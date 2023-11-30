@@ -3,14 +3,13 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/pkg/errors"
-
-	"github.com/go-logr/logr"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -33,22 +32,60 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
-	ls map[string]string, customLabels map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
-	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
-	resources corev1.ResourceRequirements, podSecurityContext *corev1.PodSecurityContext,
-	containerSecurityContext *corev1.SecurityContext, livenessProbe *api.LivenessProbeExtended,
-	readinessProbe *corev1.Probe, configName string) (appsv1.StatefulSetSpec, error) {
+func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
+	ls map[string]string, initImage string, customConf CustomConfig, usersSecret *corev1.Secret,
+) (appsv1.StatefulSetSpec, error) {
+	log := logf.FromContext(ctx)
+	size := replset.Size
+	containerName := "mongod"
+	multiAZ := replset.MultiAZ
+	resources := replset.Resources
+	volumeSpec := replset.VolumeSpec
+	podSecurityContext := replset.PodSecurityContext
+	containerSecurityContext := replset.ContainerSecurityContext
+	livenessProbe := replset.LivenessProbe
+	readinessProbe := replset.ReadinessProbe
+	configName := MongodCustomConfigName(cr.Name, replset.Name)
+
+	switch ls["app.kubernetes.io/component"] {
+	case "arbiter":
+		containerName += "-arbiter"
+		size = replset.Arbiter.Size
+		multiAZ = replset.Arbiter.MultiAZ
+		resources = replset.Arbiter.Resources
+	case "nonVoting":
+		containerName += "-nv"
+		size = replset.NonVoting.Size
+		multiAZ = replset.NonVoting.MultiAZ
+		resources = replset.NonVoting.Resources
+		podSecurityContext = replset.NonVoting.PodSecurityContext
+		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
+		configName = MongodCustomConfigName(cr.Name, replset.Name+"-nv")
+		livenessProbe = replset.NonVoting.LivenessProbe
+		readinessProbe = replset.NonVoting.ReadinessProbe
+		volumeSpec = replset.NonVoting.VolumeSpec
+	}
+
+	customLabels := make(map[string]string, len(ls))
+	for k, v := range ls {
+		customLabels[k] = v
+	}
+
+	for k, v := range multiAZ.Labels {
+		if _, ok := customLabels[k]; !ok {
+			customLabels[k] = v
+		}
+	}
 
 	fvar := false
 
 	volumes := []corev1.Volume{
 		{
-			Name: ikeyName,
+			Name: InternalKey(cr),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &secretFileMode,
-					SecretName:  ikeyName,
+					SecretName:  InternalKey(cr),
 					Optional:    &fvar,
 				},
 			},
@@ -105,12 +142,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	c, err := container(ctx, cr, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources, InternalKey(cr), customConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
+	initContainers := InitContainers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -127,6 +165,100 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
+	}
+
+	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
+
+	// add TLS/SSL Volume
+	t := true
+	volumes = append(volumes,
+		corev1.Volume{
+			Name: "ssl",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.SSL,
+					Optional:    &cr.Spec.UnsafeConf,
+					DefaultMode: &secretFileMode,
+				},
+			},
+		},
+		corev1.Volume{
+			Name: "ssl-internal",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.SSLInternal,
+					Optional:    &t,
+					DefaultMode: &secretFileMode,
+				},
+			},
+		},
+		corev1.Volume{
+			Name: "users-secret-file",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: api.InternalUserSecretName(cr),
+				},
+			},
+		},
+	)
+
+	if ls["app.kubernetes.io/component"] == "arbiter" {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: MongodDataVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	} else {
+		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
+			volumeClaimTemplates = []corev1.PersistentVolumeClaim{
+				PersistentVolumeClaim(MongodDataVolClaimName, cr.Namespace, volumeSpec),
+			}
+		} else {
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: MongodDataVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						HostPath: volumeSpec.HostPath,
+						EmptyDir: volumeSpec.EmptyDir,
+					},
+				},
+			)
+		}
+
+		if cr.Spec.Backup.Enabled {
+			rsName := replset.Name
+			if name, err := replset.CustomReplsetName(); err == nil {
+				rsName = name
+			}
+			containers = append(containers, backupAgentContainer(cr, rsName))
+		}
+
+		pmmC := AddPMMContainer(ctx, cr, usersSecret, cr.Spec.PMM.MongodParams)
+		if pmmC != nil {
+			containers = append(containers, *pmmC)
+		}
+	}
+
+	volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), volumes)
+	volumeClaimTemplates = multiAZ.WithSidecarPVCs(logf.FromContext(ctx), volumeClaimTemplates)
+
+	updateStrategy := appsv1.StatefulSetUpdateStrategy{}
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		updateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	case api.SmartUpdateStatefulSetStrategyType:
+		updateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		updateStrategy = appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
 	}
 
 	return appsv1.StatefulSetSpec{
@@ -159,7 +291,120 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				RuntimeClassName:              multiAZ.RuntimeClassName,
 			},
 		},
+		UpdateStrategy:       updateStrategy,
+		VolumeClaimTemplates: volumeClaimTemplates,
 	}, nil
+}
+
+const agentContainerName = "backup-agent"
+
+// backupAgentContainer creates the container object for a backup agent
+func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Container {
+	fvar := false
+	usersSecretName := api.UserSecretName(cr)
+
+	c := corev1.Container{
+		Name:            agentContainerName,
+		Image:           cr.Spec.Backup.Image,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Env: []corev1.EnvVar{
+			{
+				Name: "PBM_AGENT_MONGODB_USERNAME",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "MONGODB_BACKUP_USER",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: usersSecretName,
+						},
+						Optional: &fvar,
+					},
+				},
+			},
+			{
+				Name: "PBM_AGENT_MONGODB_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						Key: "MONGODB_BACKUP_PASSWORD",
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: usersSecretName,
+						},
+						Optional: &fvar,
+					},
+				},
+			},
+			{
+				Name:  "PBM_MONGODB_REPLSET",
+				Value: replsetName,
+			},
+			{
+				Name:  "PBM_MONGODB_PORT",
+				Value: strconv.Itoa(int(api.DefaultMongodPort)),
+			},
+		},
+		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
+		Resources:       cr.Spec.Backup.Resources,
+	}
+
+	if cr.CompareVersion("1.13.0") >= 0 {
+		c.Command = []string{BinMountPath + "/pbm-entry.sh"}
+		c.Args = []string{"pbm-agent"}
+		if cr.CompareVersion("1.14.0") >= 0 {
+			c.Args = []string{"pbm-agent-entrypoint"}
+			c.Env = append(c.Env, []corev1.EnvVar{
+				{
+					Name:  "PBM_AGENT_SIDECAR",
+					Value: "true",
+				},
+				{
+					Name:  "PBM_AGENT_SIDECAR_SLEEP",
+					Value: "5",
+				},
+			}...)
+		}
+		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: SSLDir,
+				ReadOnly:  true,
+			},
+			{
+				Name:      BinVolumeName,
+				MountPath: BinMountPath,
+				ReadOnly:  true,
+			},
+		}...)
+	}
+
+	if cr.Spec.Sharding.Enabled {
+		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		c.Env = append(c.Env, []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name:  "PBM_MONGODB_URI",
+				Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
+			},
+		}...)
+
+		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
+			{
+				Name:      "mongod-data",
+				MountPath: MongodContainerDataDir,
+				ReadOnly:  false,
+			},
+		}...)
+	}
+
+	return c
 }
 
 func MongodCustomConfigName(clusterName, replicaSetName string) string {
