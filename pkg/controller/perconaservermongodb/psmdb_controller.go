@@ -354,7 +354,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if !cr.Spec.UnsafeConf {
 		err = r.reconsileSSL(ctx, cr)
 		if err != nil {
-			err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
+			err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+api.SSLSecretName(cr)+` manually or setup cert-manager correctly`, err)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1365,13 +1365,13 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 
 	is110 := cr.CompareVersion("1.1.0") >= 0
 	if is110 {
-		sslHash, err := r.getTLSHash(ctx, cr, cr.Spec.Secrets.SSL)
+		sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
 		if err != nil {
 			return nil, errors.Wrap(err, "get secret hash error")
 		}
 		annotation["percona.com/ssl-hash"] = sslHash
 
-		sslInternalHash, err := r.getTLSHash(ctx, cr, cr.Spec.Secrets.SSLInternal)
+		sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return nil, errors.Wrap(err, "get secret hash error")
 		} else if err == nil {
@@ -1505,7 +1505,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
+					SecretName:  api.SSLSecretName(cr),
 					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
@@ -1515,7 +1515,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSLInternal,
+					SecretName:  api.SSLInternalSecretName(cr),
 					Optional:    &t,
 					DefaultMode: &secretFileMode,
 				},
@@ -1722,7 +1722,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	return util.CreateOrUpdate(ctx, r.client, obj)
+	_, err := util.Apply(ctx, r.client, obj)
+	return err
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service, saveOldMeta bool) error {

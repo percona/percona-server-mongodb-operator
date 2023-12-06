@@ -15,7 +15,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func CreateOrUpdate(ctx context.Context, cl client.Client, obj client.Object) error {
+type ApplyStatus string
+
+const (
+	ApplyStatusCreated   ApplyStatus = "created"
+	ApplyStatusUpdated   ApplyStatus = "updated"
+	ApplyStatusUnchanged ApplyStatus = "unchanged"
+)
+
+func Apply(ctx context.Context, cl client.Client, obj client.Object) (ApplyStatus, error) {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(make(map[string]string))
 	}
@@ -26,7 +34,7 @@ func CreateOrUpdate(ctx context.Context, cl client.Client, obj client.Object) er
 
 	hash, err := getObjectHash(obj)
 	if err != nil {
-		return errors.Wrap(err, "calculate object hash")
+		return "", errors.Wrap(err, "calculate object hash")
 	}
 
 	objAnnotations = obj.GetAnnotations()
@@ -45,11 +53,11 @@ func CreateOrUpdate(ctx context.Context, cl client.Client, obj client.Object) er
 	}, oldObject)
 
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get object")
+		return "", errors.Wrap(err, "get object")
 	}
 
 	if k8serrors.IsNotFound(err) {
-		return cl.Create(ctx, obj)
+		return ApplyStatusCreated, cl.Create(ctx, obj)
 	}
 
 	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
@@ -61,10 +69,10 @@ func CreateOrUpdate(ctx context.Context, cl client.Client, obj client.Object) er
 			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
 		}
 
-		return cl.Update(ctx, obj)
+		return ApplyStatusUpdated, cl.Update(ctx, obj)
 	}
 
-	return nil
+	return ApplyStatusUnchanged, nil
 }
 
 func getObjectHash(obj client.Object) (string, error) {

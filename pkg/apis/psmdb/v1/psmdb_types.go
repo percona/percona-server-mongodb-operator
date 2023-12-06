@@ -599,6 +599,14 @@ type SecretsSpec struct {
 	Vault         string `json:"vault,omitempty"`
 }
 
+func SSLSecretName(cr *PerconaServerMongoDB) string {
+	return cr.Spec.Secrets.SSL
+}
+
+func SSLInternalSecretName(cr *PerconaServerMongoDB) string {
+	return cr.Spec.Secrets.SSLInternal
+}
+
 type MongosSpec struct {
 	MultiAZ `json:",inline"`
 
