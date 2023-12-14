@@ -28,7 +28,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 		"app.kubernetes.io/part-of":    "percona-server-mongodb",
 	}
-	appProtocol := "mongo"
+
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -42,10 +42,9 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:        mongodPortName,
-					Port:        api.DefaultMongodPort,
-					TargetPort:  intstr.FromInt(int(api.DefaultMongodPort)),
-					AppProtocol: &appProtocol,
+					Name:       mongodPortName,
+					Port:       api.DefaultMongodPort,
+					TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
 				},
 			},
 			ClusterIP: "None",
@@ -64,7 +63,12 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			}
 		}
 	}
-
+	if cr.CompareVersion("1.16.0") >= 0 {
+		appProtocol := "mongo"
+		for _, v := range svc.Spec.Ports {
+			v.AppProtocol = &appProtocol
+		}
+	}
 	return svc
 }
 
@@ -119,7 +123,12 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-
+	if cr.CompareVersion("1.16.0") >= 0 {
+		appProtocol := "mongo"
+		for _, v := range svc.Spec.Ports {
+			v.AppProtocol = &appProtocol
+		}
+	}
 	return svc
 }
 
