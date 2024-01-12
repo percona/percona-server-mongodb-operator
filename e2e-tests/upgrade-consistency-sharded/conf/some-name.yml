@@ -10,6 +10,8 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  # TODO: remove initImage after 1.18.0 release
+  initImage: perconalab/percona-server-mongodb-operator:main
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   secrets:
