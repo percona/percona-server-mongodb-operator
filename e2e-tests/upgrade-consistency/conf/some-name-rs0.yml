@@ -7,6 +7,7 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  initImage: -init
   allowUnsafeConfigurations: false
   backup:
     enabled: false
