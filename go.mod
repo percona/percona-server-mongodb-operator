@@ -21,7 +21,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	go.mongodb.org/mongo-driver v1.12.1
 	go.uber.org/zap v1.25.0
-	golang.org/x/sync v0.5.0
+	golang.org/x/sync v0.6.0
 	google.golang.org/grpc v1.59.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	gopkg.in/yaml.v2 v2.4.0
