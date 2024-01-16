@@ -16,13 +16,19 @@ spec:
       containers:
         - name: percona-server-mongodb-operator
           image: perconalab/percona-server-mongodb-operator:main
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /metrics
+              port: metrics
+              scheme: HTTP
           ports:
-          - containerPort: 60000
+          - containerPort: 8080
             protocol: TCP
             name: metrics
           command:
           - percona-server-mongodb-operator
-          imagePullPolicy: Always
           env:
             - name: LOG_STRUCTURED
               value: 'false'
