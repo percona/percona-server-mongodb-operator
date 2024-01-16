@@ -77,7 +77,7 @@ func fakeVolumeSpec(t *testing.T) *api.VolumeSpec {
 	return &api.VolumeSpec{
 		PersistentVolumeClaim: api.PVCSpec{
 			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Requests: map[corev1.ResourceName]resource.Quantity{
 						corev1.ResourceStorage: q,
 					},

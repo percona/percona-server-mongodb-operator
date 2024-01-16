@@ -1,4 +1,4 @@
-FROM golang:1.20 AS go_builder
+FROM golang:1.21 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
 COPY . .
