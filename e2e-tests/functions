@@ -412,17 +412,21 @@ deploy_minio() {
 	desc 'install Minio'
 	helm uninstall minio-service || :
 	helm repo remove minio || :
-	helm repo add minio https://helm.min.io/
+	helm repo add minio https://charts.min.io/
 	# kubectl_bin delete pvc minio-service --force
 	retry 10 60 helm install minio-service \
-		--version 8.0.5 \
-		--set accessKey=some-access-key \
-		--set secretKey=some-secret-key \
+		--version 5.0.14 \
+		--set replicas=1 \
+		--set mode=standalone \
+		--set resources.requests.memory=256Mi \
+		--set rootUser=rootuser \
+		--set rootPassword=rootpass123 \
+		--set "users[0].accessKey=some-access-key" \
+		--set "users[0].secretKey=some-secret-key" \
+		--set "users[0].policy=consoleAdmin" \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
-		--set environment.MINIO_REGION=us-east-1 \
-		--set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
 		--set securityContext.enabled=false \
 		minio/minio
 	MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
@@ -1036,6 +1040,7 @@ cat_config() {
 	cat "$1" \
 		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
+		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
