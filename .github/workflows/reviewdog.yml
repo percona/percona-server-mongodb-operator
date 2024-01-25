@@ -73,3 +73,12 @@ jobs:
           reporter: github-pr-review
           level: info
           exclude: "./vendor/*"
+
+  manifests:
+    name: runner / manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          make generate manifests VERSION=main
+          git diff --exit-code
