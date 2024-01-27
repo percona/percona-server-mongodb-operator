@@ -391,7 +391,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 				if err != nil {
 					return errors.Wrap(err, "check storage credentials secret")
 				}
-	
+
 				if !exists {
 					log.Error(nil, "Storage credentials secret does not exist", "secret", secretName)
 					return nil
