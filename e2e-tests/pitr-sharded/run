@@ -155,7 +155,6 @@ main() {
 
 	fi
 
-
 	desc 'delete custom RuntimeClass'
 	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 	destroy $namespace
