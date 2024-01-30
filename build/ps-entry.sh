@@ -19,15 +19,15 @@ if [[ $originalArgOne == mongo* ]] && [ "$(id -u)" = '0' ]; then
 	chown --dereference mongodb "/proc/$$/fd/1" "/proc/$$/fd/2" || :
 	# ignore errors thanks to https://github.com/docker-library/mongo/issues/149
 
-	exec gosu mongodb:1001 "$BASH_SOURCE" "$@"
+	exec gosu mongodb:1001 "${BASH_SOURCE[0]}" "$@"
 fi
 
 # you should use numactl to start your mongod instances, including the config servers, mongos instances, and any clients.
 # https://docs.mongodb.com/manual/administration/production-notes/#configuring-numa-on-linux
 if [[ $originalArgOne == mongo* ]]; then
-	numa='numactl --interleave=all'
-	if $numa true &>/dev/null; then
-		set -- "$numa" "$@"
+	numa=(numactl --interleave=all)
+	if "${numa[@]}" true &>/dev/null; then
+		set -- "${numa[@]}" "$@"
 	fi
 fi
 
@@ -88,7 +88,7 @@ _mongod_hack_get_arg_val() {
 				return 0
 				;;
 			"$checkArg"=*)
-				echo "${arg#$checkArg=}"
+				echo "${arg#"$checkArg"=}"
 				return 0
 				;;
 		esac
@@ -398,6 +398,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 			case "$f" in
 				*.sh)
 					echo "$0: running $f"
+					# shellcheck source=/dev/null
 					. "$f"
 					;;
 				*.js)

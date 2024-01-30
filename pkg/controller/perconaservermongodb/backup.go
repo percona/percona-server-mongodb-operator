@@ -386,14 +386,16 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 				secretName = storage.Azure.CredentialsSecret
 			}
 
-			exists, err := secretExists(ctx, r.client, types.NamespacedName{Name: secretName, Namespace: cr.Namespace})
-			if err != nil {
-				return errors.Wrap(err, "check storage credentials secret")
-			}
+			if secretName != "" {
+				exists, err := secretExists(ctx, r.client, types.NamespacedName{Name: secretName, Namespace: cr.Namespace})
+				if err != nil {
+					return errors.Wrap(err, "check storage credentials secret")
+				}
 
-			if !exists {
-				log.Error(nil, "Storage credentials secret does not exist", "secret", secretName)
-				return nil
+				if !exists {
+					log.Error(nil, "Storage credentials secret does not exist", "secret", secretName)
+					return nil
+				}
 			}
 
 			err = pbm.SetConfig(ctx, r.client, cr, storage)
