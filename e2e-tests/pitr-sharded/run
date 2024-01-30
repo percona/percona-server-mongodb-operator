@@ -130,7 +130,7 @@ main() {
 		run_backup $backup_name_minio 0
 	else
 		kubectl_bin patch psmdb some-name --type=merge -p '{"spec":{"backup":{"pitr":{"enabled":true}}}}'
-		kubectl_bin exec some-name-rs0-0  -it -c backup-agent -- pbm status
+		kubectl_bin exec some-name-rs0-0 -it -c backup-agent -- pbm status
 		exit_status=$?
 		if [ $exit_status -gt 0 ]; then
 			exit 1
