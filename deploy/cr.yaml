@@ -46,8 +46,8 @@ spec:
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:
-    - name: rs0
-      size: 3
+  - name: rs0
+    size: 3
 #    terminationGracePeriodSeconds: 300
 #    topologySpreadConstraints:
 #      - labelSelector:
@@ -82,8 +82,8 @@ spec:
 #            blockCompressor: snappy
 #          indexConfig:
 #            prefixCompression: true
-      affinity:
-        antiAffinityTopologyKey: "kubernetes.io/hostname"
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
 #        nodeAffinity:
 #          requiredDuringSchedulingIgnoredDuringExecution:
@@ -164,8 +164,8 @@ spec:
 #        volumeMode: Filesystem
 #        accessModes:
 #          - ReadWriteOnce
-      podDisruptionBudget:
-        maxUnavailable: 1
+    podDisruptionBudget:
+      maxUnavailable: 1
 #      minAvailable: 0
 #    splitHorizons:
 #      my-cluster-name-rs0-0:
@@ -177,51 +177,51 @@ spec:
 #      my-cluster-name-rs0-2:
 #        external: rs0-2.mycluster.xyz
 #        external-2: rs0-2.mycluster2.xyz
-      expose:
-        enabled: false
-        exposeType: ClusterIP
+    expose:
+      enabled: false
+      exposeType: ClusterIP
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      serviceAnnotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #      serviceLabels:
 #        rack: rack-22
-      resources:
-        limits:
-          cpu: "300m"
-          memory: "0.5G"
-        requests:
-          cpu: "300m"
-          memory: "0.5G"
-      volumeSpec:
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
 #      emptyDir: {}
 #      hostPath:
 #        path: /data
 #        type: Directory
-        persistentVolumeClaim:
+      persistentVolumeClaim:
 #        annotations:
 #          volume.beta.kubernetes.io/storage-class: example-hostpath
 #        labels:
 #          rack: rack-22
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
-          resources:
-            requests:
-              storage: 3Gi
+        resources:
+          requests:
+            storage: 3Gi
 
-      nonvoting:
-        enabled: false
+    nonvoting:
+      enabled: false
 #      podSecurityContext: {}
 #      containerSecurityContext: {}
-        size: 3
+      size: 3
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        operationProfiling:
 #          mode: slowOp
 #        systemLog:
 #          verbosity: 1
-        affinity:
-          antiAffinityTopologyKey: "kubernetes.io/hostname"
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:
@@ -244,36 +244,36 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-        podDisruptionBudget:
-          maxUnavailable: 1
+      podDisruptionBudget:
+        maxUnavailable: 1
 #        minAvailable: 0
-        resources:
-          limits:
-            cpu: "300m"
-            memory: "0.5G"
-          requests:
-            cpu: "300m"
-            memory: "0.5G"
-        volumeSpec:
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
 #        emptyDir: {}
 #        hostPath:
 #          path: /data
 #          type: Directory
-          persistentVolumeClaim:
+        persistentVolumeClaim:
 #          annotations:
 #            volume.beta.kubernetes.io/storage-class: example-hostpath
 #          labels:
 #            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
-            resources:
-              requests:
-                storage: 3Gi
-      arbiter:
-        enabled: false
-        size: 1
-        affinity:
-          antiAffinityTopologyKey: "kubernetes.io/hostname"
+          resources:
+            requests:
+              storage: 3Gi
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
 #          nodeAffinity:
 #            requiredDuringSchedulingIgnoredDuringExecution:
@@ -297,13 +297,13 @@ spec:
 #      nodeSelector:
 #        disktype: ssd
 #    schedulerName: "default"
-        resources:
-          limits:
-            cpu: "300m"
-            memory: "0.5G"
-          requests:
-            cpu: "300m"
-            memory: "0.5G"
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
