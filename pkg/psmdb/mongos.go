@@ -438,7 +438,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		spec.Type = corev1.ServiceTypeNodePort
 		spec.ExternalTrafficPolicy = "Local"
 		if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-			for i, port := range spec.Ports {
+			for _, port := range spec.Ports {
 				port.NodePort = cr.Spec.Sharding.Mongos.Expose.NodePort
 			}
 		}
