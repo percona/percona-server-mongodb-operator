@@ -15946,7 +15946,8 @@ spec:
                           servicePerPod:
                             type: boolean
                           nodePort:
-                            type: int32
+                            format: int32
+                            type: integer
                         type: object
                       hostAliases:
                         items:
