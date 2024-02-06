@@ -6,6 +6,25 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+get_node_id_from_pmm() {
+    local -a nodeList=()
+    for instance in $(kubectl_bin get pods --no-headers -l app.kubernetes.io/name=percona-server-mongodb --output=custom-columns='NAME:.metadata.name'); do
+        nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
+    done
+
+    echo "${nodeList[@]}"
+}
+
+does_node_id_exists() {
+    local -a nodeList=("$@")
+    local -a nodeList_from_pmm=()
+    for node_id in "${nodeList[@]}"; do
+    nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-0 -- pmm-admin --server-url=https://admin:admin@$(get_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
+    done
+
+   echo "${nodeList_from_pmm[@]}"
+}
+
 deploy_cert_manager
 create_infra $namespace
 
@@ -92,6 +111,28 @@ sleep 90
 desc 'check QAN data'
 get_qan_values mongodb "dev-mongod" admin:admin
 get_qan_values mongodb "dev-mongos" admin:admin
+
+nodeList=($(get_node_id_from_pmm))
+nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
+for node_id in "${nodeList_from_pmm[@]}"; do
+    if [ -z "$node_id" ]; then
+        echo "Can't get $node_id node_id from PMM server"
+        exit 1
+    fi
+done
+
+kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+wait_for_delete "pod/${cluster}-mongos-0"
+wait_for_delete "pod/${cluster}-rs0-0"
+wait_for_delete "pod/${cluster}-cfg-0"
+
+does_node_id_exists_in_pmm=($(does_node_id_exists "${nodeList[@]}"))
+for instance in "${does_node_id_exists_in_pmm[@]}"; do
+    if [ -n "$instance" ]; then
+        echo "The $instance pod was not deleted from server inventory"
+        exit 1
+    fi
+done
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server
