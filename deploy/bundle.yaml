@@ -3671,6 +3671,9 @@ spec:
                           items:
                             type: string
                           type: array
+                        nodePort:
+                          format: int32
+                          type: integer
                         serviceAnnotations:
                           additionalProperties:
                             type: string
@@ -10859,6 +10862,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -15935,6 +15941,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
