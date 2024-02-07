@@ -12,7 +12,7 @@ get_node_id_from_pmm() {
 		nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
 	done
 
-    echo "${nodeList[@]}"
+	echo "${nodeList[@]}"
 }
 
 does_node_id_exists() {
