@@ -128,10 +128,10 @@ wait_for_delete "pod/${cluster}-cfg-0"
 
 does_node_id_exists_in_pmm=($(does_node_id_exists "${nodeList[@]}"))
 for instance in "${does_node_id_exists_in_pmm[@]}"; do
-    if [ -n "$instance" ]; then
-        echo "The $instance pod was not deleted from server inventory"
-        exit 1
-    fi
+	if [ -n "$instance" ]; then
+		echo "The $instance pod was not deleted from server inventory"
+		exit 1
+	fi
 done
 
 if [[ -n ${OPENSHIFT} ]]; then
