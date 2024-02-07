@@ -115,10 +115,10 @@ get_qan_values mongodb "dev-mongos" admin:admin
 nodeList=($(get_node_id_from_pmm))
 nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
 for node_id in "${nodeList_from_pmm[@]}"; do
-    if [ -z "$node_id" ]; then
-        echo "Can't get $node_id node_id from PMM server"
-        exit 1
-    fi
+	if [ -z "$node_id" ]; then
+		echo "Can't get $node_id node_id from PMM server"
+		exit 1
+	fi
 done
 
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
