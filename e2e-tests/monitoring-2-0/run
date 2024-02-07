@@ -7,10 +7,10 @@ test_dir=$(realpath $(dirname $0))
 set_debug
 
 get_node_id_from_pmm() {
-    local -a nodeList=()
-    for instance in $(kubectl_bin get pods --no-headers -l app.kubernetes.io/name=percona-server-mongodb --output=custom-columns='NAME:.metadata.name'); do
-        nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
-    done
+	local -a nodeList=()
+	for instance in $(kubectl_bin get pods --no-headers -l app.kubernetes.io/name=percona-server-mongodb --output=custom-columns='NAME:.metadata.name'); do
+		nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
+	done
 
     echo "${nodeList[@]}"
 }
