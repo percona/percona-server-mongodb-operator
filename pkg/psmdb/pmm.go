@@ -386,5 +386,19 @@ func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
 	}
 
+	if cr.CompareVersion("1.16.0") >= 0 {
+		pmmC.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"bash",
+						"-c",
+						"pmm-admin unregister --force",
+					},
+				},
+			},
+		}
+	}
+
 	return &pmmC
 }
