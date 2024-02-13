@@ -8,8 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,6 +20,9 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -223,12 +224,13 @@ type PerconaServerMongoDBStatus struct {
 	MongoVersion       string                   `json:"mongoVersion,omitempty"`
 	MongoImage         string                   `json:"mongoImage,omitempty"`
 	Message            string                   `json:"message,omitempty"`
-	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
+	Conditions         []metav1.Condition       `json:"conditions,omitempty"`
 	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
 	Mongos             *MongosStatus            `json:"mongos,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupStorage      string                   `json:"backupStorage,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
 	Host               string                   `json:"host,omitempty"`
@@ -705,7 +707,7 @@ type BackupTaskSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
-	Type pbm.BackupType `json:"type,omitempty"`
+	Type defs.BackupType `json:"type,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -745,16 +747,8 @@ type BackupStorageAzureSpec struct {
 	CredentialsSecret string `json:"credentialsSecret"`
 }
 
-type BackupStorageType string
-
-const (
-	BackupStorageFilesystem BackupStorageType = "filesystem"
-	BackupStorageS3         BackupStorageType = "s3"
-	BackupStorageAzure      BackupStorageType = "azure"
-)
-
 type BackupStorageSpec struct {
-	Type  BackupStorageType      `json:"type"`
+	Type  storage.Type           `json:"type"`
 	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
 	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
 }
@@ -963,7 +957,7 @@ func (cr *PerconaServerMongoDB) CanBackup() error {
 
 const maxStatusesQuantity = 20
 
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+func (s *PerconaServerMongoDBStatus) AddCondition(c metav1.Condition) {
 	if len(s.Conditions) == 0 {
 		s.Conditions = append(s.Conditions, c)
 		return

@@ -33,6 +33,10 @@ spec:
       jsonPath: .status.type
       name: Type
       type: string
+    - description: Backup size
+      jsonPath: .status.size
+      name: Size
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -89,11 +93,50 @@ spec:
               completed:
                 format: date-time
                 type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
               destination:
                 type: string
               error:
                 type: string
               lastTransition:
+                format: date-time
+                type: string
+              lastWrite:
                 format: date-time
                 type: string
               pbmName:
@@ -138,6 +181,8 @@ spec:
                 required:
                 - bucket
                 type: object
+              size:
+                type: string
               start:
                 format: date-time
                 type: string
@@ -215,11 +260,50 @@ spec:
                   completed:
                     format: date-time
                     type: string
+                  conditions:
+                    items:
+                      properties:
+                        lastTransitionTime:
+                          format: date-time
+                          type: string
+                        message:
+                          maxLength: 32768
+                          type: string
+                        observedGeneration:
+                          format: int64
+                          minimum: 0
+                          type: integer
+                        reason:
+                          maxLength: 1024
+                          minLength: 1
+                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                          type: string
+                        status:
+                          enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                          type: string
+                        type:
+                          maxLength: 316
+                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                          type: string
+                      required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                      type: object
+                    type: array
                   destination:
                     type: string
                   error:
                     type: string
                   lastTransition:
+                    format: date-time
+                    type: string
+                  lastWrite:
                     format: date-time
                     type: string
                   pbmName:
@@ -264,6 +348,8 @@ spec:
                     required:
                     - bucket
                     type: object
+                  size:
+                    type: string
                   start:
                     format: date-time
                     type: string
@@ -293,6 +379,42 @@ spec:
               completed:
                 format: date-time
                 type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
               error:
                 type: string
               lastTransition:
@@ -17886,6 +18008,8 @@ spec:
             properties:
               backup:
                 type: string
+              backupStorage:
+                type: string
               backupVersion:
                 type: string
               conditions:
@@ -17895,14 +18019,31 @@ spec:
                       format: date-time
                       type: string
                     message:
+                      maxLength: 32768
                       type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
                     reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
                     status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
                       type: string
                     type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
+                  - lastTransitionTime
+                  - message
+                  - reason
                   - status
                   - type
                   type: object

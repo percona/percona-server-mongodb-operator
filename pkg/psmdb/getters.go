@@ -37,6 +37,21 @@ func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
+func GetOneReadyRSPod(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (*corev1.Pod, error) {
+	podList, err := GetRSPods(ctx, k8sclient, cr, rsName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return &pod, nil
+		}
+	}
+
+	return nil, errors.New("no ready pods found")
+}
+
 // GetRSPods returns truncated list of replicaset pods to the size of `rs.Size`.
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
 	return getRSPods(ctx, k8sclient, cr, rsName, true)

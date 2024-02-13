@@ -15,7 +15,7 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 	usersSecretName := api.UserSecretName(cr)
 
 	c := corev1.Container{
-		Name:            agentContainerName,
+		Name:            "backup-agent",
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
@@ -113,6 +113,14 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 				ReadOnly:  false,
 			},
 		}...)
+	}
+
+	if cr.CompareVersion("1.15.0") >= 0 {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      "pbm-config",
+			MountPath: "/etc/pbm",
+			ReadOnly:  true,
+		})
 	}
 
 	return c

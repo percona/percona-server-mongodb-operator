@@ -3,13 +3,14 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,9 +24,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -47,10 +51,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		clientcmd: cli,
 	}, nil
 }
 
@@ -88,8 +91,6 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
-
-	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -126,7 +127,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !reflect.DeepEqual(cr.Status.Conditions, status.Conditions) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -160,13 +161,83 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
+	if meta.FindStatusCondition(status.Conditions, "PBMIsConfigured") == nil {
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cr.Spec.ClusterName,
+				Namespace: cr.Namespace,
+			},
+		}
+		err = r.client.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)
+		if err != nil {
+			return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
+		}
+
+		pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+		if err != nil {
+			return rr, errors.Wrapf(err, "get pod for rs/%s", cluster.Spec.Replsets[0].Name)
+		}
+
+		if cr.Spec.BackupSource == nil {
+			err = pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
+			if err != nil {
+				return rr, errors.Wrapf(err, "set pbm config for storage %s", bcp.Spec.StorageName)
+			}
+		} else {
+			var stg psmdbv1.BackupStorageSpec
+			switch {
+			case bcp.Status.S3 != nil:
+				stg = psmdbv1.BackupStorageSpec{
+					Type: storage.S3,
+					S3:   *bcp.Status.S3,
+				}
+			case bcp.Status.Azure != nil:
+				stg = psmdbv1.BackupStorageSpec{
+					Type:  storage.Azure,
+					Azure: *bcp.Status.Azure,
+				}
+			}
+			if err := pbm.SetStorageConfig(ctx, r.clientcmd, r.client, pod, stg); err != nil {
+				return rr, errors.Wrapf(err, "set pbm storage config for backup source")
+			}
+		}
+
+		if bcp.Spec.StorageName != "" {
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				c := &psmdbv1.PerconaServerMongoDB{}
+				err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
+				if err != nil {
+					return err
+				}
+
+				c.Status.BackupStorage = bcp.Spec.StorageName
+
+				return r.client.Status().Update(ctx, c)
+			})
+			if err != nil {
+				return rr, errors.Wrap(err, "update cluster status")
+			}
+		}
+
+		// Set the PBMIsConfigured condition to true
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               "PBMIsConfigured",
+			Status:             metav1.ConditionTrue,
+			Reason:             "PBMIsConfigured",
+			Message:            "PBM is configured",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		return rr, nil
+	}
+
 	switch bcp.Status.Type {
-	case "", pbm.LogicalBackup:
+	case "", defs.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")
 		}
-	case pbm.PhysicalBackup:
+	case defs.PhysicalBackup:
 		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
@@ -186,10 +257,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaSer
 	}
 	var azure psmdbv1.BackupStorageAzureSpec
 	var s3 psmdbv1.BackupStorageS3Spec
-	storageType := psmdbv1.BackupStorageS3
+	storageType := storage.S3
 
 	if cr.Spec.BackupSource.Azure != nil {
-		storageType = psmdbv1.BackupStorageAzure
+		storageType = storage.Azure
 		azure = *cr.Spec.BackupSource.Azure
 	} else if cr.Spec.BackupSource.S3 != nil {
 		s3 = *cr.Spec.BackupSource.S3
@@ -222,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				StorageName: cr.Spec.StorageName,
 				S3:          cr.Spec.BackupSource.S3,
 				Azure:       cr.Spec.BackupSource.Azure,
-				PBMname:     backupName,
+				PBMName:     backupName,
 			},
 		}, nil
 	}

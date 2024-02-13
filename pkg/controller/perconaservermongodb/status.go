@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,26 +21,28 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
 func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
 	log := logf.FromContext(ctx)
 
-	clusterCondition := api.ClusterCondition{
-		Status:             api.ConditionTrue,
-		Type:               api.AppStateInit,
+	clusterCondition := metav1.Condition{
+		Type:               string(api.AppStateInit),
+		Reason:             string(api.AppStateInit),
+		Status:             metav1.ConditionTrue,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
 	if reconcileErr != nil {
 		if cr.Status.State != api.AppStateError {
-			clusterCondition = api.ClusterCondition{
-				Status:             api.ConditionTrue,
-				Type:               api.AppStateError,
+			clusterCondition = metav1.Condition{
+				Type:               string(api.AppStateError),
+				Status:             metav1.ConditionTrue,
 				Message:            reconcileErr.Error(),
 				Reason:             "ErrorReconcile",
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
-			cr.Status.AddCondition(clusterCondition)
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 		}
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
@@ -101,9 +104,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 
 		if status.Status != currentRSstatus.Status {
-			rsCondition := api.ClusterCondition{
-				Type:               status.Status,
-				Status:             api.ConditionTrue,
+			rsCondition := metav1.Condition{
+				Type:               string(status.Status),
+				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
@@ -119,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 				rsCondition.Message = rs.Name + ": paused"
 			}
 
-			cr.Status.AddCondition(rsCondition)
+			meta.SetStatusCondition(&cr.Status.Conditions, rsCondition)
 		}
 
 		// Ready count can be greater than total size in case of downscale
@@ -150,9 +153,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 
 		if mongosStatus.Status != cr.Status.Mongos.Status {
-			mongosCondition := api.ClusterCondition{
-				Type:               mongosStatus.Status,
-				Status:             api.ConditionTrue,
+			mongosCondition := metav1.Condition{
+				Type:               string(mongosStatus.Status),
+				Status:             metav1.ConditionTrue,
 				LastTransitionTime: metav1.NewTime(time.Now()),
 			}
 
@@ -165,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 				mongosCondition.Reason = "MongosPaused"
 			}
 
-			cr.Status.AddCondition(mongosCondition)
+			meta.SetStatusCondition(&cr.Status.Conditions, mongosCondition)
 		}
 
 		// Ready count can be greater than total size in case of downscale
@@ -211,13 +214,44 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
+	if cr.Spec.Backup.Enabled {
+		if state == api.AppStateReady {
+			pbmStatus, err := r.checkPBMStatus(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check pbm status")
+			}
+
+			if pbmStatus != api.AppStateReady {
+				log.Info("PBM is not ready", "state", pbmStatus)
+				state = pbmStatus
+			}
+		}
+
+		if len(cr.Status.BackupStorage) == 0 {
+			log.Info("Set default backup storage")
+			for name := range cr.Spec.Backup.Storages {
+				cr.Status.BackupStorage = name
+				break
+			}
+		}
+
+		_, ok := cr.Spec.Backup.Storages[cr.Status.BackupStorage]
+		if !ok {
+			log.Info("Fix default backup storage")
+			for name := range cr.Spec.Backup.Storages {
+				cr.Status.BackupStorage = name
+				break
+			}
+		}
+	}
+
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
 	}
 
 	cr.Status.State = state
-	clusterCondition.Type = cr.Status.State
-	cr.Status.AddCondition(clusterCondition)
+	clusterCondition.Type = string(cr.Status.State)
+	meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
@@ -409,4 +443,36 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
+	log := logf.FromContext(ctx)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+	if err != nil {
+		return api.AppStateInit, errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
+	}
+
+	_, err = pbm.GetStatus(ctx, r.clientcmd, pod)
+	if err != nil {
+		log.V(1).Error(err, "get pbm status")
+		if pbm.IsNotConfigured(err) {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "PBMReady",
+				Reason:             "PBMIsNotConfigured",
+				Message:            err.Error(),
+				Status:             metav1.ConditionFalse,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
+		}
+		return api.AppStateInit, nil
+	}
+
+	meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+		Type:               "PBMReady",
+		Reason:             "PBMConfiguredAndReady",
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: metav1.NewTime(time.Now()),
+	})
+
+	return api.AppStateReady, nil
 }

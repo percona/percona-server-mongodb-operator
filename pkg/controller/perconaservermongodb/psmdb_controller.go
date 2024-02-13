@@ -83,7 +83,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
-		newPBM:        backup.NewPBM,
 
 		initImage: initImage,
 
@@ -172,8 +171,6 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion       *version.ServerVersion
 	reconcileIn         time.Duration
 	mongoClientProvider MongoClientProvider
-
-	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -297,6 +294,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+	}
+
+	err = r.reconcilePBMConfiguration(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile PBM configuration")
 	}
 
 	err = r.reconcileMongodConfigMaps(ctx, cr, repls)
@@ -553,10 +555,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = r.scheduleEnsureVersion(ctx, cr, VersionServiceClient{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
-	}
-
-	if err = r.updatePITR(ctx, cr); err != nil {
-		return rr, err
 	}
 
 	err = r.resyncPBMIfNeeded(ctx, cr)
@@ -1571,6 +1569,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 				rsName = name
 			}
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, rsName))
+
+			if cr.CompareVersion("1.15.0") >= 0 {
+				t := true
+				sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, corev1.Volume{
+					Name: "pbm-config",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: cr.Name + "-pbm-config",
+							Optional:   &t,
+						},
+					},
+				})
+			}
 		}
 
 		pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongodParams)

@@ -3,18 +3,15 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,8 +24,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -40,16 +42,25 @@ import (
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	reconciler, err := newReconciler(mgr)
+	if err != nil {
+		return errors.Wrap(err, "create reconciler")
+	}
+	return add(mgr, reconciler)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcilePerconaServerMongoDBBackup{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
+func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
+	cli, err := clientcmd.NewClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "create clientcmd")
 	}
+
+	return &ReconcilePerconaServerMongoDBBackup{
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		clientcmd: cli,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -84,10 +95,9 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}
 type ReconcilePerconaServerMongoDBBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
-
-	newPBMFunc backup.NewPBMFunc
+	client    client.Client
+	scheme    *runtime.Scheme
+	clientcmd *clientcmd.Client
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -128,7 +138,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !reflect.DeepEqual(cr.Status.Conditions, status.Conditions) {
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -173,13 +183,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
-	bcp, err := r.newBackup(ctx, cluster)
-	if err != nil {
-		return rr, errors.Wrap(err, "create backup object")
-	}
-	defer bcp.Close(ctx)
-
-	err = r.checkFinalizers(ctx, cr, cluster, bcp)
+	err = r.checkFinalizers(ctx, cr, cluster)
 	if err != nil {
 		return rr, errors.Wrap(err, "failed to run finalizer")
 	}
@@ -188,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		return rr, nil
 	}
 
-	status, err = r.reconcile(ctx, cluster, cr, bcp)
+	status, err = r.reconcile(ctx, cluster, cr)
 	if err != nil {
 		return rr, errors.Wrap(err, "reconcile backup")
 	}
@@ -201,7 +205,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
 	cr *psmdbv1.PerconaServerMongoDBBackup,
-	bcp *Backup,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx)
 	status := cr.Status
@@ -213,117 +216,96 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+	if err != nil {
+		return status, errors.Wrapf(err, "get a pod from rs/%s", cluster.Spec.Replsets[0].Name)
+	}
+
+	running, err := pbm.GetRunningOperation(ctx, r.clientcmd, pod)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
 
-	if cjobs {
+	if running.Name != status.PBMName && running.Name != "" {
 		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
+			log.Info("Waiting to finish another backup/restore.", "operation", running.Name, "type", running.Type, "opId", running.OpID, "status", running.Status)
 		}
 		status.State = psmdbv1.BackupStateWaiting
 		return status, nil
 	}
 
-	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		time.Sleep(10 * time.Second)
-		return bcp.Start(ctx, r.client, cluster, cr)
-	}
+	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
+		log.Info("Configuring PBM", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
 
-	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
-}
-
-func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
-	switch {
-	case cr.Status.Azure != nil:
-		if cr.Status.Azure.CredentialsSecret == "" {
-			return nil, errors.New("no azure credentials specified for the secret name")
-		}
-		azureSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.Azure.CredentialsSecret)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting azure credentials secret name")
-		}
-		azureConf := azure.Conf{
-			Account:   string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
-			Container: cr.Status.Azure.Container,
-			Prefix:    cr.Status.Azure.Prefix,
-			Credentials: azure.Credentials{
-				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
-			},
-		}
-		return azure.New(azureConf, nil)
-	case cr.Status.S3 != nil:
-		if cr.Status.S3.CredentialsSecret == "" {
-			return nil, errors.New("no s3 credentials specified for the secret name")
-		}
-		s3Conf := s3.Conf{
-			Region:                cr.Status.S3.Region,
-			EndpointURL:           cr.Status.S3.EndpointURL,
-			Bucket:                cr.Status.S3.Bucket,
-			Prefix:                cr.Status.S3.Prefix,
-			UploadPartSize:        cr.Status.S3.UploadPartSize,
-			MaxUploadParts:        cr.Status.S3.MaxUploadParts,
-			StorageClass:          cr.Status.S3.StorageClass,
-			InsecureSkipTLSVerify: cr.Status.S3.InsecureSkipTLSVerify,
-		}
-		s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting s3 credentials secret name")
+		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFileDir+"/"+cr.Spec.StorageName); err != nil {
+			return status, errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Spec.StorageName)
 		}
 
-		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0 {
-			s3Conf.ServerSideEncryption = &s3.AWSsse{
-				SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-				SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SSECustomerKey,
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			c := &psmdbv1.PerconaServerMongoDB{}
+			err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
+			if err != nil {
+				return err
 			}
-		}
 
-		if len(cr.Status.S3.ServerSideEncryption.SSEAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.KMSKeyID) != 0 {
-			s3Conf.ServerSideEncryption = &s3.AWSsse{
-				SseAlgorithm: cr.Status.S3.ServerSideEncryption.SSEAlgorithm,
-				KmsKeyID:     cr.Status.S3.ServerSideEncryption.KMSKeyID,
-			}
-		}
+			c.Status.BackupStorage = cr.Spec.StorageName
 
-		s3Conf.Credentials = s3.Credentials{
-			AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
-		}
-		return s3.New(s3Conf, nil)
-	default:
-		return nil, errors.New("no storage info in backup status")
-	}
-}
-
-func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
-	}
-	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-	return secret, err
-}
-
-func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMeta {
-	meta := &pbm.BackupMeta{
-		Name:        cr.Status.PBMname,
-		Compression: cr.Spec.Compression,
-	}
-	for _, rs := range cr.Status.ReplsetNames {
-		meta.Replsets = append(meta.Replsets, pbm.BackupReplset{
-			Name:      rs,
-			OplogName: fmt.Sprintf("%s_%s.oplog.gz", meta.Name, rs),
-			DumpName:  fmt.Sprintf("%s_%s.dump.gz", meta.Name, rs),
+			return r.client.Status().Update(ctx, c)
 		})
+		if err != nil {
+			return status, errors.Wrap(err, "update cluster status")
+		}
+
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               "PBMConfigured",
+			Reason:             "PBMConfigured",
+			Message:            "PBM is configured with storage " + cr.Spec.StorageName,
+			Status:             metav1.ConditionTrue,
+			LastTransitionTime: metav1.Time{Time: time.Now()},
+		})
+
+		return status, nil
 	}
-	return meta
+
+	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+		log.Info("Starting backup", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
+
+		backup, err := pbm.RunBackup(ctx, r.clientcmd, pod, pbm.BackupOptions{
+			Type:        cr.Spec.Type,
+			Compression: cr.Spec.Compression,
+		})
+		if err != nil {
+			if pbm.IsAnotherOperationInProgress(err) {
+				log.Info("Another operation is in progress", "backup", cr.Name, "error", err)
+				return status, nil
+			}
+			return status, errors.Wrap(err, "run backup")
+		}
+
+		status.PBMName = backup.Name
+		status.State = psmdbv1.BackupStateRequested
+
+		return status, nil
+	}
+
+	var backupMeta pbm.DescribeBackupResponse
+	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+		backupMeta, err = pbm.DescribeBackup(ctx, r.clientcmd, pod, pbm.DescribeBackupOptions{Name: status.PBMName})
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return status, errors.Wrap(err, "describe backup")
+	}
+
+	return getBackupStatus(ctx, cr, cluster, backupMeta)
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
 	var err error
@@ -337,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 		for _, f := range cr.GetFinalizers() {
 			switch f {
 			case "delete-backup":
-				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
+				if err := r.deleteBackupFinalizer(ctx, cr, cluster); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
 				}
@@ -351,32 +333,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	return err
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
-	if len(cr.Status.PBMname) == 0 {
-		return nil
-	}
+func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) error {
+	l := logf.FromContext(ctx)
 
-	var meta *pbm.BackupMeta
-	var err error
-
-	if b.pbm != nil {
-		meta, err = b.pbm.GetBackupMeta(cr.Status.PBMname)
-		if err != nil {
-			if !errors.Is(err, pbm.ErrNotFound) {
-				return errors.Wrap(err, "get backup meta")
-			}
-			meta = nil
-		}
-	}
-	if b.pbm == nil || meta == nil {
-		dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
-		stg, err := r.getPBMStorage(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "get storage")
-		}
-		if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
-			return errors.Wrap(err, "failed to delete backup files with dummy PBM")
-		}
+	if len(cr.Status.PBMName) == 0 {
 		return nil
 	}
 
@@ -384,73 +344,143 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return errors.Errorf("PerconaServerMongoDB %s is not found", cr.Spec.GetClusterName())
 	}
 
-	var storage psmdbv1.BackupStorageSpec
+	var stg psmdbv1.BackupStorageSpec
 	switch {
 	case cr.Status.S3 != nil:
-		storage.Type = psmdbv1.BackupStorageS3
-		storage.S3 = *cr.Status.S3
+		stg.Type = storage.S3
+		stg.S3 = *cr.Status.S3
 	case cr.Status.Azure != nil:
-		storage.Type = psmdbv1.BackupStorageAzure
-		storage.Azure = *cr.Status.Azure
+		stg.Type = storage.Azure
+		stg.Azure = *cr.Status.Azure
 	}
 
-	err = b.pbm.SetConfig(ctx, r.client, cluster, storage)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
 	if err != nil {
-		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+		return errors.Wrapf(err, "get a pod from rs/%s", cluster.Spec.Replsets[0].Name)
 	}
-	e := b.pbm.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
-	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
-	// as it's not possible to delete backup if it is a base for the PITR timeline
-	err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete PITR")
+
+	l.V(1).Info("Setting storage config", "backup", cr.Status.PBMName, "pod", pod.Name, "stg", stg)
+
+	if err := pbm.SetStorageConfig(ctx, r.clientcmd, r.client, pod, stg); err != nil {
+		return errors.Wrap(err, "set storage config")
 	}
-	err = b.pbm.DeleteBackup(cr.Status.PBMname, e)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete backup")
+
+	l.V(1).Info("Deleting backup", "backup", cr.Status.PBMName, "pod", pod.Name)
+
+	if err := pbm.DeleteBackup(ctx, r.clientcmd, pod, cr.Status.PBMName); err != nil {
+		return errors.Wrap(err, "delete backup")
 	}
+
 	return nil
 }
 
 // deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
-func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp, e *pbmLog.Event) error {
+func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, until primitive.Timestamp) error {
+	// log := logf.FromContext(ctx)
+
+	// stg, err := b.pbm.GetStorage(e)
+	// if err != nil {
+	// 	return errors.Wrap(err, "get storage")
+	// }
+
+	// chunks, err := b.pbm.PITRGetChunksSlice("", primitive.Timestamp{}, until)
+	// if err != nil {
+	// 	return errors.Wrap(err, "get pitr chunks")
+	// }
+	// if len(chunks) == 0 {
+	// 	log.Info("nothing to delete")
+	// }
+
+	// for _, chnk := range chunks {
+	// 	err = stg.Delete(chnk.FName)
+	// 	if err != nil && err != storage.ErrNotExist {
+	// 		return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
+	// 	}
+
+	// 	_, err = b.pbm.Conn().Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
+	// 		ctx,
+	// 		bson.D{
+	// 			{Key: "rs", Value: chnk.RS},
+	// 			{Key: "start_ts", Value: chnk.StartTS},
+	// 			{Key: "end_ts", Value: chnk.EndTS},
+	// 		},
+	// 	)
+
+	// 	if err != nil {
+	// 		return errors.Wrap(err, "delete pitr chunk metadata")
+	// 	}
+
+	// 	log.Info("deleted " + chnk.FName)
+	// }
+	return nil
+}
+
+func getBackupStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, backupMeta pbm.DescribeBackupResponse) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx)
 
-	stg, err := b.pbm.GetStorage(e)
-	if err != nil {
-		return errors.Wrap(err, "get storage")
+	status := cr.Status
+
+	stg, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+	if !ok {
+		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	chunks, err := b.pbm.PITRGetChunksSlice("", primitive.Timestamp{}, until)
-	if err != nil {
-		return errors.Wrap(err, "get pitr chunks")
-	}
-	if len(chunks) == 0 {
-		log.Info("nothing to delete")
-	}
+	switch stg.Type {
+	case storage.S3:
+		status.S3 = &stg.S3
 
-	for _, chnk := range chunks {
-		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
-			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
+		status.Destination = stg.S3.Bucket
+
+		if stg.S3.Prefix != "" {
+			status.Destination = stg.S3.Bucket + "/" + stg.S3.Prefix
 		}
-
-		_, err = b.pbm.Conn().Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
-			ctx,
-			bson.D{
-				{Key: "rs", Value: chnk.RS},
-				{Key: "start_ts", Value: chnk.StartTS},
-				{Key: "end_ts", Value: chnk.EndTS},
-			},
-		)
-
-		if err != nil {
-			return errors.Wrap(err, "delete pitr chunk metadata")
+		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
+			status.Destination = "s3://" + status.Destination
 		}
+	case storage.Azure:
+		status.Azure = &stg.Azure
 
-		log.Info("deleted " + chnk.FName)
+		status.Destination = stg.Azure.Container
+
+		if stg.Azure.Prefix != "" {
+			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix
+		}
+		if !strings.HasPrefix(stg.Azure.Container, "azure://") {
+			status.Destination = "azure://" + status.Destination
+		}
 	}
-	return nil
+
+	status.Destination += "/" + status.PBMName
+
+	switch backupMeta.Status {
+	case defs.StatusError:
+		log.Info("Backup failed", "backup", cr.Name, "error", backupMeta.Error)
+		status.State = api.BackupStateError
+		status.Error = fmt.Sprintf("%v", backupMeta.Error)
+	case defs.StatusDone:
+		log.Info("Backup completed", "backup", cr.Name)
+		status.State = api.BackupStateReady
+		status.CompletedAt = &metav1.Time{
+			Time: time.Unix(backupMeta.LastTransitionTS, 0),
+		}
+	case defs.StatusStarting:
+		log.V(1).Info("Backup is starting", "backup", cr.Name)
+		status.State = api.BackupStateRequested
+	default:
+		log.V(1).Info("Backup is running", "backup", cr.Name)
+		status.State = api.BackupStateRunning
+	}
+
+	status.Size = backupMeta.SizeH
+	status.LastWrite = &metav1.Time{
+		Time: time.Unix(backupMeta.LastWriteTS, 0),
+	}
+	status.LastTransition = &metav1.Time{
+		Time: time.Unix(backupMeta.LastTransitionTS, 0),
+	}
+	status.Type = backupMeta.Type
+
+	return status, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
