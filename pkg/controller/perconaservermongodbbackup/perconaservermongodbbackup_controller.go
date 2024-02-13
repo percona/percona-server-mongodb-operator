@@ -2,16 +2,9 @@ package perconaservermongodbbackup
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -235,66 +229,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	return bcp.Status(ctx, cr)
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
-	switch {
-	case cr.Status.Azure != nil:
-		if cr.Status.Azure.CredentialsSecret == "" {
-			return nil, errors.New("no azure credentials specified for the secret name")
-		}
-		azureSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.Azure.CredentialsSecret)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting azure credentials secret name")
-		}
-		azureConf := azure.Conf{
-			Account:   string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
-			Container: cr.Status.Azure.Container,
-			Prefix:    cr.Status.Azure.Prefix,
-			Credentials: azure.Credentials{
-				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
-			},
-		}
-		return azure.New(azureConf, nil)
-	case cr.Status.S3 != nil:
-		if cr.Status.S3.CredentialsSecret == "" {
-			return nil, errors.New("no s3 credentials specified for the secret name")
-		}
-		s3Conf := s3.Conf{
-			Region:                cr.Status.S3.Region,
-			EndpointURL:           cr.Status.S3.EndpointURL,
-			Bucket:                cr.Status.S3.Bucket,
-			Prefix:                cr.Status.S3.Prefix,
-			UploadPartSize:        cr.Status.S3.UploadPartSize,
-			MaxUploadParts:        cr.Status.S3.MaxUploadParts,
-			StorageClass:          cr.Status.S3.StorageClass,
-			InsecureSkipTLSVerify: cr.Status.S3.InsecureSkipTLSVerify,
-		}
-		s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting s3 credentials secret name")
-		}
-
-		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0 {
-			s3Conf.ServerSideEncryption = &s3.AWSsse{
-				SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-				SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SSECustomerKey,
-			}
-		}
-
-		if len(cr.Status.S3.ServerSideEncryption.SSEAlgorithm) != 0 && len(cr.Status.S3.ServerSideEncryption.KMSKeyID) != 0 {
-			s3Conf.ServerSideEncryption = &s3.AWSsse{
-				SseAlgorithm: cr.Status.S3.ServerSideEncryption.SSEAlgorithm,
-				KmsKeyID:     cr.Status.S3.ServerSideEncryption.KMSKeyID,
-			}
-		}
-
-		s3Conf.Credentials = s3.Credentials{
-			AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
-		}
-		return s3.New(s3Conf, nil)
-	default:
-		return nil, errors.New("no storage info in backup status")
-	}
+func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
+	return errors.New("IMPLEMENT")
 }
 
 func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
@@ -308,18 +244,19 @@ func secret(ctx context.Context, cl client.Client, namespace, secretName string)
 	return secret, err
 }
 
-func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMeta {
-	meta := &pbm.BackupMeta{
+func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbm.BackupMetadata {
+	meta := &pbm.BackupMetadata{
 		Name:        cr.Status.PBMname,
 		Compression: cr.Spec.Compression,
 	}
-	for _, rs := range cr.Status.ReplsetNames {
-		meta.Replsets = append(meta.Replsets, pbm.BackupReplset{
-			Name:      rs,
-			OplogName: fmt.Sprintf("%s_%s.oplog.gz", meta.Name, rs),
-			DumpName:  fmt.Sprintf("%s_%s.dump.gz", meta.Name, rs),
-		})
-	}
+	// IMPLEMENT
+	// for _, rs := range cr.Status.ReplsetNames {
+	// 	meta.Replsets = append(meta.Replsets, pbm.BackupReplset{
+	// 		Name:      rs,
+	// 		OplogName: fmt.Sprintf("%s_%s.oplog.gz", meta.Name, rs),
+	// 		DumpName:  fmt.Sprintf("%s_%s.dump.gz", meta.Name, rs),
+	// 	})
+	// }
 	return meta
 }
 
@@ -356,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	var meta *pbm.BackupMeta
+	var meta *pbm.BackupMetadata
 	var err error
 
 	if b.pbm != nil {
@@ -369,14 +306,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		}
 	}
 	if b.pbm == nil || meta == nil {
-		dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
-		stg, err := r.getPBMStorage(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "get storage")
-		}
-		if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
-			return errors.Wrap(err, "failed to delete backup files with dummy PBM")
-		}
+		// dummyPBM := new(pbm.PBM) // We need this only for the DeleteBackupFiles method, which doesn't use method receiver at all
+		// stg, err := r.getPBMStorage(ctx, cr)
+		// if err != nil {
+		// 	return errors.Wrap(err, "get storage")
+		// }
+		// if err := dummyPBM.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
+		// 	return errors.Wrap(err, "failed to delete backup files with dummy PBM")
+		// }
 		return nil
 	}
 
@@ -398,58 +335,58 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	if err != nil {
 		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
-	e := b.pbm.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
+	// e := b.pbm.Logger().NewEvent(string(pbm.CmdDeleteBackup), "", "", primitive.Timestamp{})
 	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
 	// as it's not possible to delete backup if it is a base for the PITR timeline
-	err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete PITR")
-	}
-	err = b.pbm.DeleteBackup(cr.Status.PBMname, e)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete backup")
-	}
+	// err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to delete PITR")
+	// }
+	// err = b.pbm.DeleteBackup(cr.Status.PBMname, e)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to delete backup")
+	// }
 	return nil
 }
 
 // deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
-func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp, e *pbmLog.Event) error {
-	log := logf.FromContext(ctx)
+func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp) error {
+	// log := logf.FromContext(ctx)
 
-	stg, err := b.pbm.GetStorage(e)
-	if err != nil {
-		return errors.Wrap(err, "get storage")
-	}
+	// stg, err := b.pbm.GetStorage(e)
+	// if err != nil {
+	// 	return errors.Wrap(err, "get storage")
+	// }
 
-	chunks, err := b.pbm.PITRGetChunksSlice("", primitive.Timestamp{}, until)
-	if err != nil {
-		return errors.Wrap(err, "get pitr chunks")
-	}
-	if len(chunks) == 0 {
-		log.Info("nothing to delete")
-	}
+	// chunks, err := b.pbm.PITRGetChunksSlice("", primitive.Timestamp{}, until)
+	// if err != nil {
+	// 	return errors.Wrap(err, "get pitr chunks")
+	// }
+	// if len(chunks) == 0 {
+	// 	log.Info("nothing to delete")
+	// }
 
-	for _, chnk := range chunks {
-		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
-			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
-		}
+	// for _, chnk := range chunks {
+	// 	err = stg.Delete(chnk.FName)
+	// 	if err != nil && err != storage.ErrNotExist {
+	// 		return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
+	// 	}
 
-		_, err = b.pbm.Conn().Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
-			ctx,
-			bson.D{
-				{Key: "rs", Value: chnk.RS},
-				{Key: "start_ts", Value: chnk.StartTS},
-				{Key: "end_ts", Value: chnk.EndTS},
-			},
-		)
+	// 	_, err = b.pbm.Conn().Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
+	// 		ctx,
+	// 		bson.D{
+	// 			{Key: "rs", Value: chnk.RS},
+	// 			{Key: "start_ts", Value: chnk.StartTS},
+	// 			{Key: "end_ts", Value: chnk.EndTS},
+	// 		},
+	// 	)
 
-		if err != nil {
-			return errors.Wrap(err, "delete pitr chunk metadata")
-		}
+	// 	if err != nil {
+	// 		return errors.Wrap(err, "delete pitr chunk metadata")
+	// 	}
 
-		log.Info("deleted " + chnk.FName)
-	}
+	// 	log.Info("deleted " + chnk.FName)
+	// }
 	return nil
 }
 

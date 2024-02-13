@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
@@ -54,24 +54,24 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 
 	name := time.Now().UTC().Format(time.RFC3339)
 
-	var compLevel *int
-	if cr.Spec.CompressionLevel != nil {
-		l := int(*cr.Spec.CompressionLevel)
-		compLevel = &l
-	}
+	// var compLevel *int
+	// if cr.Spec.CompressionLevel != nil {
+	// 	l := int(*cr.Spec.CompressionLevel)
+	// 	compLevel = &l
+	// }
 
-	err = b.pbm.SendCmd(pbm.Cmd{
-		Cmd: pbm.CmdBackup,
-		Backup: &pbm.BackupCmd{
-			Name:             name,
-			Type:             cr.Spec.Type,
-			Compression:      cr.Spec.Compression,
-			CompressionLevel: compLevel,
-		},
-	})
-	if err != nil {
-		return status, err
-	}
+	// err = b.pbm.SendCmd(pbm.Command{
+	// 	Cmd: pbm.CmdBackup,
+	// 	Backup: &pbm.BackupCmd{
+	// 		Name:             name,
+	// 		Type:             cr.Spec.Type,
+	// 		Compression:      cr.Spec.Compression,
+	// 		CompressionLevel: compLevel,
+	// 	},
+	// })
+	// if err != nil {
+	// 	return status, err
+	// }
 
 	status = api.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
@@ -138,15 +138,15 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	}
 
 	switch meta.Status {
-	case pbm.StatusError:
+	case "error":
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
-	case pbm.StatusDone:
+	case "done":
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-	case pbm.StatusStarting:
+	case "starting":
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
 		if passed >= pbmStartingDeadline {
 			status.State = api.BackupStateError

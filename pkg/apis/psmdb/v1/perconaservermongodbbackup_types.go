@@ -3,18 +3,17 @@ package v1
 import (
 	"fmt"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
-	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
-	ClusterName      string                   `json:"clusterName,omitempty"`
-	StorageName      string                   `json:"storageName,omitempty"`
-	Compression      compress.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+	PSMDBCluster     string              `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
+	ClusterName      string              `json:"clusterName,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	Compression      pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
 	Type pbm.BackupType `json:"type,omitempty"`
@@ -91,7 +90,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		p.Spec.Type = pbm.LogicalBackup
 	}
 	if string(p.Spec.Compression) == "" {
-		p.Spec.Compression = compress.CompressionTypeGZIP
+		p.Spec.Compression = pbm.CompressionTypeGZIP
 	}
 	return nil
 }

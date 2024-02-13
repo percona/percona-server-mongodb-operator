@@ -55,8 +55,8 @@ type PBM interface {
 	Close(ctx context.Context) error
 	HasLocks(predicates ...LockHeaderPredicate) (bool, error)
 
-	GetRestoreMeta(name string) (*pbm.RestoreMeta, error)
-	GetBackupMeta(name string) (*pbm.BackupMeta, error)
+	GetRestoreMeta(name string) (*pbm.RestoreMetadata, error)
+	GetBackupMeta(name string) (*pbm.BackupMetadata, error)
 	DeleteBackup(name string, l *pbmLog.Event) error
 
 	SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error

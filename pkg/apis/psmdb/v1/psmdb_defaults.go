@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -460,7 +460,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Backup.Enabled {
 		for _, bkpTask := range cr.Spec.Backup.Tasks {
 			if string(bkpTask.CompressionType) == "" {
-				bkpTask.CompressionType = compress.CompressionTypeGZIP
+				bkpTask.CompressionType = pbm.CompressionTypeGZIP
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 {

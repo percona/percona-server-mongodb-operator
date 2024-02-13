@@ -8,8 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -696,13 +695,13 @@ const (
 )
 
 type BackupTaskSpec struct {
-	Name             string                   `json:"name"`
-	Enabled          bool                     `json:"enabled"`
-	Keep             int                      `json:"keep,omitempty"`
-	Schedule         string                   `json:"schedule,omitempty"`
-	StorageName      string                   `json:"storageName,omitempty"`
-	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+	Name             string              `json:"name"`
+	Enabled          bool                `json:"enabled"`
+	Keep             int                 `json:"keep,omitempty"`
+	Schedule         string              `json:"schedule,omitempty"`
+	StorageName      string              `json:"storageName,omitempty"`
+	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
 	Type pbm.BackupType `json:"type,omitempty"`
@@ -760,11 +759,11 @@ type BackupStorageSpec struct {
 }
 
 type PITRSpec struct {
-	Enabled          bool                     `json:"enabled,omitempty"`
-	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
-	OplogOnly        bool                     `json:"oplogOnly,omitempty"`
-	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+	Enabled          bool                `json:"enabled,omitempty"`
+	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
+	OplogOnly        bool                `json:"oplogOnly,omitempty"`
+	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {
