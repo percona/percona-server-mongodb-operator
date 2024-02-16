@@ -8,7 +8,6 @@ import (
 
 	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,23 +19,6 @@ const (
 	pbmStartingDeadline       = time.Duration(120) * time.Second
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
-
-type Backup struct {
-	pbm  backup.PBM
-	spec api.BackupSpec
-}
-
-func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, cluster *api.PerconaServerMongoDB) (*Backup, error) {
-	if cluster == nil {
-		return new(Backup), nil
-	}
-	cn, err := backup.NewPBM(ctx, r.client, cluster)
-	if err != nil {
-		return nil, errors.Wrap(err, "create pbm object")
-	}
-
-	return &Backup{pbm: cn, spec: cluster.Spec.Backup}, nil
-}
 
 // Start requests backup on PBM
 func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {

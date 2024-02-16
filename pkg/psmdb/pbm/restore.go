@@ -24,7 +24,7 @@ type RestoreResponse struct {
 	Error string `json:"Error"`
 }
 
-func RunRestore(ctx context.Context, cli clientcmd.Client, pod *corev1.Pod, opts RestoreOptions) (RestoreResponse, error) {
+func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts RestoreOptions) (RestoreResponse, error) {
 	response := RestoreResponse{}
 
 	stdout := bytes.Buffer{}

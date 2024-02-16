@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
+	"github.com/percona/percona-backup-mongodb/pbm/oplog"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
@@ -44,9 +43,9 @@ type pbmC struct {
 type PBM interface {
 	Conn() *mongo.Client
 
-	GetPITRChunkContains(ctx context.Context, unixTS int64) (*pbm.OplogChunk, error)
-	GetLatestTimelinePITR() (pbm.Timeline, error)
-	PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]pbm.OplogChunk, error)
+	GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error)
+	GetLatestTimelinePITR() (oplog.Timeline, error)
+	PITRGetChunksSlice(rs string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error)
 
 	Logger() *pbmLog.Logger
 	GetStorage(l *pbmLog.Event) (storage.Storage, error)

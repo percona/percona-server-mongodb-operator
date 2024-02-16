@@ -11,6 +11,6 @@ import (
 
 const pbmSidecarName = "backup-agent"
 
-func exec(ctx context.Context, cli clientcmd.Client, pod *corev1.Pod, command []string, stdout, stderr io.Writer) error {
+func exec(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, command []string, stdout, stderr io.Writer) error {
 	return cli.Exec(ctx, pod, pbmSidecarName, command, nil, stdout, stderr, false)
 }

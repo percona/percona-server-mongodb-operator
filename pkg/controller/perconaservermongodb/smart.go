@@ -17,7 +17,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
@@ -96,7 +96,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, &list.Items[0])
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
@@ -327,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, &list.Items[0])
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}

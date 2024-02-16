@@ -83,7 +83,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		reconcileIn:   time.Second * 5,
 		crons:         NewCronRegistry(),
 		lockers:       newLockStore(),
-		newPBM:        backup.NewPBM,
 
 		initImage: initImage,
 
@@ -172,8 +171,6 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion       *version.ServerVersion
 	reconcileIn         time.Duration
 	mongoClientProvider MongoClientProvider
-
-	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -297,6 +294,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+	}
+
+	err = r.reconcilePBMConfiguration(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile PBM configuration")
 	}
 
 	err = r.reconcileMongodConfigMaps(ctx, cr, repls)

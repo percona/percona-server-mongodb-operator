@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
-	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,6 +20,9 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -695,16 +697,16 @@ const (
 )
 
 type BackupTaskSpec struct {
-	Name             string              `json:"name"`
-	Enabled          bool                `json:"enabled"`
-	Keep             int                 `json:"keep,omitempty"`
-	Schedule         string              `json:"schedule,omitempty"`
-	StorageName      string              `json:"storageName,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Name             string                   `json:"name"`
+	Enabled          bool                     `json:"enabled"`
+	Keep             int                      `json:"keep,omitempty"`
+	Schedule         string                   `json:"schedule,omitempty"`
+	StorageName      string                   `json:"storageName,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
-	Type pbm.BackupType `json:"type,omitempty"`
+	Type defs.BackupType `json:"type,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -744,26 +746,18 @@ type BackupStorageAzureSpec struct {
 	CredentialsSecret string `json:"credentialsSecret"`
 }
 
-type BackupStorageType string
-
-const (
-	BackupStorageFilesystem BackupStorageType = "filesystem"
-	BackupStorageS3         BackupStorageType = "s3"
-	BackupStorageAzure      BackupStorageType = "azure"
-)
-
 type BackupStorageSpec struct {
-	Type  BackupStorageType      `json:"type"`
+	Type  storage.Type           `json:"type"`
 	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
 	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
 }
 
 type PITRSpec struct {
-	Enabled          bool                `json:"enabled,omitempty"`
-	OplogSpanMin     numstr.NumberString `json:"oplogSpanMin,omitempty"`
-	OplogOnly        bool                `json:"oplogOnly,omitempty"`
-	CompressionType  pbm.CompressionType `json:"compressionType,omitempty"`
-	CompressionLevel *int                `json:"compressionLevel,omitempty"`
+	Enabled          bool                     `json:"enabled,omitempty"`
+	OplogSpanMin     numstr.NumberString      `json:"oplogSpanMin,omitempty"`
+	OplogOnly        bool                     `json:"oplogOnly,omitempty"`
+	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
+	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 func (p PITRSpec) Disabled() PITRSpec {

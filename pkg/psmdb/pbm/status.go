@@ -67,7 +67,7 @@ type Status struct {
 	Running Running `json:"running"`
 }
 
-func GetStatus(ctx context.Context, cli clientcmd.Client, pod *corev1.Pod) (Status, error) {
+func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Status, error) {
 	status := Status{}
 
 	stdout := bytes.Buffer{}
@@ -83,4 +83,13 @@ func GetStatus(ctx context.Context, cli clientcmd.Client, pod *corev1.Pod) (Stat
 	}
 
 	return status, nil
+}
+
+func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
+	status, err := GetStatus(ctx, cli, pod)
+	if err != nil {
+		return false, err
+	}
+
+	return status.Running.Status != "", nil
 }

@@ -15,7 +15,6 @@ import (
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -41,7 +40,6 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		client:  cl,
 		scheme:  s,
 		lockers: newLockStore(),
-		newPBM:  fakeBackup.NewPBM,
 	}
 }
 

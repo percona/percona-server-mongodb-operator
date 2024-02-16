@@ -31,7 +31,7 @@ type BackupResponse struct {
 	Error   string `json:"Error"`
 }
 
-func RunBackup(ctx context.Context, cli clientcmd.Client, pod *corev1.Pod, opts BackupOptions) (BackupResponse, error) {
+func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts BackupOptions) (BackupResponse, error) {
 	response := BackupResponse{}
 
 	stdout := bytes.Buffer{}
