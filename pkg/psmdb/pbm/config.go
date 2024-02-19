@@ -3,6 +3,7 @@ package pbm
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -18,12 +19,32 @@ import (
 )
 
 // SetConfigFile sets the PBM configuration file
-func SetConfigFile(ctx context.Context, path string) error {
+func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) error {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	cmd := []string{"pbm", "config", "--file", path}
+
+	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	if err != nil {
+		return errors.Wrapf(err, "set config file %s", path)
+	}
+
 	return nil
 }
 
 // SetConfigKey sets the PBM configuration key
 func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, key, value string) error {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	cmd := []string{"pbm", "config", fmt.Sprintf("--set=%s=%s", key, value)}
+
+	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	if err != nil {
+		return errors.Wrapf(err, "set config var %s=%s", key, value)
+	}
+
 	return nil
 }
 
@@ -117,4 +138,12 @@ func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmd
 	}
 
 	return nil
+}
+
+func EnablePITR(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
+	return SetConfigVar(ctx, cli, pod, "pitr.enabled", "true")
+}
+
+func DisablePITR(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
+	return SetConfigVar(ctx, cli, pod, "pitr.enabled", "false")
 }

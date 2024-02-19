@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,9 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -47,10 +47,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		clientcmd: cli,
 	}, nil
 }
 
@@ -88,8 +87,6 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
-
-	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -161,12 +158,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	switch bcp.Status.Type {
-	case "", pbm.LogicalBackup:
+	case "", defs.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")
 		}
-	case pbm.PhysicalBackup:
+	case defs.PhysicalBackup:
 		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
@@ -186,10 +183,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaSer
 	}
 	var azure psmdbv1.BackupStorageAzureSpec
 	var s3 psmdbv1.BackupStorageS3Spec
-	storageType := psmdbv1.BackupStorageS3
+	storageType := storage.S3
 
 	if cr.Spec.BackupSource.Azure != nil {
-		storageType = psmdbv1.BackupStorageAzure
+		storageType = storage.Azure
 		azure = *cr.Spec.BackupSource.Azure
 	} else if cr.Spec.BackupSource.S3 != nil {
 		s3 = *cr.Spec.BackupSource.S3

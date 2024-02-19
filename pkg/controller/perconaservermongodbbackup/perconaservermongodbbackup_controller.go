@@ -2,6 +2,7 @@ package perconaservermongodbbackup
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,7 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -233,12 +236,37 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		time.Sleep(10 * time.Second)
-		// return bcp.Start(ctx, r.client, cluster, cr)
+		backup, err := pbm.RunBackup(ctx, r.clientcmd, &pod, pbm.BackupOptions{Type: cr.Spec.Type})
+		if err != nil {
+			return status, errors.Wrap(err, "run backup")
+		}
+
+		backupMeta, err := pbm.DescribeBackup(ctx, r.clientcmd, &pod, pbm.DescribeBackupOptions{Name: backup.Name})
+		if err != nil {
+			return status, errors.Wrap(err, "describe backup")
+		}
+
+		switch backupMeta.Status {
+		case defs.StatusError:
+			status.State = api.BackupStateError
+			status.Error = fmt.Sprintf("%v", backupMeta.Error)
+		case defs.StatusDone:
+			status.State = api.BackupStateReady
+			status.CompletedAt = &metav1.Time{
+				Time: time.Unix(backupMeta.LastTransitionTS, 0),
+			}
+		case defs.StatusStarting:
+			status.State = api.BackupStateRequested
+		default:
+			status.State = api.BackupStateRunning
+		}
+
+		status.LastTransition = &metav1.Time{
+			Time: time.Unix(backupMeta.LastTransitionTS, 0),
+		}
+		status.Type = backupMeta.Type
 	}
 
-	time.Sleep(5 * time.Second)
-	// return bcp.Status(ctx, cr)
 	return status, nil
 }
 

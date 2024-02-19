@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,9 +21,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -148,10 +148,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-			log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
-
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
+			err := pbm.SetConfigFile(ctx, r.clientcmd, &pod, "/etc/pbm/pbm_config.yaml")
 			if err != nil {
 				log.Error(err, "failed to set PBM configuration")
 			}
@@ -174,49 +171,33 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			case <-timeout.C:
 				return status, errors.Errorf("timeout while waiting PBM operation to finish")
 			case <-ticker.C:
+				hasRunningOp := false
 				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-					stdoutBuf.Reset()
-					stderrBuf.Reset()
-
-					command := []string{"/opt/percona/pbm", "status", "--out", "json"}
-					err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-					if err != nil {
-						log.Error(err, "failed to get PBM status")
-						return err
-					}
-
-					log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-					return nil
+					hasRunningOp, err = pbm.HasRunningOperation(ctx, r.clientcmd, &pod)
+					return err
 				})
 				if err != nil {
-					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					return status, errors.Wrapf(err, "check running operations status")
 				}
 
-				var pbmStatus struct {
-					Running struct {
-						Type string `json:"type,omitempty"`
-						OpId string `json:"opID,omitempty"`
-					} `json:"running"`
-				}
-
-				if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-					return status, errors.Wrap(err, "unmarshal PBM status output")
-				}
-
-				if len(pbmStatus.Running.OpId) == 0 {
+				if !hasRunningOp {
 					break outer
 				}
 
-				log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+				log.Info("Waiting for another PBM operation to finish")
 			}
 		}
 
-		var restoreCommand []string
+		var restoreOpts pbm.RestoreOptions
 		if cr.Spec.PITR != nil {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", cr.Status.PITRTarget, "--out", "json"}
+			restoreOpts = pbm.RestoreOptions{
+				BaseSnapshot: bcp.Status.PBMname,
+				Time:         cr.Status.PITRTarget,
+			}
 		} else {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+			restoreOpts = pbm.RestoreOptions{
+				BackupName: bcp.Status.PBMname,
+			}
 		}
 
 		backoff := wait.Backoff{
@@ -229,15 +210,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		err = retry.OnError(backoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
-			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
+			log.Info("Starting restore", "opts", restoreOpts, "pod", pod.Name)
 
-			stdoutBuf.Reset()
-			stderrBuf.Reset()
-
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCommand, nil, stdoutBuf, stderrBuf, false)
+			_, err := pbm.RunRestore(ctx, r.clientcmd, &pod, restoreOpts)
 			if err != nil {
-				log.Error(nil, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
-				return errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+				return err
 			}
 
 			log.Info("Restore started", "pod", pod.Name)
@@ -257,34 +234,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 
 		status.State = psmdbv1.RestoreStateRequested
-		status.PBMname = out.Name
+		status.PBMName = out.Name
 
 		return status, nil
 	}
 
-	meta := pbm.BackupMeta{}
-
+	var restoreMeta pbm.DescribeRestoreResponse
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return strings.Contains(err.Error(), "container is not created or running") || strings.Contains(err.Error(), "error dialing backend: No agent available")
 	}, func() error {
-		stdoutBuf.Reset()
-		stderrBuf.Reset()
-
-		command := []string{
-			"/opt/percona/pbm", "describe-restore", cr.Status.PBMname,
-			"--config", "/etc/pbm/pbm_config.yaml",
-			"--out", "json",
-		}
-
 		pod := corev1.Pod{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
 			return errors.Wrap(err, "get pod")
 		}
 
-		log.V(1).Info("Check restore status", "command", command, "pod", pod.Name)
-
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		restoreMeta, err = pbm.DescribeRestore(ctx, r.clientcmd, &pod, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName, ConfigPath: "/etc/pbm/pbm_config.yaml"})
+		if err != nil {
+			return err
 		}
 
 		return nil
@@ -293,37 +259,33 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, err
 	}
 
-	if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
-		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
-	}
+	log.V(1).Info("PBM restore status", "status", restoreMeta)
 
-	log.V(1).Info("PBM restore status", "status", meta)
-
-	switch meta.Status {
-	case pbm.StatusStarting:
-		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusRunning {
+	switch restoreMeta.Status {
+	case defs.StatusStarting:
+		for _, rs := range restoreMeta.Replsets {
+			if rs.Status == defs.StatusRunning {
 				status.State = psmdbv1.RestoreStateRunning
 				return status, nil
 			}
 		}
-	case pbm.StatusError:
+	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
-		status.Error = meta.Err
-	case pbm.StatusPartlyDone:
+		status.Error = restoreMeta.Error
+	case defs.StatusPartlyDone:
 		status.State = psmdbv1.RestoreStateError
 		var pbmErr string
-		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusError {
+		for _, rs := range restoreMeta.Replsets {
+			if rs.Status == defs.StatusError {
 				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
 			}
 		}
 		status.Error = pbmErr
-	case pbm.StatusRunning:
+	case defs.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
-	case pbm.StatusDone:
-		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusDone {
+	case defs.StatusDone:
+		for _, rs := range restoreMeta.Replsets {
+			if rs.Status == defs.StatusDone {
 				continue
 			}
 
@@ -757,14 +719,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		return errors.Wrap(err, "get storage")
 	}
 
-	pbmConfig, err := backup.GetPBMConfig(ctx, r.client, cluster, storage)
+	config, err := pbm.GetConfig(ctx, r.client, cluster, storage)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	pbmConfig.PITR.Enabled = false
+	config.PITR.Enabled = false
 
-	confBytes, err := yaml.Marshal(pbmConfig)
+	confBytes, err := yaml.Marshal(config)
 	if err != nil {
 		return errors.Wrap(err, "marshal PBM config to yaml")
 	}

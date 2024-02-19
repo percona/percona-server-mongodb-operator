@@ -67,6 +67,7 @@ type Status struct {
 	Running Running `json:"running"`
 }
 
+// GetStatus returns the status of PBM
 func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Status, error) {
 	status := Status{}
 
@@ -85,6 +86,7 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 	return status, nil
 }
 
+// HasRunningOperation checks if there is a running operation in PBM
 func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
 	status, err := GetStatus(ctx, cli, pod)
 	if err != nil {
@@ -92,4 +94,14 @@ func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1
 	}
 
 	return status.Running.Status != "", nil
+}
+
+// IsPITRRunning checks if PITR is running or enabled in config
+func IsPITRRunning(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
+	status, err := GetStatus(ctx, cli, pod)
+	if err != nil {
+		return false, err
+	}
+
+	return status.PITR.Run || status.PITR.Conf, nil
 }
