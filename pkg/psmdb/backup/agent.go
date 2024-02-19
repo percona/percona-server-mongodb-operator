@@ -115,5 +115,13 @@ func AgentContainer(cr *api.PerconaServerMongoDB, replsetName string) corev1.Con
 		}...)
 	}
 
+	if cr.CompareVersion("1.15.0") >= 0 {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      "pbm-config",
+			MountPath: "/etc/pbm",
+			ReadOnly:  true,
+		})
+	}
+
 	return c
 }

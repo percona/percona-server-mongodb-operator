@@ -11,6 +11,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
@@ -64,6 +65,8 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 }
 
 func GetConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) (config.Config, error) {
+	l := log.FromContext(ctx)
+
 	cnf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cr.Spec.Backup.PITR.Enabled,
@@ -95,10 +98,14 @@ func GetConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Percona
 		}
 	}
 
+	l.Info("PBM config", "config", cnf)
+
 	return cnf, nil
 }
 
 func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
+	l := log.FromContext(ctx)
+
 	cnf, err := GetConfig(ctx, k8sclient, cr, stg)
 	if err != nil {
 		return errors.Wrap(err, "get config")
@@ -122,6 +129,7 @@ func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmd
 	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
+			l.Info("Creating PBM config secret", "secret", secret.Name)
 			err = k8sclient.Create(ctx, &secret)
 			if err != nil {
 				return errors.Wrap(err, "create secret")
@@ -131,6 +139,10 @@ func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmd
 
 		return errors.Wrap(err, "get secret")
 	}
+
+	l.Info("Updating PBM config secret", "secret", secret.Name)
+
+	secret.Data["config.yaml"] = cnfBytes
 
 	err = k8sclient.Update(ctx, &secret)
 	if err != nil {

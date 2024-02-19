@@ -352,13 +352,23 @@ func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if cr.Spec.Backup.Storages == nil {
+		return nil
+	}
+
+	log.Info("Reconciling PBM configuration", "storages", cr.Spec.Backup.Storages)
+
 	var firstStorage api.BackupStorageSpec
 	for _, stg := range cr.Spec.Backup.Storages {
 		firstStorage = stg
 		break
 	}
 
-	log.Info("Configuring PBM with storage", "storage", firstStorage.Type)
+	log.Info("Configuring PBM with storage", "storage", firstStorage)
 
 	if err := pbm.CreateOrUpdateConfig(ctx, r.client, cr, firstStorage); err != nil {
 		return errors.Wrap(err, "create or update PBM configuration")

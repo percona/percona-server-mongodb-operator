@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -76,7 +77,7 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 
 	err := exec(ctx, cli, pod, []string{"pbm", "status", "-o", "json"}, &stdout, &stderr)
 	if err != nil {
-		return status, err
+		return status, errors.Wrapf(err, "get status stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
