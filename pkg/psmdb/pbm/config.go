@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -28,7 +29,7 @@ func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, 
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return errors.Wrapf(err, "set config file %s", path)
+		return errors.Wrap(err, stderr.String())
 	}
 
 	return nil
@@ -43,7 +44,7 @@ func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, k
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return errors.Wrapf(err, "set config var %s=%s", key, value)
+		return errors.Wrapf(err, stderr.String())
 	}
 
 	return nil
@@ -58,7 +59,7 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return err
+		return errors.Wrap(err, stderr.String())
 	}
 
 	return nil
@@ -103,7 +104,7 @@ func GetConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Percona
 	return cnf, nil
 }
 
-func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
+func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
 	l := log.FromContext(ctx)
 
 	cnf, err := GetConfig(ctx, k8sclient, cr, stg)
@@ -121,15 +122,14 @@ func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmd
 			Name:      cr.Name + "-pbm-config",
 			Namespace: cr.Namespace,
 		},
-		Data: map[string][]byte{
-			"config.yaml": cnfBytes,
-		},
 	}
 
 	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			l.Info("Creating PBM config secret", "secret", secret.Name)
+			secret.Data = make(map[string][]byte)
+			secret.Data["config.yaml"] = cnfBytes
 			err = k8sclient.Create(ctx, &secret)
 			if err != nil {
 				return errors.Wrap(err, "create secret")
@@ -140,13 +140,33 @@ func CreateOrUpdateConfig(ctx context.Context, k8sclient client.Client, cr *psmd
 		return errors.Wrap(err, "get secret")
 	}
 
+	if reflect.DeepEqual(secret.Data["config.yaml"], cnfBytes) {
+		l.V(1).Info("PBM config secret is up to date", "secret", secret.Name)
+		return nil
+	}
+
 	l.Info("Updating PBM config secret", "secret", secret.Name)
 
 	secret.Data["config.yaml"] = cnfBytes
-
 	err = k8sclient.Update(ctx, &secret)
 	if err != nil {
 		return errors.Wrap(err, "update secret")
+	}
+
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
+			Namespace: cr.Namespace,
+		},
+	}
+	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&pod), &pod)
+	if err != nil {
+		return errors.Wrapf(err, "get pod %s", pod.Name)
+	}
+
+	err = SetConfigFile(ctx, cli, &pod, "/etc/pbm/config.yaml")
+	if err != nil {
+		return errors.Wrap(err, "set config file")
 	}
 
 	return nil

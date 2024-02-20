@@ -370,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	log.Info("Configuring PBM with storage", "storage", firstStorage)
 
-	if err := pbm.CreateOrUpdateConfig(ctx, r.client, cr, firstStorage); err != nil {
+	if err := pbm.CreateOrUpdateConfig(ctx, r.clientcmd, r.client, cr, firstStorage); err != nil {
 		return errors.Wrap(err, "create or update PBM configuration")
 	}
 

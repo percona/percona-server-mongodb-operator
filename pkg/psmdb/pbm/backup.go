@@ -4,19 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"strconv"
+
+	"github.com/pkg/errors"
 
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
 
 type BackupOptions struct {
-	Type             defs.BackupType `json:"type"`
-	Compression      string          `json:"compression"`
-	CompressionLevel string          `json:"compressionLevel"`
-	Namespace        string          `json:"namespace"`
+	Type             defs.BackupType          `json:"type"`
+	Compression      compress.CompressionType `json:"compression"`
+	CompressionLevel *int                     `json:"compressionLevel"`
+	Namespace        string                   `json:"namespace"`
 }
 
 type BackupResponse struct {
@@ -67,15 +70,25 @@ func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts
 
 	cmd := []string{
 		"pbm", "backup",
-		"--ns=" + opts.Namespace,
-		"--compression=" + opts.Compression,
-		"--compression-level=" + opts.CompressionLevel,
 		"--out=json",
+		"--compression=" + string(opts.Compression),
+	}
+
+	if opts.Type != "" {
+		cmd = append(cmd, "--type="+string(opts.Type))
+	}
+
+	if opts.Namespace != "" {
+		cmd = append(cmd, "--ns="+opts.Namespace)
+	}
+
+	if opts.CompressionLevel != nil {
+		cmd = append(cmd, "--compression-level="+strconv.Itoa(*opts.CompressionLevel))
 	}
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, err
+		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
@@ -103,7 +116,7 @@ func DescribeBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod,
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, err
+		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {

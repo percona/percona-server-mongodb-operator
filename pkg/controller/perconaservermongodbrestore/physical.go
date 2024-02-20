@@ -191,12 +191,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		var restoreOpts pbm.RestoreOptions
 		if cr.Spec.PITR != nil {
 			restoreOpts = pbm.RestoreOptions{
-				BaseSnapshot: bcp.Status.PBMname,
+				BaseSnapshot: bcp.Status.PBMName,
 				Time:         cr.Status.PITRTarget,
 			}
 		} else {
 			restoreOpts = pbm.RestoreOptions{
-				BackupName: bcp.Status.PBMname,
+				BackupName: bcp.Status.PBMName,
 			}
 		}
 

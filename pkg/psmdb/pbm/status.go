@@ -59,8 +59,8 @@ type Running struct {
 }
 
 type Status struct {
-	Backups Backups `json:"backups"`
-	Cluster Cluster `json:"cluster"`
+	Backups Backups   `json:"backups"`
+	Cluster []Cluster `json:"cluster"`
 	PITR    struct {
 		Conf bool `json:"conf"`
 		Run  bool `json:"run"`
@@ -77,7 +77,7 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 
 	err := exec(ctx, cli, pod, []string{"pbm", "status", "-o", "json"}, &stdout, &stderr)
 	if err != nil {
-		return status, errors.Wrapf(err, "get status stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return status, errors.Wrap(err, stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
@@ -85,6 +85,17 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 	}
 
 	return status, nil
+}
+
+func GetRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Running, error) {
+	running := Running{}
+
+	status, err := GetStatus(ctx, cli, pod)
+	if err != nil {
+		return running, err
+	}
+
+	return status.Running, nil
 }
 
 // HasRunningOperation checks if there is a running operation in PBM

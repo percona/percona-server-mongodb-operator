@@ -68,7 +68,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	}
 
 	var (
-		backupName = bcp.Status.PBMname
+		backupName = bcp.Status.PBMName
 		// storageName = bcp.Spec.StorageName
 	)
 

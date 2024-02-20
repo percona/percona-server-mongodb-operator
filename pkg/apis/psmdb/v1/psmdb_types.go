@@ -224,7 +224,7 @@ type PerconaServerMongoDBStatus struct {
 	MongoVersion       string                   `json:"mongoVersion,omitempty"`
 	MongoImage         string                   `json:"mongoImage,omitempty"`
 	Message            string                   `json:"message,omitempty"`
-	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
+	Conditions         []metav1.Condition       `json:"conditions,omitempty"`
 	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
 	Mongos             *MongosStatus            `json:"mongos,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
@@ -956,7 +956,7 @@ func (cr *PerconaServerMongoDB) CanBackup() error {
 
 const maxStatusesQuantity = 20
 
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+func (s *PerconaServerMongoDBStatus) AddCondition(c metav1.Condition) {
 	if len(s.Conditions) == 0 {
 		s.Conditions = append(s.Conditions, c)
 		return

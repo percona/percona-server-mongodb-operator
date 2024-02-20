@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+
+	"github.com/pkg/errors"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -74,7 +75,7 @@ func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opt
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, err
+		return response, errors.Wrap(err, stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
@@ -102,7 +103,7 @@ func DescribeRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, err
+		return response, errors.Wrap(err, stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
