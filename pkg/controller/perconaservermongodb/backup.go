@@ -363,6 +363,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return nil
 	}
 
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
+			Namespace: cr.Namespace,
+		},
+	}
+	err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if err != nil {
+		return errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
+	}
+
+	hasRunning, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
+	if err != nil {
+		return errors.Wrap(err, "check if PBM has running operation")
+	}
+
+	if hasRunning {
+		log.V(1).Info("PBM has running operation")
+		return nil
+	}
+
 	log.Info("Reconciling PBM configuration", "storages", cr.Spec.Backup.Storages)
 
 	var firstStorage api.BackupStorageSpec
@@ -377,27 +398,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return errors.Wrap(err, "create or update PBM configuration")
 	}
 
-	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil {
-		log.Info("PBM is ready", "status", cond.Status, "reason", cond.Reason)
-		if cond.Status == metav1.ConditionTrue {
-			return nil
-		}
-
-		if cond.Reason != "PBMIsNotConfigured" {
-			return nil
-		}
-
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
-				Namespace: cr.Namespace,
-			},
-		}
-		err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
-		if err != nil {
-			return errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
-		}
-
+	// Initialize PBM configuration
+	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil && cond.Reason == "PBMIsNotConfigured" && cond.Status != metav1.ConditionTrue {
 		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.ConfigFilePath) {
 			log.Info("Waiting for PBM configuration to be propagated to the pod")
 			return nil
@@ -406,7 +408,47 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFilePath); err != nil {
 			return errors.Wrap(err, "set PBM config file")
 		}
+
+		return nil
 	}
 
-	return nil
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-pbm-config",
+			Namespace: cr.Namespace,
+		},
+	}
+	err = r.client.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
+	if err != nil {
+		return errors.Wrapf(err, "get secret %s", client.ObjectKeyFromObject(&secret))
+	}
+
+	_, ok := secret.Annotations["percona.com/config-applied"]
+	if ok {
+		return nil
+	}
+
+	checksum, ok := secret.Annotations["percona.com/config-sum"]
+	if !ok {
+		return errors.New("missing checksum annotation")
+	}
+
+	log.Info("PBM configuration checksum", "checksum", checksum)
+
+	// is secret propagated to the pod
+	if !pbm.CheckSHA256Sum(ctx, r.clientcmd, pod, checksum, pbm.ConfigFilePath) {
+		return nil
+	}
+
+	log.Info("PBM configuration is propagated to the pod")
+
+	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFilePath); err != nil {
+		return errors.Wrap(err, "set PBM config file")
+	}
+
+	log.Info("PBM configuration is applied to the DB")
+
+	secret.Annotations["percona.com/config-applied"] = "true"
+
+	return r.client.Update(ctx, &secret)
 }

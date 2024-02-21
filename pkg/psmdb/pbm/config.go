@@ -3,6 +3,7 @@ package pbm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"reflect"
 	"strings"
@@ -84,9 +85,37 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 	return nil
 }
 
-func GetConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) (config.Config, error) {
-	l := log.FromContext(ctx)
+// CheckSHA256Sum checks the SHA256 checksum of a file in the PBM container
+func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, checksum, path string) bool {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
 
+	cmd := []string{"bash", "-c", fmt.Sprintf("echo %s %s | sha256sum --check --status", checksum, path)}
+
+	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+
+	return err == nil
+}
+
+// GetConfigChecksum returns the SHA256 checksum of the *applied* PBM configuration
+func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (string, error) {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	cmd := []string{"pbm", "config"}
+
+	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	if err != nil {
+		return "", errors.Wrap(err, stderr.String())
+	}
+
+	sha256sum := fmt.Sprintf("%x", sha256.Sum256(stdout.Bytes()))
+
+	return sha256sum, nil
+}
+
+// GenerateConfig generates a PBM configuration based on the PerconaServerMongoDB CR
+func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) (config.Config, error) {
 	cnf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cr.Spec.Backup.PITR.Enabled,
@@ -118,15 +147,13 @@ func GetConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Percona
 		}
 	}
 
-	l.Info("PBM config", "config", cnf)
-
 	return cnf, nil
 }
 
 func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
 	l := log.FromContext(ctx)
 
-	cnf, err := GetConfig(ctx, k8sclient, cr, stg)
+	cnf, err := GenerateConfig(ctx, k8sclient, cr, stg)
 	if err != nil {
 		return errors.Wrap(err, "get config")
 	}
@@ -143,10 +170,14 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		},
 	}
 
+	sha256sum := fmt.Sprintf("%x", sha256.Sum256(cnfBytes))
+
 	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
-			l.Info("Creating PBM config secret", "secret", secret.Name)
+			l.Info("Creating PBM config secret", "secret", secret.Name, "checksum", sha256sum)
+			secret.Annotations = make(map[string]string)
+			secret.Annotations["percona.com/config-sum"] = sha256sum
 			secret.Data = make(map[string][]byte)
 			secret.Data["config.yaml"] = cnfBytes
 			err = k8sclient.Create(ctx, &secret)
@@ -164,7 +195,13 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		return nil
 	}
 
-	l.Info("Updating PBM config secret", "secret", secret.Name)
+	l.Info("Updating PBM config secret", "secret", secret.Name, "checksum", sha256sum)
+
+	if secret.Annotations == nil {
+		secret.Annotations = make(map[string]string)
+	}
+	delete(secret.Annotations, "percona.com/config-applied")
+	secret.Annotations["percona.com/config-sum"] = sha256sum
 
 	secret.Data["config.yaml"] = cnfBytes
 	err = k8sclient.Update(ctx, &secret)

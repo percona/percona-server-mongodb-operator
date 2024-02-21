@@ -719,7 +719,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		return errors.Wrap(err, "get storage")
 	}
 
-	config, err := pbm.GetConfig(ctx, r.client, cluster, storage)
+	config, err := pbm.GenerateConfig(ctx, r.client, cluster, storage)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}

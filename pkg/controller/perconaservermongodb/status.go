@@ -214,13 +214,15 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
-	pbmStatus, err := r.checkPBMStatus(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "check pbm status")
-	}
+	if cr.Spec.Backup.Enabled && state == api.AppStateReady {
+		pbmStatus, err := r.checkPBMStatus(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "check pbm status")
+		}
 
-	if pbmStatus != api.AppStateReady {
-		state = pbmStatus
+		if pbmStatus != api.AppStateReady {
+			state = pbmStatus
+		}
 	}
 
 	if cr.Status.State != state {
@@ -424,10 +426,6 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
-	if !cr.Spec.Backup.Enabled {
-		return api.AppStateReady, nil
-	}
-
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
