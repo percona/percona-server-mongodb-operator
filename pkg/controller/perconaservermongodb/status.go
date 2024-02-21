@@ -29,6 +29,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	clusterCondition := metav1.Condition{
 		Type:               string(api.AppStateInit),
+		Reason:             string(api.AppStateInit),
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	}
@@ -423,8 +424,6 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
-	l := logf.FromContext(ctx)
-
 	if !cr.Spec.Backup.Enabled {
 		return api.AppStateReady, nil
 	}
@@ -442,18 +441,21 @@ func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *
 
 	_, err = pbm.GetStatus(ctx, r.clientcmd, pod)
 	if err != nil {
-		l.Info("PBM is not ready", "error", err)
-		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               "PBMReady",
-			Status:             metav1.ConditionFalse,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-		})
+		if pbm.IsNotConfigured(err) {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "PBMReady",
+				Reason:             "PBMIsNotConfigured",
+				Message:            err.Error(),
+				Status:             metav1.ConditionFalse,
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			})
+		}
 		return api.AppStateInit, nil
 	}
 
-	l.Info("PBM is ready")
 	meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 		Type:               "PBMReady",
+		Reason:             "PBMConfiguredAndReady",
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	})

@@ -8,6 +8,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -357,6 +359,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	}
 
 	if cr.Spec.Backup.Storages == nil {
+		log.Info("PBM is not configured", "reason", "backup storages are not configured")
 		return nil
 	}
 
@@ -372,6 +375,37 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	if err := pbm.CreateOrUpdateConfig(ctx, r.clientcmd, r.client, cr, firstStorage); err != nil {
 		return errors.Wrap(err, "create or update PBM configuration")
+	}
+
+	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil {
+		log.Info("PBM is ready", "status", cond.Status, "reason", cond.Reason)
+		if cond.Status == metav1.ConditionTrue {
+			return nil
+		}
+
+		if cond.Reason != "PBMIsNotConfigured" {
+			return nil
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
+				Namespace: cr.Namespace,
+			},
+		}
+		err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+		if err != nil {
+			return errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
+		}
+
+		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.ConfigFilePath) {
+			log.Info("Waiting for PBM configuration to be propagated to the pod")
+			return nil
+		}
+
+		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFilePath); err != nil {
+			return errors.Wrap(err, "set PBM config file")
+		}
 	}
 
 	return nil

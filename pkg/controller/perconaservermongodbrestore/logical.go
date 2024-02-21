@@ -55,11 +55,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
 	}
 
-	cjobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
+	running, err := pbm.GetRunningOperation(ctx, r.clientcmd, pod)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
-	if cjobs {
+	if running.Name != status.PBMName && running.Name != "" {
 		if cr.Status.State != psmdbv1.RestoreStateWaiting {
 			log.Info("waiting to finish another backup/restore.")
 		}
@@ -106,8 +106,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		}
 
 		log.Info("Starting restore", "backup", backupName)
+
 		status.PBMName, err = runRestore(ctx, r.clientcmd, r.client, pod, backupName, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
+
 		return status, err
 	}
 

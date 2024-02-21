@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -19,6 +20,24 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
+
+const ConfigFilePath = "/etc/pbm/config.yaml"
+
+func IsNotConfigured(err error) bool {
+	return strings.Contains(err.Error(), "mongo: no documents in result")
+}
+
+// FileExists checks if a file exists in the PBM container
+func FileExists(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) bool {
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	cmd := []string{"test", "-f", path}
+
+	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+
+	return err == nil
+}
 
 // SetConfigFile sets the PBM configuration file
 func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) error {
@@ -151,22 +170,6 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	err = k8sclient.Update(ctx, &secret)
 	if err != nil {
 		return errors.Wrap(err, "update secret")
-	}
-
-	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
-			Namespace: cr.Namespace,
-		},
-	}
-	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&pod), &pod)
-	if err != nil {
-		return errors.Wrapf(err, "get pod %s", pod.Name)
-	}
-
-	err = SetConfigFile(ctx, cli, &pod, "/etc/pbm/config.yaml")
-	if err != nil {
-		return errors.Wrap(err, "set config file")
 	}
 
 	return nil

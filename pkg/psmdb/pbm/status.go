@@ -77,7 +77,7 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 
 	err := exec(ctx, cli, pod, []string{"pbm", "status", "-o", "json"}, &stdout, &stderr)
 	if err != nil {
-		return status, errors.Wrap(err, stderr.String())
+		return status, errors.Wrapf(err, "stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
