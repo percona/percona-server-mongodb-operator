@@ -857,8 +857,6 @@ spec:
                     type: object
                   runtimeClassName:
                     type: string
-                  serviceAccountName:
-                    type: string
                   storages:
                     additionalProperties:
                       properties:

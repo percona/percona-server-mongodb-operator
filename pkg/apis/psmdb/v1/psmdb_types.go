@@ -779,7 +779,6 @@ type BackupSpec struct {
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
-	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`

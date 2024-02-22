@@ -22,9 +22,8 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 	}
 
 	backupPod := corev1.PodSpec{
-		RestartPolicy:      corev1.RestartPolicyNever,
-		ImagePullSecrets:   cr.Spec.ImagePullSecrets,
-		ServiceAccountName: backupSpec.ServiceAccountName,
+		RestartPolicy:    corev1.RestartPolicyNever,
+		ImagePullSecrets: cr.Spec.ImagePullSecrets,
 		Containers: []corev1.Container{
 			{
 				Name:    "backup",

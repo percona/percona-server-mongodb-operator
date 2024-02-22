@@ -463,9 +463,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
 			}
 		}
-		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
-			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
-		}
 
 		var fsgroup *int64
 		if platform == version.PlatformKubernetes {
