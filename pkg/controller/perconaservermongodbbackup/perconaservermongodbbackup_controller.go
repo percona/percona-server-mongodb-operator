@@ -3,12 +3,14 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -133,7 +135,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !reflect.DeepEqual(cr.Status.Conditions, status.Conditions) {
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -227,8 +229,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
 
-	log.Info("PBMName", "PBMName", status.PBMName, "running", running.Name)
-
 	if running.Name != status.PBMName && running.Name != "" {
 		if cr.Status.State != psmdbv1.BackupStateWaiting {
 			log.Info("Waiting to finish another backup/restore.", "operation", running.Name, "type", running.Type, "opId", running.OpID, "status", running.Status)
@@ -237,12 +237,36 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
+	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
+		log.Info("Configuring PBM", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
+
+		if err := pbm.SetConfigFile(ctx, r.clientcmd, &pod, pbm.ConfigFileDir+"/"+cr.Spec.StorageName); err != nil {
+			return status, errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Spec.StorageName)
+		}
+
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               "PBMConfigured",
+			Reason:             "PBMConfigured",
+			Message:            "PBM is configured with storage " + cr.Spec.StorageName,
+			Status:             metav1.ConditionTrue,
+			LastTransitionTime: metav1.Time{Time: time.Now()},
+		})
+
+		return status, nil
+	}
+
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+		log.Info("Starting backup", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
+
 		backup, err := pbm.RunBackup(ctx, r.clientcmd, &pod, pbm.BackupOptions{
 			Type:        cr.Spec.Type,
 			Compression: cr.Spec.Compression,
 		})
 		if err != nil {
+			if pbm.IsAnotherOperationInProgress(err) {
+				log.Info("Another operation is in progress", "backup", cr.Name, "error", err)
+				return status, nil
+			}
 			return status, errors.Wrap(err, "run backup")
 		}
 
@@ -268,16 +292,20 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 
 	switch backupMeta.Status {
 	case defs.StatusError:
+		log.Info("Backup failed", "backup", cr.Name, "error", backupMeta.Error)
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", backupMeta.Error)
 	case defs.StatusDone:
+		log.Info("Backup completed", "backup", cr.Name)
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(backupMeta.LastTransitionTS, 0),
 		}
 	case defs.StatusStarting:
+		log.V(1).Info("Backup is starting", "backup", cr.Name)
 		status.State = api.BackupStateRequested
 	default:
+		log.V(1).Info("Backup is running", "backup", cr.Name)
 		status.State = api.BackupStateRunning
 	}
 

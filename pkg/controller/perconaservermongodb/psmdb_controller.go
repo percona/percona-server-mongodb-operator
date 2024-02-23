@@ -557,10 +557,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
 	}
 
-	if err = r.updatePITR(ctx, cr); err != nil {
-		return rr, err
-	}
-
 	err = r.resyncPBMIfNeeded(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "resync PBM if needed")

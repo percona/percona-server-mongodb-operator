@@ -702,8 +702,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
-	log := logf.FromContext(ctx)
-
 	secret := corev1.Secret{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: "pbm-config", Namespace: cluster.Namespace}, &secret)
 	if err == nil {
@@ -712,14 +710,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		return errors.Wrap(err, "get PBM config secret")
 	}
 
-	log.V(1).Info("Configuring PBM", "storage", bcp.Spec.StorageName)
+	// log.V(1).Info("Configuring PBM", "storage", bcp.Spec.StorageName)
 
-	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
-	if err != nil {
-		return errors.Wrap(err, "get storage")
-	}
+	// storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
+	// if err != nil {
+	// 	return errors.Wrap(err, "get storage")
+	// }
 
-	config, err := pbm.GenerateConfig(ctx, r.client, cluster, storage)
+	config, err := pbm.GenerateConfig(ctx, r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}

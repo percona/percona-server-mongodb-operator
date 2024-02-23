@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"reflect"
-	"strings"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -22,10 +21,11 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-const ConfigFilePath = "/etc/pbm/config.yaml"
+const ConfigFileDir = "/etc/pbm"
+const ConfigFilePath = ConfigFileDir + "/config.yaml"
 
-func IsNotConfigured(err error) bool {
-	return strings.Contains(err.Error(), "mongo: no documents in result")
+type storageConfig struct {
+	Storage config.StorageConf `yaml:"storage"`
 }
 
 // FileExists checks if a file exists in the PBM container
@@ -115,7 +115,7 @@ func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.P
 }
 
 // GenerateConfig generates a PBM configuration based on the PerconaServerMongoDB CR
-func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) (config.Config, error) {
+func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB) (config.Config, error) {
 	cnf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cr.Spec.Backup.PITR.Enabled,
@@ -126,34 +126,13 @@ func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Pe
 		},
 	}
 
-	switch stg.Type {
-	case storage.S3:
-		creds, err := GetS3Crendentials(ctx, k8sclient, cr.Namespace, stg.S3)
-		if err != nil {
-			return cnf, errors.Wrap(err, "get S3 credentials")
-		}
-		cnf.Storage = config.StorageConf{
-			Type: storage.S3,
-			S3:   NewS3Config(stg.S3, creds),
-		}
-	case storage.Azure:
-		account, creds, err := GetAzureCrendentials(ctx, k8sclient, cr.Namespace, stg.Azure)
-		if err != nil {
-			return cnf, errors.Wrap(err, "get Azure credentials")
-		}
-		cnf.Storage = config.StorageConf{
-			Type:  storage.Azure,
-			Azure: NewAzureConfig(stg.Azure, account, creds),
-		}
-	}
-
 	return cnf, nil
 }
 
-func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
+func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB) error {
 	l := log.FromContext(ctx)
 
-	cnf, err := GenerateConfig(ctx, k8sclient, cr, stg)
+	cnf, err := GenerateConfig(ctx, k8sclient, cr)
 	if err != nil {
 		return errors.Wrap(err, "get config")
 	}
@@ -163,6 +142,50 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		return errors.Wrap(err, "marshal config")
 	}
 
+	data := make(map[string][]byte)
+	data["config.yaml"] = cnfBytes
+
+	for name, st := range cr.Spec.Backup.Storages {
+		var s storageConfig
+		switch st.Type {
+		case storage.S3:
+			creds, err := GetS3Crendentials(ctx, k8sclient, cr.Namespace, st.S3)
+			if err != nil {
+				return err
+			}
+			s = storageConfig{
+				Storage: config.StorageConf{
+					Type: storage.S3,
+					S3:   NewS3Config(st.S3, creds),
+				},
+			}
+		case storage.Azure:
+			account, creds, err := GetAzureCrendentials(ctx, k8sclient, cr.Namespace, st.Azure)
+			if err != nil {
+				return err
+			}
+			s = storageConfig{
+				Storage: config.StorageConf{
+					Type:  storage.Azure,
+					Azure: NewAzureConfig(st.Azure, account, creds),
+				},
+			}
+		}
+
+		stgBytes, err := yaml.Marshal(s)
+		if err != nil {
+			return errors.Wrapf(err, "marshal storage %s", name)
+		}
+
+		data[name] = stgBytes
+	}
+
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return errors.Wrap(err, "marshal data to json")
+	}
+	sha256sum := fmt.Sprintf("%x", sha256.Sum256(dataBytes))
+
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name + "-pbm-config",
@@ -170,16 +193,13 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		},
 	}
 
-	sha256sum := fmt.Sprintf("%x", sha256.Sum256(cnfBytes))
-
 	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			l.Info("Creating PBM config secret", "secret", secret.Name, "checksum", sha256sum)
 			secret.Annotations = make(map[string]string)
 			secret.Annotations["percona.com/config-sum"] = sha256sum
-			secret.Data = make(map[string][]byte)
-			secret.Data["config.yaml"] = cnfBytes
+			secret.Data = data
 			err = k8sclient.Create(ctx, &secret)
 			if err != nil {
 				return errors.Wrap(err, "create secret")
@@ -190,8 +210,9 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		return errors.Wrap(err, "get secret")
 	}
 
-	if reflect.DeepEqual(secret.Data["config.yaml"], cnfBytes) {
-		l.V(1).Info("PBM config secret is up to date", "secret", secret.Name)
+	checksum, ok := secret.Annotations["percona.com/config-sum"]
+	if ok && checksum == sha256sum {
+		l.Info("PBM config secret is up to date", "secret", secret.Name, "checksum", sha256sum)
 		return nil
 	}
 
@@ -203,7 +224,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	delete(secret.Annotations, "percona.com/config-applied")
 	secret.Annotations["percona.com/config-sum"] = sha256sum
 
-	secret.Data["config.yaml"] = cnfBytes
+	secret.Data = data
 	err = k8sclient.Update(ctx, &secret)
 	if err != nil {
 		return errors.Wrap(err, "update secret")
