@@ -75,7 +75,7 @@ func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opt
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, errors.Wrap(err, stderr.String())
+		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
@@ -103,7 +103,7 @@ func DescribeRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return response, errors.Wrap(err, stderr.String())
+		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {

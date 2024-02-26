@@ -49,7 +49,7 @@ func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, 
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return errors.Wrap(err, stderr.String())
+		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	return nil
@@ -64,7 +64,7 @@ func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, k
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return errors.Wrapf(err, stderr.String())
+		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	return nil
@@ -79,7 +79,7 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return errors.Wrap(err, stderr.String())
+		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	return nil
@@ -106,7 +106,7 @@ func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.P
 
 	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
 	if err != nil {
-		return "", errors.Wrap(err, stderr.String())
+		return "", errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256(stdout.Bytes()))

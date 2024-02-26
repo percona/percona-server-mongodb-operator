@@ -10,6 +10,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -59,9 +60,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
-	if running.Name != status.PBMName && running.Name != "" {
+	// for some reason PBM returns backup name for restore operation
+	if running.Name != bcp.Status.PBMName && running.Name != "" {
 		if cr.Status.State != psmdbv1.RestoreStateWaiting {
-			log.Info("waiting to finish another backup/restore.")
+			log.Info("waiting to finish another backup/restore.", "running", running.Name, "type", running.Type, "opid", running.OpID)
 		}
 		status.State = psmdbv1.RestoreStateWaiting
 		return status, nil
@@ -88,7 +90,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	}
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		// Disable PITR before restore
 		err = pbm.DisablePITR(ctx, r.clientcmd, pod)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
@@ -105,18 +106,24 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 			return status, nil
 		}
 
-		log.Info("Starting restore", "backup", backupName)
-
 		status.PBMName, err = runRestore(ctx, r.clientcmd, r.client, pod, backupName, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
+
+		log.Info("Restore is requested", "backup", backupName, "restore", status.PBMName, "pitr", cr.Spec.PITR != nil)
 
 		return status, err
 	}
 
-	restore, err := pbm.DescribeRestore(ctx, r.clientcmd, pod, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName})
+	var restore pbm.DescribeRestoreResponse
+	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+		restore, err = pbm.DescribeRestore(ctx, r.clientcmd, pod, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName})
+		return err
+	})
 	if err != nil {
 		return status, errors.Wrap(err, "describe restore")
 	}
+
+	log.Info("Restore status", "status", restore.Status, "error", restore.Error)
 
 	switch restore.Status {
 	case defs.StatusError:
