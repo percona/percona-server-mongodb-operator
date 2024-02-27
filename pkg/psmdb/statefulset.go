@@ -245,7 +245,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), volumes)
 	volumeClaimTemplates = multiAZ.WithSidecarPVCs(logf.FromContext(ctx), volumeClaimTemplates)
 
-	updateStrategy := appsv1.StatefulSetUpdateStrategy{}
+	var updateStrategy appsv1.StatefulSetUpdateStrategy
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		updateStrategy = appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
