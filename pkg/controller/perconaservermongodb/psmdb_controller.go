@@ -496,7 +496,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		}
 
 		if replset.NonVoting.Enabled {
-			matchLabels = replset.MongodLabels(cr)
+			matchLabels = replset.NonVotingLabels(cr)
 			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 			if err != nil {
 				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
