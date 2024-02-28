@@ -172,7 +172,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			if err := physical.SetConfigFile(ctx, r.clientcmd, &pod, pbm.ConfigFilePath); err != nil {
+			if err := physical.SetConfigFile(ctx, r.clientcmd, &pod, pbm.GetConfigPathForStorage(bcp.Spec.StorageName)); err != nil {
 				return err
 			}
 
@@ -266,7 +266,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 
 		restoreMeta, err = physical.DescribeRestore(ctx, r.clientcmd, &pod, pbm.DescribeRestoreOptions{
 			Name:       cr.Status.PBMName,
-			ConfigPath: pbm.ConfigFilePath,
+			ConfigPath: pbm.GetConfigPathForStorage(bcp.Spec.StorageName),
 		})
 		if err != nil {
 			return err

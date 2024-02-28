@@ -226,8 +226,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
-	log.Info("cluster state", "clusterState", clusterState, "state", state)
-
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
 	}

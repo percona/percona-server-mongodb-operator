@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -64,10 +63,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, nil
 	}
 
-	var (
-		backupName = bcp.Status.PBMName
-		// storageName = bcp.Spec.StorageName
-	)
+	backupName := bcp.Status.PBMName
 
 	if cluster.Spec.Sharding.Enabled {
 		mongos := appsv1.Deployment{}
@@ -101,7 +97,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 			return status, nil
 		}
 
-		status.PBMName, err = runRestore(ctx, r.clientcmd, r.client, pod, backupName, cr.Spec.PITR)
+		status.PBMName, err = runRestore(ctx, r.clientcmd, pod, backupName, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 
 		log.Info("Restore is requested", "backup", backupName, "restore", status.PBMName, "pitr", cr.Spec.PITR != nil)
@@ -142,12 +138,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	return status, nil
 }
 
-func runRestore(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, pod *corev1.Pod, backup string, pitr *psmdbv1.PITRestoreSpec) (string, error) {
+func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, backup string, pitr *psmdbv1.PITRestoreSpec) (string, error) {
 	opts := pbm.RestoreOptions{
 		BackupName: backup,
 	}
 
-	// TODO: Implement PITR
+	if pitr != nil {
+		opts.Time = pitr.Date.String()
+	}
 
 	restore, err := pbm.RunRestore(ctx, cli, pod, opts)
 	if err != nil {

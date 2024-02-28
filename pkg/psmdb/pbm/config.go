@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -22,11 +23,6 @@ import (
 )
 
 const ConfigFileDir = "/etc/pbm"
-const ConfigFilePath = ConfigFileDir + "/config.yaml"
-
-type storageConfig struct {
-	Storage config.StorageConf `yaml:"storage"`
-}
 
 // FileExists checks if a file exists in the PBM container
 func FileExists(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) bool {
@@ -89,16 +85,39 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 	return nil
 }
 
+func calculateSHA256Sum(data map[string][]byte) string {
+	keys := make([]string, 0, len(data))
+	sums := make(map[string]string)
+	for key, d := range data {
+		keys = append(keys, key)
+		sums[key] = fmt.Sprintf("%x", sha256.Sum256(d))
+	}
+
+	slices.Sort[[]string](keys)
+
+	lines := make([]string, 0, len(sums))
+	for _, key := range keys {
+		lines = append(lines, fmt.Sprintf("%s  %s", sums[key], ConfigFileDir+"/"+key))
+	}
+
+	checkfile := strings.Join(lines, "\n") + "\n"
+
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(checkfile)))
+}
+
 // CheckSHA256Sum checks the SHA256 checksum of a file in the PBM container
-func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, checksum, path string) bool {
+func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, checksum string) bool {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"bash", "-c", fmt.Sprintf("echo %s %s | sha256sum --check --status", checksum, path)}
+	cmd := []string{"bash", "-c", "sha256sum " + ConfigFileDir + "/* | sha256sum | awk '{print $1}'"}
 
 	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
+	if err != nil {
+		return false
+	}
 
-	return err == nil
+	return strings.TrimSpace(stdout.String()) == checksum
 }
 
 // GetConfigChecksum returns the SHA256 checksum of the *applied* PBM configuration
@@ -169,24 +188,17 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		return errors.Wrap(err, "get config")
 	}
 
-	cnfBytes, err := yaml.Marshal(cnf)
-	if err != nil {
-		return errors.Wrap(err, "marshal config")
-	}
-
 	data := make(map[string][]byte)
-	data["config.yaml"] = cnfBytes
 
 	for name, st := range cr.Spec.Backup.Storages {
-		var s storageConfig
 		conf, err := NewStorageConfig(ctx, k8sclient, cr.Namespace, st)
 		if err != nil {
 			return errors.Wrapf(err, "get storage config for %s", name)
 		}
 
-		s = storageConfig{Storage: conf}
+		cnf.Storage = conf
 
-		stgBytes, err := yaml.Marshal(s)
+		stgBytes, err := yaml.Marshal(cnf)
 		if err != nil {
 			return errors.Wrapf(err, "marshal storage %s", name)
 		}
@@ -194,11 +206,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		data[name] = stgBytes
 	}
 
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return errors.Wrap(err, "marshal data to json")
-	}
-	sha256sum := fmt.Sprintf("%x", sha256.Sum256(dataBytes))
+	sha256sum := calculateSHA256Sum(data)
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -226,7 +234,6 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 
 	checksum, ok := secret.Annotations["percona.com/config-sum"]
 	if ok && checksum == sha256sum {
-		l.Info("PBM config secret is up to date", "secret", secret.Name, "checksum", sha256sum)
 		return nil
 	}
 

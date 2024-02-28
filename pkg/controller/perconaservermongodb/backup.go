@@ -185,16 +185,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	// Initialize PBM configuration
 	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil && cond.Status != metav1.ConditionTrue && cond.Reason == "PBMIsNotConfigured" {
-		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.ConfigFilePath) {
+		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)) {
 			log.Info("Waiting for PBM configuration to be propagated to the pod")
 			return nil
 		}
 
-		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFilePath); err != nil {
-			return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFilePath)
-		}
-
-		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFileDir+"/"+firstStorageName); err != nil {
+		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)); err != nil {
 			return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+firstStorageName)
 		}
 
@@ -222,25 +218,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return errors.New("missing checksum annotation")
 	}
 
-	log.V(1).Info("PBM configuration checksum", "checksum", checksum)
-
 	// is secret propagated to the pod
-	if !pbm.CheckSHA256Sum(ctx, r.clientcmd, pod, checksum, pbm.ConfigFilePath) {
+	if !pbm.CheckSHA256Sum(ctx, r.clientcmd, pod, checksum) {
+		log.Info("Waiting for PBM configuration to be propagated to the pod")
 		return nil
 	}
 
 	log.V(1).Info("PBM configuration is propagated to the pod", "pod", pod.Name)
 
-	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFilePath); err != nil {
-		return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFilePath)
-	}
-
-	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFileDir+"/"+firstStorageName); err != nil {
-		return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+firstStorageName)
+	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)); err != nil {
+		return errors.Wrapf(err, "set PBM config file %s", pbm.GetConfigPathForStorage(firstStorageName))
 	}
 
 	log.V(1).Info("PBM configuration is applied to the DB", "pod", pod.Name)
-
 	secret.Annotations["percona.com/config-applied"] = "true"
 
 	return r.client.Update(ctx, &secret)
