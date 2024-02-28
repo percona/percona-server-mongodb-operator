@@ -73,7 +73,7 @@ func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opt
 		cmd = append(cmd, "--time="+opts.Time)
 	}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -101,7 +101,7 @@ func DescribeRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod
 		cmd = append(cmd, "--config="+opts.ConfigPath)
 	}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}

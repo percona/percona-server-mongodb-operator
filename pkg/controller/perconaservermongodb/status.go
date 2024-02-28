@@ -221,9 +221,12 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 
 		if pbmStatus != api.AppStateReady {
+			log.Info("PBM is not ready", "state", pbmStatus)
 			state = pbmStatus
 		}
 	}
+
+	log.Info("cluster state", "clusterState", clusterState, "state", state)
 
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
@@ -426,19 +429,15 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 }
 
 func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
-			Namespace: cr.Namespace,
-		},
-	}
-	err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	log := logf.FromContext(ctx)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
 	if err != nil {
-		return api.AppStateInit, errors.Wrap(err, "get pod")
+		return api.AppStateInit, errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
 	}
 
 	_, err = pbm.GetStatus(ctx, r.clientcmd, pod)
 	if err != nil {
+		log.Error(err, "get pbm status")
 		if pbm.IsNotConfigured(err) {
 			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 				Type:               "PBMReady",

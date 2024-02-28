@@ -17,6 +17,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -45,15 +46,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-" + cluster.Spec.Replsets[0].Name + "-0",
-			Namespace: cluster.Namespace,
-		},
-	}
-	err = r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
 	if err != nil {
-		return status, errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
+		return status, errors.Wrapf(err, "get pod for rs/%s", cluster.Spec.Replsets[0].Name)
 	}
 
 	running, err := pbm.GetRunningOperation(ctx, r.clientcmd, pod)

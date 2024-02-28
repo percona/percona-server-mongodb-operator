@@ -86,7 +86,7 @@ func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts
 		cmd = append(cmd, "--compression-level="+strconv.Itoa(*opts.CompressionLevel))
 	}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -114,7 +114,7 @@ func DescribeBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod,
 		cmd = append(cmd, "--with-collections")
 	}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}

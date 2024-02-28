@@ -3,12 +3,14 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +28,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -123,7 +127,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !reflect.DeepEqual(cr.Status.Conditions, status.Conditions) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -155,6 +159,40 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	case psmdbv1.BackupStateReady:
 	default:
 		return reconcile.Result{}, errors.New("backup is not ready")
+	}
+
+	if meta.FindStatusCondition(status.Conditions, "PBMIsConfigured") == nil {
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cr.Spec.ClusterName,
+				Namespace: cr.Namespace,
+			},
+		}
+		err = r.client.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)
+		if err != nil {
+			return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
+		}
+
+		pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+		if err != nil {
+			return rr, errors.Wrapf(err, "get pod for rs/%s", cluster.Spec.Replsets[0].Name)
+		}
+
+		err = pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
+		if err != nil {
+			return rr, errors.Wrapf(err, "set pbm config for storage %s", bcp.Spec.StorageName)
+		}
+
+		// Set the PBMIsConfigured condition to true
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:               "PBMIsConfigured",
+			Status:             metav1.ConditionTrue,
+			Reason:             "PBMIsConfigured",
+			Message:            "PBM is configured",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		return rr, nil
 	}
 
 	switch bcp.Status.Type {

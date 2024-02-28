@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
@@ -108,11 +108,9 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 
 	log.V(1).Info("Deleted annotation", "annotation", api.AnnotationResyncPBM)
 
-	pod := &corev1.Pod{}
-	podName := fmt.Sprintf("%s-%s-0", cr.Name, cr.Spec.Replsets[0].Name)
-	err = r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
 	if err != nil {
-		return errors.Wrapf(err, "get pod/%s", podName)
+		return errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
 	}
 
 	log.Info("Starting PBM resync", "pod", pod.Name)
@@ -149,15 +147,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return nil
 	}
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + cr.Spec.Replsets[0].Name + "-0",
-			Namespace: cr.Namespace,
-		},
-	}
-	err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	restoreRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
-		return errors.Wrapf(err, "get pod %s", client.ObjectKeyFromObject(pod))
+		return errors.Wrap(err, "check if restore is running")
+	}
+
+	if restoreRunning {
+		log.Info("Waiting for restore to complete", "reason", "restore is running")
+		return nil
+	}
+
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+	if err != nil {
+		log.Info("Waiting for a pod to be ready", "reason", "no ready pods found")
+		return nil
 	}
 
 	hasRunning, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)

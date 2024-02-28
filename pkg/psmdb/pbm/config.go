@@ -35,9 +35,13 @@ func FileExists(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, pat
 
 	cmd := []string{"test", "-f", path}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 
 	return err == nil
+}
+
+func GetConfigPathForStorage(name string) string {
+	return fmt.Sprintf("%s/%s", ConfigFileDir, name)
 }
 
 // SetConfigFile sets the PBM configuration file
@@ -47,7 +51,7 @@ func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, 
 
 	cmd := []string{"pbm", "config", "--file", path}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -62,7 +66,7 @@ func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, k
 
 	cmd := []string{"pbm", "config", fmt.Sprintf("--set=%s=%s", key, value)}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -77,7 +81,7 @@ func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) er
 
 	cmd := []string{"pbm", "config", "--force-resync"}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -92,7 +96,7 @@ func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod,
 
 	cmd := []string{"bash", "-c", fmt.Sprintf("echo %s %s | sha256sum --check --status", checksum, path)}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 
 	return err == nil
 }
@@ -104,7 +108,7 @@ func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.P
 
 	cmd := []string{"pbm", "config"}
 
-	err := exec(ctx, cli, pod, cmd, &stdout, &stderr)
+	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, &stdout, &stderr)
 	if err != nil {
 		return "", errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -129,6 +133,34 @@ func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Pe
 	return cnf, nil
 }
 
+func NewStorageConfig(ctx context.Context, k8sclient client.Client, namespace string, stg psmdbv1.BackupStorageSpec) (config.StorageConf, error) {
+	switch stg.Type {
+	case storage.S3:
+		creds, err := GetS3Crendentials(ctx, k8sclient, namespace, stg.S3)
+		if err != nil {
+			return config.StorageConf{}, err
+		}
+
+		return config.StorageConf{
+			Type: storage.S3,
+			S3:   NewS3Config(stg.S3, creds),
+		}, nil
+
+	case storage.Azure:
+		account, creds, err := GetAzureCrendentials(ctx, k8sclient, namespace, stg.Azure)
+		if err != nil {
+			return config.StorageConf{}, err
+		}
+
+		return config.StorageConf{
+			Type:  storage.Azure,
+			Azure: NewAzureConfig(stg.Azure, account, creds),
+		}, nil
+	default:
+		return config.StorageConf{}, errors.Errorf("unknown storage type %s", stg.Type)
+	}
+}
+
 func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB) error {
 	l := log.FromContext(ctx)
 
@@ -147,30 +179,12 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 
 	for name, st := range cr.Spec.Backup.Storages {
 		var s storageConfig
-		switch st.Type {
-		case storage.S3:
-			creds, err := GetS3Crendentials(ctx, k8sclient, cr.Namespace, st.S3)
-			if err != nil {
-				return err
-			}
-			s = storageConfig{
-				Storage: config.StorageConf{
-					Type: storage.S3,
-					S3:   NewS3Config(st.S3, creds),
-				},
-			}
-		case storage.Azure:
-			account, creds, err := GetAzureCrendentials(ctx, k8sclient, cr.Namespace, st.Azure)
-			if err != nil {
-				return err
-			}
-			s = storageConfig{
-				Storage: config.StorageConf{
-					Type:  storage.Azure,
-					Azure: NewAzureConfig(st.Azure, account, creds),
-				},
-			}
+		conf, err := NewStorageConfig(ctx, k8sclient, cr.Namespace, st)
+		if err != nil {
+			return errors.Wrapf(err, "get storage config for %s", name)
 		}
+
+		s = storageConfig{Storage: conf}
 
 		stgBytes, err := yaml.Marshal(s)
 		if err != nil {

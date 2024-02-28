@@ -24,8 +24,7 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	mongosPods []corev1.Pod) (api.AppState, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
@@ -44,6 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if restoreInProgress {
+		log.Info("restore in progress", "replset", replset.Name)
 		return api.AppStateInit, nil
 	}
 
@@ -90,9 +90,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
+
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
+
+		log.V(1).Error(err, "failed to get mongo client")
 
 		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {

@@ -327,7 +327,12 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, &list.Items[0])
+	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+	if err != nil {
+		return errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
+	}
+
+	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}

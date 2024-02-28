@@ -25,6 +25,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm/physical"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -97,6 +98,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		status.State = psmdbv1.RestoreStateWaiting
 	}
 
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &psmdbv1.PerconaServerMongoDB{}
+
+		err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
+
+		orig := c.DeepCopy()
+
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
+		c.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+		return r.client.Patch(ctx, c, client.MergeFrom(orig))
+	})
+	if err != nil {
+		return status, errors.Wrap(err, "annotate cluster for restore")
+	}
+
 	if err := r.createPBMConfigSecret(ctx, cr, cluster, bcp); err != nil {
 		return status, errors.Wrap(err, "create PBM config secret")
 	}
@@ -148,12 +170,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			err := pbm.SetConfigFile(ctx, r.clientcmd, &pod, "/etc/pbm/pbm_config.yaml")
-			if err != nil {
-				log.Error(err, "failed to set PBM configuration")
+			if err := physical.SetConfigFile(ctx, r.clientcmd, &pod, pbm.ConfigFilePath); err != nil {
+				return err
 			}
 
-			return err
+			return nil
 		})
 		if err != nil {
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
@@ -173,7 +194,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			case <-ticker.C:
 				hasRunningOp := false
 				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-					hasRunningOp, err = pbm.HasRunningOperation(ctx, r.clientcmd, &pod)
+					hasRunningOp, err = physical.HasRunningOperation(ctx, r.clientcmd, &pod)
 					return err
 				})
 				if err != nil {
@@ -207,12 +228,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			Jitter:   0.1,
 		}
 
+		var out pbm.RestoreResponse
 		err = retry.OnError(backoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
 			log.Info("Starting restore", "opts", restoreOpts, "pod", pod.Name)
 
-			_, err := pbm.RunRestore(ctx, r.clientcmd, &pod, restoreOpts)
+			out, err = physical.RunRestore(ctx, r.clientcmd, &pod, restoreOpts)
 			if err != nil {
 				return err
 			}
@@ -223,14 +245,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		})
 		if err != nil {
 			return status, err
-		}
-
-		var out struct {
-			Name    string `json:"name"`
-			Storage string `json:"storage"`
-		}
-		if err := json.Unmarshal(stdoutBuf.Bytes(), &out); err != nil {
-			return status, errors.Wrap(err, "unmarshal PBM restore output")
 		}
 
 		status.State = psmdbv1.RestoreStateRequested
@@ -248,7 +262,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return errors.Wrap(err, "get pod")
 		}
 
-		restoreMeta, err = pbm.DescribeRestore(ctx, r.clientcmd, &pod, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName, ConfigPath: "/etc/pbm/pbm_config.yaml"})
+		restoreMeta, err = physical.DescribeRestore(ctx, r.clientcmd, &pod, pbm.DescribeRestoreOptions{
+			Name:       cr.Status.PBMName,
+			ConfigPath: pbm.ConfigFilePath,
+		})
 		if err != nil {
 			return err
 		}
@@ -422,14 +439,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 	sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers[:pbmIdx], sts.Spec.Template.Spec.Containers[pbmIdx+1:]...)
 
-	sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
-		Name: "pbm-config",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: "pbm-config",
-			},
-		},
-	})
 	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
 		Name:      "pbm-config",
 		MountPath: "/etc/pbm/",
@@ -507,7 +516,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
 		})
 		if err != nil {
 			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -702,20 +711,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+	secretName := cr.Name + "-pbm-config"
 	secret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: "pbm-config", Namespace: cluster.Namespace}, &secret)
+	err := r.client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, &secret)
 	if err == nil {
 		return nil
 	} else if !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "get PBM config secret")
 	}
-
-	// log.V(1).Info("Configuring PBM", "storage", bcp.Spec.StorageName)
-
-	// storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
-	// if err != nil {
-	// 	return errors.Wrap(err, "get storage")
-	// }
 
 	config, err := pbm.GenerateConfig(ctx, r.client, cluster)
 	if err != nil {
@@ -724,6 +727,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 
 	config.PITR.Enabled = false
 
+	stg, ok := cluster.Spec.Backup.Storages[bcp.Spec.StorageName]
+	if !ok {
+		return errors.Errorf("storage %s not found", bcp.Spec.StorageName)
+	}
+
+	stgConf, err := pbm.NewStorageConfig(ctx, r.client, cluster.Namespace, stg)
+	if err != nil {
+		return errors.Wrapf(err, "get storage config for %s", bcp.Spec.StorageName)
+	}
+
+	config.Storage = stgConf
+
 	confBytes, err := yaml.Marshal(config)
 	if err != nil {
 		return errors.Wrap(err, "marshal PBM config to yaml")
@@ -731,11 +746,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 
 	secret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pbm-config",
+			Name:      secretName,
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string][]byte{
-			"pbm_config.yaml": confBytes,
+			"config.yaml": confBytes,
 		},
 	}
 	if err := r.client.Create(ctx, &secret); err != nil {
