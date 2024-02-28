@@ -144,7 +144,9 @@ func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, bac
 	}
 
 	if pitr != nil {
-		opts.Time = pitr.Date.String()
+		opts = pbm.RestoreOptions{
+			Time: pitr.Date.String(),
+		}
 	}
 
 	restore, err := pbm.RunRestore(ctx, cli, pod, opts)

@@ -147,7 +147,7 @@ func (t *PITRestoreDate) MarshalJSON() ([]byte, error) {
 }
 
 func (t *PITRestoreDate) String() string {
-	return t.Time.Format("2006-01-02 15:04:05")
+	return t.Time.Format("2006-01-02T15:04:05")
 }
 
 type PITRestoreSpec struct {
