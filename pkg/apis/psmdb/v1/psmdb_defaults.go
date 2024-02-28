@@ -282,6 +282,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
 		}
+
+		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 {
+			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
 	}
 
 	repls := cr.Spec.Replsets
