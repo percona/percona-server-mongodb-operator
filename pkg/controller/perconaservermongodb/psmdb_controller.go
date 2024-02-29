@@ -1132,6 +1132,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
 	}
+	mongos = msSts
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
