@@ -53,7 +53,6 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	}
 }
 
-
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
 	ls := MongosLabels(cr)
 
@@ -160,12 +159,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args: mongosContainerArgs(
-			cr,
-			cr.Spec.Sharding.Mongos.Resources,
-			useConfigFile,
-			cfgInstances,
-		),
+		Args:            mongosContainerArgs(cr, useConfigFile, cfgInstances),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
@@ -218,7 +212,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	return container, nil
 }
 
-func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) []string {
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
