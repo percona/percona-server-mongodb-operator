@@ -120,7 +120,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cr.Spec.Secrets.Users,
+						Name: api.InternalUserSecretName(cr),
 					},
 					Optional: &fvar,
 				},
@@ -135,16 +135,6 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
-		container.EnvFrom = []corev1.EnvFromSource{
-			{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.InternalUserSecretName(cr),
-					},
-					Optional: &fvar,
-				},
-			},
-		}
 		container.Command = []string{"/data/db/ps-entry.sh"}
 	}
 

@@ -180,18 +180,18 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
+			// {
+			// 	SecretRef: &corev1.SecretEnvSource{
+			// 		LocalObjectReference: corev1.LocalObjectReference{
+			// 			Name: cr.Spec.Secrets.Users,
+			// 		},
+			// 		Optional: &fvar,
+			// 	},
+			// },
 			{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cr.Spec.Secrets.Users,
-					},
-					Optional: &fvar,
-				},
-			},
-			{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cr),
+						Name: api.InternalUserSecretName(cr),
 					},
 					Optional: &fvar,
 				},
