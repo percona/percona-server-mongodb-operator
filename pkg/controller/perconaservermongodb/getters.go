@@ -28,14 +28,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *a
 	return mongodPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongosDeployment(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.Deployment, error) {
-	mongos := appsv1.Deployment{}
-
-	err := r.client.Get(ctx, cr.MongosNamespacedName(), &mongos)
-
-	return mongos, err
-
-}
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongosPods := corev1.PodList{}

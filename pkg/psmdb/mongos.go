@@ -29,19 +29,6 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 	}
 }
 
-func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.MongosNamespacedName().Name,
-			Namespace: cr.MongosNamespacedName().Namespace,
-		},
-	}
-}
-
 func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.StatefulSetSpec {
 	var updateStrategy appsv1.StatefulSetUpdateStrategy
 	switch cr.Spec.UpdateStrategy {
@@ -66,22 +53,6 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	}
 }
 
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.DeploymentSpec {
-	zero := intstr.FromInt(0)
-	return appsv1.DeploymentSpec{
-		Replicas: &cr.Spec.Sharding.Mongos.Size,
-		Selector: &metav1.LabelSelector{
-			MatchLabels: MongosLabels(cr),
-		},
-		Template: template,
-		Strategy: appsv1.DeploymentStrategy{
-			Type: appsv1.RollingUpdateDeploymentStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge: &zero,
-			},
-		},
-	}
-}
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
 	ls := MongosLabels(cr)

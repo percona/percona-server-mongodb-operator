@@ -50,7 +50,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := isEncryptionEnabled(replset)
 	if err != nil {
 		return corev1.Container{}, err
 	}
@@ -194,7 +194,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args = append(args, "--shardsvr")
 	}
 
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := isEncryptionEnabled(replset)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to check if mongo encryption enabled")
 	}
