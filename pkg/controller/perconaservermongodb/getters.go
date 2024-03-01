@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -27,7 +28,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *a
 
 	return mongodPods, err
 }
-
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	mongosPods := corev1.PodList{}
@@ -97,6 +97,14 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 	)
 
 	return list, err
+}
+
+func (r *ReconcilePerconaServerMongoDB) getMongosStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
+	sts := psmdb.MongosStatefulset(cr)
+	err := r.client.Get(ctx,
+		types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace},
+		sts)
+	return sts, err
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {

@@ -1195,12 +1195,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		}
 	}
 
-	for k, v := range mSts.Annotations {
-		if k == "last-applied-secret" || k == "last-applied-secret-ts" {
-			templateSpec.Annotations[k] = v
-		}
-	}
-
 	mSts.Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
 
 	err = r.createOrUpdate(ctx, mSts)
