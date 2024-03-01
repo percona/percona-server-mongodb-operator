@@ -1125,12 +1125,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrapf(err, "set owner ref for statefulset %s", msSts.Name)
 	}
 
-	var mongos client.Object
+	var mSts *appsv1.StatefulSet
 	err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
 	}
-	mongos = msSts
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
 	if err != nil {
@@ -1197,14 +1196,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		}
 	}
 
-	mongos.(*appsv1.StatefulSet).Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
-
-	err = r.createOrUpdate(ctx, mongos)
-	if err != nil {
-		return errors.Wrapf(err, "update or create mongos %s", mongos)
+	for k, v := range mSts.Annotations {
+		if k == "last-applied-secret" || k == "last-applied-secret-ts" {
+			templateSpec.Annotations[k] = v
+		}
 	}
 
-	err = r.reconcilePDB(ctx, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, mongos)
+	mSts.Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+
+	err = r.createOrUpdate(ctx, mSts)
+	if err != nil {
+		return errors.Wrapf(err, "update or create mongos %s", mSts)
+	}
+
+	err = r.reconcilePDB(ctx, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, mSts)
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
 	}
@@ -1227,7 +1232,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "remove outdated mongos services")
 	}
 	if cr.CompareVersion("1.12.0") >= 0 {
-		err = r.smartMongosUpdate(ctx, cr, mongos.(*appsv1.StatefulSet))
+		err = r.smartMongosUpdate(ctx, cr, mSts)
 		if err != nil {
 			return errors.Wrap(err, "smart update")
 		}
