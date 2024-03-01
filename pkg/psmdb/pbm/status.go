@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	"github.com/pkg/errors"
@@ -118,4 +119,16 @@ func IsPITRRunning(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) 
 	}
 
 	return status.PITR.Run || status.PITR.Conf, nil
+}
+
+func LatestPITRChunk(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (string, error) {
+	status, err := GetStatus(ctx, cli, pod)
+	if err != nil {
+		return "", err
+	}
+
+	latest := status.Backups.PITRChunks.Chunks[len(status.Backups.PITRChunks.Chunks)-1].Range.End
+	ts := time.Unix(int64(latest), 0).UTC()
+
+	return ts.Format("2006-01-02T15:04:05"), nil
 }

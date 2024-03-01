@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -853,6 +854,9 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	stsName := cr.Name + "-" + replset.Name
 	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
 	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, errors.Wrapf(err, "get statefulset %s", stsName)
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]

@@ -136,30 +136,32 @@ func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("reconcilePBMConfiguration")
 
 	if !cr.Spec.Backup.Enabled {
 		return nil
 	}
 
 	if cr.Spec.Backup.Storages == nil {
-		log.Info("PBM is not configured", "reason", "backup storages are not configured")
+		log.Info("Waiting for backup storages to be configured")
 		return nil
 	}
 
-	restoreRunning, err := r.isRestoreRunning(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "check if restore is running")
-	}
+	for _, rs := range cr.Spec.Replsets {
+		restoreRunning, err := r.restoreInProgress(ctx, cr, rs)
+		if err != nil {
+			return errors.Wrap(err, "check if restore is running")
+		}
 
-	if restoreRunning {
-		log.Info("Waiting for restore to complete", "reason", "restore is running")
-		return nil
+		if restoreRunning {
+			log.Info("Waiting for restore to complete")
+			return nil
+		}
 	}
 
 	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
 	if err != nil {
-		log.Info("Waiting for a pod to be ready", "reason", "no ready pods found")
+		log.Info("Waiting for a ready pod")
 		return nil
 	}
 

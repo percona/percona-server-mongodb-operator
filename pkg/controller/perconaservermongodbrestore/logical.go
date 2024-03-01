@@ -144,8 +144,19 @@ func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, bac
 	}
 
 	if pitr != nil {
-		opts = pbm.RestoreOptions{
-			Time: pitr.Date.String(),
+		switch pitr.Type {
+		case psmdbv1.PITRestoreTypeDate:
+			opts = pbm.RestoreOptions{
+				Time: pitr.Date.String(),
+			}
+		case psmdbv1.PITRestoreTypeLatest:
+			latest, err := pbm.LatestPITRChunk(ctx, cli, pod)
+			if err != nil {
+				return "", errors.Wrap(err, "get latest PITR chunk")
+			}
+			opts = pbm.RestoreOptions{
+				Time: latest,
+			}
 		}
 	}
 

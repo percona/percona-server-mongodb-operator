@@ -435,7 +435,7 @@ func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *
 
 	_, err = pbm.GetStatus(ctx, r.clientcmd, pod)
 	if err != nil {
-		log.Error(err, "get pbm status")
+		log.V(1).Error(err, "get pbm status")
 		if pbm.IsNotConfigured(err) {
 			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 				Type:               "PBMReady",
