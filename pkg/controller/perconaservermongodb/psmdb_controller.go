@@ -1119,16 +1119,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return nil
 	}
 
-	msSts := psmdb.MongosStatefulset(cr)
-	err = setControllerReference(cr, msSts, r.scheme)
+	mSts := psmdb.MongosStatefulset(cr)
+	err = setControllerReference(cr, mSts, r.scheme)
 	if err != nil {
-		return errors.Wrapf(err, "set owner ref for statefulset %s", msSts.Name)
+		return errors.Wrapf(err, "set owner ref for statefulset %s", mSts.Name)
 	}
 
-	var mSts *appsv1.StatefulSet
-	err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
+	err = r.client.Get(ctx, types.NamespacedName{Name: mSts.Name, Namespace: mSts.Namespace}, mSts)
 	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
+		return errors.Wrapf(err, "get statefulset %s", mSts.Name)
 	}
 
 	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
