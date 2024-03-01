@@ -230,6 +230,7 @@ type PerconaServerMongoDBStatus struct {
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupStorage      string                   `json:"backupStorage,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
 	Host               string                   `json:"host,omitempty"`

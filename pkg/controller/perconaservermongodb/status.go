@@ -214,15 +214,34 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
-	if cr.Spec.Backup.Enabled && state == api.AppStateReady {
-		pbmStatus, err := r.checkPBMStatus(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check pbm status")
+	if cr.Spec.Backup.Enabled {
+		if state == api.AppStateReady {
+			pbmStatus, err := r.checkPBMStatus(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check pbm status")
+			}
+
+			if pbmStatus != api.AppStateReady {
+				log.Info("PBM is not ready", "state", pbmStatus)
+				state = pbmStatus
+			}
 		}
 
-		if pbmStatus != api.AppStateReady {
-			log.Info("PBM is not ready", "state", pbmStatus)
-			state = pbmStatus
+		if len(cr.Status.BackupStorage) == 0 {
+			log.Info("Set default backup storage")
+			for name := range cr.Spec.Backup.Storages {
+				cr.Status.BackupStorage = name
+				break
+			}
+		}
+
+		_, ok := cr.Spec.Backup.Storages[cr.Status.BackupStorage]
+		if !ok {
+			log.Info("Fix default backup storage")
+			for name := range cr.Spec.Backup.Storages {
+				cr.Status.BackupStorage = name
+				break
+			}
 		}
 	}
 

@@ -182,6 +182,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			c := &psmdbv1.PerconaServerMongoDB{}
+			err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
+			if err != nil {
+				return err
+			}
+
+			c.Status.BackupStorage = cr.Spec.StorageName
+
+			return r.client.Status().Update(ctx, c)
+		})
+		if err != nil {
+			return status, errors.Wrap(err, "update cluster status")
+		}
+
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
@@ -375,19 +390,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 
 		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			c := &psmdbv1.PerconaServerMongoDB{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
+			s := &corev1.Secret{}
+			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name + "-pbm-config", Namespace: cluster.Namespace}, s)
 			if err != nil {
 				return err
 			}
 
-			orig := c.DeepCopy()
-			c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
+			orig := s.DeepCopy()
+			delete(s.Annotations, "percona.com/config-applied")
 
-			return r.client.Patch(ctx, c, client.MergeFrom(orig))
+			return r.client.Patch(ctx, s, client.MergeFrom(orig))
 		})
 		if err != nil {
-			return status, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
+			return status, err
 		}
 
 	}

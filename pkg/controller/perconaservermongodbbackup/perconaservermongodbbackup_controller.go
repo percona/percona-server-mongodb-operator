@@ -239,6 +239,21 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 			return status, errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Spec.StorageName)
 		}
 
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			c := &psmdbv1.PerconaServerMongoDB{}
+			err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
+			if err != nil {
+				return err
+			}
+
+			c.Status.BackupStorage = cr.Spec.StorageName
+
+			return r.client.Status().Update(ctx, c)
+		})
+		if err != nil {
+			return status, errors.Wrap(err, "update cluster status")
+		}
+
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 			Type:               "PBMConfigured",
 			Reason:             "PBMConfigured",

@@ -175,10 +175,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return nil
 	}
 
-	var firstStorageName string
-	for name := range cr.Spec.Backup.Storages {
-		firstStorageName = name
-		break
+	if len(cr.Status.BackupStorage) == 0 {
+		return nil
+	}
+
+	_, ok := cr.Spec.Backup.Storages[cr.Status.BackupStorage]
+	if !ok {
+		return nil
 	}
 
 	if err := pbm.CreateOrUpdateConfig(ctx, r.clientcmd, r.client, cr); err != nil {
@@ -187,13 +190,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	// Initialize PBM configuration
 	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil && cond.Status != metav1.ConditionTrue && cond.Reason == "PBMIsNotConfigured" {
-		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)) {
+		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)) {
 			log.Info("Waiting for PBM configuration to be propagated to the pod")
 			return nil
 		}
 
-		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)); err != nil {
-			return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+firstStorageName)
+		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
+			return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Status.BackupStorage)
 		}
 
 		return nil
@@ -210,7 +213,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return errors.Wrapf(err, "get secret %s", client.ObjectKeyFromObject(&secret))
 	}
 
-	_, ok := secret.Annotations["percona.com/config-applied"]
+	_, ok = secret.Annotations["percona.com/config-applied"]
 	if ok {
 		return nil
 	}
@@ -228,8 +231,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	log.V(1).Info("PBM configuration is propagated to the pod", "pod", pod.Name)
 
-	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(firstStorageName)); err != nil {
-		return errors.Wrapf(err, "set PBM config file %s", pbm.GetConfigPathForStorage(firstStorageName))
+	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
+		return errors.Wrapf(err, "set PBM config file %s", pbm.GetConfigPathForStorage(cr.Status.BackupStorage))
 	}
 
 	log.V(1).Info("PBM configuration is applied to the DB", "pod", pod.Name)
