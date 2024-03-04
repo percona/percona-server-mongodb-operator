@@ -190,6 +190,7 @@ function main() {
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
+	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
 	backup_name_minio="backup-minio"
@@ -228,7 +229,7 @@ function main() {
 	check_applied_images "operator"
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
-	compare_generation "2" "statefulset" "${cluster}-mongos"
+	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
 	desc 'patch psmdb images and upgrade'
@@ -249,7 +250,7 @@ function main() {
 	check_applied_images "all"
 	compare_generation "2" "statefulset" "${cluster}-rs0"
 	compare_generation "2" "statefulset" "${cluster}-cfg"
-	compare_generation "3" "statefulset" "${cluster}-mongos"
+	compare_generation "2" "statefulset" "${cluster}-mongos"
 	compare_generation "2" "psmdb" "${cluster}"
 
 	desc 'check if upgrade order is cfg, rs0, mongos'
