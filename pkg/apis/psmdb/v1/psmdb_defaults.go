@@ -463,7 +463,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
 			}
 		}
-		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
+		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
 			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
 		}
 
