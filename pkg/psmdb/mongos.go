@@ -1,6 +1,8 @@
 package psmdb
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -53,7 +55,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	}
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string, secret *corev1.Secret) (corev1.PodTemplateSpec, error) {
 	ls := MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -85,6 +87,12 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
+
+	sd, err := json.Marshal(secret.Data)
+	if err != nil {
+		return corev1.PodTemplateSpec{}, fmt.Errorf("marshal sys secret data: %v", err)
+	}
+	annotations["percona.com/secrets-hash"] = fmt.Sprintf("%x", sha256.Sum256(sd))
 
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

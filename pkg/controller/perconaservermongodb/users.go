@@ -129,29 +129,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		}
 	}
 
-	if cr.Spec.Sharding.Enabled {
-		mSts, err := r.getMongosStatefulset(ctx, cr)
-		if err != nil {
-			return errors.Wrapf(err, "get statefulset %s", mSts.Name)
-		}
-		// if mSts.Annotations == nil {
-		// 	mSts.Annotations = map[string]string{}
-		// }
-		// mSts.Annotations["percona.com/secrets-hash"] = newSecretDataHash
-
-		if mSts.Spec.Template.Annotations == nil {
-			mSts.Spec.Template.Annotations = map[string]string{}
-		}
-		mSts.Spec.Template.Annotations["percona.com/secrets-hash"] = newSecretDataHash
-
-		log.Info("AAAAAAAAAAAAAAAAAAAAAA")
-		err = r.createOrUpdate(ctx, mSts)
-		if err != nil {
-			return errors.Wrapf(err, "update statefulset %s", mSts.Name)
-		}
-		log.Info("BBBBBBBBBBBBBBBB")
-	}
-
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	err = r.client.Update(ctx, &internalSysSecretObj)
 	if err != nil {
