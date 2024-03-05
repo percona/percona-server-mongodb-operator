@@ -135,10 +135,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			return errors.Wrapf(err, "get statefulset %s", mSts.Name)
 		}
 
-		if mSts.Annotations == nil {
-			mSts.Annotations = map[string]string{}
-		}
-		mSts.Annotations["percona.com/secrets-hash"] = newSecretDataHash
 		if mSts.Spec.Template.Annotations == nil {
 			mSts.Spec.Template.Annotations = map[string]string{}
 		}
