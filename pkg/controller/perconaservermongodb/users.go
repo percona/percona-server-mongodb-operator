@@ -134,6 +134,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		if err != nil {
 			return errors.Wrapf(err, "get statefulset %s", mSts.Name)
 		}
+		// if mSts.Annotations == nil {
+		// 	mSts.Annotations = map[string]string{}
+		// }
+		// mSts.Annotations["percona.com/secrets-hash"] = newSecretDataHash
 
 		if mSts.Spec.Template.Annotations == nil {
 			mSts.Spec.Template.Annotations = map[string]string{}
@@ -141,10 +145,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		mSts.Spec.Template.Annotations["percona.com/secrets-hash"] = newSecretDataHash
 
 		log.Info("AAAAAAAAAAAAAAAAAAAAAA")
-		r.createOrUpdate(ctx, mSts)
+		err = r.createOrUpdate(ctx, mSts)
 		if err != nil {
 			return errors.Wrapf(err, "update statefulset %s", mSts.Name)
 		}
+		log.Info("BBBBBBBBBBBBBBBB")
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
