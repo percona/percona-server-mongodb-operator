@@ -282,6 +282,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
 		}
+
+		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
+			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
 	}
 
 	repls := cr.Spec.Replsets
@@ -463,7 +467,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
 			}
 		}
-		if len(cr.Spec.Backup.ServiceAccountName) == 0 {
+		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
 			cr.Spec.Backup.ServiceAccountName = "percona-server-mongodb-operator"
 		}
 
