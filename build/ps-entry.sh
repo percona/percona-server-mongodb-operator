@@ -34,7 +34,7 @@ fi
 MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 mongo_shell="env HOME=${TMPDIR:-/tmp} mongosh"
-if [ "$MONGODB_VERSION" != 'v6.0' ]; then
+if [ "$MONGODB_VERSION" != 'v6.0' ] || [ "$MONGODB_VERSION" != 'v7.0' ]; then
 	echo "MongoDB version $MONGODB_VERSION present, using mongo shell"
 	mongo_shell=mongo
 fi
