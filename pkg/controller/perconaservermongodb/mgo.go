@@ -568,6 +568,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
+
 		var errb, outb bytes.Buffer
 
 		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
@@ -576,7 +577,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 
 		mongoCmd := "mongosh"
-		if !strings.Contains(outb.String(), "v6.0") {
+		if !strings.Contains(outb.String(), "v6.0") || !strings.Contains(outb.String(), "v7.0"){
 			mongoCmd = "mongo"
 		}
 

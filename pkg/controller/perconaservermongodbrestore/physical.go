@@ -644,13 +644,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
 	}
 
-	comp, err := cluster.CompareMongoDBVersion("6.0")
+	comp60, err := cluster.CompareMongoDBVersion("6.0")
+	if err != nil {
+		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
+	}
+	comp70, err := cluster.CompareMongoDBVersion("7.0")
 	if err != nil {
 		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
 	}
 
 	mongoClient := "mongo"
-	if comp >= 0 {
+	if comp60 >= 0 || comp70 >= 0{
 		mongoClient = "mongosh"
 	}
 
