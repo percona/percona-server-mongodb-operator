@@ -1,0 +1,171 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  image:
+  imagePullPolicy: Always
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb-pitr-demand-backup-eks-credentials
+    pitr:
+      enabled: false
+      oplogSpanMin: 2
+    runtimeClassName: container-rc
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+      sidecars:
+      - image: busybox
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+        name: cfg-sidecar-1
+      runtimeClassName: container-rc
+
+    mongos:
+      size: 3
+      expose:
+        exposeType: ClusterIP
+      sidecars:
+      - image: busybox
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+        name: mongos-sidecar-1
+      runtimeClassName: container-rc
+
+
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    runtimeClassName: container-rc
+    size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
+  - name: rs1
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
+  - name: rs2
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
+    sidecars:
+    - image: busybox
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
+      name: rs-sidecar-1
+  secrets:
+    users: some-users
