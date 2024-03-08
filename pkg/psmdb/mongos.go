@@ -130,6 +130,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Tolerations:                   cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
 			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.MultiAZ.TerminationGracePeriodSeconds,
 			PriorityClassName:             cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
+			ServiceAccountName:            cr.Spec.Sharding.Mongos.MultiAZ.ServiceAccountName,
 			RestartPolicy:                 corev1.RestartPolicyAlways,
 			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 			Containers:                    containers,

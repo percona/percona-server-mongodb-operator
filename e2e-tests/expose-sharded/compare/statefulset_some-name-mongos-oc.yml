@@ -168,6 +168,8 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
         - name: some-name-mongodb-keyfile
