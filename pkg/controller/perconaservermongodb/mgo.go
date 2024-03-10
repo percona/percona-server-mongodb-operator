@@ -577,7 +577,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 
 		mongoCmd := "mongo"
-		if strings.Contains(outb.String(), "v6.0") || strings.Contains(outb.String(), "v7.0"){
+		if strings.Contains(outb.String(), "v6.0") || strings.Contains(outb.String(), "v7.0") {
 			mongoCmd = "mongosh"
 		}
 
