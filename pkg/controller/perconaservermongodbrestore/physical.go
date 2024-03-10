@@ -654,7 +654,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 	}
 
 	mongoClient := "mongo"
-	if comp60 >= 0 || comp70 >= 0{
+	if comp60 >= 0 || comp70 >= 0 {
 		mongoClient = "mongosh"
 	}
 
