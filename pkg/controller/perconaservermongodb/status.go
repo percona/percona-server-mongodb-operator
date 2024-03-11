@@ -120,6 +120,9 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			case api.AppStatePaused:
 				rsCondition.Reason = "RSPaused"
 				rsCondition.Message = rs.Name + ": paused"
+			case api.AppStateInit:
+				rsCondition.Reason = "RSInit"
+				rsCondition.Message = rs.Name + ": initializing"
 			}
 
 			meta.SetStatusCondition(&cr.Status.Conditions, rsCondition)
@@ -166,6 +169,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 				mongosCondition.Reason = "MongosStopping"
 			case api.AppStatePaused:
 				mongosCondition.Reason = "MongosPaused"
+			case api.AppStateInit:
+				mongosCondition.Reason = "MongosInitializing"
 			}
 
 			meta.SetStatusCondition(&cr.Status.Conditions, mongosCondition)
@@ -252,6 +257,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	cr.Status.State = state
 	clusterCondition.Type = string(cr.Status.State)
 	meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
+	log.Info("Cluster status", "status", cr.Status)
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
