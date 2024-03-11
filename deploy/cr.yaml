@@ -502,7 +502,6 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
-    serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:

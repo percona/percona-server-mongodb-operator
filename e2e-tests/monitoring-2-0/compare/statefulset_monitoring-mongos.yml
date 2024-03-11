@@ -244,7 +244,7 @@ spec:
                 command:
                   - bash
                   - -c
-                  - pmm-admin inventory remove node --force $(pmm-admin status --json | python -c "import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])")
+                  - pmm-admin unregister --force
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -302,6 +302,8 @@ spec:
       schedulerName: default-scheduler
       securityContext:
         fsGroup: 1001
+      serviceAccount: default
+      serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
         - name: monitoring-mongodb-keyfile
