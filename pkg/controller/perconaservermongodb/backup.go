@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -85,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 		return nil
 	}
 
-	_, resyncNeeded := cr.Annotations[api.AnnotationResyncPBM]
+	_, resyncNeeded := cr.Annotations[api.AnnotationPBMForceResync]
 	if !resyncNeeded {
 		return nil
 	}
@@ -98,7 +99,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 		}
 
 		orig := c.DeepCopy()
-		delete(c.Annotations, api.AnnotationResyncPBM)
+		delete(c.Annotations, api.AnnotationPBMForceResync)
 
 		return r.client.Patch(ctx, c, client.MergeFrom(orig))
 	})
@@ -106,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 		return errors.Wrap(err, "delete annotation")
 	}
 
-	log.V(1).Info("Deleted annotation", "annotation", api.AnnotationResyncPBM)
+	log.V(1).Info("Deleted annotation", "annotation", api.AnnotationPBMForceResync)
 
 	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
 	if err != nil {
@@ -162,7 +163,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
 	if err != nil {
 		log.Info("Waiting for a ready pod")
-		return nil
+
+		if strings.Contains(err.Error(), "no ready pods found") {
+			return nil
+		}
+
+		return err
 	}
 
 	hasRunning, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
@@ -213,12 +219,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return errors.Wrapf(err, "get secret %s", client.ObjectKeyFromObject(&secret))
 	}
 
-	_, ok = secret.Annotations["percona.com/config-applied"]
+	_, ok = secret.Annotations[api.AnnotationPBMConfigApplied]
 	if ok {
 		return nil
 	}
 
-	checksum, ok := secret.Annotations["percona.com/config-sum"]
+	checksum, ok := secret.Annotations[api.AnnotationPBMConfigSum]
 	if !ok {
 		return errors.New("missing checksum annotation")
 	}
@@ -236,7 +242,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	}
 
 	log.V(1).Info("PBM configuration is applied to the DB", "pod", pod.Name)
-	secret.Annotations["percona.com/config-applied"] = "true"
+	secret.Annotations[api.AnnotationPBMConfigApplied] = "true"
 
 	return r.client.Update(ctx, &secret)
 }

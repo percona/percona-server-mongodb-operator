@@ -250,7 +250,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		if k8sErrors.IsNotFound(err) {
 			l.Info("Creating PBM config secret", "secret", secret.Name, "checksum", sha256sum)
 			secret.Annotations = make(map[string]string)
-			secret.Annotations["percona.com/config-sum"] = sha256sum
+			secret.Annotations[psmdbv1.AnnotationPBMConfigSum] = sha256sum
 			secret.Data = data
 			err = k8sclient.Create(ctx, &secret)
 			if err != nil {
@@ -262,7 +262,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		return errors.Wrap(err, "get secret")
 	}
 
-	checksum, ok := secret.Annotations["percona.com/config-sum"]
+	checksum, ok := secret.Annotations[psmdbv1.AnnotationPBMConfigSum]
 	if ok && checksum == sha256sum {
 		return nil
 	}
@@ -272,8 +272,8 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	if secret.Annotations == nil {
 		secret.Annotations = make(map[string]string)
 	}
-	delete(secret.Annotations, "percona.com/config-applied")
-	secret.Annotations["percona.com/config-sum"] = sha256sum
+	delete(secret.Annotations, psmdbv1.AnnotationPBMConfigApplied)
+	secret.Annotations[psmdbv1.AnnotationPBMConfigSum] = sha256sum
 
 	secret.Data = data
 	err = k8sclient.Update(ctx, &secret)

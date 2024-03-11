@@ -397,7 +397,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			}
 
 			orig := s.DeepCopy()
-			delete(s.Annotations, "percona.com/config-applied")
+			delete(s.Annotations, psmdbv1.AnnotationPBMConfigApplied)
 
 			return r.client.Patch(ctx, s, client.MergeFrom(orig))
 		})
