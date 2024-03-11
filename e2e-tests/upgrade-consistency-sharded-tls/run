@@ -56,15 +56,15 @@ main() {
 	start_cluster $CLUSTER
 
 	# Wait for at least one reconciliation
-	sleep 10
+	sleep 20
 	desc 'check if Pod started'
 	wait_cluster
 
 	renew-certificate "some-name-ssl"
-	sleep 10
+	sleep 20
 	wait_cluster
 	renew-certificate "some-name-ssl-internal"
-	sleep 10
+	sleep 20
 	wait_cluster
 
 	desc 'check if service and statefulset created with expected config'
@@ -78,15 +78,15 @@ main() {
         "spec": {"crVersion":"1.16.0"}
     }'
 	# Wait for at least one reconciliation
-	sleep 10
+	sleep 20
 	desc 'check if Pod started'
 	wait_cluster
 
 	renew-certificate "some-name-ssl"
-	sleep 10
+	sleep 20
 	wait_cluster
 	renew-certificate "some-name-ssl-internal"
-	sleep 10
+	sleep 20
 	wait_cluster
 
 	desc 'check if service and statefulset created with expected config'
