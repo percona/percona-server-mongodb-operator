@@ -106,6 +106,9 @@ func GetRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1
 func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
 	status, err := GetStatus(ctx, cli, pod)
 	if err != nil {
+		if IsNotConfigured(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
