@@ -114,7 +114,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrap(err, "describe restore")
 	}
 
-	log.Info("Restore status", "status", restore.Status, "error", restore.Error)
+	log.V(1).Info("Restore status", "status", restore)
 
 	switch restore.Status {
 	case defs.StatusError:

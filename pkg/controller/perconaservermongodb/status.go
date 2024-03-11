@@ -452,7 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *
 		return api.AppStateInit, errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
 	}
 
-	_, err = pbm.GetStatus(ctx, r.clientcmd, pod)
+	status, err := pbm.GetStatus(ctx, r.clientcmd, pod)
 	if err != nil {
 		log.V(1).Error(err, "get pbm status")
 		if pbm.IsNotConfigured(err) {
@@ -473,6 +473,10 @@ func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: metav1.NewTime(time.Now()),
 	})
+
+	if status.PITR.Error != "" {
+		log.Error(nil, "PiTR is not working", "error", status.PITR.Error)
+	}
 
 	return api.AppStateReady, nil
 }

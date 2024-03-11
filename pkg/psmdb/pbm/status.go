@@ -63,8 +63,9 @@ type Status struct {
 	Backups Backups   `json:"backups"`
 	Cluster []Cluster `json:"cluster"`
 	PITR    struct {
-		Conf bool `json:"conf"`
-		Run  bool `json:"run"`
+		Conf  bool   `json:"conf"`
+		Run   bool   `json:"run"`
+		Error string `json:"error"`
 	} `json:"pitr"`
 	Running Running `json:"running"`
 }
