@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -27,7 +26,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
@@ -371,47 +369,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return errors.Wrap(err, "delete backup")
 	}
 
-	return nil
-}
+	l.Info("Deleted backup", "backup", cr.Status.PBMName, "pod", pod.Name)
 
-// deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
-func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, until primitive.Timestamp) error {
-	// log := logf.FromContext(ctx)
-
-	// stg, err := b.pbm.GetStorage(e)
-	// if err != nil {
-	// 	return errors.Wrap(err, "get storage")
-	// }
-
-	// chunks, err := b.pbm.PITRGetChunksSlice("", primitive.Timestamp{}, until)
-	// if err != nil {
-	// 	return errors.Wrap(err, "get pitr chunks")
-	// }
-	// if len(chunks) == 0 {
-	// 	log.Info("nothing to delete")
-	// }
-
-	// for _, chnk := range chunks {
-	// 	err = stg.Delete(chnk.FName)
-	// 	if err != nil && err != storage.ErrNotExist {
-	// 		return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
-	// 	}
-
-	// 	_, err = b.pbm.Conn().Database(pbm.DB).Collection(pbm.PITRChunksCollection).DeleteOne(
-	// 		ctx,
-	// 		bson.D{
-	// 			{Key: "rs", Value: chnk.RS},
-	// 			{Key: "start_ts", Value: chnk.StartTS},
-	// 			{Key: "end_ts", Value: chnk.EndTS},
-	// 		},
-	// 	)
-
-	// 	if err != nil {
-	// 		return errors.Wrap(err, "delete pitr chunk metadata")
-	// 	}
-
-	// 	log.Info("deleted " + chnk.FName)
-	// }
 	return nil
 }
 
@@ -455,20 +414,20 @@ func getBackupStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup
 	switch backupMeta.Status {
 	case defs.StatusError:
 		log.Info("Backup failed", "backup", cr.Name, "error", backupMeta.Error)
-		status.State = api.BackupStateError
+		status.State = psmdbv1.BackupStateError
 		status.Error = fmt.Sprintf("%v", backupMeta.Error)
 	case defs.StatusDone:
 		log.Info("Backup completed", "backup", cr.Name)
-		status.State = api.BackupStateReady
+		status.State = psmdbv1.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(backupMeta.LastTransitionTS, 0),
 		}
 	case defs.StatusStarting:
 		log.V(1).Info("Backup is starting", "backup", cr.Name)
-		status.State = api.BackupStateRequested
+		status.State = psmdbv1.BackupStateRequested
 	default:
 		log.V(1).Info("Backup is running", "backup", cr.Name)
-		status.State = api.BackupStateRunning
+		status.State = psmdbv1.BackupStateRunning
 	}
 
 	status.Size = backupMeta.SizeH
