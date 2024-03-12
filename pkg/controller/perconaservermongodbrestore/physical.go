@@ -25,7 +25,6 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm/physical"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -155,24 +154,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 	}
 
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster, pbm.WithContainerName("mongod"), pbm.WithPBMPath("/opt/percona/pbm"))
+
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
 	if cr.Status.State == psmdbv1.RestoreStateWaiting {
-		rs := replsets[0]
-
-		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: rs.PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
-			return status, errors.Wrap(err, "get pod")
-		}
-
-		log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
-
 		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			if err := physical.SetConfigFile(ctx, r.clientcmd, &pod, pbm.GetConfigPathForStorage(bcp.Spec.StorageName)); err != nil {
+			if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName)); err != nil {
 				return err
 			}
 
@@ -211,7 +203,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			case <-ticker.C:
 				hasRunningOp := false
 				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-					hasRunningOp, err = physical.HasRunningOperation(ctx, r.clientcmd, &pod)
+					hasRunningOp, err = pbmClient.HasRunningOperation(ctx)
 					return err
 				})
 				if err != nil {
@@ -249,14 +241,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		err = retry.OnError(backoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
-			log.Info("Starting restore", "opts", restoreOpts, "pod", pod.Name)
+			log.Info("Starting restore", "opts", restoreOpts)
 
-			out, err = physical.RunRestore(ctx, r.clientcmd, &pod, restoreOpts)
+			out, err = pbmClient.RunRestore(ctx, restoreOpts)
 			if err != nil {
 				return err
 			}
 
-			log.Info("Restore started", "pod", pod.Name)
+			log.Info("Restore started", "name", out.Name)
 
 			return nil
 		})
@@ -274,12 +266,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return strings.Contains(err.Error(), "container is not created or running") || strings.Contains(err.Error(), "error dialing backend: No agent available")
 	}, func() error {
-		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
-			return errors.Wrap(err, "get pod")
-		}
+		_pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster, pbm.WithContainerName("mongod"), pbm.WithPBMPath("/opt/percona/pbm"))
 
-		restoreMeta, err = physical.DescribeRestore(ctx, r.clientcmd, &pod, pbm.DescribeRestoreOptions{
+		restoreMeta, err = _pbmClient.DescribeRestore(ctx, pbm.DescribeRestoreOptions{
 			Name:       cr.Status.PBMName,
 			ConfigPath: pbm.GetConfigPathForStorage(bcp.Spec.StorageName),
 		})
@@ -748,7 +737,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		return errors.Wrap(err, "get PBM config secret")
 	}
 
-	config, err := pbm.GenerateConfig(ctx, r.client, cluster)
+	config, err := pbm.GenerateConfig(ctx, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}
@@ -758,7 +747,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		return errors.Errorf("storage %s not found", bcp.Spec.StorageName)
 	}
 
-	stgConf, err := pbm.NewStorageConfig(ctx, r.client, cluster.Namespace, stg)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster, pbm.WithContainerName("mongod"), pbm.WithPBMPath("/opt/percona/pbm"))
+	if err != nil {
+		return errors.Wrap(err, "create PBM client")
+	}
+
+	stgConf, err := pbmClient.NewStorageConfig(ctx, stg)
 	if err != nil {
 		return errors.Wrapf(err, "get storage config for %s", bcp.Spec.StorageName)
 	}

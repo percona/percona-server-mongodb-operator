@@ -6,7 +6,6 @@ import (
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -14,9 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -45,12 +42,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster)
 	if err != nil {
-		return status, errors.Wrapf(err, "get pod for rs/%s", cluster.Spec.Replsets[0].Name)
+		return status, errors.Wrap(err, "create pbm client")
 	}
 
-	running, err := pbm.GetRunningOperation(ctx, r.clientcmd, pod)
+	running, err := pbmClient.GetRunningOperation(ctx)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -81,12 +78,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	}
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		err = pbm.DisablePITR(ctx, r.clientcmd, pod)
+		err = pbmClient.DisablePITR(ctx)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
 		}
 
-		isBlockedByPITR, err := pbm.IsPITRRunning(ctx, r.clientcmd, pod)
+		isBlockedByPITR, err := pbmClient.IsPITRRunning(ctx)
 		if err != nil {
 			return status, errors.Wrap(err, "check if PITR is running")
 		}
@@ -97,7 +94,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 			return status, nil
 		}
 
-		status.PBMName, err = runRestore(ctx, r.clientcmd, pod, backupName, cr.Spec.PITR)
+		status.PBMName, err = runRestore(ctx, pbmClient, backupName, cr.Spec.PITR)
 		status.State = psmdbv1.RestoreStateRequested
 
 		log.Info("Restore is requested", "backup", backupName, "restore", status.PBMName, "pitr", cr.Spec.PITR != nil)
@@ -107,7 +104,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 
 	var restore pbm.DescribeRestoreResponse
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
-		restore, err = pbm.DescribeRestore(ctx, r.clientcmd, pod, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName})
+		restore, err = pbmClient.DescribeRestore(ctx, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName})
 		return err
 	})
 	if err != nil {
@@ -122,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		status.Error = restore.Error
 		if cluster.Spec.Backup.PITR.Enabled {
 			log.Info("Enabling PITR after restore finished with error")
-			if err := pbm.EnablePITR(ctx, r.clientcmd, pod); err != nil {
+			if err := pbmClient.EnablePITR(ctx); err != nil {
 				return status, errors.Wrap(err, "enable PITR")
 			}
 		}
@@ -133,7 +130,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		}
 		if cluster.Spec.Backup.PITR.Enabled {
 			log.Info("Enabling PITR after restore finished with success")
-			if err := pbm.EnablePITR(ctx, r.clientcmd, pod); err != nil {
+			if err := pbmClient.EnablePITR(ctx); err != nil {
 				return status, errors.Wrap(err, "enable PITR")
 			}
 		}
@@ -144,7 +141,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	return status, nil
 }
 
-func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, backup string, pitr *psmdbv1.PITRestoreSpec) (string, error) {
+func runRestore(ctx context.Context, pbmClient *pbm.PBM, backup string, pitr *psmdbv1.PITRestoreSpec) (string, error) {
 	opts := pbm.RestoreOptions{
 		BackupName: backup,
 	}
@@ -156,7 +153,7 @@ func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, bac
 				Time: pitr.Date.String(),
 			}
 		case psmdbv1.PITRestoreTypeLatest:
-			latest, err := pbm.LatestPITRChunk(ctx, cli, pod)
+			latest, err := pbmClient.LatestPITRChunk(ctx)
 			if err != nil {
 				return "", errors.Wrap(err, "get latest PITR chunk")
 			}
@@ -166,7 +163,7 @@ func runRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, bac
 		}
 	}
 
-	restore, err := pbm.RunRestore(ctx, cli, pod, opts)
+	restore, err := pbmClient.RunRestore(ctx, opts)
 	if err != nil {
 		return "", errors.Wrap(err, "run restore")
 	}

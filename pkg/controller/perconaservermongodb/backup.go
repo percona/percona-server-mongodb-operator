@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +90,12 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 		return nil
 	}
 
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "create PBM client")
+	}
+
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &api.PerconaServerMongoDB{}
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
@@ -115,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	}
 
 	log.Info("Starting PBM resync", "pod", pod.Name)
-	if err := pbm.ForceResync(ctx, r.clientcmd, pod); err != nil {
+	if err := pbmClient.ForceResync(ctx, r.clientcmd, pod); err != nil {
 		return errors.Wrap(err, "force PBM resync")
 
 	}
@@ -160,18 +164,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		}
 	}
 
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr)
 	if err != nil {
-		log.Info("Waiting for a ready pod")
-
-		if strings.Contains(err.Error(), "no ready pods found") {
-			return nil
-		}
-
-		return err
+		return errors.Wrap(err, "create PBM client")
 	}
 
-	hasRunning, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
+	hasRunning, err := pbmClient.HasRunningOperation(ctx)
 	if err != nil && !pbm.IsNotConfigured(err) {
 		return errors.Wrap(err, "check if PBM has running operation")
 	}
@@ -190,18 +188,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 		return nil
 	}
 
-	if err := pbm.CreateOrUpdateConfig(ctx, r.clientcmd, r.client, cr); err != nil {
+	if err := pbmClient.CreateOrUpdateConfig(ctx, cr); err != nil {
 		return errors.Wrap(err, "create or update PBM configuration")
 	}
 
 	// Initialize PBM configuration
 	if cond := meta.FindStatusCondition(cr.Status.Conditions, "PBMReady"); cond != nil && cond.Status != metav1.ConditionTrue && cond.Reason == "PBMIsNotConfigured" {
-		if !pbm.FileExists(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)) {
+		if !pbmClient.FileExists(ctx, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)) {
 			log.Info("Waiting for PBM configuration to be propagated to the pod")
 			return nil
 		}
 
-		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
+		if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
 			return errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Status.BackupStorage)
 		}
 
@@ -230,18 +228,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	}
 
 	// is secret propagated to the pod
-	if !pbm.CheckSHA256Sum(ctx, r.clientcmd, pod, checksum) {
+	if !pbmClient.CheckSHA256Sum(ctx, checksum) {
 		log.Info("Waiting for PBM configuration to be propagated to the pod")
 		return nil
 	}
 
-	log.V(1).Info("PBM configuration is propagated to the pod", "pod", pod.Name)
+	log.V(1).Info("PBM configuration is propagated to the pod")
 
-	if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
+	if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(cr.Status.BackupStorage)); err != nil {
 		return errors.Wrapf(err, "set PBM config file %s", pbm.GetConfigPathForStorage(cr.Status.BackupStorage))
 	}
 
-	log.V(1).Info("PBM configuration is applied to the DB", "pod", pod.Name)
+	log.V(1).Info("PBM configuration is applied to the DB")
 	secret.Annotations[api.AnnotationPBMConfigApplied] = "true"
 
 	return r.client.Update(ctx, &secret)

@@ -25,13 +25,13 @@ import (
 const ConfigFileDir = "/etc/pbm"
 
 // FileExists checks if a file exists in the PBM container
-func FileExists(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) bool {
+func (p *PBM) FileExists(ctx context.Context, path string) bool {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
 	cmd := []string{"test", "-f", path}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 
 	return err == nil
 }
@@ -41,13 +41,13 @@ func GetConfigPathForStorage(name string) string {
 }
 
 // SetConfigFile sets the PBM configuration file
-func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, path string) error {
+func (p *PBM) SetConfigFile(ctx context.Context, path string) error {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "config", "--file", path}
+	cmd := []string{p.pbmPath, "config", "--file", path}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -56,13 +56,13 @@ func SetConfigFile(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, 
 }
 
 // SetConfigKey sets the PBM configuration key
-func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, key, value string) error {
+func (p *PBM) SetConfigVar(ctx context.Context, key, value string) error {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "config", fmt.Sprintf("--set=%s=%s", key, value)}
+	cmd := []string{p.pbmPath, "config", fmt.Sprintf("--set=%s=%s", key, value)}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -71,13 +71,13 @@ func SetConfigVar(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, k
 }
 
 // ForceResync forces a resync of the PBM storage
-func ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
+func (p *PBM) ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "config", "--force-resync"}
+	cmd := []string{p.pbmPath, "config", "--force-resync"}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -106,13 +106,13 @@ func calculateSHA256Sum(data map[string][]byte) string {
 }
 
 // CheckSHA256Sum checks the SHA256 checksum of a file in the PBM container
-func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, checksum string) bool {
+func (p *PBM) CheckSHA256Sum(ctx context.Context, checksum string) bool {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
 	cmd := []string{"bash", "-c", "sha256sum " + ConfigFileDir + "/* | sha256sum | awk '{print $1}'"}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return false
 	}
@@ -121,13 +121,13 @@ func CheckSHA256Sum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod,
 }
 
 // GetConfigChecksum returns the SHA256 checksum of the *applied* PBM configuration
-func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (string, error) {
+func (p *PBM) GetConfigChecksum(ctx context.Context) (string, error) {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "config"}
+	cmd := []string{p.pbmPath, "config"}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return "", errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -138,7 +138,7 @@ func GetConfigChecksum(ctx context.Context, cli *clientcmd.Client, pod *corev1.P
 }
 
 // GenerateConfig generates a PBM configuration based on the PerconaServerMongoDB CR
-func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB) (config.Config, error) {
+func GenerateConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) (config.Config, error) {
 	cnf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cr.Spec.Backup.PITR.Enabled,
@@ -152,10 +152,10 @@ func GenerateConfig(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Pe
 	return cnf, nil
 }
 
-func NewStorageConfig(ctx context.Context, k8sclient client.Client, namespace string, stg psmdbv1.BackupStorageSpec) (config.StorageConf, error) {
+func (p *PBM) NewStorageConfig(ctx context.Context, stg psmdbv1.BackupStorageSpec) (config.StorageConf, error) {
 	switch stg.Type {
 	case storage.S3:
-		creds, err := GetS3Crendentials(ctx, k8sclient, namespace, stg.S3)
+		creds, err := GetS3Crendentials(ctx, p.k8sClient, p.pod.Namespace, stg.S3)
 		if err != nil {
 			return config.StorageConf{}, err
 		}
@@ -166,7 +166,7 @@ func NewStorageConfig(ctx context.Context, k8sclient client.Client, namespace st
 		}, nil
 
 	case storage.Azure:
-		account, creds, err := GetAzureCrendentials(ctx, k8sclient, namespace, stg.Azure)
+		account, creds, err := GetAzureCrendentials(ctx, p.k8sClient, p.pod.Namespace, stg.Azure)
 		if err != nil {
 			return config.StorageConf{}, err
 		}
@@ -180,8 +180,8 @@ func NewStorageConfig(ctx context.Context, k8sclient client.Client, namespace st
 	}
 }
 
-func SetStorageConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, pod *corev1.Pod, stg psmdbv1.BackupStorageSpec) error {
-	conf, err := NewStorageConfig(ctx, k8sclient, pod.Namespace, stg)
+func (p *PBM) SetStorageConfig(ctx context.Context, stg psmdbv1.BackupStorageSpec) error {
+	conf, err := p.NewStorageConfig(ctx, stg)
 	if err != nil {
 		return errors.Wrap(err, "get storage config")
 	}
@@ -202,7 +202,7 @@ func SetStorageConfig(ctx context.Context, cli *clientcmd.Client, k8sclient clie
 
 	cmd := []string{"pbm", "config", "--file=-"}
 
-	err = exec(ctx, cli, pod, BackupAgentContainerName, cmd, stdin, &stdout, &stderr)
+	err = p.exec(ctx, cmd, stdin, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -210,10 +210,10 @@ func SetStorageConfig(ctx context.Context, cli *clientcmd.Client, k8sclient clie
 	return nil
 }
 
-func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB) error {
+func (p *PBM) CreateOrUpdateConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	l := log.FromContext(ctx)
 
-	cnf, err := GenerateConfig(ctx, k8sclient, cr)
+	cnf, err := GenerateConfig(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get config")
 	}
@@ -221,7 +221,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	data := make(map[string][]byte)
 
 	for name, st := range cr.Spec.Backup.Storages {
-		conf, err := NewStorageConfig(ctx, k8sclient, cr.Namespace, st)
+		conf, err := p.NewStorageConfig(ctx, st)
 		if err != nil {
 			return errors.Wrapf(err, "get storage config for %s", name)
 		}
@@ -245,14 +245,14 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 		},
 	}
 
-	err = k8sclient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
+	err = p.k8sClient.Get(ctx, client.ObjectKeyFromObject(&secret), &secret)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			l.Info("Creating PBM config secret", "secret", secret.Name, "checksum", sha256sum)
 			secret.Annotations = make(map[string]string)
 			secret.Annotations[psmdbv1.AnnotationPBMConfigSum] = sha256sum
 			secret.Data = data
-			err = k8sclient.Create(ctx, &secret)
+			err = p.k8sClient.Create(ctx, &secret)
 			if err != nil {
 				return errors.Wrap(err, "create secret")
 			}
@@ -276,7 +276,7 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	secret.Annotations[psmdbv1.AnnotationPBMConfigSum] = sha256sum
 
 	secret.Data = data
-	err = k8sclient.Update(ctx, &secret)
+	err = p.k8sClient.Update(ctx, &secret)
 	if err != nil {
 		return errors.Wrap(err, "update secret")
 	}
@@ -284,10 +284,10 @@ func CreateOrUpdateConfig(ctx context.Context, cli *clientcmd.Client, k8sclient 
 	return nil
 }
 
-func EnablePITR(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
-	return SetConfigVar(ctx, cli, pod, "pitr.enabled", "true")
+func (p *PBM) EnablePITR(ctx context.Context) error {
+	return p.SetConfigVar(ctx, "pitr.enabled", "true")
 }
 
-func DisablePITR(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
-	return SetConfigVar(ctx, cli, pod, "pitr.enabled", "false")
+func (p *PBM) DisablePITR(ctx context.Context) error {
+	return p.SetConfigVar(ctx, "pitr.enabled", "false")
 }

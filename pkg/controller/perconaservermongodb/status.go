@@ -258,8 +258,6 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	clusterCondition.Type = string(cr.Status.State)
 	meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
-	log.Info("Cluster status", "status", cr.Status)
-
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	return r.writeStatus(ctx, cr)
@@ -454,14 +452,14 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 
 func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
 	log := logf.FromContext(ctx)
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr)
 	if err != nil {
-		return api.AppStateInit, errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
+		return api.AppStateInit, errors.Wrap(err, "get pbm client")
 	}
 
-	status, err := pbm.GetStatus(ctx, r.clientcmd, pod)
+	status, err := pbmClient.GetStatus(ctx)
 	if err != nil {
-		log.V(1).Error(err, "get pbm status")
 		if pbm.IsNotConfigured(err) {
 			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 				Type:               "PBMReady",
@@ -483,6 +481,14 @@ func (r *ReconcilePerconaServerMongoDB) checkPBMStatus(ctx context.Context, cr *
 
 	if status.PITR.Error != "" {
 		log.Error(nil, "PiTR is not working", "error", status.PITR.Error)
+	}
+
+	for _, rs := range status.Cluster {
+		for _, node := range rs.Nodes {
+			for _, err := range node.Errors {
+				log.Error(nil, "PBM agent is not OK", "error", err, "agent", node.Agent, "host", node.Host)
+			}
+		}
 	}
 
 	return api.AppStateReady, nil

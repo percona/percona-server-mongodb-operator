@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Snapshot struct {
@@ -40,10 +38,11 @@ type Backups struct {
 }
 
 type Node struct {
-	Host  string `json:"host"`
-	Agent string `json:"agent"`
-	Role  string `json:"role"`
-	OK    bool   `json:"ok"`
+	Host   string   `json:"host"`
+	Agent  string   `json:"agent"`
+	Role   string   `json:"role"`
+	OK     bool     `json:"ok"`
+	Errors []string `json:"errors"`
 }
 
 type Cluster struct {
@@ -71,15 +70,15 @@ type Status struct {
 }
 
 // GetStatus returns the status of PBM
-func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Status, error) {
+func (p *PBM) GetStatus(ctx context.Context) (Status, error) {
 	status := Status{}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "status", "-o", "json"}
+	cmd := []string{p.pbmPath, "status", "-o", "json"}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return status, errors.Wrapf(err, "stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -91,10 +90,10 @@ func GetStatus(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Sta
 	return status, nil
 }
 
-func GetRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (Running, error) {
+func (p *PBM) GetRunningOperation(ctx context.Context) (Running, error) {
 	running := Running{}
 
-	status, err := GetStatus(ctx, cli, pod)
+	status, err := p.GetStatus(ctx)
 	if err != nil {
 		return running, err
 	}
@@ -103,8 +102,8 @@ func GetRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1
 }
 
 // HasRunningOperation checks if there is a running operation in PBM
-func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
-	status, err := GetStatus(ctx, cli, pod)
+func (p *PBM) HasRunningOperation(ctx context.Context) (bool, error) {
+	status, err := p.GetStatus(ctx)
 	if err != nil {
 		if IsNotConfigured(err) {
 			return false, nil
@@ -116,8 +115,8 @@ func HasRunningOperation(ctx context.Context, cli *clientcmd.Client, pod *corev1
 }
 
 // IsPITRRunning checks if PITR is running or enabled in config
-func IsPITRRunning(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (bool, error) {
-	status, err := GetStatus(ctx, cli, pod)
+func (p *PBM) IsPITRRunning(ctx context.Context) (bool, error) {
+	status, err := p.GetStatus(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -125,8 +124,8 @@ func IsPITRRunning(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) 
 	return status.PITR.Run || status.PITR.Conf, nil
 }
 
-func LatestPITRChunk(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) (string, error) {
-	status, err := GetStatus(ctx, cli, pod)
+func (p *PBM) LatestPITRChunk(ctx context.Context) (string, error) {
+	status, err := p.GetStatus(ctx)
 	if err != nil {
 		return "", err
 	}

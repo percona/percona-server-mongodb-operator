@@ -27,7 +27,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -214,12 +213,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster)
 	if err != nil {
-		return status, errors.Wrapf(err, "get a pod from rs/%s", cluster.Spec.Replsets[0].Name)
+		return status, errors.Wrap(err, "create PBM client")
 	}
 
-	running, err := pbm.GetRunningOperation(ctx, r.clientcmd, pod)
+	running, err := pbmClient.GetRunningOperation(ctx)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
@@ -233,9 +232,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
-		log.Info("Configuring PBM", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
+		log.Info("Configuring PBM", "backup", cr.Name)
 
-		if err := pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.ConfigFileDir+"/"+cr.Spec.StorageName); err != nil {
+		if err := pbmClient.SetConfigFile(ctx, pbm.ConfigFileDir+"/"+cr.Spec.StorageName); err != nil {
 			return status, errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Spec.StorageName)
 		}
 
@@ -266,9 +265,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		log.Info("Starting backup", "backup", cr.Name, "pod", pod.Name, "namespace", pod.Namespace)
+		log.Info("Starting backup", "backup", cr.Name)
 
-		backup, err := pbm.RunBackup(ctx, r.clientcmd, pod, pbm.BackupOptions{
+		backup, err := pbmClient.RunBackup(ctx, pbm.BackupOptions{
 			Type:        cr.Spec.Type,
 			Compression: cr.Spec.Compression,
 		})
@@ -288,7 +287,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 
 	var backupMeta pbm.DescribeBackupResponse
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
-		backupMeta, err = pbm.DescribeBackup(ctx, r.clientcmd, pod, pbm.DescribeBackupOptions{Name: status.PBMName})
+		backupMeta, err = pbmClient.DescribeBackup(ctx, pbm.DescribeBackupOptions{Name: status.PBMName})
 
 		if err != nil {
 			return err
@@ -352,24 +351,24 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		stg.Azure = *cr.Status.Azure
 	}
 
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster)
 	if err != nil {
-		return errors.Wrapf(err, "get a pod from rs/%s", cluster.Spec.Replsets[0].Name)
+		return errors.Wrap(err, "create PBM client")
 	}
 
-	l.V(1).Info("Setting storage config", "backup", cr.Status.PBMName, "pod", pod.Name, "stg", stg)
+	l.V(1).Info("Setting storage config", "backup", cr.Status.PBMName, "stg", stg)
 
-	if err := pbm.SetStorageConfig(ctx, r.clientcmd, r.client, pod, stg); err != nil {
+	if err := pbmClient.SetStorageConfig(ctx, stg); err != nil {
 		return errors.Wrap(err, "set storage config")
 	}
 
-	l.V(1).Info("Deleting backup", "backup", cr.Status.PBMName, "pod", pod.Name)
+	l.V(1).Info("Deleting backup", "backup", cr.Status.PBMName)
 
-	if err := pbm.DeleteBackup(ctx, r.clientcmd, pod, cr.Status.PBMName); err != nil {
+	if err := pbmClient.DeleteBackup(ctx, cr.Status.PBMName); err != nil {
 		return errors.Wrap(err, "delete backup")
 	}
 
-	l.Info("Deleted backup", "backup", cr.Status.PBMName, "pod", pod.Name)
+	l.Info("Deleted backup", "backup", cr.Status.PBMName)
 
 	return nil
 }

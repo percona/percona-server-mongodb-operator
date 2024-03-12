@@ -28,7 +28,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
@@ -173,13 +172,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
 		}
 
-		pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cluster, cluster.Spec.Replsets[0].Name)
+		pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster)
 		if err != nil {
-			return rr, errors.Wrapf(err, "get pod for rs/%s", cluster.Spec.Replsets[0].Name)
+			return rr, errors.Wrap(err, "create pbm client")
 		}
 
 		if cr.Spec.BackupSource == nil {
-			err = pbm.SetConfigFile(ctx, r.clientcmd, pod, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
+			err = pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
 			if err != nil {
 				return rr, errors.Wrapf(err, "set pbm config for storage %s", bcp.Spec.StorageName)
 			}
@@ -197,7 +196,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 					Azure: *bcp.Status.Azure,
 				}
 			}
-			if err := pbm.SetStorageConfig(ctx, r.clientcmd, r.client, pod, stg); err != nil {
+			if err := pbmClient.SetStorageConfig(ctx, stg); err != nil {
 				return rr, errors.Wrapf(err, "set pbm storage config for backup source")
 			}
 		}

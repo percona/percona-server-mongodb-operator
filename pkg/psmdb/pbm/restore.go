@@ -7,10 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
 
 type RestoreOptions struct {
@@ -49,13 +46,13 @@ type DescribeRestoreResponse struct {
 	Error string `json:"Error"`
 }
 
-func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts RestoreOptions) (RestoreResponse, error) {
+func (p *PBM) RunRestore(ctx context.Context, opts RestoreOptions) (RestoreResponse, error) {
 	response := RestoreResponse{}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "restore", opts.BackupName, "--out=json"}
+	cmd := []string{p.pbmPath, "restore", opts.BackupName, "--out=json"}
 
 	if len(opts.Namespace) > 0 {
 		cmd = append(cmd, "--ns="+opts.Namespace)
@@ -73,7 +70,7 @@ func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opt
 		cmd = append(cmd, "--time="+opts.Time)
 	}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -89,19 +86,19 @@ func RunRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opt
 	return response, nil
 }
 
-func DescribeRestore(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts DescribeRestoreOptions) (DescribeRestoreResponse, error) {
+func (p *PBM) DescribeRestore(ctx context.Context, opts DescribeRestoreOptions) (DescribeRestoreResponse, error) {
 	response := DescribeRestoreResponse{}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "describe-restore", opts.Name, "--out=json"}
+	cmd := []string{p.pbmPath, "describe-restore", opts.Name, "--out=json"}
 
 	if len(opts.ConfigPath) > 0 {
 		cmd = append(cmd, "--config="+opts.ConfigPath)
 	}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}

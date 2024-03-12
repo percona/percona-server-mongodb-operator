@@ -96,7 +96,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, &list.Items[0])
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr, pbm.WithPod(&list.Items[0]))
+	if err != nil {
+		return errors.Wrap(err, "create PBM client")
+	}
+
+	hasActiveJobs, err := pbmClient.HasRunningOperation(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
@@ -327,12 +332,12 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	pod, err := psmdb.GetOneReadyRSPod(ctx, r.client, cr, cr.Spec.Replsets[0].Name)
+	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr)
 	if err != nil {
-		return errors.Wrapf(err, "get a pod from rs/%s", cr.Spec.Replsets[0].Name)
+		return errors.Wrap(err, "create PBM client")
 	}
 
-	hasActiveJobs, err := pbm.HasRunningOperation(ctx, r.clientcmd, pod)
+	hasActiveJobs, err := pbmClient.HasRunningOperation(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}

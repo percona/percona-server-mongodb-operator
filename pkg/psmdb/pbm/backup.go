@@ -8,11 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
 
 type BackupOptions struct {
@@ -62,14 +59,14 @@ type DescribeBackupResponse struct {
 	Error string `json:"Error"`
 }
 
-func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts BackupOptions) (BackupResponse, error) {
+func (p *PBM) RunBackup(ctx context.Context, opts BackupOptions) (BackupResponse, error) {
 	response := BackupResponse{}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
 	cmd := []string{
-		"pbm", "backup",
+		p.pbmPath, "backup",
 		"--out=json",
 		"--compression=" + string(opts.Compression),
 	}
@@ -86,7 +83,7 @@ func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts
 		cmd = append(cmd, "--compression-level="+strconv.Itoa(*opts.CompressionLevel))
 	}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -102,19 +99,19 @@ func RunBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts
 	return response, nil
 }
 
-func DescribeBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, opts DescribeBackupOptions) (DescribeBackupResponse, error) {
+func (p *PBM) DescribeBackup(ctx context.Context, opts DescribeBackupOptions) (DescribeBackupResponse, error) {
 	response := DescribeBackupResponse{}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	cmd := []string{"pbm", "describe-backup", opts.Name, "--out=json"}
+	cmd := []string{p.pbmPath, "describe-backup", opts.Name, "--out=json"}
 
 	if opts.WithCollections {
 		cmd = append(cmd, "--with-collections")
 	}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -130,13 +127,13 @@ func DescribeBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod,
 	return response, nil
 }
 
-func DeleteBackup(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod, name string) error {
+func (p *PBM) DeleteBackup(ctx context.Context, name string) error {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
 	cmd := []string{"pbm", "delete-backup", name, "--yes"}
 
-	err := exec(ctx, cli, pod, BackupAgentContainerName, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
 	if err != nil {
 		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
