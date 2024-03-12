@@ -1,6 +1,14 @@
 package pbm
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/pkg/errors"
+)
+
+func wrapExecError(err error, cmd []string) error {
+	return errors.Wrapf(err, "run '%s'", strings.Join(cmd, " "))
+}
 
 func IsNotConfigured(err error) bool {
 	messages := []string{

@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var ErrNoReadyPod = errors.New("no ready pods found")
+
 func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "percona-server-mongodb",
@@ -49,7 +51,7 @@ func GetOneReadyRSPod(ctx context.Context, k8sclient client.Client, cr *api.Perc
 		}
 	}
 
-	return nil, errors.New("no ready pods found")
+	return nil, ErrNoReadyPod
 }
 
 // GetRSPods returns truncated list of replicaset pods to the size of `rs.Size`.

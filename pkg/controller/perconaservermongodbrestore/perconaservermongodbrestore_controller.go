@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -28,6 +29,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
 
@@ -172,9 +174,29 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
 		}
 
-		pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "create pbm client")
+		var pbmClient *pbm.PBM
+		restoreRunning := false
+		for _, rs := range cluster.Spec.Replsets {
+			restoreRunning, err = r.restoreInProgress(ctx, cluster, rs)
+			if err != nil {
+				return rr, errors.Wrap(err, "check restore in progress")
+			}
+
+			if restoreRunning {
+				break
+			}
+		}
+
+		if restoreRunning {
+			pbmClient, err = pbm.New(ctx, r.clientcmd, r.client, cluster, pbm.WithContainerName(psmdb.MongodContainerName), pbm.WithPBMPath(pbm.PhysicalRestorePBMPath))
+			if err != nil {
+				return rr, errors.Wrap(err, "create pbm client")
+			}
+		} else {
+			pbmClient, err = pbm.New(ctx, r.clientcmd, r.client, cluster)
+			if err != nil {
+				return rr, errors.Wrap(err, "create pbm client")
+			}
 		}
 
 		if cr.Spec.BackupSource == nil {
@@ -348,4 +370,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 	}
 
 	return errors.Wrap(err, "write status")
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) restoreInProgress(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, replset *psmdbv1.ReplsetSpec) (bool, error) {
+	sts := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-" + replset.Name,
+			Namespace: cr.Namespace,
+		},
+	}
+
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(&sts), &sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "get statefulset %s", sts.Name)
+	}
+
+	_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
+	return ok, nil
 }

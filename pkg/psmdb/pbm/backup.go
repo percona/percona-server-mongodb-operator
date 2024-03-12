@@ -1,9 +1,7 @@
 package pbm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -62,9 +60,6 @@ type DescribeBackupResponse struct {
 func (p *PBM) RunBackup(ctx context.Context, opts BackupOptions) (BackupResponse, error) {
 	response := BackupResponse{}
 
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{
 		p.pbmPath, "backup",
 		"--out=json",
@@ -83,13 +78,9 @@ func (p *PBM) RunBackup(ctx context.Context, opts BackupOptions) (BackupResponse
 		cmd = append(cmd, "--compression-level="+strconv.Itoa(*opts.CompressionLevel))
 	}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &response)
 	if err != nil {
-		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
-	}
-
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return response, err
+		return response, wrapExecError(err, cmd)
 	}
 
 	if len(response.Error) > 0 {
@@ -102,22 +93,15 @@ func (p *PBM) RunBackup(ctx context.Context, opts BackupOptions) (BackupResponse
 func (p *PBM) DescribeBackup(ctx context.Context, opts DescribeBackupOptions) (DescribeBackupResponse, error) {
 	response := DescribeBackupResponse{}
 
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "describe-backup", opts.Name, "--out=json"}
 
 	if opts.WithCollections {
 		cmd = append(cmd, "--with-collections")
 	}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &response)
 	if err != nil {
-		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
-	}
-
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return response, err
+		return response, wrapExecError(err, cmd)
 	}
 
 	if len(response.Error) > 0 {
@@ -128,14 +112,11 @@ func (p *PBM) DescribeBackup(ctx context.Context, opts DescribeBackupOptions) (D
 }
 
 func (p *PBM) DeleteBackup(ctx context.Context, name string) error {
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{"pbm", "delete-backup", name, "--yes"}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, nil)
 	if err != nil {
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return wrapExecError(err, cmd)
 	}
 
 	return nil

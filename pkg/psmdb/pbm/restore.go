@@ -1,9 +1,7 @@
 package pbm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 
 	"github.com/pkg/errors"
 
@@ -49,9 +47,6 @@ type DescribeRestoreResponse struct {
 func (p *PBM) RunRestore(ctx context.Context, opts RestoreOptions) (RestoreResponse, error) {
 	response := RestoreResponse{}
 
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "restore", opts.BackupName, "--out=json"}
 
 	if len(opts.Namespace) > 0 {
@@ -70,13 +65,9 @@ func (p *PBM) RunRestore(ctx context.Context, opts RestoreOptions) (RestoreRespo
 		cmd = append(cmd, "--time="+opts.Time)
 	}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &response)
 	if err != nil {
-		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
-	}
-
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return response, err
+		return response, wrapExecError(err, cmd)
 	}
 
 	if len(response.Error) > 0 {
@@ -89,22 +80,15 @@ func (p *PBM) RunRestore(ctx context.Context, opts RestoreOptions) (RestoreRespo
 func (p *PBM) DescribeRestore(ctx context.Context, opts DescribeRestoreOptions) (DescribeRestoreResponse, error) {
 	response := DescribeRestoreResponse{}
 
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "describe-restore", opts.Name, "--out=json"}
 
 	if len(opts.ConfigPath) > 0 {
 		cmd = append(cmd, "--config="+opts.ConfigPath)
 	}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &response)
 	if err != nil {
-		return response, errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
-	}
-
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return response, err
+		return response, wrapExecError(err, cmd)
 	}
 
 	if len(response.Error) > 0 {

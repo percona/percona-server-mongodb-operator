@@ -166,6 +166,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	pbmClient, err := pbm.New(ctx, r.clientcmd, r.client, cr)
 	if err != nil {
+		if errors.Is(err, psmdb.ErrNoReadyPod) {
+			log.Info("Waiting for a pod to be ready")
+			return nil
+		}
 		return errors.Wrap(err, "create PBM client")
 	}
 

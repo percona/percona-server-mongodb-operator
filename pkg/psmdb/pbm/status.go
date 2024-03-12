@@ -1,12 +1,8 @@
 package pbm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 type Snapshot struct {
@@ -73,18 +69,11 @@ type Status struct {
 func (p *PBM) GetStatus(ctx context.Context) (Status, error) {
 	status := Status{}
 
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "status", "-o", "json"}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, &status)
 	if err != nil {
-		return status, errors.Wrapf(err, "stdout: %s stderr: %s", stdout.String(), stderr.String())
-	}
-
-	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
-		return status, err
+		return status, wrapExecError(err, cmd)
 	}
 
 	return status, nil

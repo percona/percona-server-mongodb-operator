@@ -22,18 +22,16 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-const ConfigFileDir = "/etc/pbm"
+const (
+	ConfigFileDir          = "/etc/pbm"
+	PhysicalRestorePBMPath = "/opt/percona/pbm"
+)
 
 // FileExists checks if a file exists in the PBM container
 func (p *PBM) FileExists(ctx context.Context, path string) bool {
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{"test", "-f", path}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
-
-	return err == nil
+	return p.exec(ctx, cmd, nil, nil) == nil
 }
 
 func GetConfigPathForStorage(name string) string {
@@ -42,14 +40,11 @@ func GetConfigPathForStorage(name string) string {
 
 // SetConfigFile sets the PBM configuration file
 func (p *PBM) SetConfigFile(ctx context.Context, path string) error {
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "config", "--file", path}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, nil)
 	if err != nil {
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return wrapExecError(err, cmd)
 	}
 
 	return nil
@@ -57,14 +52,11 @@ func (p *PBM) SetConfigFile(ctx context.Context, path string) error {
 
 // SetConfigKey sets the PBM configuration key
 func (p *PBM) SetConfigVar(ctx context.Context, key, value string) error {
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "config", fmt.Sprintf("--set=%s=%s", key, value)}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, nil)
 	if err != nil {
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return wrapExecError(err, cmd)
 	}
 
 	return nil
@@ -72,14 +64,11 @@ func (p *PBM) SetConfigVar(ctx context.Context, key, value string) error {
 
 // ForceResync forces a resync of the PBM storage
 func (p *PBM) ForceResync(ctx context.Context, cli *clientcmd.Client, pod *corev1.Pod) error {
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
-
 	cmd := []string{p.pbmPath, "config", "--force-resync"}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.exec(ctx, cmd, nil, nil)
 	if err != nil {
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return wrapExecError(err, cmd)
 	}
 
 	return nil
@@ -112,7 +101,7 @@ func (p *PBM) CheckSHA256Sum(ctx context.Context, checksum string) bool {
 
 	cmd := []string{"bash", "-c", "sha256sum " + ConfigFileDir + "/* | sha256sum | awk '{print $1}'"}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.execClient.Exec(ctx, p.pod, p.containerName, cmd, nil, &stdout, &stderr, false)
 	if err != nil {
 		return false
 	}
@@ -127,9 +116,9 @@ func (p *PBM) GetConfigChecksum(ctx context.Context) (string, error) {
 
 	cmd := []string{p.pbmPath, "config"}
 
-	err := p.exec(ctx, cmd, nil, &stdout, &stderr)
+	err := p.execClient.Exec(ctx, p.pod, p.containerName, cmd, nil, &stdout, &stderr, false)
 	if err != nil {
-		return "", errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return "", errors.Wrapf(wrapExecError(err, cmd), "stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
 
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256(stdout.Bytes()))
@@ -197,14 +186,12 @@ func (p *PBM) SetStorageConfig(ctx context.Context, stg psmdbv1.BackupStorageSpe
 	}
 
 	stdin := bytes.NewReader(sBytes)
-	stdout := bytes.Buffer{}
-	stderr := bytes.Buffer{}
 
 	cmd := []string{"pbm", "config", "--file=-"}
 
-	err = p.exec(ctx, cmd, stdin, &stdout, &stderr)
+	err = p.exec(ctx, cmd, stdin, nil)
 	if err != nil {
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return wrapExecError(err, cmd)
 	}
 
 	return nil
