@@ -34,9 +34,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		volumeSpec = rs.NonVoting.VolumeSpec
 	}
 
-	sfs, errGet := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
-	if errGet != nil {
-		return nil, errors.Wrapf(errGet, "get StatefulSet %s", sfs.Name)
+	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get StatefulSet for replset %s", rs.Name)
 	}
 
 	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
@@ -49,7 +49,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	err := r.createOrUpdate(ctx, sfs)
+	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
