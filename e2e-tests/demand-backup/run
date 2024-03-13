@@ -116,8 +116,8 @@ desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep myApp.test.gz
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ |
+	grep myApp.test.gz
 run_recovery_check "$backup_name_minio" "$cluster"
 
 desc 'restore from backup source, with storageName -- minio'
@@ -132,8 +132,8 @@ desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
 backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
-	| grep -c ${backup_dest_minio} | cat)
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ |
+	grep -c ${backup_dest_minio} | cat)
 if [[ $backup_exists -eq 1 ]]; then
 	echo "Backup was not removed from bucket -- minio"
 	exit 1
@@ -160,15 +160,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_azure"
 fi
 
-kubectl_bin delete psmdb --all
-sleep 60
-
 desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
 backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
-	| grep -c ${backup_dest_minio} | cat)
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ |
+	grep -c ${backup_dest_minio} | cat)
 if [[ $backup_exists -eq 1 ]]; then
 	echo "Backup was not removed from bucket -- minio"
 	exit 1
@@ -182,6 +179,9 @@ fi
 
 desc 'check for passwords leak'
 check_passwords_leak
+
+kubectl_bin delete psmdb --all
+sleep 60
 
 destroy $namespace
 
