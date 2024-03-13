@@ -29,3 +29,7 @@ func IsNotConfigured(err error) bool {
 func IsAnotherOperationInProgress(err error) bool {
 	return strings.Contains(err.Error(), "another operation in progress")
 }
+
+func BackupNotFound(err error) bool {
+	return strings.Contains(err.Error(), "get backup metadata: not found")
+}

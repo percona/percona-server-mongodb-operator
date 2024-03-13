@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,24 +52,6 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 		if bcp.Status.State != api.BackupStateReady &&
 			bcp.Status.State != api.BackupStateError &&
 			bcp.Spec.GetClusterName() == cr.Name {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
-	backups := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "get backup list")
-	}
-
-	for _, b := range backups.Items {
-		if b.Status.State == api.BackupStateReady && b.Spec.GetClusterName() == cr.Name {
 			return true, nil
 		}
 	}
@@ -127,19 +108,6 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	return nil
 }
 
-func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName) (bool, error) {
-	var secret corev1.Secret
-	err := cl.Get(ctx, nn, &secret)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("reconcilePBMConfiguration")
 
@@ -153,7 +121,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	}
 
 	for _, rs := range cr.Spec.Replsets {
-		if s, ok := cr.Status.Replsets[rs.Name]; ok && s.Initialized && s.Status != api.AppStateReady {
+		if s, ok := cr.Status.Replsets[rs.Name]; ok && !s.Initialized && s.Status != api.AppStateReady {
 			log.Info("Waiting for the replset to be ready", "replset", rs.Name)
 			return nil
 		}

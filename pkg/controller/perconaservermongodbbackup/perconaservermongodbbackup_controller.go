@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -142,6 +143,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
 			}
 		}
+
+		if cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError {
+			if err = r.deleteLeaseForBackup(ctx, cr); err != nil {
+				log.Error(err, "delete lease for backup")
+			}
+		}
 	}()
 
 	err = cr.CheckFields()
@@ -189,6 +196,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		return rr, nil
 	}
 
+	gotLease, err := r.getLeaseForBackup(ctx, cr)
+	if err != nil {
+		return rr, errors.Wrap(err, "get lease for backup")
+	}
+
+	if !gotLease {
+		log.Info("Another backup is in progress")
+		return rr, nil
+	}
+
 	status, err = r.reconcile(ctx, cluster, cr)
 	if err != nil {
 		return rr, errors.Wrap(err, "reconcile backup")
@@ -232,10 +249,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
-		log.Info("Configuring PBM", "backup", cr.Name)
+		log.Info("Configuring PBM", "backup", cr.Name, "storage", cr.Spec.StorageName)
 
-		if err := pbmClient.SetConfigFile(ctx, pbm.ConfigFileDir+"/"+cr.Spec.StorageName); err != nil {
-			return status, errors.Wrapf(err, "set PBM config file %s", pbm.ConfigFileDir+"/"+cr.Spec.StorageName)
+		if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(cr.Spec.StorageName)); err != nil {
+			return status, errors.Wrapf(err, "set PBM config file %s", pbm.GetConfigPathForStorage(cr.Spec.StorageName))
 		}
 
 		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -265,12 +282,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		log.Info("Starting backup", "backup", cr.Name)
-
-		backup, err := pbmClient.RunBackup(ctx, pbm.BackupOptions{
+		opts := pbm.BackupOptions{
 			Type:        cr.Spec.Type,
 			Compression: cr.Spec.Compression,
-		})
+		}
+		log.Info("Requesting backup", "backup", cr.Name, "options", opts)
+
+		backup, err := pbmClient.RunBackup(ctx, opts)
 		if err != nil {
 			if pbm.IsAnotherOperationInProgress(err) {
 				log.Info("Another operation is in progress", "backup", cr.Name, "error", err)
@@ -282,11 +300,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		status.PBMName = backup.Name
 		status.State = psmdbv1.BackupStateRequested
 
+		log.Info("Backup is requested", "backup", cr.Name, "pbmName", backup.Name)
+
 		return status, nil
 	}
 
 	var backupMeta pbm.DescribeBackupResponse
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+	err = retry.OnError(wait.Backoff{Steps: 5, Duration: 500 * time.Millisecond, Factor: 5.0, Jitter: 0.1}, func(err error) bool { return true }, func() error {
 		backupMeta, err = pbmClient.DescribeBackup(ctx, pbm.DescribeBackupOptions{Name: status.PBMName})
 
 		if err != nil {
@@ -365,6 +385,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	l.V(1).Info("Deleting backup", "backup", cr.Status.PBMName)
 
 	if err := pbmClient.DeleteBackup(ctx, cr.Status.PBMName); err != nil {
+		if pbm.BackupNotFound(err) {
+			l.Info("Backup not found in storage", "backup", cr.Status.PBMName, "storage", stg)
+			return nil
+		}
 		return errors.Wrap(err, "delete backup")
 	}
 
@@ -412,20 +436,18 @@ func getBackupStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup
 
 	switch backupMeta.Status {
 	case defs.StatusError:
-		log.Info("Backup failed", "backup", cr.Name, "error", backupMeta.Error)
+		log.Info("Backup failed", "backup", cr.Name, "pbmName", status.PBMName, "error", backupMeta.Error)
 		status.State = psmdbv1.BackupStateError
 		status.Error = fmt.Sprintf("%v", backupMeta.Error)
 	case defs.StatusDone:
-		log.Info("Backup completed", "backup", cr.Name)
+		log.Info("Backup completed", "backup", cr.Name, "pbmName", status.PBMName)
 		status.State = psmdbv1.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(backupMeta.LastTransitionTS, 0),
 		}
 	case defs.StatusStarting:
-		log.V(1).Info("Backup is starting", "backup", cr.Name)
 		status.State = psmdbv1.BackupStateRequested
 	default:
-		log.V(1).Info("Backup is running", "backup", cr.Name)
 		status.State = psmdbv1.BackupStateRunning
 	}
 
