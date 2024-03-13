@@ -17863,6 +17863,17 @@ spec:
                 properties:
                   certValidityDuration:
                     type: string
+                  issuerConf:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                 type: object
               unmanaged:
                 type: boolean
