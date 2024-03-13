@@ -192,22 +192,24 @@ wait_cron() {
 wait_backup_agent() {
 	local agent_pod=$1
 
+	set +o errexit
 	set +o xtrace
 	retry=0
 	echo -n $agent_pod
-	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | grep 'listening for the commands')" ]; do
 		sleep 5
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
-			kubectl_bin logs $agent_pod -c backup-agent \
-				| tail -100
+			kubectl_bin logs $agent_pod -c backup-agent |
+				tail -100
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
 	echo
 	set_debug
+	set -o errexit
 }
 
 wait_backup() {
