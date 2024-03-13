@@ -249,7 +249,7 @@ spec:
           secret:
             defaultMode: 420
             optional: true
-            secretName: some-name-pbm-config
+            secretName: one-pod-pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0

@@ -181,9 +181,9 @@ spec:
               readOnly: true
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/pbm
+            - mountpath: /etc/pbm
               name: pbm-config
-              readOnly: true
+              readonly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
