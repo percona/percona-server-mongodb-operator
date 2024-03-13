@@ -9,6 +9,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -63,7 +64,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	backupName := bcp.Status.PBMName
 
 	if cluster.Spec.Sharding.Enabled {
-		mongos := appsv1.Deployment{}
+		mongos := appsv1.StatefulSet{}
 		err = r.client.Get(ctx, cluster.MongosNamespacedName(), &mongos)
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return status, errors.Wrapf(err, "failed to get mongos")
@@ -95,15 +96,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		}
 
 		status.PBMName, err = runRestore(ctx, pbmClient, backupName, cr.Spec.PITR)
+		if err != nil {
+			if pbm.IsAnotherOperationInProgress(err) {
+				log.Info("waiting for another operation to finish", "err", err)
+				return status, nil
+			}
+			return status, err
+		}
+
 		status.State = psmdbv1.RestoreStateRequested
 
 		log.Info("Restore is requested", "backup", backupName, "restore", status.PBMName, "pitr", cr.Spec.PITR != nil)
 
-		return status, err
+		return status, nil
 	}
 
 	var restore pbm.DescribeRestoreResponse
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+	err = retry.OnError(wait.Backoff{Steps: 5, Duration: 500 * time.Millisecond, Factor: 5.0, Jitter: 0.1}, func(err error) bool { return true }, func() error {
 		restore, err = pbmClient.DescribeRestore(ctx, pbm.DescribeRestoreOptions{Name: cr.Status.PBMName})
 		return err
 	})

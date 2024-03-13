@@ -200,6 +200,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 
 		if cr.Spec.BackupSource == nil {
+			log.Info("Setting PBM config for storage", "restore", cr.Name, "storage", bcp.Spec.StorageName)
 			err = pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
 			if err != nil {
 				return rr, errors.Wrapf(err, "set pbm config for storage %s", bcp.Spec.StorageName)
@@ -218,6 +219,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 					Azure: *bcp.Status.Azure,
 				}
 			}
+			log.Info("Setting PBM storage config for backup source", "restore", cr.Name, "storage", stg)
 			if err := pbmClient.SetStorageConfig(ctx, stg); err != nil {
 				return rr, errors.Wrapf(err, "set pbm storage config for backup source")
 			}
@@ -249,6 +251,35 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			LastTransitionTime: metav1.Now(),
 		})
 
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		timeout := time.NewTimer(900 * time.Second)
+		defer timeout.Stop()
+
+	outer:
+		for {
+			select {
+			case <-timeout.C:
+				return rr, errors.Errorf("timeout while waiting PBM operation to finish")
+			case <-ticker.C:
+				var running pbm.Running
+				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+					running, err = pbmClient.GetRunningOperation(ctx)
+					return err
+				})
+				if err != nil {
+					return rr, errors.Wrapf(err, "check running operations status")
+				}
+
+				if running.OpID == "" {
+					break outer
+				}
+
+				log.Info("Waiting for PBM operation to finish", "operation", running.Name, "type", running.Type, "opid", running.OpID)
+			}
+		}
+
 		return rr, nil
 	}
 
@@ -266,31 +297,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	return rr, nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, storageName string) (psmdbv1.BackupStorageSpec, error) {
-	if len(storageName) > 0 {
-		storage, ok := cluster.Spec.Backup.Storages[storageName]
-		if !ok {
-			return psmdbv1.BackupStorageSpec{}, errors.Errorf("unable to get storage '%s'", storageName)
-		}
-		return storage, nil
-	}
-	var azure psmdbv1.BackupStorageAzureSpec
-	var s3 psmdbv1.BackupStorageS3Spec
-	storageType := storage.S3
-
-	if cr.Spec.BackupSource.Azure != nil {
-		storageType = storage.Azure
-		azure = *cr.Spec.BackupSource.Azure
-	} else if cr.Spec.BackupSource.S3 != nil {
-		s3 = *cr.Spec.BackupSource.S3
-	}
-	return psmdbv1.BackupStorageSpec{
-		Type:  storageType,
-		S3:    s3,
-		Azure: azure,
-	}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) (*psmdbv1.PerconaServerMongoDBBackup, error) {
