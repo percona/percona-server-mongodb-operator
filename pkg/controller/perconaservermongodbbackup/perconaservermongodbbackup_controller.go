@@ -28,6 +28,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -98,6 +99,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	clientcmd *clientcmd.Client
 }
 
+const leaseName = "percona-server-mongodb-backup"
+
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
 // and what is in the PerconaServerMongoDBBackup.Spec
 // Note:
@@ -145,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 
 		if cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError {
-			if err = r.deleteLeaseForBackup(ctx, cr); err != nil {
+			if err = k8s.DeleteLease(ctx, r.client, cr.Namespace, leaseName, cr.Name); err != nil {
 				log.Error(err, "delete lease for backup")
 			}
 		}
@@ -196,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		return rr, nil
 	}
 
-	gotLease, err := r.getLeaseForBackup(ctx, cr)
+	gotLease, err := k8s.GetLease(ctx, r.client, cr.Namespace, leaseName, cr.Name)
 	if err != nil {
 		return rr, errors.Wrap(err, "get lease for backup")
 	}
@@ -235,19 +238,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "create PBM client")
 	}
 
-	running, err := pbmClient.GetRunningOperation(ctx)
-	if err != nil {
-		return status, errors.Wrap(err, "check for concurrent jobs")
-	}
-
-	if running.Name != status.PBMName && running.Name != "" {
-		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.", "operation", running.Name, "type", running.Type, "opId", running.OpID, "status", running.Status)
-		}
-		status.State = psmdbv1.BackupStateWaiting
-		return status, nil
-	}
-
 	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
 		log.Info("Configuring PBM", "backup", cr.Name, "storage", cr.Spec.StorageName)
 
@@ -277,6 +267,35 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 			Status:             metav1.ConditionTrue,
 			LastTransitionTime: metav1.Time{Time: time.Now()},
 		})
+
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		timeout := time.NewTimer(900 * time.Second)
+		defer timeout.Stop()
+
+	outer:
+		for {
+			select {
+			case <-timeout.C:
+				return status, errors.Errorf("timeout while waiting PBM operation to finish")
+			case <-ticker.C:
+				var running pbm.Running
+				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+					running, err = pbmClient.GetRunningOperation(ctx)
+					return err
+				})
+				if err != nil {
+					return status, errors.Wrapf(err, "check running operations status")
+				}
+
+				if running.OpID == "" {
+					break outer
+				}
+
+				log.Info("Waiting for PBM operation to finish", "operation", running.Name, "type", running.Type, "opid", running.OpID)
+			}
+		}
 
 		return status, nil
 	}

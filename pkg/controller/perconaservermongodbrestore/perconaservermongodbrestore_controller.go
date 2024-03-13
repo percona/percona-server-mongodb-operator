@@ -29,6 +29,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pbm"
 )
@@ -94,6 +95,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	clientcmd *clientcmd.Client
 }
 
+const leaseName = "percona-server-mongodb-restore"
+
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
 // and what is in the PerconaServerMongoDBRestore.Spec
 // Note:
@@ -136,6 +139,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				log.Error(uerr, "failed to updated restore status", "restore", cr.Name, "backup", cr.Spec.BackupName)
 			}
 		}
+
+		if cr.Status.State == psmdbv1.RestoreStateReady || cr.Status.State == psmdbv1.RestoreStateError {
+			if err = k8s.DeleteLease(ctx, r.client, cr.Namespace, leaseName, cr.Name); err != nil {
+				log.Error(err, "delete lease for restore")
+			}
+		}
 	}()
 
 	err = cr.CheckFields()
@@ -146,6 +155,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	switch cr.Status.State {
 	case psmdbv1.RestoreStateReady, psmdbv1.RestoreStateError:
 		return reconcile.Result{}, nil
+	}
+
+	gotLease, err := k8s.GetLease(ctx, r.client, cr.Namespace, leaseName, cr.Name)
+	if err != nil {
+		return rr, errors.Wrap(err, "get lease for restore")
+	}
+
+	if !gotLease {
+		log.Info("Another restore is in progress")
+		return rr, nil
 	}
 
 	bcp, err := r.getBackup(ctx, cr)
