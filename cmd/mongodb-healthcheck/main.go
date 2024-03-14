@@ -24,6 +24,7 @@ import (
 
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/percona/percona-server-mongodb-operator/healthcheck"
@@ -54,6 +55,7 @@ func main() {
 		Level:   getLogLevel(),
 	}
 	log := zap.New(zap.UseFlagOptions(&opts))
+	logf.SetLogger(log)
 
 	restoreInProgress, err := fileExists("/opt/percona/restore-in-progress")
 	if err != nil {
