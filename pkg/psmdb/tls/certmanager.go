@@ -46,7 +46,7 @@ func CertificateSecretName(cr *api.PerconaServerMongoDB, internal bool) string {
 }
 
 func issuerName(cr *api.PerconaServerMongoDB) string {
-	if cr.CompareVersion("1.16.0") < 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 		return cr.Spec.TLS.IssuerConf.Name
 	}
 
@@ -117,7 +117,7 @@ func (c *CertManagerController) CreateCAIssuer(ctx context.Context, cr *api.Perc
 func (c *CertManagerController) CreateCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) error {
 	issuerKind := cm.IssuerKind
 	issuerGroup := ""
-	if cr.CompareVersion("1.16.0") < 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 
