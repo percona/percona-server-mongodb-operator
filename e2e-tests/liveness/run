@@ -1,7 +1,6 @@
 #!/bin/bash
 
-set -o errexit -o errtrace
-trap collect_debug_info ERR
+set -o errexit
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
