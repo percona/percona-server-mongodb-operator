@@ -1,7 +1,7 @@
 #!/bin/bash
 
-set -o errexit
-set -o xtrace
+set -o errexit -o errtrace
+trap collect_debug_info ERR
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
@@ -90,8 +90,8 @@ function main() {
 		sleep 10
 		wait_cluster_consistency "${cluster}"
 
-		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" \
-			| grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
+		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" |
+			grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
 
 		if [[ ${currentFCV} != ${version} ]]; then
 			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."

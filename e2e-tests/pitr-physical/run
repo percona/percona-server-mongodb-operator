@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -o errexit
+set -o errexit -o errtrace
+trap collect_debug_info ERR
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
@@ -32,10 +33,10 @@ run_backup() {
 	local type=$3
 
 	desc "run backup $name-$idx"
-	cat $test_dir/conf/$name.yml \
-		| $sed -e "s/name:/name: $name-$idx/" \
-		| $sed -e "s/type:/type: $type/" \
-		| kubectl_bin apply -f -
+	cat $test_dir/conf/$name.yml |
+		$sed -e "s/name:/name: $name-$idx/" |
+		$sed -e "s/type:/type: $type/" |
+		kubectl_bin apply -f -
 
 	wait_backup "$name-$idx"
 
@@ -62,12 +63,12 @@ check_recovery() {
 	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
 
 	desc "check restore by $restore_type"
-	cat $test_dir/conf/restore.yml \
-		| $sed -e "s/name:/name: restore-$backup_name/" \
-		| $sed -e "s/backupName:/backupName: $backup_name/" \
-		| $sed -e "s/type:/type: $restore_type/" \
-		| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-		| kubectl_bin apply -f -
+	cat $test_dir/conf/restore.yml |
+		$sed -e "s/name:/name: restore-$backup_name/" |
+		$sed -e "s/backupName:/backupName: $backup_name/" |
+		$sed -e "s/type:/type: $restore_type/" |
+		if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi |
+		kubectl_bin apply -f -
 
 	# fail faster if we don't reach requested status until some time
 	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
