@@ -91,8 +91,8 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type TLSSpec struct {
-	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
-	IssuerConf *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
+	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
