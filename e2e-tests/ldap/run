@@ -12,13 +12,30 @@ deploy_openldap() {
     kubectl rollout status deployment/openldap --timeout=120s
 }
 
+compare_config() {
+	local resource="$1"
+  local filename="$2"
+	local new_result="${tmp_dir}/${resource//\//_}.yml"
+
+  config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongod\.conf}')
+  if [ -z "$config" ]; then
+    config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongos\.conf}')
+  fi
+
+	echo "$config" \
+    | yq '.security.ldap.servers="servers"' > "${new_result}"
+
+  diff -u "$filename" "$new_result"
+}
+
 test_mongod_openldap() {
     cluster="some-name"
-    kubectl_bin create secret generic $cluster-rs0-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
-        | yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
     
     desc "create first PSMDB cluster $cluster"
-    apply_cluster "$test_dir/conf/$cluster.yml"
+
+		cat_config "$test_dir/conf/$cluster.yml" \
+      | yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
+			| kubectl_bin apply -f -
 
     desc 'check if all 3 Pods started'
     wait_for_running $cluster-rs0 3
@@ -73,19 +90,20 @@ test_mongod_openldap() {
       echo "No roles found"
       exit 1
     fi
+
+    compare_config configmap/$cluster-rs0-mongod "$test_dir/conf/mongod.conf"
+
     kubectl_bin delete psmdb $cluster
     kubectl_bin delete pvc --all
 }
 
 test_sharded_openldap() {
     cluster="some-name-sharded"
-    kubectl_bin create secret generic $cluster-mongos --from-literal=mongos.conf="$(yq "$test_dir/conf/mongos.conf" \
-        | yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
-    kubectl_bin create secret generic $cluster-cfg-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
-        | yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
     
     desc "create first PSMDB cluster $cluster"
-    apply_cluster "$test_dir/conf/$cluster.yml"
+		cat_config "$test_dir/conf/$cluster.yml" \
+      | yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
+			| kubectl_bin apply -f -
 
     desc 'check if all 3 Pods started'
     wait_for_running $cluster-rs0 3
@@ -141,6 +159,9 @@ test_sharded_openldap() {
       exit 1
     fi
 
+    compare_config configmap/$cluster-cfg-mongod "$test_dir/conf/mongod.conf"
+    compare_config configmap/$cluster-mongos "$test_dir/conf/mongos.conf"
+
     kubectl_bin delete psmdb $cluster
     kubectl_bin delete pvc --all
 }
@@ -153,7 +174,7 @@ main() {
     desc 'create secrets and start client'
     cluster="some-name"
     kubectl_bin apply \
-        -f "$conf_dir/secrets.yml" \
+        -f "$test_dir/conf/secrets.yml" \
         -f "$conf_dir/client.yml"
     
     test_mongod_openldap

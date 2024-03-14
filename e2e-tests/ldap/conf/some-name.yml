@@ -6,6 +6,15 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  ldap:
+    enabled: true
+    servers:
+    - ""
+    queryTemplate: "dc=ldap,dc=local??sub?(&(objectClass=groupOfUniqueNames)(uniqueMember={USER}))"
+    queryUser: "cn=readonly,dc=ldap,dc=local"
+    userToDNMapping:
+    - match: "(.+)"
+      ldapQuery: "OU=perconadba,DC=ldap,DC=local??sub?(uid={0})"
   backup:
     enabled: false
   replsets:

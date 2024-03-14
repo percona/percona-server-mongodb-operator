@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.1
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -158,8 +157,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.1
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -315,8 +313,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.1
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -1033,6 +1030,32 @@ spec:
                 type: object
               initImage:
                 type: string
+              ldap:
+                properties:
+                  enabled:
+                    type: boolean
+                  queryTemplate:
+                    type: string
+                  queryUser:
+                    type: string
+                  servers:
+                    items:
+                      type: string
+                    type: array
+                  userToDNMapping:
+                    items:
+                      properties:
+                        ldapQuery:
+                          type: string
+                        match:
+                          type: string
+                        substitution:
+                          type: string
+                      required:
+                      - match
+                      type: object
+                    type: array
+                type: object
               multiCluster:
                 properties:
                   DNSSuffix:

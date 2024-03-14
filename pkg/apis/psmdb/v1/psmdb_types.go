@@ -72,6 +72,7 @@ type PerconaServerMongoDBSpec struct {
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	LDAP                         LDAPSpec                             `json:"ldap,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                       BackupSpec                           `json:"backup,omitempty"`
@@ -87,6 +88,20 @@ type PerconaServerMongoDBSpec struct {
 	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+}
+
+type LDAPSpec struct {
+	Enabled         bool                  `json:"enabled,omitempty"`
+	Servers         []string              `json:"servers,omitempty"`
+	QueryTemplate   string                `json:"queryTemplate,omitempty"`
+	QueryUser       string                `json:"queryUser,omitempty"`
+	UserToDNMapping []LDAPUserToDNMapping `json:"userToDNMapping,omitempty"`
+}
+
+type LDAPUserToDNMapping struct {
+	Match        string `json:"match"`
+	Substitution string `json:"substitution,omitempty"`
+	LDAPQuery    string `json:"ldapQuery,omitempty"`
 }
 
 type TLSSpec struct {
@@ -403,6 +418,48 @@ func (nv *NonVotingSpec) GetSize() int32 {
 }
 
 type MongoConfiguration string
+
+func (conf *MongoConfiguration) SetValuesIfNotSet(values map[string]any) error {
+	m := make(map[any]any)
+	err := yaml.Unmarshal([]byte(*conf), m)
+	if err != nil {
+		return errors.Wrap(err, "unmarshal")
+	}
+
+	type setFunc func(f setFunc, m map[any]any, values map[string]any)
+
+	setValuesIfNotSet := func(f setFunc, cfgM map[any]any, values map[string]any) {
+		for k, v := range values {
+			innerVal, ok := cfgM[k]
+			if !ok {
+				cfgM[k] = v
+				continue
+			}
+
+			switch t := innerVal.(type) {
+			case map[any]any:
+				valuesMap, ok := v.(map[string]any)
+				if !ok {
+					continue
+				}
+
+				f(f, t, valuesMap)
+
+				cfgM[k] = t
+			}
+		}
+	}
+
+	setValuesIfNotSet(setValuesIfNotSet, m, values)
+
+	data, err := yaml.Marshal(m)
+	if err != nil {
+		return errors.Wrap(err, "marshal")
+	}
+
+	*conf = MongoConfiguration(data)
+	return nil
+}
 
 func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
 	m := make(map[string]interface{})
@@ -903,6 +960,7 @@ const (
 	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+	EnvLDAPQueryUserPassword         = "LDAP_QUERY_USER_PASSWORD"
 	EnvPMMServerUser                 = PMMUserKey
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey

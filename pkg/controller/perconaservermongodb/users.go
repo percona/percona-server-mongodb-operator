@@ -158,7 +158,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods 
 
 					return nil
 				})
-
 				if err != nil {
 					return errors.Wrap(err, "failed to restart container")
 				}
@@ -212,7 +211,13 @@ func (su *systemUsers) len() int {
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret,
-	repls []*api.ReplsetSpec) ([]string, error) {
+	repls []*api.ReplsetSpec,
+) ([]string, error) {
+	queryUserPass := string(newUsersSec.Data[api.EnvLDAPQueryUserPassword])
+	if err := r.updateLDAPQueryUser(ctx, cr, repls, queryUserPass); err != nil {
+		return nil, errors.Wrap(err, "update ldap query user")
+	}
+
 	su := systemUsers{
 		currData: currUsersSec.Data,
 		newData:  newUsersSec.Data,
@@ -295,6 +300,41 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 	err := r.updateUsers(ctx, cr, su.users, repls)
 
 	return containers, errors.Wrap(err, "mongo: update system users")
+}
+
+func (r *ReconcilePerconaServerMongoDB) updateLDAPQueryUser(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec, pass string) error {
+	grp, gCtx := errgroup.WithContext(ctx)
+	for i := range repls {
+		replset := repls[i]
+		grp.Go(func() error {
+			client, err := r.mongoClientWithRole(gCtx, cr, *replset, api.RoleUserAdmin)
+			if err != nil {
+				return errors.Wrap(err, "dial")
+			}
+			defer func() {
+				if err := client.Disconnect(gCtx); err != nil {
+					logf.FromContext(ctx).Error(err, "failed to close connection")
+				}
+			}()
+
+			queryUser := "" // TODO: maybe pointer
+			queryPass := "" // TODO: maybe pointer
+			if cr.Spec.LDAP.Enabled {
+				queryUser = cr.Spec.LDAP.QueryUser
+				if pass == "" {
+					return errors.Errorf("%s is not set in secrets", api.EnvLDAPQueryUserPassword)
+				}
+				queryPass = pass
+			}
+
+			if err := client.UpdateLDAPQueryUser(gCtx, queryUser, queryPass); err != nil {
+				return errors.Wrap(err, "update ldap query user")
+			}
+			return nil
+		})
+	}
+
+	return grp.Wait()
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api.PerconaServerMongoDB, users []systemUser, repls []*api.ReplsetSpec) error {
