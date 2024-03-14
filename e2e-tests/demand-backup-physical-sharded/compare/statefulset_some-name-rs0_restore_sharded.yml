@@ -159,7 +159,7 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
             - mountPath: /etc/pbm/
-              name: pbm-config
+              name: restore-pbm-config
               readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst

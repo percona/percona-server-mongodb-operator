@@ -224,7 +224,7 @@ wait_backup() {
 		echo -n .
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
+		if [[ $retry -ge 720 || ${current_status} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) |
 				grep -v 'level=info' |
 				grep -v 'level=debug' |
@@ -1409,4 +1409,10 @@ function collect_debug_info() {
 	done
 
 	echo "Debug info saved to ${tmp_dir}/debug"
+}
+
+function get_lease_holder() {
+	local lease_name=$1
+
+	kubectl_bin get lease $lease_name -o jsonpath='{.spec.holderIdentity}'
 }
