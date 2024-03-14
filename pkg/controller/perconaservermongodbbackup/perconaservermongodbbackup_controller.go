@@ -151,6 +151,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			if err = k8s.DeleteLease(ctx, r.client, cr.Namespace, leaseName, cr.Name); err != nil {
 				log.Error(err, "delete lease for backup")
 			}
+			log.Info("Deleted lease for backup", "lease", leaseName, "backup", cr.Name)
 		}
 	}()
 
@@ -208,6 +209,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		log.Info("Another backup is in progress")
 		return rr, nil
 	}
+
+	log.Info("Got lease for backup", "lease", leaseName, "backup", cr.Name)
 
 	status, err = r.reconcile(ctx, cluster, cr)
 	if err != nil {

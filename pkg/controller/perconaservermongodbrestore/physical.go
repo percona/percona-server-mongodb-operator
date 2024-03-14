@@ -139,61 +139,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	}
 
 	if cr.Status.State == psmdbv1.RestoreStateWaiting {
-		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
-			if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName)); err != nil {
-				return err
-			}
-
-			return nil
-		})
-		if err != nil {
-			return status, errors.Wrapf(err, "resync config")
-		}
-
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			c := &psmdbv1.PerconaServerMongoDB{}
-			err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
-			if err != nil {
-				return err
-			}
-
-			c.Status.BackupStorage = cr.Spec.StorageName
-
-			return r.client.Status().Update(ctx, c)
-		})
-		if err != nil {
-			return status, errors.Wrap(err, "update cluster status")
-		}
-
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		timeout := time.NewTimer(900 * time.Second)
-		defer timeout.Stop()
-
-	outer:
-		for {
-			select {
-			case <-timeout.C:
-				return status, errors.Errorf("timeout while waiting PBM operation to finish")
-			case <-ticker.C:
-				hasRunningOp := false
-				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-					hasRunningOp, err = pbmClient.HasRunningOperation(ctx)
-					return err
-				})
-				if err != nil {
-					return status, errors.Wrapf(err, "check running operations status")
-				}
-
-				if !hasRunningOp {
-					break outer
-				}
-
-				log.Info("Waiting for another PBM operation to finish")
-			}
-		}
-
 		var restoreOpts pbm.RestoreOptions
 		if cr.Spec.PITR != nil {
 			restoreOpts = pbm.RestoreOptions{

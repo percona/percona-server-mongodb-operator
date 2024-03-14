@@ -126,9 +126,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 			return nil
 		}
 
-		if s, ok := cr.Status.Replsets[rs.Name]; ok && cr.Spec.Sharding.Enabled && s.AddedAsShard == nil {
-			log.Info("Waiting for the replset to be added as a shard", "replset", rs.Name)
-			return nil
+		if cr.Spec.Sharding.Enabled {
+			if s, ok := cr.Status.Replsets[rs.Name]; ok && s.AddedAsShard == nil {
+				log.Info("Waiting for the replset to be added as a shard", "replset", rs.Name)
+				return nil
+			}
 		}
 
 		restoreRunning, err := r.restoreInProgress(ctx, cr, rs)
