@@ -111,7 +111,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("reconcilePBMConfiguration")
 
-	if !cr.Spec.Backup.Enabled {
+	if !cr.Spec.Backup.Enabled || cr.CompareVersion("1.15.0") < 0 {
 		return nil
 	}
 

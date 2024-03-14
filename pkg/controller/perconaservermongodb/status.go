@@ -219,7 +219,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
-	if cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0 {
+	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0 {
 		if state == api.AppStateReady {
 			pbmStatus, err := r.checkPBMStatus(ctx, cr)
 			if err != nil {
