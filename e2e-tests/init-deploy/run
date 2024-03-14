@@ -61,6 +61,8 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 desc 'check number of connections'
 conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
 if [ ${conn_count} -gt ${max_conn} ]; then
+	collect_k8s_logs
+	echo "Mongo connection count ${conn_count} is greater than maximum connection count limit: ${max_conn}"
 	exit 1
 fi
 

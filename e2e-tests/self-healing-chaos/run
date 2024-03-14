@@ -15,6 +15,7 @@ check_pod_restarted() {
 	local new_resourceVersion=$(kubectl get pod $pod -ojson | jq '.metadata.resourceVersion' | tr -d '"')
 
 	if [[ $old_resourceVersion == "$new_resourceVersion" ]]; then
+		collect_k8s_logs
 		echo "Chaos mesh didn't work for some reason. Please check!!!"
 		echo "The resourceVersion was not changed: $new_resourceVersion"
 		exit 1

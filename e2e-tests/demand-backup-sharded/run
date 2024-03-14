@@ -166,6 +166,7 @@ backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --rest
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
 	| grep -c ${backup_dest_minio}_ | cat)
 if [[ $backup_exists -eq 1 ]]; then
+	collect_k8s_logs
 	echo "Backup was not removed from bucket -- minio"
 	exit 1
 fi

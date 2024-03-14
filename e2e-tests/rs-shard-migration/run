@@ -38,10 +38,12 @@ function main() {
 	wait_cluster_consistency "${cluster}"
 
 	if [[ $(kubectl_bin get statefulset/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
+		collect_k8s_logs
 		echo "Mongos hasn't been properly started. Exiting..."
 		exit 1
 	fi
 	if [[ "$(kubectl_bin get sts/${cluster}-cfg -o jsonpath='{.status.replicas}')" != "$(kubectl_bin get sts/${cluster}-cfg -o jsonpath='{.status.readyReplicas}')" ]]; then
+		collect_k8s_logs
 		echo "Cfg pods haven't been properly started. Exiting..."
 		exit 1
 	fi
@@ -54,6 +56,7 @@ function main() {
 
 	if [[ -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
 		&& [[ -z "$(get_shard_parameter ${cluster} ${namespace} '$configServerState.opTime.ts')" ]]; then # for mongo 3.6
+		collect_k8s_logs
 		echo "Sharded cluster does not work properly"
 		exit 1
 	fi
@@ -70,6 +73,7 @@ function main() {
 		|| [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-mongos"'")].metadata.name}')" ]] \
 		|| [[ -n "$(kubectl_bin get service -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]] \
 		|| [[ -n "$(kubectl_bin get statefulset -o jsonpath='{.items[?(@.metadata.name == "'"${cluster}-cfg"'")].metadata.name}')" ]]; then
+		collect_k8s_logs
 		echo "Transition to replicaset cluster has not been done well. Cluster does not work properly or some leftovers still exist"
 		exit 1
 	fi

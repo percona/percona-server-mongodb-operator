@@ -83,6 +83,7 @@ encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 -c mongod -n $namespace
 
 echo "$encrypted_cluster_log"
 if [ -z "$encrypted_cluster_log" ]; then
+	collect_k8s_logs
 	echo "Cluster is not encrypted"
 	exit 1
 fi
@@ -99,6 +100,7 @@ until [ "$retry" -ge 10 ]; do
 		echo "Cluster is not encrypted already"
 		break
 	elif [ $retry == 15 ]; then
+		collect_k8s_logs
 		echo "Max retry count $retry reached. Cluster is still encrypted"
 		exit 1
 	else

@@ -94,6 +94,7 @@ function main() {
 			| grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
 
 		if [[ ${currentFCV} != ${version} ]]; then
+			collect_k8s_logs
 			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
 			exit 1
 		fi

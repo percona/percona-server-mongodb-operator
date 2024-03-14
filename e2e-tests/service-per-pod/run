@@ -64,6 +64,7 @@ check_cr_config() {
 		compare_kubectl service/node-port-rs0-0 "-updated"
 		current_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
 		if [[ $current_node_port != "$old_node_port" ]]; then
+			collect_k8s_logs
 			echo "Node port changed from ${old_node_port} to ${current_node_port}"
 			exit 1
 		fi

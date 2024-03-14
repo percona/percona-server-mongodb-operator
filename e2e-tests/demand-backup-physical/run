@@ -38,6 +38,7 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "900"
 	kubectl_bin get psmdb ${cluster} -o yaml
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		collect_k8s_logs
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
 	fi

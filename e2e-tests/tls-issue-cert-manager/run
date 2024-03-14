@@ -44,6 +44,7 @@ check_secret_data_key() {
 
 	secret_data=$(kubectl_bin get "secrets/${secret_name}" -o json | jq ".data[\"${data_key}\"]")
 	if [ -z "$secret_data" ]; then
+		collect_k8s_logs
 		exit 1
 	fi
 }

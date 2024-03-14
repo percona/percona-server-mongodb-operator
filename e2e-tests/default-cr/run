@@ -27,6 +27,7 @@ function stop_cluster() {
 		let passed_time="${passed_time}+${sleep_time}"
 		sleep ${sleep_time}
 		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			collect_k8s_logs
 			echo "We've been waiting for cluster stop for too long. Exiting..."
 			exit 1
 		fi

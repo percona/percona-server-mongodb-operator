@@ -23,6 +23,7 @@ wait_mcs_api() {
 	until [[ $(kubectl_bin api-resources | grep ServiceExport | wc -l) -eq 1 ]]; do
 		let retry+=1
 		if [ $retry -ge 64 ]; then
+			collect_k8s_logs
 			echo max retry count $retry reached. Something went wrong with MCS, probably a problem on GCP side.
 			exit 1
 		fi
@@ -40,6 +41,7 @@ wait_service_import() {
 	until [[ "$(kubectl_bin get serviceimport --ignore-not-found | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
 		if [ $retry -ge 64 ]; then
+			collect_k8s_logs
 			echo max retry count $retry reached. Something went wrong with MCS, probably a problem in gke-mcs-importer.
 			exit 1
 		fi
@@ -58,6 +60,7 @@ wait_service_export() {
 	until [[ "$(kubectl_bin get serviceexport --ignore-not-found | grep -v 'NAME' | wc -l)" -eq "9" ]]; do
 		let retry+=1
 		if [ $retry -ge 64 ]; then
+			collect_k8s_logs
 			echo max retry count $retry reached. Something went wrong with MCS, probably a problem in gke-mcs-exporter.
 			exit 1
 		fi

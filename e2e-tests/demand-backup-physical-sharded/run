@@ -38,6 +38,7 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "900"
 	kubectl_bin get psmdb ${cluster} -o yaml
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		collect_k8s_logs
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
 	fi
@@ -52,6 +53,7 @@ check_exported_mongos_service_endpoint() {
 	local host=$1
 
 	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+		collect_k8s_logs
 		echo "Exported host is not correct after the restore"
 		exit 1
 	fi
@@ -80,6 +82,7 @@ wait_cluster_consistency ${cluster}
 lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' \
 	| jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0][]')
 if [ -z $lbEndpoint ]; then
+	collect_k8s_logs
 	echo "mongos service not exported correctly"
 	exit 1
 fi

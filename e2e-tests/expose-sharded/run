@@ -23,6 +23,7 @@ function stop_cluster() {
 		let passed_time="${passed_time}+${sleep_time}"
 		sleep ${passed_time}
 		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			collect_k8s_logs
 			echo "We've been waiting for cluster stop for too long. Exiting..."
 			exit 1
 		fi
@@ -52,6 +53,7 @@ function compare_mongo_config() {
 	rs0_0_endpoint_actual=$(run_mongo 'var host;var x=0;rs.conf().members.forEach(function(d){ if(d.tags.podName=="some-name-rs0-0"){ host=rs.conf().members[x].host;print(host)};x=x+1; })' "clusterAdmin:clusterAdmin123456@${cluster}-rs0.${namespace}" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye')
 
 	if [[ $rs0_0_endpoint_actual != "$rs0_0_endpoint:27017" || $cfg_0_endpoint_actual != "$cfg_0_endpoint:27017" ]]; then
+		collect_k8s_logs
 		desc "Actual values rs $rs0_0_endpoint_actual and cfg $cfg_0_endpoint_actual do not match expected rs $rs0_0_endpoint:27017 and cfg $cfg_0_endpoint:27017"
 		exit 1
 	fi

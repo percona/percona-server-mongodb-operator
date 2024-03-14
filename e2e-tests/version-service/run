@@ -67,7 +67,7 @@ function check_telemetry_transfer() {
 		# operator fallback VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service.log.json ${test_dir}/compare/${telemetry_log_file})
 		# CR VS should not have telemetry
-		[[ -s "${tmp_dir}/enabled_telemetry.version-service-cr.log.json" ]] && exit 1
+		[[ -s "${tmp_dir}/enabled_telemetry.version-service-cr.log.json" ]] && collect_k8s_logs && exit 1
 	fi
 
 	local telemetry_cr_log_file="${telemetry_state}_telemetry.version-service-cr.log${OPERATOR_NS:+-cw}.json"
@@ -77,15 +77,15 @@ function check_telemetry_transfer() {
 		# cr VS should have telemetry
 		diff ${test_dir}/compare/${telemetry_cr_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json ${test_dir}/compare/${telemetry_cr_log_file})
 		# operator VS should not have telemetry
-		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && exit 1
+		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && collect_k8s_logs && exit 1
 	fi
 
 	desc 'telemetry was disabled in CR as well as in operator'
 	if [ "${cr_vs_channel}" == 'disabled' -a "${telemetry_state}" == 'disabled' ]; then
 		# CR VS should not have telemetry
-		[[ -s ${tmp_dir}/disabled_telemetry.version-service-cr.log.json ]] && exit 1
+		[[ -s ${tmp_dir}/disabled_telemetry.version-service-cr.log.json ]] && collect_k8s_logs && exit 1
 		# operator VS should not have telemetry
-		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && exit 1
+		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && collect_k8s_logs && exit 1
 	fi
 
 	kubectl_bin delete pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
@@ -183,6 +183,7 @@ for i in "${!cases[@]}"; do
 
 	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
 	if [ ${#pods[@]} -eq 0 ]; then
+		collect_k8s_logs
 		echo "pods not found"
 		exit 1
 	fi
@@ -190,6 +191,7 @@ for i in "${!cases[@]}"; do
 	for pod in "${pods[@]}"; do
 		img=$(kubectl get $pod -o jsonpath='{.spec.containers[0].image}')
 		if [ "$img" != "$expected_image" ]; then
+			collect_k8s_logs
 			echo "image was not updated"
 			exit 1
 		fi
