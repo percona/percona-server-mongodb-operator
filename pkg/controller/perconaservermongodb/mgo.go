@@ -576,9 +576,9 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		mongoCmd := "mongo"
-		if strings.Contains(outb.String(), "v6.0") || strings.Contains(outb.String(), "v7.0") {
-			mongoCmd = "mongosh"
+		mongoCmd := "mongosh"
+		if strings.Contains(outb.String(), "v4.4") || strings.Contains(outb.String(), "v5.0") {
+			mongoCmd = "mongo"
 		}
 
 		if !cr.Spec.UnsafeConf {
