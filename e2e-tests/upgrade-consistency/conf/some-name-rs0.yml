@@ -3,10 +3,11 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.13.0
+  crVersion: 1.14.0
   #platform: openshift
   image:
   imagePullPolicy: Always
+  initImage: -init
   allowUnsafeConfigurations: false
   backup:
     enabled: false

@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -86,7 +87,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		},
 		{
 			Name:  "DB_PORT",
-			Value: "27017",
+			Value: strconv.Itoa(int(api.DefaultMongodPort)),
 		},
 		{
 			Name:  "DB_PORT_MIN",
@@ -384,6 +385,20 @@ func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *
 			},
 		}
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 {
+		pmmC.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"bash",
+						"-c",
+						"pmm-admin unregister --force",
+					},
+				},
+			},
+		}
 	}
 
 	return &pmmC

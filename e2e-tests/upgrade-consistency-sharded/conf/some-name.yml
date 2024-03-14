@@ -6,10 +6,11 @@ metadata:
     - delete-psmdb-pods-in-order
     - delete-psmdb-pvc
 spec:
-  crVersion: 1.13.0
+  crVersion: 1.14.0
   #platform: openshift
   image:
   imagePullPolicy: Always
+  initImage: -init
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   secrets:

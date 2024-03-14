@@ -11,8 +11,8 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.15.0
-  image: percona/percona-server-mongodb:6.0.9-7
+  crVersion: 1.16.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod6.0
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
@@ -41,7 +41,7 @@ spec:
 #    vault: my-cluster-name-vault
   pmm:
     enabled: false
-    image: percona/pmm-client:2.39.0
+    image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -500,8 +500,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.3.0
-    serviceAccountName: percona-server-mongodb-operator
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:

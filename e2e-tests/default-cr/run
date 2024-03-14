@@ -81,23 +81,8 @@ function main() {
 	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	desc 'starting PMM server'
-	if [ ! -z "$OPENSHIFT" ]; then
-		platform=openshift
-		oc create sa pmm-server
-		oc adm policy add-scc-to-user privileged -z pmm-server
-		if [ -n "$OPERATOR_NS" ]; then
-			timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-psmdb-operator-' | awk '{print $1}') || :
-			oc create clusterrolebinding pmm-psmdb-operator-cluster-wide --clusterrole=percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
-			oc patch clusterrole/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' ${OPERATOR_NS:+-n $OPERATOR_NS}
-		else
-			oc create rolebinding pmm-psmdb-operator-namespace-only --role percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
-			oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
-		fi
-		retry 10 60 helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform --set sa=pmm-server --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VER}.tgz
-	else
-		retry 10 60 helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VER}.tgz
-	fi
+	desc 'install PMM Server'
+	deploy_pmm_server
 	sleep 20
 	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 			"spec": {"pmm":{"enabled":true}}

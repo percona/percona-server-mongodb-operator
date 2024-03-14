@@ -5,7 +5,7 @@ jobs:
     name: runner / suggester / golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
@@ -17,7 +17,7 @@ jobs:
     name: runner / suggester / gofmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
       - run: gofmt -w -s $(find . -not -path "*/vendor/*" -name "*.go")
       - uses: reviewdog/action-suggester@v1
         with:
@@ -27,10 +27,10 @@ jobs:
     name: runner / suggester / shfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4.1.1
+      - uses: actions/setup-go@v5
         with:
-          go-version: '^1.17'
+          go-version: '^1.21'
       - run: go install mvdan.cc/sh/v3/cmd/shfmt@latest
       - run: $(go env GOPATH)/bin/shfmt -f . | grep -v 'vendor' | xargs $(go env GOPATH)/bin/shfmt -bn -ci -s -w
       - name: suggester / shfmt
@@ -43,7 +43,7 @@ jobs:
     name: runner / shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
       - uses: reviewdog/action-shellcheck@v1
         with:
           github_token: ${{ secrets.github_token }}
@@ -54,7 +54,7 @@ jobs:
     name: runner / misspell
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
       - uses: reviewdog/action-misspell@v1
         with:
           github_token: ${{ secrets.github_token }}
@@ -66,10 +66,19 @@ jobs:
     name: runner / alex
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.0
+      - uses: actions/checkout@v4.1.1
       - uses: reviewdog/action-alex@v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-review
           level: info
           exclude: "./vendor/*"
+
+  manifests:
+    name: runner / manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          make generate manifests VERSION=main
+          git diff --exit-code

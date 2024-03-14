@@ -130,7 +130,7 @@ full list of variables is the following one:
 
 * `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:main` by default,
 * `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod4.4` by default,
-* `IMAGE_PMM` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
+* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
 * `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
 
 ### Using automatic clean-up after testing

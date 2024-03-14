@@ -156,7 +156,6 @@
           "cluster": true
         },
         "actions": [
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "getDefaultRWConcern",
           "getCmdLineOpts",
