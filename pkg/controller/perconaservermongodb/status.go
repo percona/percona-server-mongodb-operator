@@ -260,6 +260,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
+	log.V(1).Info("Cluster status", "status", cr.Status)
+
 	return r.writeStatus(ctx, cr)
 }
 
