@@ -9,6 +9,7 @@ demand-backup-physical
 demand-backup-physical-sharded
 demand-backup-sharded
 init-deploy
+ldap
 mongod-major-upgrade
 mongod-major-upgrade-sharded
 monitoring-2-0
