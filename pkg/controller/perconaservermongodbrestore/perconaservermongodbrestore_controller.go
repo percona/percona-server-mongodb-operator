@@ -226,7 +226,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			}
 		} else {
 			var stg psmdbv1.BackupStorageSpec
+			var ok bool
 			switch {
+			case cr.Spec.StorageName != "":
+				stg, ok = cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+				if !ok {
+					return reconcile.Result{}, errors.Errorf("storage %s not found in cluster spec", cr.Spec.StorageName)
+				}
 			case bcp.Status.S3 != nil:
 				stg = psmdbv1.BackupStorageSpec{
 					Type: storage.S3,
@@ -242,6 +248,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			if err := pbmClient.SetStorageConfig(ctx, stg); err != nil {
 				return rr, errors.Wrapf(err, "set pbm storage config for backup source")
 			}
+		}
+
+		err = pbmClient.DisablePITR(ctx)
+		if err != nil {
+			return rr, errors.Wrap(err, "set pbm config")
 		}
 
 		if bcp.Spec.StorageName != "" {

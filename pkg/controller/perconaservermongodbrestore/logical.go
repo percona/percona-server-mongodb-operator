@@ -79,11 +79,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	}
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		err = pbmClient.DisablePITR(ctx)
-		if err != nil {
-			return status, errors.Wrap(err, "set pbm config")
-		}
-
 		isBlockedByPITR, err := pbmClient.IsPITRRunning(ctx)
 		if err != nil {
 			return status, errors.Wrap(err, "check if PITR is running")
