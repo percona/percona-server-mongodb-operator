@@ -7,41 +7,41 @@ test_dir=$(realpath "$(dirname "$0")")
 set_debug
 
 deploy_openldap() {
-    kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+	kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
 
-    kubectl rollout status deployment/openldap --timeout=120s
+	kubectl rollout status deployment/openldap --timeout=120s
 }
 
 compare_config() {
 	local resource="$1"
-  local filename="$2"
+	local filename="$2"
 	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
-  config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongod\.conf}')
-  if [ -z "$config" ]; then
-    config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongos\.conf}')
-  fi
+	config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongod\.conf}')
+	if [ -z "$config" ]; then
+		config=$(kubectl_bin get "${resource}" -o jsonpath='{.data.mongos\.conf}')
+	fi
 
 	echo "$config" \
-    | yq '.security.ldap.servers="servers"' > "${new_result}"
+		| yq '.security.ldap.servers="servers"' >"${new_result}"
 
-  diff -u "$filename" "$new_result"
+	diff -u "$filename" "$new_result"
 }
 
 test_mongod_openldap() {
-    cluster="some-name"
-    
-    desc "create first PSMDB cluster $cluster"
+	cluster="some-name"
 
-		cat_config "$test_dir/conf/$cluster.yml" \
-      | yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
-			| kubectl_bin apply -f -
+	desc "create first PSMDB cluster $cluster"
 
-    desc 'check if all 3 Pods started'
-    wait_for_running $cluster-rs0 3
+	cat_config "$test_dir/conf/$cluster.yml" \
+		| yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
+		| kubectl_bin apply -f -
 
-    run_mongo \
-        'db.getSiblingDB("admin").createRole(
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+
+	run_mongo \
+		'db.getSiblingDB("admin").createRole(
 {
  role: "cn=admin,ou=perconadba,dc=ldap,dc=local",
  privileges: [],
@@ -71,47 +71,47 @@ test_mongod_openldap() {
      "db" : "admin"
    }
  ]})' \
-        "userAdmin:userAdmin123456@$cluster-rs0.$namespace"
+		"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
 
-    run_mongo 'db.runCommand({connectionStatus:1})' "percona:password@$cluster-rs0.$namespace" "" "" "--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'"
+	run_mongo 'db.runCommand({connectionStatus:1})' "percona:password@$cluster-rs0.$namespace" "" "" "--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'"
 
-    roles_size=$(run_mongo 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
-      "percona:password@$cluster-rs0.$namespace" "" "" \
-      "--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
-        | grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
-        | jq '.authInfo.authenticatedUserRoles | length')
+	roles_size=$(run_mongo 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+		"percona:password@$cluster-rs0.$namespace" "" "" \
+		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
+		| jq '.authInfo.authenticatedUserRoles | length')
 
-    if [ -z "$roles_size" ]; then
-      echo "Got problem while getting roles size"
-      exit 1
-    fi
+	if [ -z "$roles_size" ]; then
+		echo "Got problem while getting roles size"
+		exit 1
+	fi
 
-    if [ "$roles_size" -eq 0 ]; then
-      echo "No roles found"
-      exit 1
-    fi
+	if [ "$roles_size" -eq 0 ]; then
+		echo "No roles found"
+		exit 1
+	fi
 
-    compare_config configmap/$cluster-rs0-mongod "$test_dir/conf/mongod.conf"
+	compare_config configmap/$cluster-rs0-mongod "$test_dir/conf/mongod.conf"
 
-    kubectl_bin delete psmdb $cluster
-    kubectl_bin delete pvc --all
+	kubectl_bin delete psmdb $cluster
+	kubectl_bin delete pvc --all
 }
 
 test_sharded_openldap() {
-    cluster="some-name-sharded"
-    
-    desc "create first PSMDB cluster $cluster"
-		cat_config "$test_dir/conf/$cluster.yml" \
-      | yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
-			| kubectl_bin apply -f -
+	cluster="some-name-sharded"
 
-    desc 'check if all 3 Pods started'
-    wait_for_running $cluster-rs0 3
-    wait_for_running $cluster-cfg 3 "false"
-    wait_for_running $cluster-mongos 3
+	desc "create first PSMDB cluster $cluster"
+	cat_config "$test_dir/conf/$cluster.yml" \
+		| yq ".spec.ldap.servers[0]=\"openldap.$namespace.svc.cluster.local:1389\"" \
+		| kubectl_bin apply -f -
 
-    run_mongos \
-        'db.getSiblingDB("admin").createRole(
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	run_mongos \
+		'db.getSiblingDB("admin").createRole(
 {
  role: "cn=admin,ou=perconadba,dc=ldap,dc=local",
  privileges: [],
@@ -141,48 +141,48 @@ test_sharded_openldap() {
      "db" : "admin"
    }
  ]})' \
-        "userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 
-    roles_size=$(run_mongos 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
-      "percona:password@$cluster-mongos.$namespace" "" "" \
-      "--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
-        | grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
-        | jq '.authInfo.authenticatedUserRoles | length')
+	roles_size=$(run_mongos 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+		"percona:password@$cluster-mongos.$namespace" "" "" \
+		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
+		| jq '.authInfo.authenticatedUserRoles | length')
 
-    if [ -z "$roles_size" ]; then
-      echo "Got problem while getting roles size"
-      exit 1
-    fi
+	if [ -z "$roles_size" ]; then
+		echo "Got problem while getting roles size"
+		exit 1
+	fi
 
-    if [ "$roles_size" -eq 0 ]; then
-      echo "No roles found"
-      exit 1
-    fi
+	if [ "$roles_size" -eq 0 ]; then
+		echo "No roles found"
+		exit 1
+	fi
 
-    compare_config configmap/$cluster-cfg-mongod "$test_dir/conf/mongod.conf"
-    compare_config configmap/$cluster-mongos "$test_dir/conf/mongos.conf"
+	compare_config configmap/$cluster-cfg-mongod "$test_dir/conf/mongod.conf"
+	compare_config configmap/$cluster-mongos "$test_dir/conf/mongos.conf"
 
-    kubectl_bin delete psmdb $cluster
-    kubectl_bin delete pvc --all
+	kubectl_bin delete psmdb $cluster
+	kubectl_bin delete pvc --all
 }
 
 main() {
-    create_infra "$namespace"
+	create_infra "$namespace"
 
-    deploy_openldap
+	deploy_openldap
 
-    desc 'create secrets and start client'
-    cluster="some-name"
-    kubectl_bin apply \
-        -f "$test_dir/conf/secrets.yml" \
-        -f "$conf_dir/client.yml"
-    
-    test_mongod_openldap
-    test_sharded_openldap
+	desc 'create secrets and start client'
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "$test_dir/conf/secrets.yml" \
+		-f "$conf_dir/client.yml"
 
-    destroy "$namespace"
+	test_mongod_openldap
+	test_sharded_openldap
 
-    desc 'test passed'
+	destroy "$namespace"
+
+	desc 'test passed'
 }
 
 main
