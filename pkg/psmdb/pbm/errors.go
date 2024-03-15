@@ -33,3 +33,7 @@ func IsAnotherOperationInProgress(err error) bool {
 func BackupNotFound(err error) bool {
 	return strings.Contains(err.Error(), "get backup metadata: not found")
 }
+
+func PBMSidecarNotFound(err error) bool {
+	return strings.Contains(err.Error(), "container backup-agent is not valid for pod")
+}

@@ -155,6 +155,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 
 	hasRunning, err := pbmClient.HasRunningOperation(ctx)
 	if err != nil && !pbm.IsNotConfigured(err) {
+		if pbm.PBMSidecarNotFound(err) {
+			return nil
+		}
 		return errors.Wrap(err, "check if PBM has running operation")
 	}
 
