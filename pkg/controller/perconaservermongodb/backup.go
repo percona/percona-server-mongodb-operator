@@ -121,7 +121,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfiguration(ctx context.Co
 	}
 
 	for _, rs := range cr.Spec.Replsets {
-		if s, ok := cr.Status.Replsets[rs.Name]; ok && !s.Initialized && s.Status != api.AppStateReady {
+		if s, ok := cr.Status.Replsets[rs.Name]; ok && !s.Initialized || s.Status != api.AppStateReady {
 			log.Info("Waiting for the replset to be ready", "replset", rs.Name)
 			return nil
 		}
