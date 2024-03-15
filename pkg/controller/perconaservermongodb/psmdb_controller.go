@@ -1657,11 +1657,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *
 	for _, pvc := range pvcList.Items {
 		orig := pvc.DeepCopy()
 
+		if pvc.Labels == nil {
+			pvc.Labels = make(map[string]string)
+		}
 		for k, v := range pvcSpec.Labels {
 			pvc.Labels[k] = v
 		}
 		for k, v := range sts.Labels {
 			pvc.Labels[k] = v
+		}
+
+		if pvc.Annotations == nil {
+			pvc.Annotations = make(map[string]string)
 		}
 		for k, v := range pvcSpec.Annotations {
 			pvc.Annotations[k] = v
