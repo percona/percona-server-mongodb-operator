@@ -12,7 +12,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.16.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod6.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
