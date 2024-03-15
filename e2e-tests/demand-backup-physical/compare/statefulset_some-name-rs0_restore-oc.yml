@@ -237,9 +237,10 @@ spec:
             defaultMode: 420
             optional: true
             secretName: some-name-pbm-config
-        - name: pbm-config
+        - name: restore-pbm-config
           secret:
             defaultMode: 420
+            optional: false
             secretName: some-name-restore-pbm-config
   updateStrategy:
     rollingUpdate:

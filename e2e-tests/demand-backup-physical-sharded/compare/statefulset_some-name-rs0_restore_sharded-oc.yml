@@ -157,7 +157,7 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
-            - mountPath: /etc/pbm/
+            - mountPath: /etc/pbm
               name: pbm-config
               readOnly: true
           workingDir: /data/db
@@ -236,7 +236,13 @@ spec:
         - name: pbm-config
           secret:
             defaultMode: 420
-            secretName: pbm-config
+            optional: true
+            secretName: some-name-pbm-config
+        - name: restore-pbm-config
+          secret:
+            defaultMode: 420
+            optional: false
+            secretName: some-name-restore-pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0
