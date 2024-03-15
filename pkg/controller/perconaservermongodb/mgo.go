@@ -277,8 +277,8 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			horizons := make(map[string]string)
 			for h, domain := range rs.Horizons[pod.Name] {
 				d := domain
-				if !strings.HasSuffix(d, ":27017") {
-					d = d + ":27017"
+				if !strings.Contains(d, ":") {
+					d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
 				}
 				horizons[h] = d
 			}
