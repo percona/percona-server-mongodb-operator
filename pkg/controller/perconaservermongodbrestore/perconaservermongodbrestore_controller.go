@@ -181,18 +181,40 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
-	if meta.FindStatusCondition(status.Conditions, "PBMIsConfigured") == nil {
-		cluster := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Spec.ClusterName,
-				Namespace: cr.Namespace,
-			},
-		}
-		err = r.client.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)
-		if err != nil {
-			return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.ClusterName,
+			Namespace: cr.Namespace,
+		},
+	}
+	err = r.client.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)
+	if err != nil {
+		return rr, errors.Wrapf(err, "get cluster %s", client.ObjectKeyFromObject(cluster))
+	}
+
+	if cluster.CompareVersion("1.15.0") <= 0 {
+		var stg psmdbv1.BackupStorageSpec
+		var ok bool
+		if cr.Spec.BackupSource == nil {
+			stg, ok = cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+			if !ok {
+				return reconcile.Result{}, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+			}
+		} else {
+			stg, err = getBackupSourceStorage(cr, bcp, cluster)
+			if err != nil {
+				return rr, errors.Wrap(err, "get backup source storage")
+			}
 		}
 
+		log.Info("Setting PBM config for storage (legacy)", "restore", cr.Name, "storage", stg)
+
+		if err := pbm.LegacySetConfig(ctx, r.client, cluster, stg); err != nil {
+			return rr, errors.Wrap(err, "set PBM config (legacy)")
+		}
+	}
+
+	if cluster.CompareVersion("1.16.0") >= 0 && meta.FindStatusCondition(status.Conditions, "PBMIsConfigured") == nil {
 		var pbmClient *pbm.PBM
 		restoreRunning := false
 		for _, rs := range cluster.Spec.Replsets {
@@ -220,31 +242,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 		if cr.Spec.BackupSource == nil {
 			log.Info("Setting PBM config for storage", "restore", cr.Name, "storage", bcp.Spec.StorageName)
-			err = pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName))
-			if err != nil {
+
+			if err = pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(bcp.Spec.StorageName)); err != nil {
 				return rr, errors.Wrapf(err, "set pbm config for storage %s", bcp.Spec.StorageName)
 			}
 		} else {
-			var stg psmdbv1.BackupStorageSpec
-			var ok bool
-			switch {
-			case cr.Spec.StorageName != "":
-				stg, ok = cluster.Spec.Backup.Storages[cr.Spec.StorageName]
-				if !ok {
-					return reconcile.Result{}, errors.Errorf("storage %s not found in cluster spec", cr.Spec.StorageName)
-				}
-			case bcp.Status.S3 != nil:
-				stg = psmdbv1.BackupStorageSpec{
-					Type: storage.S3,
-					S3:   *bcp.Status.S3,
-				}
-			case bcp.Status.Azure != nil:
-				stg = psmdbv1.BackupStorageSpec{
-					Type:  storage.Azure,
-					Azure: *bcp.Status.Azure,
-				}
+			stg, err := getBackupSourceStorage(cr, bcp, cluster)
+			if err != nil {
+				return rr, errors.Wrap(err, "get backup source storage")
 			}
+
 			log.Info("Setting PBM storage config for backup source", "restore", cr.Name, "storage", stg)
+
 			if err := pbmClient.SetStorageConfig(ctx, stg); err != nil {
 				return rr, errors.Wrapf(err, "set pbm storage config for backup source")
 			}
@@ -425,4 +434,29 @@ func (r *ReconcilePerconaServerMongoDBRestore) restoreInProgress(ctx context.Con
 
 	_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
 	return ok, nil
+}
+
+func getBackupSourceStorage(cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.BackupStorageSpec, error) {
+	var stg psmdbv1.BackupStorageSpec
+	var ok bool
+
+	switch {
+	case cr.Spec.StorageName != "":
+		stg, ok = cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+		if !ok {
+			return stg, errors.Errorf("storage %s not found in cluster spec", cr.Spec.StorageName)
+		}
+	case bcp.Status.S3 != nil:
+		stg = psmdbv1.BackupStorageSpec{
+			Type: storage.S3,
+			S3:   *bcp.Status.S3,
+		}
+	case bcp.Status.Azure != nil:
+		stg = psmdbv1.BackupStorageSpec{
+			Type:  storage.Azure,
+			Azure: *bcp.Status.Azure,
+		}
+	}
+
+	return stg, nil
 }

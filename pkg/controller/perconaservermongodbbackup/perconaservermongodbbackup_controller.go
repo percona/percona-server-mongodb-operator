@@ -241,7 +241,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "create PBM client")
 	}
 
-	if meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
+	if cluster.CompareVersion("1.15.0") <= 0 {
+		stg, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+		if !ok {
+			return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
+		}
+		if err := pbm.LegacySetConfig(ctx, r.client, cluster, stg); err != nil {
+			return status, errors.Wrap(err, "set PBM config (legacy)")
+		}
+	}
+
+	if cluster.CompareVersion("1.16.0") >= 0 && meta.FindStatusCondition(cr.Status.Conditions, "PBMConfigured") == nil {
 		log.Info("Configuring PBM", "backup", cr.Name, "storage", cr.Spec.StorageName)
 
 		if err := pbmClient.SetConfigFile(ctx, pbm.GetConfigPathForStorage(cr.Spec.StorageName)); err != nil {
@@ -505,3 +515,5 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 
 	return errors.Wrap(err, "write status")
 }
+
+func pbmSetConfigLegacy(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) {}
