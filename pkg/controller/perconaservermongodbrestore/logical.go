@@ -48,19 +48,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		return status, errors.Wrap(err, "create pbm client")
 	}
 
-	running, err := pbmClient.GetRunningOperation(ctx)
-	if err != nil {
-		return status, errors.Wrap(err, "check for concurrent jobs")
-	}
-	// for some reason PBM returns backup name for restore operation
-	if running.Name != bcp.Status.PBMName && running.Name != "" {
-		if cr.Status.State != psmdbv1.RestoreStateWaiting {
-			log.Info("waiting to finish another backup/restore.", "running", running.Name, "type", running.Type, "opid", running.OpID)
-		}
-		status.State = psmdbv1.RestoreStateWaiting
-		return status, nil
-	}
-
 	backupName := bcp.Status.PBMName
 
 	if cluster.Spec.Sharding.Enabled {
