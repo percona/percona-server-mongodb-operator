@@ -13,12 +13,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -112,9 +112,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.Initialized = true
 		cr.Status.Replsets[replset.Name] = rs
 
-		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               string(api.AppStateInit),
-			Status:             metav1.ConditionTrue,
+		k8s.SetStatusCondition(&cr.Status.Conditions, api.ClusterCondition{
+			Type:               api.AppStateInit,
+			Status:             api.ConditionTrue,
 			Message:            replset.Name,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})
@@ -148,9 +148,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.Initialized = true
 		cr.Status.Replsets[replset.Name] = rs
 
-		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               string(api.AppStateInit),
-			Status:             metav1.ConditionTrue,
+		k8s.SetStatusCondition(&cr.Status.Conditions, api.ClusterCondition{
+			Type:               api.AppStateInit,
+			Status:             api.ConditionTrue,
 			Message:            replset.Name,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})

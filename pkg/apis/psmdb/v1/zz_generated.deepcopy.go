@@ -1195,7 +1195,7 @@ func (in *PerconaServerMongoDBStatus) DeepCopyInto(out *PerconaServerMongoDBStat
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]ClusterCondition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
