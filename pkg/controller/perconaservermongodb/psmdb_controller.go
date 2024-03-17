@@ -1570,7 +1570,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 			}
 			sfsSpec.Template.Spec.Containers = append(sfsSpec.Template.Spec.Containers, backup.AgentContainer(cr, rsName))
 
-			if cr.CompareVersion("1.15.0") >= 0 {
+			if cr.CompareVersion("1.16.0") >= 0 {
 				t := true
 				sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes, corev1.Volume{
 					Name: "pbm-config",
