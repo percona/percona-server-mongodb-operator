@@ -783,10 +783,10 @@ func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 }
 
 var affinityValidTopologyKeys = map[string]struct{}{
-	AffinityOff:                                {},
-	"kubernetes.io/hostname":                   {},
-	"failure-domain.beta.kubernetes.io/zone":   {},
-	"failure-domain.beta.kubernetes.io/region": {},
+	AffinityOff:                     {},
+	"kubernetes.io/hostname":        {},
+	"topology.kubernetes.io/zone":   {},
+	"topology.kubernetes.io/region": {},
 }
 
 var defaultAffinityTopologyKey = "kubernetes.io/hostname"
