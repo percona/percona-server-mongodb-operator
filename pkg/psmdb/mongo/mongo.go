@@ -57,7 +57,6 @@ type Client interface {
 	UpdateUserRoles(ctx context.Context, username string, roles []map[string]interface{}) error
 	UpdateUserPass(ctx context.Context, name, pass string) error
 	UpdateUser(ctx context.Context, currName, newName, pass string) error
-	UpdateLDAPQueryUser(ctx context.Context, name, pass string) error
 }
 
 type ClientDatabase interface {
@@ -580,16 +579,6 @@ func (client *mongoClient) UpdateUserRoles(ctx context.Context, username string,
 // UpdateUserPass updates user's password
 func (client *mongoClient) UpdateUserPass(ctx context.Context, name, pass string) error {
 	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
-}
-
-func (client *mongoClient) UpdateLDAPQueryUser(ctx context.Context, name, pass string) error {
-	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "setParameter", Value: 1}, {Key: "ldapQueryUser", Value: pass}}).Err(); err != nil {
-		return errors.Wrap(err, "ldapQueryUser")
-	}
-	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "setParameter", Value: 1}, {Key: "ldapQueryPassword", Value: pass}}).Err(); err != nil {
-		return errors.Wrap(err, "ldapQueryUser")
-	}
-	return nil
 }
 
 // UpdateUser recreates user with new name and password

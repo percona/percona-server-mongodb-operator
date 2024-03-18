@@ -149,7 +149,3 @@ func (c *fakeMongoClient) UpdateUserPass(ctx context.Context, name, pass string)
 func (c *fakeMongoClient) UpdateUser(ctx context.Context, currName, newName, pass string) error {
 	return nil
 }
-
-func (c *fakeMongoClient) UpdateLDAPQueryUser(ctx context.Context, name, pass string) error {
-	return nil
-}
