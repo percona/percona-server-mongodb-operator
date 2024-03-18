@@ -186,7 +186,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
-	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
 				Name:      LDAPTLSVolClaimName,
@@ -401,7 +401,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 		})
 	}
 
-	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.Volume{
 			{
 				Name: LDAPTLSVolClaimName,

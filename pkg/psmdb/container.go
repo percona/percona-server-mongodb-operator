@@ -51,7 +51,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
-	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
 				Name:      LDAPTLSVolClaimName,

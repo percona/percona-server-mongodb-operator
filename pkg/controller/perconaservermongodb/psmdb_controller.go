@@ -1533,7 +1533,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 				},
 			})
 	}
-	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
 			corev1.Volume{
 				Name: psmdb.LDAPTLSVolClaimName,
