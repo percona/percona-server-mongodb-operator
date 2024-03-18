@@ -72,7 +72,6 @@ type PerconaServerMongoDBSpec struct {
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
-	LDAP                         LDAPSpec                             `json:"ldap,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                       BackupSpec                           `json:"backup,omitempty"`
@@ -654,6 +653,7 @@ type SecretsSpec struct {
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
+	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
 type MongosSpec struct {
@@ -960,7 +960,6 @@ const (
 	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	EnvLDAPQueryUserPassword         = "LDAP_QUERY_USER_PASSWORD"
 	EnvPMMServerUser                 = PMMUserKey
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey

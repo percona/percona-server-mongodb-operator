@@ -1168,7 +1168,6 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	in.LDAP.DeepCopyInto(&out.LDAP)
 	if in.Replsets != nil {
 		in, out := &in.Replsets, &out.Replsets
 		*out = make([]*ReplsetSpec, len(*in))

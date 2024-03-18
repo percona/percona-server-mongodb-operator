@@ -14,7 +14,8 @@ import (
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
 	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
-	containerSecurityContext *corev1.SecurityContext) (corev1.Container, error) {
+	containerSecurityContext *corev1.SecurityContext,
+) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -48,6 +49,20 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 
 	if cr.CompareVersion("1.14.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+	}
+
+	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.VolumeMount{
+			{
+				Name:      LDAPTLSVolClaimName,
+				MountPath: ldapTLSDir,
+				ReadOnly:  true,
+			},
+			{
+				Name:      LDAPConfVolClaimName,
+				MountPath: ldapConfDir,
+			},
+		}...)
 	}
 
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)

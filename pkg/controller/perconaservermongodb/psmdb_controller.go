@@ -1533,6 +1533,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 				},
 			})
 	}
+	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		sfsSpec.Template.Spec.Volumes = append(sfsSpec.Template.Spec.Volumes,
+			corev1.Volume{
+				Name: psmdb.LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &t,
+						DefaultMode: &secretFileMode,
+					},
+				},
+			},
+			corev1.Volume{
+				Name: psmdb.LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	}
 	secret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
 	if client.IgnoreNotFound(err) != nil {

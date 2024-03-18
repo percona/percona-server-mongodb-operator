@@ -39,25 +39,13 @@ spec:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
+#    ldapSecret: my-ldap-secret
   pmm:
     enabled: false
     image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
-#  ldap:
-#    enabled: true
-#    servers:
-#    - "server1.default.svc.cluster.local:389"
-#    - "server2.default.svc.cluster.local:389"
-#    queryTemplate: "dc=ldap,dc=local??sub?(&(objectClass=groupOfUniqueNames)(uniqueMember={USER}))"
-#    queryUser: "cn=readonly,dc=ldap,dc=local"
-#    userToDNMapping:
-#    - match: "(.+)"
-#      ldapQuery: "OU=perconadba,DC=ldap,DC=local??sub?(uid={0})"
-#      substitution
-#    - match: "(.+)"
-#      substitution: ""
   replsets:
   - name: rs0
     size: 3

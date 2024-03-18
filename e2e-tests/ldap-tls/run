@@ -7,7 +7,9 @@ test_dir=$(realpath "$(dirname "$0")")
 set_debug
 
 deploy_openldap() {
-	kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+	yq "$test_dir/conf/openldap.yaml" \
+		| yq "select(.metadata.name == \"ldap-ca\").spec.dnsNames[0]=\"openldap.$namespace.svc.cluster.local\"" \
+		| kubectl_bin apply -f -
 
 	kubectl rollout status deployment/openldap --timeout=120s
 }
@@ -16,7 +18,7 @@ test_mongod_openldap() {
 	cluster="some-name"
 
 	kubectl_bin create secret generic $cluster-rs0-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
-		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
 
 	desc "create first PSMDB cluster $cluster"
 	apply_cluster "$test_dir/conf/$cluster.yml"
@@ -83,10 +85,10 @@ test_sharded_openldap() {
 	cluster="some-name-sharded"
 
 	kubectl_bin create secret generic $cluster-mongos --from-literal=mongos.conf="$(yq "$test_dir/conf/mongos.conf" \
-		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
 
 	kubectl_bin create secret generic $cluster-cfg-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
-		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1389\"")"
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
 
 	desc "create first PSMDB cluster $cluster"
 
@@ -151,6 +153,8 @@ test_sharded_openldap() {
 }
 
 main() {
+	deploy_cert_manager
+
 	create_infra "$namespace"
 
 	deploy_openldap

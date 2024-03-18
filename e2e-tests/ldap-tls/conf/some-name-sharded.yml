@@ -49,3 +49,4 @@ spec:
     size: 3
   secrets:
     users: some-users
+    ldapSecret: ldap-ca

@@ -186,6 +186,20 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
+	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.VolumeMount{
+			{
+				Name:      LDAPTLSVolClaimName,
+				MountPath: ldapTLSDir,
+				ReadOnly:  true,
+			},
+			{
+				Name:      LDAPConfVolClaimName,
+				MountPath: ldapConfDir,
+			},
+		}...)
+	}
+
 	container := corev1.Container{
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
@@ -385,6 +399,27 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		})
+	}
+
+	if cr.CompareVersion("1.15.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.Volume{
+			{
+				Name: LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &tvar,
+						DefaultMode: &secretFileMode,
+					},
+				},
+			},
+			{
+				Name: LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}...)
 	}
 
 	return volumes

@@ -1,10 +1,8 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -552,80 +550,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 	if !mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled {
 		return errors.New("MCS is not available on this cluster")
-	}
-
-	if ldap := cr.Spec.LDAP; ldap.Enabled {
-		if len(ldap.Servers) == 0 {
-			return errors.New("ldap.servers should be specified")
-		}
-		if len(ldap.QueryTemplate) == 0 {
-			return errors.New("ldap.queryTemplate should be specified")
-		}
-		for _, mapping := range ldap.UserToDNMapping {
-			if mapping.Match == "" {
-				return errors.New("ldap.userToDNMapping.match should be specified")
-			}
-			if mapping.LDAPQuery != "" && mapping.Substitution != "" {
-				return errors.New("only one of ldap.userToDNMapping.ldapQuery or ldap.userToDNMapping.substitution should be specified")
-			}
-			if mapping.LDAPQuery == "" && mapping.Substitution == "" {
-				return errors.New("one of ldap.userToDNMapping.ldapQuery or ldap.userToDNMapping.substitution should be specified")
-			}
-		}
-
-		addLDAPConfToReplset := func(rs *ReplsetSpec) error {
-			data, err := json.Marshal(ldap.UserToDNMapping)
-			if err != nil {
-				return err
-			}
-			return rs.Configuration.SetValuesIfNotSet(map[string]any{
-				"security": map[string]any{
-					"authorization": "enabled",
-					"ldap": map[string]any{
-						"authz": map[string]any{
-							"queryTemplate": ldap.QueryTemplate,
-						},
-						"servers":           strings.Join(ldap.Servers, ","),
-						"transportSecurity": "none",
-						"userToDNMapping":   string(data),
-					},
-				},
-				"setParameter": map[string]any{
-					"authenticationMechanisms": "PLAIN,SCRAM-SHA-1",
-				},
-			})
-		}
-
-		if cr.Spec.Sharding.Enabled {
-			if err := addLDAPConfToReplset(cr.Spec.Replset(ConfigReplSetName)); err != nil {
-				return err
-			}
-
-			data, err := json.Marshal(ldap.UserToDNMapping)
-			if err != nil {
-				return err
-			}
-			if err := cr.Spec.Sharding.Mongos.Configuration.SetValuesIfNotSet(map[string]any{
-				"security": map[string]any{
-					"ldap": map[string]any{
-						"servers":           strings.Join(ldap.Servers, ","),
-						"transportSecurity": "none",
-						"userToDNMapping":   string(data),
-					},
-				},
-				"setParameter": map[string]any{
-					"authenticationMechanisms": "PLAIN,SCRAM-SHA-1",
-				},
-			}); err != nil {
-				return err
-			}
-		} else {
-			for _, rs := range cr.Spec.Replsets {
-				if err := addLDAPConfToReplset(rs); err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	return nil

@@ -1030,32 +1030,6 @@ spec:
                 type: object
               initImage:
                 type: string
-              ldap:
-                properties:
-                  enabled:
-                    type: boolean
-                  queryTemplate:
-                    type: string
-                  queryUser:
-                    type: string
-                  servers:
-                    items:
-                      type: string
-                    type: array
-                  userToDNMapping:
-                    items:
-                      properties:
-                        ldapQuery:
-                          type: string
-                        match:
-                          type: string
-                        substitution:
-                          type: string
-                      required:
-                      - match
-                      type: object
-                    type: array
-                type: object
               multiCluster:
                 properties:
                   DNSSuffix:
@@ -8287,6 +8261,8 @@ spec:
               secrets:
                 properties:
                   encryptionKey:
+                    type: string
+                  ldapSecret:
                     type: string
                   ssl:
                     type: string
