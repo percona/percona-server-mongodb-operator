@@ -7,7 +7,6 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-
 function main() {
 	rbac="rbac"
 	if [ -n "$OPERATOR_NS" ]; then
@@ -17,7 +16,8 @@ function main() {
 	create_infra "${namespace}"
 
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
-		-f "${conf_dir}/secrets.yml"
+		-f "${conf_dir}/secrets.yml" \
+		-f "${conf_dir}/minio-secret.yml"
 
 	desc 'install version service'
 
@@ -85,8 +85,8 @@ function main() {
 		sleep 10
 		wait_cluster_consistency "${cluster%%-rs0}"
 
-		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}.${namespace}" \
-			| grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
+		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}.${namespace}" |
+			grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
 
 		if [[ ${currentFCV} != ${version} ]]; then
 			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."

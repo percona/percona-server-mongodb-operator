@@ -17255,6 +17255,8 @@ spec:
             properties:
               backup:
                 type: string
+              backupStorage:
+                type: string
               backupVersion:
                 type: string
               conditions:

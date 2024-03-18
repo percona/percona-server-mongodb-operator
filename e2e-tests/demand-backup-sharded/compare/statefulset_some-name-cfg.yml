@@ -204,6 +204,9 @@ spec:
               readOnly: true
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /etc/pbm
+              name: pbm-config
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -253,6 +256,11 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-config
+          secret:
+            defaultMode: 420
+            optional: true
+            secretName: some-name-pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0

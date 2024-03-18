@@ -95,6 +95,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs
 	run_backup azure-blob
 
+	for i in $(seq 1 4); do
+		sleep 6
+		backup=$(get_lease_holder percona-server-mongodb-backup)
+		wait_backup "${backup}"
+	done
+
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
 	wait_backup "$backup_name_azure"
@@ -148,8 +154,8 @@ desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://${backup_dest_minio}/rs0/" \
-	| grep "myApp.test.gz"
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://${backup_dest_minio}/rs0/" |
+	grep "myApp.test.gz"
 insert_data_mongos "100501" "myApp"
 insert_data_mongos "100501" "myApp1"
 insert_data_mongos "100501" "myApp2"
@@ -163,8 +169,8 @@ kubectl_bin delete psmdb-backup --all
 
 backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
-	| grep -c ${backup_dest_minio}_ | cat)
+	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ |
+	grep -c ${backup_dest_minio}_ | cat)
 if [[ $backup_exists -eq 1 ]]; then
 	echo "Backup was not removed from bucket -- minio"
 	exit 1

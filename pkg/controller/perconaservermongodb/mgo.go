@@ -12,19 +12,20 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	mongosPods []corev1.Pod) (api.AppState, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
@@ -43,6 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if restoreInProgress {
+		log.Info("restore in progress", "replset", replset.Name)
 		return api.AppStateInit, nil
 	}
 
@@ -89,9 +91,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
+
 		if cr.Status.Replsets[replset.Name].Initialized {
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
+
+		log.V(1).Error(err, "failed to get mongo client")
 
 		err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {
@@ -107,9 +112,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.Initialized = true
 		cr.Status.Replsets[replset.Name] = rs
 
-		cr.Status.AddCondition(api.ClusterCondition{
-			Status:             api.ConditionTrue,
+		k8s.SetStatusCondition(&cr.Status.Conditions, api.ClusterCondition{
 			Type:               api.AppStateInit,
+			Status:             api.ConditionTrue,
 			Message:            replset.Name,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})
@@ -143,9 +148,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		rs.Initialized = true
 		cr.Status.Replsets[replset.Name] = rs
 
-		cr.Status.AddCondition(api.ClusterCondition{
-			Status:             api.ConditionTrue,
+		k8s.SetStatusCondition(&cr.Status.Conditions, api.ClusterCondition{
 			Type:               api.AppStateInit,
+			Status:             api.ConditionTrue,
 			Message:            replset.Name,
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})
@@ -849,6 +854,9 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	stsName := cr.Name + "-" + replset.Name
 	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
 	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, errors.Wrapf(err, "get statefulset %s", stsName)
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]

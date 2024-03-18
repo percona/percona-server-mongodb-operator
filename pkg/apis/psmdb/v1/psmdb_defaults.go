@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	pbm "github.com/percona/percona-backup-mongodb/sdk"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -464,7 +465,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.Backup.Enabled {
 		for _, bkpTask := range cr.Spec.Backup.Tasks {
 			if string(bkpTask.CompressionType) == "" {
-				bkpTask.CompressionType = compress.CompressionTypeGZIP
+				bkpTask.CompressionType = pbm.CompressionTypeGZIP
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
@@ -491,7 +492,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 
 		for _, stg := range cr.Spec.Backup.Storages {
-			if stg.Type != BackupStorageS3 {
+			if stg.Type != storage.S3 {
 				continue
 			}
 

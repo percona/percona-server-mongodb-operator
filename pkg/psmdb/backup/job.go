@@ -9,7 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 )
@@ -104,7 +104,7 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 	if len(shortClusterName) > 16 {
 		shortClusterName = shortClusterName[:16]
 	}
-	backupType := pbm.LogicalBackup
+	backupType := defs.LogicalBackup
 	if len(task.Type) > 0 {
 		backupType = task.Type
 	}

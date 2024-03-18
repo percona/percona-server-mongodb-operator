@@ -8,6 +8,7 @@ package v1
 import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -939,6 +940,10 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		in, out := &in.LastTransition, &out.LastTransition
 		*out = (*in).DeepCopy()
 	}
+	if in.LastWrite != nil {
+		in, out := &in.LastWrite, &out.LastWrite
+		*out = (*in).DeepCopy()
+	}
 	if in.S3 != nil {
 		in, out := &in.S3, &out.S3
 		*out = new(BackupStorageS3Spec)
@@ -953,6 +958,13 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		in, out := &in.ReplsetNames, &out.ReplsetNames
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 
@@ -1092,6 +1104,13 @@ func (in *PerconaServerMongoDBRestoreStatus) DeepCopyInto(out *PerconaServerMong
 	if in.LastTransition != nil {
 		in, out := &in.LastTransition, &out.LastTransition
 		*out = (*in).DeepCopy()
+	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 

@@ -3,9 +3,10 @@ package v1
 import (
 	"fmt"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 )
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
@@ -17,7 +18,7 @@ type PerconaServerMongoDBBackupSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
-	Type pbm.BackupType `json:"type,omitempty"`
+	Type defs.BackupType `json:"type,omitempty"`
 }
 
 type BackupState string
@@ -34,19 +35,22 @@ const (
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
-	Type           pbm.BackupType          `json:"type,omitempty"`
+	Type           defs.BackupType         `json:"type,omitempty"`
 	State          BackupState             `json:"state,omitempty"`
 	StartAt        *metav1.Time            `json:"start,omitempty"`
 	CompletedAt    *metav1.Time            `json:"completed,omitempty"`
 	LastTransition *metav1.Time            `json:"lastTransition,omitempty"`
+	LastWrite      *metav1.Time            `json:"lastWrite,omitempty"`
+	Size           string                  `json:"size,omitempty"`
 	Destination    string                  `json:"destination,omitempty"`
 	StorageName    string                  `json:"storageName,omitempty"`
 	S3             *BackupStorageS3Spec    `json:"s3,omitempty"`
 	Azure          *BackupStorageAzureSpec `json:"azure,omitempty"`
 	ReplsetNames   []string                `json:"replsetNames,omitempty"`
-	PBMname        string                  `json:"pbmName,omitempty"`
+	PBMName        string                  `json:"pbmName,omitempty"`
 	PBMPod         string                  `json:"pbmPod,omitempty"`
 	Error          string                  `json:"error,omitempty"`
+	Conditions     []metav1.Condition      `json:"conditions,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -60,6 +64,7 @@ type PerconaServerMongoDBBackupStatus struct {
 // +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName",description="Storage name"
 // +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination",description="Backup destination"
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".status.type",description="Backup type"
+// +kubebuilder:printcolumn:name="Size",type=string,JSONPath=".status.size",description="Backup size"
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
 // +kubebuilder:printcolumn:name="Completed",type=date,JSONPath=".status.completed",description="Completed time"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
@@ -88,7 +93,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
 	if string(p.Spec.Type) == "" {
-		p.Spec.Type = pbm.LogicalBackup
+		p.Spec.Type = defs.LogicalBackup
 	}
 	if string(p.Spec.Compression) == "" {
 		p.Spec.Compression = compress.CompressionTypeGZIP

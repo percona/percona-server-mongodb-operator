@@ -192,22 +192,24 @@ wait_cron() {
 wait_backup_agent() {
 	local agent_pod=$1
 
+	set +o errexit
 	set +o xtrace
 	retry=0
 	echo -n $agent_pod
-	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | grep 'listening for the commands')" ]; do
 		sleep 5
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
-			kubectl_bin logs $agent_pod -c backup-agent \
-				| tail -100
+			kubectl_bin logs $agent_pod -c backup-agent |
+				tail -100
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
 	echo
 	set_debug
+	set -o errexit
 }
 
 wait_backup() {
@@ -222,13 +224,13 @@ wait_backup() {
 		echo -n .
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
+		if [[ $retry -ge 720 || ${current_status} == 'error' ]]; then
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) |
+				grep -v 'level=info' |
+				grep -v 'level=debug' |
+				grep -v 'Getting tasks for pod' |
+				grep -v 'Getting pods from source' |
+				tail -100
 			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
@@ -1370,4 +1372,10 @@ deploy_pmm_server() {
 	fi
 
 	retry 10 60 helm install monitoring --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VER.tgz
+}
+
+function get_lease_holder() {
+	local lease_name=$1
+
+	kubectl_bin get lease $lease_name -o jsonpath='{.spec.holderIdentity}'
 }
