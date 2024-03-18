@@ -155,6 +155,12 @@ fi
 
 wait_backup "$backup_name_minio"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	for i in $(seq 1 3); do
+		sleep 6
+		backup=$(get_lease_holder percona-server-mongodb-backup)
+		wait_backup "${backup}"
+	done
+
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
 	wait_backup "$backup_name_azure"

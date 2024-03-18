@@ -7,11 +7,16 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const BackupAgentContainerName = "backup-agent"
 
 func (p *PBM) exec(ctx context.Context, command []string, stdin io.Reader, out any) error {
+	l := log.FromContext(ctx)
+
+	l.V(1).Info("Executing PBM command", "command", command)
+
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 

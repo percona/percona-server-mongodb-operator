@@ -86,6 +86,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs ${backup_name_gcp}
 	run_backup azure-blob ${backup_name_azure}
 
+	for i in $(seq 1 4); do
+		sleep 6
+		backup=$(get_lease_holder percona-server-mongodb-backup)
+		wait_backup "${backup}"
+	done
+
 	wait_backup "${backup_name_aws}"
 	wait_backup "${backup_name_gcp}"
 	wait_backup "${backup_name_azure}"
