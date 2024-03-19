@@ -59,23 +59,14 @@ test_mongod_openldap() {
  ]})' \
 		"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
 
-	run_mongo 'db.runCommand({connectionStatus:1})' "percona:password@$cluster-rs0.$namespace" "" "" "--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'"
-
-	roles_size=$(run_mongo 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+	run_mongo 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
 		"percona:password@$cluster-rs0.$namespace" "" "" \
 		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
 		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
-		| jq '.authInfo.authenticatedUserRoles | length')
+		| jq '.authInfo' \
+		| jq '.authenticatedUserRoles |= sort_by(.role)'> "$tmp_dir/$cluster-$namespace-authInfo.json"
 
-	if [ -z "$roles_size" ]; then
-		echo "Got problem while getting roles size"
-		exit 1
-	fi
-
-	if [ "$roles_size" -eq 0 ]; then
-		echo "No roles found"
-		exit 1
-	fi
+	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
 
 	kubectl_bin delete psmdb $cluster
 	kubectl_bin delete pvc --all
@@ -98,6 +89,7 @@ test_sharded_openldap() {
 	wait_for_running $cluster-rs0 3
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency $cluster
 
 	run_mongos \
 		'db.getSiblingDB("admin").createRole(
@@ -132,21 +124,14 @@ test_sharded_openldap() {
  ]})' \
 		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 
-	roles_size=$(run_mongos 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+	run_mongos 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
 		"percona:password@$cluster-mongos.$namespace" "" "" \
 		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
 		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
-		| jq '.authInfo.authenticatedUserRoles | length')
+		| jq '.authInfo' \
+		| jq '.authenticatedUserRoles |= sort_by(.role)' > "$tmp_dir/$cluster-$namespace-authInfo.json"
 
-	if [ -z "$roles_size" ]; then
-		echo "Got problem while getting roles size"
-		exit 1
-	fi
-
-	if [ "$roles_size" -eq 0 ]; then
-		echo "No roles found"
-		exit 1
-	fi
+	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
 
 	kubectl_bin delete psmdb $cluster
 	kubectl_bin delete pvc --all
