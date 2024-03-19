@@ -60,6 +60,9 @@ main() {
 	desc 'check if Pod started'
 	wait_cluster
 
+	kubectl wait --for=condition=Ready certificate/some-name-ssl --timeout=60s
+	kubectl wait --for=condition=Ready certificate/some-name-ssl-internal --timeout=60s
+
 	renew-certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
