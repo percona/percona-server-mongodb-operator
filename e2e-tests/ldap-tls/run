@@ -64,7 +64,7 @@ test_mongod_openldap() {
 		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
 		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
 		| jq '.authInfo' \
-		| jq '.authenticatedUserRoles |= sort_by(.role)'> "$tmp_dir/$cluster-$namespace-authInfo.json"
+		| jq '.authenticatedUserRoles |= sort_by(.role)' >"$tmp_dir/$cluster-$namespace-authInfo.json"
 
 	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
 
@@ -129,7 +129,7 @@ test_sharded_openldap() {
 		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
 		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
 		| jq '.authInfo' \
-		| jq '.authenticatedUserRoles |= sort_by(.role)' > "$tmp_dir/$cluster-$namespace-authInfo.json"
+		| jq '.authenticatedUserRoles |= sort_by(.role)' >"$tmp_dir/$cluster-$namespace-authInfo.json"
 
 	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
 
