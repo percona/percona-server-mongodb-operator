@@ -1612,6 +1612,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		sfs.Labels = customLabels
 	}
 
+	if err := r.reconcilePVCs(ctx, cr, sfs, matchLabels, volumeSpec.PersistentVolumeClaim); err != nil {
+		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+	}
+
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
@@ -1622,10 +1626,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
-	if err := r.reconcilePVCs(ctx, sfs, matchLabels, volumeSpec.PersistentVolumeClaim); err != nil {
-		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
-	}
-
 	if err := r.smartUpdate(ctx, cr, sfs, replset); err != nil {
 		return nil, errors.Wrap(err, "failed to run smartUpdate")
 	}
@@ -1633,37 +1633,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
-	})
-	if err != nil {
-		return errors.Wrap(err, "list PVCs")
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
+	if err := r.fixVolumeLabels(ctx, sts, ls, pvcSpec); err != nil {
+		return errors.Wrap(err, "fix volume labels")
 	}
 
-	for _, pvc := range pvcList.Items {
-		orig := pvc.DeepCopy()
-
-		for k, v := range pvcSpec.Labels {
-			pvc.Labels[k] = v
-		}
-		for k, v := range sts.Labels {
-			pvc.Labels[k] = v
-		}
-		for k, v := range pvcSpec.Annotations {
-			pvc.Annotations[k] = v
-		}
-
-		if util.MapEqual(orig.Labels, pvc.Labels) && util.MapEqual(orig.Annotations, pvc.Annotations) {
-			continue
-		}
-		patch := client.MergeFrom(orig)
-
-		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
-		}
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, pvcSpec); err != nil {
+		return errors.Wrap(err, "resize volumes if needed")
 	}
 
 	return nil
