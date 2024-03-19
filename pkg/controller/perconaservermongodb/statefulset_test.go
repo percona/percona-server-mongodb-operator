@@ -142,11 +142,11 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 		delete(got.Annotations, "percona.com/last-config-hash")
 		gotBytes, err := yaml.Marshal(got)
 		if err != nil {
-			t.Fatalf("error marshalling got: %v", err)
+			t.Fatalf("error marshaling got: %v", err)
 		}
 		wantBytes, err := yaml.Marshal(want)
 		if err != nil {
-			t.Fatalf("error marshalling want: %v", err)
+			t.Fatalf("error marshaling want: %v", err)
 		}
 		if string(gotBytes) != string(wantBytes) {
 			t.Fatalf("expected sts object meta:\n%s\ngot:\n%s", string(wantBytes), string(gotBytes))
@@ -158,11 +158,11 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 		delete(got.Template.Annotations, "percona.com/ssl-hash")
 		gotBytes, err := yaml.Marshal(got)
 		if err != nil {
-			t.Fatalf("error marshalling got: %v", err)
+			t.Fatalf("error marshaling got: %v", err)
 		}
 		wantBytes, err := yaml.Marshal(want)
 		if err != nil {
-			t.Fatalf("error marshalling want: %v", err)
+			t.Fatalf("error marshaling want: %v", err)
 		}
 		if string(gotBytes) != string(wantBytes) {
 			t.Fatalf("expected sts spec:\n%s\ngot:\n%s", string(wantBytes), string(gotBytes))
