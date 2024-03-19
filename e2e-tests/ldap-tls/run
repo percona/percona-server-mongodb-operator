@@ -138,9 +138,9 @@ test_sharded_openldap() {
 }
 
 main() {
-	deploy_cert_manager
-
 	create_infra "$namespace"
+
+	deploy_cert_manager
 
 	deploy_openldap
 
