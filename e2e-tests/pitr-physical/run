@@ -32,10 +32,10 @@ run_backup() {
 	local type=$3
 
 	desc "run backup $name-$idx"
-	cat $test_dir/conf/$name.yml \
-		| $sed -e "s/name:/name: $name-$idx/" \
-		| $sed -e "s/type:/type: $type/" \
-		| kubectl_bin apply -f -
+	cat $test_dir/conf/$name.yml |
+		$sed -e "s/name:/name: $name-$idx/" |
+		$sed -e "s/type:/type: $type/" |
+		kubectl_bin apply -f -
 
 	wait_backup "$name-$idx"
 
@@ -54,20 +54,26 @@ check_recovery() {
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
+	if [[ ! -z ${restore_date} ]]; then
+		desc "Restoring to time ${restore_date}"
+	fi
+
 	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
+	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm logs -sD
 
 	desc 'waiting for chunks to be uploaded'
 	sleep 150
 
 	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
+	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm logs -sD
 
 	desc "check restore by $restore_type"
-	cat $test_dir/conf/restore.yml \
-		| $sed -e "s/name:/name: restore-$backup_name/" \
-		| $sed -e "s/backupName:/backupName: $backup_name/" \
-		| $sed -e "s/type:/type: $restore_type/" \
-		| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-		| kubectl_bin apply -f -
+	cat $test_dir/conf/restore.yml |
+		$sed -e "s/name:/name: restore-$backup_name/" |
+		$sed -e "s/backupName:/backupName: $backup_name/" |
+		$sed -e "s/type:/type: $restore_type/" |
+		if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi |
+		kubectl_bin apply -f -
 
 	# fail faster if we don't reach requested status until some time
 	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
@@ -120,11 +126,17 @@ main() {
 	run_backup $backup_name_minio 1 physical
 
 	write_document "-2nd"
-	sleep 2
 
-	time_now=$(run_mongos 'new Date().toISOString()' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' | cut -c1-19 | tr T " ")
+	desc 'waiting for chunks to be uploaded'
+	sleep 150
 
-	check_recovery $backup_name_minio-1 date "$time_now" "-2nd" "$cluster"
+	kubectl exec $cluster-rs0-0 -c backup-agent -- pbm status
+	kubectl exec $cluster-rs0-0 -c backup-agent -- pbm logs -sD
+
+	last_chunk=$(kubectl exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+	last_chunk_time=$(TZ=UTC date -d@${last_chunk} '+%Y-%m-%d %H:%M:%S')
+
+	check_recovery $backup_name_minio-1 date "$last_chunk_time" "-2nd" "$cluster"
 
 	run_backup $backup_name_minio 2 logical
 	run_backup $backup_name_minio 3 physical
