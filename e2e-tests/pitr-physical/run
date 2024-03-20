@@ -42,10 +42,10 @@ run_backup() {
 	local type=$3
 
 	desc "run backup $name-$idx"
-	cat $test_dir/conf/$name.yml |
-		$sed -e "s/name:/name: $name-$idx/" |
-		$sed -e "s/type:/type: $type/" |
-		kubectl_bin apply -f -
+	cat $test_dir/conf/$name.yml \
+		| $sed -e "s/name:/name: $name-$idx/" \
+		| $sed -e "s/type:/type: $type/" \
+		| kubectl_bin apply -f -
 
 	wait_backup "$name-$idx"
 
