@@ -6,6 +6,16 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+}
+
+get_latest_oplog_chunk_ts() {
+	local cluster=$1
+	echo $(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+}
+
 write_document() {
 	local cmp_postfix="$1"
 
@@ -49,30 +59,48 @@ check_recovery() {
 	local cmp_postfix=$4
 	local cluster_name=$5
 
+	local latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+
 	desc "write more data before restore by $restore_type"
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
 	if [[ ! -z ${restore_date} ]]; then
-		desc "Restoring to time ${restore_date}"
+		desc "Restoring to time $(format_date ${restore_date})"
+		retries=0
+		until [[ ${latest_ts} -gt ${restore_date} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Last oplog chunk ($(format_date ${latest_ts})) is not greater than restore target ($(format_date ${restore_date}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be greater than restore target ($(format_date ${restore_date}))"
+			sleep 10
+		done
+	else
+		desc "Restoring to latest"
+		local current_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+		retries=0
+		until [[ ${latest_ts} -gt ${current_ts} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Last oplog chunk ($(format_date ${latest_ts})) is not greater than starting chunk ($(format_date ${current_ts}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be greater than starting chunk ($(format_date ${current_ts}))"
+			sleep 10
+		done
 	fi
-
-	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
-	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm logs -sD
-
-	desc 'waiting for chunks to be uploaded'
-	sleep 150
-
-	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm status
-	kubectl exec -it some-name-rs0-0 -c backup-agent -- pbm logs -sD
 
 	desc "check restore by $restore_type"
 	cat $test_dir/conf/restore.yml |
 		$sed -e "s/name:/name: restore-$backup_name/" |
 		$sed -e "s/backupName:/backupName: $backup_name/" |
 		$sed -e "s/type:/type: $restore_type/" |
-		if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi |
+		if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $(format_date ${restore_date})/"; fi |
 		kubectl_bin apply -f -
 
 	# fail faster if we don't reach requested status until some time
@@ -127,16 +155,22 @@ main() {
 
 	write_document "-2nd"
 
-	desc 'waiting for chunks to be uploaded'
-	sleep 150
+	backup_last_write=$(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+	last_chunk=$(get_latest_oplog_chunk_ts $cluster)
 
-	kubectl exec $cluster-rs0-0 -c backup-agent -- pbm status
-	kubectl exec $cluster-rs0-0 -c backup-agent -- pbm logs -sD
+	retries=0
+	until [[ ${last_chunk} -gt ${backup_last_write} ]]; do
+		if [[ $retries -gt 30 ]]; then
+			echo "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${backup_last_write}))"
+			exit 1
+		fi
+		last_chunk=$(get_latest_oplog_chunk_ts $cluster)
+		retries=$((retries + 1))
+		echo "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${backup_last_write}))"
+		sleep 10
+	done
 
-	last_chunk=$(kubectl exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
-	last_chunk_time=$(TZ=UTC date -d@${last_chunk} '+%Y-%m-%d %H:%M:%S')
-
-	check_recovery $backup_name_minio-1 date "$last_chunk_time" "-2nd" "$cluster"
+	check_recovery $backup_name_minio-1 date "${last_chunk}" "-2nd" "$cluster"
 
 	run_backup $backup_name_minio 2 logical
 	run_backup $backup_name_minio 3 physical
