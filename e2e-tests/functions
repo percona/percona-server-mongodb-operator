@@ -1372,9 +1372,19 @@ deploy_pmm_server() {
 	retry 10 60 helm install monitoring --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VER.tgz
 }
 
-renew-certificate() {
+wait_certificate() {
 	certificate="$1"
 
+	for i in {1..10}; do
+		kubectl wait --for=condition=Ready "certificate/$certificate" --timeout=60s
+		sleep 1
+	done
+}
+
+renew_certificate() {
+	certificate="$1"
+
+	wait_certificate "$certificate"
 	desc "renew $certificate"
 
 	local pod_name

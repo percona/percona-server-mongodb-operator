@@ -32,8 +32,8 @@ main() {
 
 	# TODO: uncomment when 1.14.0 will be removed,
 	#       renewal doesn't work on "1.14.0" version
-	#renew-certificate "some-name-ssl"
-	#renew-certificate "some-name-ssl-internal"
+	#renew_certificate "some-name-ssl"
+	#renew_certificate "some-name-ssl-internal"
 	#wait_cluster
 
 	desc 'check if service and statefulset created with expected config'
@@ -50,9 +50,9 @@ main() {
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.15.0"}
     }'
-	kubectl_bin delete secret "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
 	kubectl_bin delete certificate "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
 	kubectl_bin delete issuer "$CLUSTER-psmdb-ca"
+	kubectl_bin delete secret "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
 	start_cluster $CLUSTER
 
 	# Wait for at least one reconciliation
@@ -60,13 +60,10 @@ main() {
 	desc 'check if Pod started'
 	wait_cluster
 
-	kubectl wait --for=condition=Ready certificate/some-name-ssl --timeout=60s
-	kubectl wait --for=condition=Ready certificate/some-name-ssl-internal --timeout=60s
-
-	renew-certificate "some-name-ssl"
+	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	renew-certificate "some-name-ssl-internal"
+	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
 
@@ -85,10 +82,10 @@ main() {
 	desc 'check if Pod started'
 	wait_cluster
 
-	renew-certificate "some-name-ssl"
+	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	renew-certificate "some-name-ssl-internal"
+	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
 
