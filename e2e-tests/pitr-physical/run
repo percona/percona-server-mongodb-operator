@@ -66,7 +66,7 @@ check_recovery() {
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
 
-	if [[ ! -z ${restore_date} ]]; then
+	if [[ -n ${restore_date} ]]; then
 		desc "Restoring to time $(format_date ${restore_date})"
 		retries=0
 		until [[ ${latest_ts} -gt ${restore_date} ]]; do
