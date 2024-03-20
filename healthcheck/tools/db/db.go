@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	mgo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -32,15 +32,12 @@ var (
 )
 
 func Dial(ctx context.Context, conf *Config) (mongo.Client, error) {
-	log.WithFields(log.Fields{
-		"hosts":      conf.Hosts,
-		"ssl":        conf.SSL.Enabled,
-		"ssl_secure": conf.SSL.Insecure,
-	}).Debug("Connecting to mongodb")
-
 	if err := conf.configureTLS(); err != nil {
 		return nil, errors.Wrap(err, "configure TLS")
 	}
+
+	log := logf.FromContext(ctx)
+	log.V(1).Info("Connecting to mongodb", "hosts", conf.Hosts, "ssl", conf.SSL.Enabled, "ssl_insecure", conf.SSL.Insecure)
 
 	opts := options.Client().
 		SetHosts(conf.Hosts).
@@ -51,7 +48,7 @@ func Dial(ctx context.Context, conf *Config) (mongo.Client, error) {
 		SetServerSelectionTimeout(10 * time.Second)
 
 	if conf.Username != "" && conf.Password != "" {
-		log.WithFields(log.Fields{"user": conf.Username}).Debug("Enabling authentication for session")
+		log.V(1).Info("Enabling authentication for session", "user", conf.Username)
 	}
 
 	client, err := mgo.Connect(ctx, opts)

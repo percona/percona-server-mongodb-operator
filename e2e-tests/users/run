@@ -128,6 +128,17 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
+desc 'update monitor user username'
+patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_USER" "$(echo -n "$newmonitorusername" | base64)"
+sleep 35
+wait_cluster_consistency $psmdb
+sleep 15
+user=$(getSecretData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
+pass=$(getSecretData "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD")
+check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
+check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
+
 desc 'secret without userAdmin'
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 sleep 25

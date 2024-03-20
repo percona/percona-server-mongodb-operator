@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -86,7 +87,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		},
 		{
 			Name:  "DB_PORT",
-			Value: "27017",
+			Value: strconv.Itoa(int(api.DefaultMongodPort)),
 		},
 		{
 			Name:  "DB_PORT_MIN",
