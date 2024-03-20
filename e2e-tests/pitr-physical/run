@@ -8,7 +8,7 @@ set_debug
 
 format_date() {
 	local timestamp=$1
-	echo $(TZ=UTC date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
 }
 
 get_latest_oplog_chunk_ts() {
