@@ -3,9 +3,10 @@ package v1
 import (
 	"fmt"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 )
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
@@ -17,7 +18,7 @@ type PerconaServerMongoDBBackupSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical}
-	Type pbm.BackupType `json:"type,omitempty"`
+	Type defs.BackupType `json:"type,omitempty"`
 }
 
 type BackupState string
@@ -34,7 +35,7 @@ const (
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
-	Type           pbm.BackupType          `json:"type,omitempty"`
+	Type           defs.BackupType         `json:"type,omitempty"`
 	State          BackupState             `json:"state,omitempty"`
 	StartAt        *metav1.Time            `json:"start,omitempty"`
 	CompletedAt    *metav1.Time            `json:"completed,omitempty"`
@@ -88,7 +89,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
 	}
 	if string(p.Spec.Type) == "" {
-		p.Spec.Type = pbm.LogicalBackup
+		p.Spec.Type = defs.LogicalBackup
 	}
 	if string(p.Spec.Compression) == "" {
 		p.Spec.Compression = compress.CompressionTypeGZIP
