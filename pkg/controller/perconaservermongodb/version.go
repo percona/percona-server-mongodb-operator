@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 )
@@ -283,7 +283,7 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 	}
 
 	for _, task := range cr.Spec.Backup.Tasks {
-		if task.Type == pbm.PhysicalBackup && task.Enabled {
+		if task.Type == defs.PhysicalBackup && task.Enabled {
 			vm.PhysicalBackupScheduled = true
 			break
 		}
