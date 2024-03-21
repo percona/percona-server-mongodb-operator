@@ -234,7 +234,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
+	return bcp.Status(ctx, cr, cluster)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
@@ -444,7 +444,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b 
 				{Key: "end_ts", Value: chnk.EndTS},
 			},
 		)
-
 		if err != nil {
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
