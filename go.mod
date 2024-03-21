@@ -14,7 +14,7 @@ require (
 	github.com/go-openapi/validate v0.22.6
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.0
 	github.com/hashicorp/go-version v1.6.0
-	github.com/percona/percona-backup-mongodb v1.8.1-0.20240305084523-0b6fbbb00c0d
+	github.com/percona/percona-backup-mongodb v1.8.1-0.20240321083036-d96752d1abc5
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.8.4
