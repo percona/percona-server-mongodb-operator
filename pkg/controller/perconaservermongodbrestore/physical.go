@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -262,7 +262,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		return status, nil
 	}
 
-	meta := pbm.BackupMeta{}
+	meta := backup.BackupMeta{}
 
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return strings.Contains(err.Error(), "container is not created or running") || strings.Contains(err.Error(), "error dialing backend: No agent available")
@@ -300,30 +300,30 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	log.V(1).Info("PBM restore status", "status", meta)
 
 	switch meta.Status {
-	case pbm.StatusStarting:
+	case defs.StatusStarting:
 		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusRunning {
+			if rs.Status == defs.StatusRunning {
 				status.State = psmdbv1.RestoreStateRunning
 				return status, nil
 			}
 		}
-	case pbm.StatusError:
+	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Err
-	case pbm.StatusPartlyDone:
+	case defs.StatusPartlyDone:
 		status.State = psmdbv1.RestoreStateError
 		var pbmErr string
 		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusError {
+			if rs.Status == defs.StatusError {
 				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
 			}
 		}
 		status.Error = pbmErr
-	case pbm.StatusRunning:
+	case defs.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
-	case pbm.StatusDone:
+	case defs.StatusDone:
 		for _, rs := range meta.Replsets {
-			if rs.Status == pbm.StatusDone {
+			if rs.Status == defs.StatusDone {
 				continue
 			}
 
