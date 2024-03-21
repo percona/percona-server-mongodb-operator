@@ -768,7 +768,7 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 }
 
 func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
-	m.reconcileAffinityOpts()
+	m.reconcileAffinityOpts(cr)
 	m.reconcileTopologySpreadConstraints(cr)
 	if cr.CompareVersion("1.15.0") >= 0 {
 		if m.TerminationGracePeriodSeconds == nil || (!cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30) {
@@ -783,10 +783,10 @@ func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
 }
 
 var affinityValidTopologyKeys = map[string]struct{}{
-	AffinityOff:                                {},
-	"kubernetes.io/hostname":                   {},
-	"failure-domain.beta.kubernetes.io/zone":   {},
-	"failure-domain.beta.kubernetes.io/region": {},
+	AffinityOff:                     {},
+	"kubernetes.io/hostname":        {},
+	"topology.kubernetes.io/zone":   {},
+	"topology.kubernetes.io/region": {},
 }
 
 var defaultAffinityTopologyKey = "kubernetes.io/hostname"
@@ -798,7 +798,16 @@ const AffinityOff = "none"
 // - if topology key is set and the value not the one of `affinityValidTopologyKeys` - set to `defaultAffinityTopologyKey`
 // - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
-func (m *MultiAZ) reconcileAffinityOpts() {
+func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
+
+	if cr.CompareVersion("1.16.0") < 0 {
+		affinityValidTopologyKeys = map[string]struct{}{
+			AffinityOff:                                {},
+			"kubernetes.io/hostname":                   {},
+			"failure-domain.beta.kubernetes.io/zone":   {},
+			"failure-domain.beta.kubernetes.io/region": {},
+		}
+	}
 	switch {
 	case m.Affinity == nil:
 		m.Affinity = &PodAffinity{
