@@ -58,7 +58,6 @@ spec:
                         type: string
                     required:
                     - credentialsSecret
-                    - endpointUrl
                     type: object
                   completed:
                     format: date-time

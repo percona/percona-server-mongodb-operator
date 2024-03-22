@@ -87,7 +87,6 @@ spec:
                     type: string
                 required:
                 - credentialsSecret
-                - endpointUrl
                 type: object
               completed:
                 format: date-time
@@ -216,7 +215,6 @@ spec:
                         type: string
                     required:
                     - credentialsSecret
-                    - endpointUrl
                     type: object
                   completed:
                     format: date-time
@@ -880,7 +878,6 @@ spec:
                               type: string
                           required:
                           - credentialsSecret
-                          - endpointUrl
                           type: object
                         s3:
                           properties:
