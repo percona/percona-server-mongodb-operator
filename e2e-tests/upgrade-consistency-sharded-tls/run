@@ -57,6 +57,8 @@ main() {
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.15.0"}
     }'
+	# Wait for at least one reconciliation
+	sleep 20
 
 	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
 	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
