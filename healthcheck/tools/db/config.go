@@ -15,6 +15,7 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -57,12 +58,25 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 		"replset",
 		"mongodb replica set name, overridden by env var "+pkg.EnvMongoDBReplset,
 	).Envar(pkg.EnvMongoDBReplset).StringVar(&conf.ReplSetName)
-	app.Flag(
-		"username",
-		"mongodb auth username, this flag or env var "+envUser+" is required",
-	).Envar(envUser).Required().StringVar(&conf.Username)
 
-	pwdFile := "/etc/users-secret/MONGODB_CLUSTER_MONITOR_PASSWORD"
+	usernameFile := fmt.Sprintf("/etc/users-secret/%s", envUser)
+	if _, err := os.Stat(usernameFile); err == nil {
+		username, err := os.ReadFile(usernameFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read %s", usernameFile)
+		}
+
+		conf.Username = string(username)
+	} else if os.IsNotExist(err) {
+		app.Flag(
+			"username",
+			"mongodb auth username, this flag or env var "+envUser+" is required",
+		).Envar(envUser).Required().StringVar(&conf.Username)
+	} else {
+		return nil, errors.Wrap(err, "failed to get password")
+	}
+
+	pwdFile := fmt.Sprintf("/etc/users-secret/%s", envPassword)
 	if _, err := os.Stat(pwdFile); err == nil {
 		pass, err := os.ReadFile(pwdFile)
 		if err != nil {

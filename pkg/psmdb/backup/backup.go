@@ -101,7 +101,7 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 	defer pbm.Close(ctx)
 
 	allowLock = append(allowLock, NotJobLock(current))
-	hasLocks, err := pbm.HasLocks(allowLock...)
+	hasLocks, err := pbm.HasLocks(ctx, allowLock...)
 	if err != nil {
 		return false, errors.Wrap(err, "check PBM locks")
 	}
