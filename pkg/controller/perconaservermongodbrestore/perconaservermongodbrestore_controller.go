@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -161,12 +161,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	switch bcp.Status.Type {
-	case "", pbm.LogicalBackup:
+	case "", defs.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")
 		}
-	case pbm.PhysicalBackup:
+	case defs.PhysicalBackup:
 		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
