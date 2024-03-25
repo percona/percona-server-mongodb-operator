@@ -40,6 +40,7 @@ spec:
         azure:
           container: operator-testing
           prefix: psmdb-demand-backup
+          endpointUrl: https://engk8soperators.blob.core.windows.net
           credentialsSecret: azure-secret
 
     tasks:
