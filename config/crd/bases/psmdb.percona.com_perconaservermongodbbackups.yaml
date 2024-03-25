@@ -81,6 +81,8 @@ spec:
                     type: string
                   credentialsSecret:
                     type: string
+                  endpointUrl:
+                    type: string
                   prefix:
                     type: string
                 required:

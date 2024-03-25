@@ -126,6 +126,12 @@ wait_for_delete "pod/${cluster}-mongos-0"
 wait_for_delete "pod/${cluster}-rs0-0"
 wait_for_delete "pod/${cluster}-cfg-0"
 
+desc 'check if services are not deleted'
+
+kubectl_bin get svc $cluster-rs0
+kubectl_bin get svc $cluster-cfg
+kubectl_bin get svc $cluster-mongos
+
 does_node_id_exists_in_pmm=($(does_node_id_exists "${nodeList[@]}"))
 for instance in "${does_node_id_exists_in_pmm[@]}"; do
 	if [ -n "$instance" ]; then
