@@ -47,6 +47,9 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  configuration:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
