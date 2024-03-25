@@ -149,18 +149,6 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup,
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-
-		if cluster.Spec.Backup.PITR.Enabled {
-			tl, err := b.pbm.GetLatestTimelinePITR(ctx)
-			if err != nil && err != backup.ErrNoOplogsForPITR {
-				return status, errors.Wrap(err, "get latest PITR timeline")
-			}
-			if err == nil {
-				status.LatestRestorableTime = &metav1.Time{
-					Time: time.Unix(int64(tl.End), 0),
-				}
-			}
-		}
 	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
 		if passed >= pbmStartingDeadline {

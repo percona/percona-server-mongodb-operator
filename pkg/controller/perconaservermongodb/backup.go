@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
@@ -201,7 +203,8 @@ func (r *ReconcilePerconaServerMongoDB) deleteBackupTask(cr *api.PerconaServerMo
 
 // oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
 func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context, cr *api.PerconaServerMongoDB,
-	ancestor string, keep int) ([]api.PerconaServerMongoDBBackup, error) {
+	ancestor string, keep int,
+) ([]api.PerconaServerMongoDBBackup, error) {
 	bcpList := api.PerconaServerMongoDBBackupList{}
 	err := r.client.List(ctx,
 		&bcpList,
@@ -321,6 +324,31 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *a
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getLatestBackup(ctx context.Context, cr *api.PerconaServerMongoDB) (*api.PerconaServerMongoDBBackup, error) {
+	backups := api.PerconaServerMongoDBBackupList{}
+	if err := r.client.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "get backup list")
+	}
+
+	var latest *api.PerconaServerMongoDBBackup
+	for _, b := range backups.Items {
+		b := b
+
+		if b.Status.State != api.BackupStateReady || b.Spec.GetClusterName() != cr.Name {
+			continue
+		}
+
+		if latest == nil || latest.CreationTimestamp.Before(&b.ObjectMeta.CreationTimestamp) {
+			latest = &b
+		}
+	}
+
+	return latest, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -474,7 +502,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	}
 
 	val, err = pbm.GetConfigVar(ctx, "pitr.compression")
-	var compression = ""
+	compression := ""
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil
@@ -537,6 +565,31 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		}
 		if err := pbm.SetConfigVar(ctx, "pitr.enabled", "true"); err != nil {
 			return errors.Wrap(err, "enable pitr")
+		}
+	}
+
+	tl, err := pbm.GetLatestTimelinePITR(ctx)
+	if err != nil && err != backup.ErrNoOplogsForPITR {
+		return errors.Wrap(err, "get latest PITR timeline")
+	}
+	if err == nil {
+		bcp, err := r.getLatestBackup(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get latest backup")
+		}
+		if bcp != nil {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				b := &api.PerconaServerMongoDBBackup{}
+				if err := r.client.Get(ctx, types.NamespacedName{Name: bcp.Name, Namespace: bcp.Namespace}, b); err != nil {
+					return errors.Wrap(err, "get backup")
+				}
+				b.Status.LatestRestorableTime = &metav1.Time{
+					Time: time.Unix(int64(tl.End), 0),
+				}
+				return r.client.Status().Update(ctx, b)
+			}); err != nil {
+				return errors.Wrap(err, "update latest restorable time")
+			}
 		}
 	}
 
