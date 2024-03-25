@@ -81,6 +81,8 @@ spec:
                     type: string
                   credentialsSecret:
                     type: string
+                  endpointUrl:
+                    type: string
                   prefix:
                     type: string
                 required:
@@ -206,6 +208,8 @@ spec:
                       container:
                         type: string
                       credentialsSecret:
+                        type: string
+                      endpointUrl:
                         type: string
                       prefix:
                         type: string
@@ -867,6 +871,8 @@ spec:
                             container:
                               type: string
                             credentialsSecret:
+                              type: string
+                            endpointUrl:
                               type: string
                             prefix:
                               type: string
