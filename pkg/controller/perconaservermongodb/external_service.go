@@ -26,7 +26,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 			return nil, errors.Wrapf(err, "set owner ref for Service %s", service.Name)
 		}
 
-		err = r.createOrUpdate(ctx, service)
+		err = r.createOrUpdateSvc(ctx, cr, service, replset.Expose.SaveOldMeta())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create external service for replset %s", replset.Name)
 		}
@@ -45,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service) error {
-	ls := clusterLabels(cr)
+	ls := api.ClusterLabels(cr)
 	if !cr.Spec.MultiCluster.Enabled {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 		return nil
 	}
 
-	ls := clusterLabels(cr)
+	ls := api.ClusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
 	err := r.client.List(ctx,
@@ -126,8 +126,10 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 	service := psmdb.ExternalService(cr, replset, cr.Name+"-"+replset.Name)
 
 	svcNames := make(map[string]struct{}, replset.Size)
-	for i := 0; i < int(replset.Size); i++ {
-		svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+	if replset.Expose.Enabled {
+		for i := 0; i < int(replset.Size); i++ {
+			svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
+		}
 	}
 
 	if replset.NonVoting.Enabled {

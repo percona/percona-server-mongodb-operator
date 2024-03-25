@@ -1,0 +1,24 @@
+{
+  "versions": [
+    {
+      "operator": "1.14.0",
+      "product": "psmdb-operator",
+      "matrix": {
+        "mongod": {
+        },
+        "pmm": {
+          "2.27.0": {
+            "image_path": "percona/pmm-client:2.27.0",
+            "image_hash": "4f4d4508afe4ef3b5d72e2ebec6485be84204902b0b2b23c3a9e7c2fe4726884",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "backup": {
+        },
+        "operator": {
+        }
+      }
+    }
+  ]
+}

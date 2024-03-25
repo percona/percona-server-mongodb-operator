@@ -11,16 +11,22 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.14.0
-  image: percona/percona-server-mongodb:5.0.11-10
+  crVersion: 1.16.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod6.0
   imagePullPolicy: Always
 #  tls:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #  imagePullSecrets:
 #    - name: private-registry-credentials
+#  initImage: perconalab/percona-server-mongodb-operator:main
+#  initContainerSecurityContext: {}
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  multiCluster:
 #    enabled: true
 #    DNSSuffix: svc.clusterset.local
@@ -35,14 +41,21 @@ spec:
 #    vault: my-cluster-name-vault
   pmm:
     enabled: false
-    image: percona/pmm-client:2.30.0
+    image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:
-
   - name: rs0
     size: 3
+#    terminationGracePeriodSeconds: 300
+#    topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server-mongodb
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -154,6 +167,16 @@ spec:
     podDisruptionBudget:
       maxUnavailable: 1
 #      minAvailable: 0
+#    splitHorizons:
+#      my-cluster-name-rs0-0:
+#        external: rs0-0.mycluster.xyz
+#        external-2: rs0-0.mycluster2.xyz
+#      my-cluster-name-rs0-1:
+#        external: rs0-1.mycluster.xyz
+#        external-2: rs0-1.mycluster2.xyz
+#      my-cluster-name-rs0-2:
+#        external: rs0-2.mycluster.xyz
+#        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
       exposeType: ClusterIP
@@ -176,6 +199,10 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
+#        annotations:
+#          volume.beta.kubernetes.io/storage-class: example-hostpath
+#        labels:
+#          rack: rack-22
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
@@ -233,6 +260,10 @@ spec:
 #          path: /data
 #          type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
@@ -265,12 +296,34 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
+#    schedulerName: "default"
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+#    hostAliases:
+#    - ip: "10.10.0.2"
+#      hostnames:
+#      - "host1"
+#      - "host2"
 
   sharding:
     enabled: true
-
+#    balancer:
+#      enabled: true
     configsvrReplSet:
       size: 3
+#      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      externalNodes:
 #      - host: 34.124.76.93
 #      - host: 34.124.76.94
@@ -350,14 +403,31 @@ spec:
 #         path: /data
 #         type: Directory
         persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
 #          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
               storage: 3Gi
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
     mongos:
       size: 3
+#      terminationGracePeriodSeconds: 300
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server-mongodb
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        systemLog:
@@ -422,15 +492,15 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
-
-#  mongod:
-#    security:
-#      encryptionKeySecret: "my-cluster-name-mongodb-encryption-key"
+#      hostAliases:
+#      - ip: "10.10.0.2"
+#        hostnames:
+#        - "host1"
+#        - "host2"
 
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
-    serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
@@ -446,6 +516,11 @@ spec:
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
 #          credentialsSecret: my-cluster-name-backup-s3
+#          serverSideEncryption:
+#            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+#            sseAlgorithm: aws:kms
+#            sseCustomerAlgorithm: AES256
+#            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -469,6 +544,7 @@ spec:
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
+      oplogOnly: false
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
@@ -484,6 +560,14 @@ spec:
 #        enabled: false
 #        schedule: "0 0 * * 0"
 #        keep: 5
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+#      - name: weekly-s3-us-west-physical
+#        enabled: false
+#        schedule: "0 5 * * 0"
+#        keep: 5
+#        type: physical
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6

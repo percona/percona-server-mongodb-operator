@@ -1,24 +1,34 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
+set_debug
 
 create_infra $namespace
 
+desc 'create secrets and start client'
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
-cluster="liveness"
 
-desc 'create first PSMDB cluster'
+cluster="liveness"
+desc "create first PSMDB cluster $cluster"
 spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
+
+desc 'check if statefulset created with expected config'
 compare_kubectl "statefulset/${cluster}-rs0"
 
 desc 'change liveness config'
 postfix="-changed"
 apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
 sleep 20
+
+desc 'check if all 3 Pods started'
 wait_for_running "${cluster}-rs0" "3"
+
+desc 'check if statefulset created with expected config'
 compare_kubectl "statefulset/${cluster}-rs0" $postfix
+
 destroy $namespace
+
+desc 'test passed'

@@ -37,6 +37,7 @@ const (
 type PerconaServerMongoDBRestoreStatus struct {
 	State          RestoreState `json:"state,omitempty"`
 	PBMname        string       `json:"pbmName,omitempty"`
+	PITRTarget     string       `json:"pitrTarget,omitempty"`
 	Error          string       `json:"error,omitempty"`
 	CompletedAt    *metav1.Time `json:"completed,omitempty"`
 	LastTransition *metav1.Time `json:"lastTransition,omitempty"`
@@ -45,13 +46,13 @@ type PerconaServerMongoDBRestoreStatus struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PerconaServerMongoDBRestore is the Schema for the perconaservermongodbrestores API
-//+k8s:openapi-gen=true
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="psmdb-restore"
-//+kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=".spec.clusterName",description="Cluster name"
-//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
-//+kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName="psmdb-restore"
+// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=".spec.clusterName",description="Cluster name"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
 type PerconaServerMongoDBRestore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -140,6 +141,10 @@ func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
+func (t *PITRestoreDate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.Time.Format("2006-01-02 15:04:05"))
+}
+
 type PITRestoreSpec struct {
 	Type PITRestoreType  `json:"type,omitempty"`
 	Date *PITRestoreDate `json:"date,omitempty"`
@@ -151,3 +156,5 @@ var (
 	PITRestoreTypeDate   PITRestoreType = "date"
 	PITRestoreTypeLatest PITRestoreType = "latest"
 )
+
+const AnnotationRestoreInProgress = "percona.com/restore-in-progress"

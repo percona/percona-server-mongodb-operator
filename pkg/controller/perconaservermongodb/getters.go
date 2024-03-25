@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -20,7 +21,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *a
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
 		},
 	)
 
@@ -42,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 		&mongosPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.MongosLabels(cr)),
 		},
 	)
 
@@ -52,7 +53,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	list := appsv1.StatefulSetList{}
 
-	l := arbiterLabels(cr)
+	l := api.ArbiterLabels(cr)
 	l["app.kubernetes.io/replset"] = rs
 
 	err := r.client.List(ctx,
@@ -85,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(ctx context.Conte
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(arbiterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.ArbiterLabels(cr)),
 		},
 	)
 
@@ -99,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
 		},
 	)
 
@@ -109,7 +110,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
-	selectors := labels.SelectorFromSet(clusterLabels(cr))
+	selectors := labels.SelectorFromSet(api.ClusterLabels(cr))
 
 	req, err := labels.NewRequirement("app.kubernetes.io/component", selection.NotEquals, []string{"mongos"})
 	if err != nil {
@@ -136,7 +137,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(ctx context.Context, 
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.ClusterLabels(cr)),
 		},
 	)
 
@@ -162,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(clusterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.ClusterLabels(cr)),
 		},
 	)
 
@@ -176,36 +177,9 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPVCs(ctx context.Context, cr *a
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(mongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
 		},
 	)
 
 	return list, err
-}
-
-func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-}
-
-func mongodLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongod"
-	return lbls
-}
-
-func arbiterLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "arbiter"
-	return lbls
-}
-
-func mongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongos"
-	return lbls
 }

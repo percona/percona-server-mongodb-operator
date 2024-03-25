@@ -27,15 +27,15 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 			},
 		},
@@ -48,7 +48,7 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -66,11 +66,11 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
@@ -92,11 +92,11 @@ func TestVoting(t *testing.T) {
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 			},
 		},
@@ -116,31 +116,31 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -167,31 +167,31 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -215,27 +215,27 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -262,11 +262,11 @@ func TestVoting(t *testing.T) {
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    1,
-					Priority: 1,
+					Priority: 2,
 				},
 				mongo.ConfigMember{
 					Votes:    0,

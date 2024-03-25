@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"runtime"
 	"strconv"
@@ -12,8 +11,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	certmgrscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
-	certmgrscheme "github.com/jetstack/cert-manager/pkg/client/clientset/versioned/scheme"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -24,6 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
@@ -40,14 +41,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(apis.AddToScheme(scheme))
-}
-
-func printVersion() {
-	setupLog.Info(fmt.Sprintf("Git commit: %s Git branch: %s", GitCommit, GitBranch))
-	setupLog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
-	setupLog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 }
 
 func main() {
@@ -74,7 +68,8 @@ func main() {
 	// uniform and structured logs.
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	printVersion()
+	setupLog.Info("Manager starting up", "gitCommit", GitCommit, "gitBranch", GitBranch,
+		"goVersion", runtime.Version(), "os", runtime.GOOS, "arch", runtime.GOARCH)
 
 	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {
@@ -95,19 +90,25 @@ func main() {
 	}
 
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsServer.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "08db0feb.percona.com",
-		Namespace:              namespace,
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE
 	if len(namespace) > 0 {
-		options.Namespace = ""
-		options.NewCache = cache.MultiNamespacedCacheBuilder(append(strings.Split(namespace, ","), operatorNamespace))
+		namespaces := make(map[string]cache.Config)
+		for _, ns := range append(strings.Split(namespace, ","), operatorNamespace) {
+			namespaces[ns] = cache.Config{}
+		}
+		options.Cache.DefaultNamespaces = namespaces
 	}
 
 	mgr, err := ctrl.NewManager(config, options)
@@ -173,7 +174,7 @@ func getLogEncoder(log logr.Logger) zapcore.Encoder {
 
 	useJson, err := strconv.ParseBool(s)
 	if err != nil {
-		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using console logger", s))
+		log.Info("Cant't parse LOG_STRUCTURED env var, using console logger", "envVar", s)
 		return consoleEnc
 	}
 	if !useJson {
@@ -197,7 +198,7 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	case "ERROR":
 		return zapcore.ErrorLevel
 	default:
-		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
+		log.Info("Unsupported log level", "level", l)
 		return zapcore.InfoLevel
 	}
 }

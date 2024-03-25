@@ -1,0 +1,112 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+function main() {
+	rbac="rbac"
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac="cw-rbac"
+	fi
+
+	create_infra "${namespace}"
+
+	apply_s3_storage_secrets
+
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml"
+
+	desc 'install version service'
+
+	cp $test_dir/conf/operator.main.psmdb-operator.dep.json ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.dep.json
+	generate_vs_json $test_dir/conf/operator.main.psmdb-operator.json ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json
+
+	kubectl_bin create configmap ${OPERATOR_NS:+-n $OPERATOR_NS} versions \
+		--from-file ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.dep.json \
+		--from-file ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json
+
+	cat $test_dir/conf/vs.yml | $sed -r 's#operator.9.9.9.psmdb-operator#operator.'${OPERATOR_VERSION}.psmdb-operator'#g' | kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+
+	version_matrix=$(jq '.[] | .[] |.matrix.mongod' ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.json)
+
+	current_mongod_version=$(get_mongod_ver_from_image ${IMAGE_MONGOD})
+	version_matrix=$(echo ${version_matrix} | jq '. += {"'${current_mongod_version}'":{"image_path":"'${IMAGE_MONGOD}'","status": "recommended"}}')
+
+	version_matrix=$(echo ${version_matrix} | jq 'to_entries
+												 | sort_by( .key | split("[[:punct:]]";"g") | map(tonumber) )
+												 | map({(.key): .value}) ')
+
+	versions_to_verify=$(echo ${version_matrix} | jq -r '.[] | keys | .[] | split(".") | .[:2] | join(".")' | uniq | tail -n +2)
+	cluster="some-name"
+	desc 'Starting the cluster with IMAGE_MONGOD '$(echo ${version_matrix} | jq '.[0] | keys | .[0]')''
+	export IMAGE_MONGOD=$(echo ${version_matrix} | jq -r 'to_entries | .[0].value | .[].image_path')
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running "${cluster}-cfg" 3
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-mongos" 3
+	wait_cluster_consistency "${cluster}"
+
+	desc 'write data, read from all'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+	sleep 2
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@${cluster}-mongos.${namespace}"
+	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'Starting to follow mongod upgrade images chain'
+	target_generation=2
+	for version in ${versions_to_verify[@]}; do
+		desc "Testing upgrade to version: ${version}"
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/apply","value": "'${version}'-recommended"},
+				]'
+
+		sleep 70 # waiting for update loop to fire
+		wait_for_running "${cluster}-cfg" 3
+		wait_for_running "${cluster}-rs0" 3
+		wait_for_running "${cluster}-mongos" 3
+		wait_cluster_consistency "${cluster}"
+
+		compare_generation ${target_generation} "statefulset" "${cluster}-cfg"
+		compare_generation ${target_generation} "statefulset" "${cluster}-rs0"
+		compare_generation ${target_generation} "statefulset" "${cluster}-mongos"
+
+		kubectl_bin patch psmdb/${cluster%%-rs0} \
+			--type=json \
+			-p='[
+					{"op":"replace","path":"/spec/upgradeOptions/setFCV","value": true}
+				]'
+		sleep 10
+		wait_cluster_consistency "${cluster}"
+
+		currentFCV=$(run_mongos 'JSON.stringify(db.adminCommand({getParameter:1,featureCompatibilityVersion:1}))' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" \
+			| grep -E '^\{.*\}$' | jq -r '.featureCompatibilityVersion.version')
+
+		if [[ ${currentFCV} != ${version} ]]; then
+			echo "FCV at the moment is ${currentFCV} and is not set to ${version} as it should. Exiting..."
+			exit 1
+		fi
+
+		run_mongos \
+			'use myApp\n db.test.insert({ x: 10050'${target_generation}' })' \
+			"myApp:myPass@${cluster}-mongos.${namespace}"
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-${target_generation}"
+
+		target_generation=$((target_generation + 1))
+	done
+
+	destroy ${namespace}
+}
+
+main

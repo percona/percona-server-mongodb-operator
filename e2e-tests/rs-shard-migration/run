@@ -1,29 +1,33 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
+set_debug
 
 function get_shard_parameter() {
 	local cluster_name=$1
 	local namespace=$2
 	local parameter=${3:-lastCommittedOpTime}
 	run_mongo 'db.isMaster().'${parameter}'' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match'
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:'
 }
 
 function main() {
 	create_infra $namespace
 
+	desc 'create secrets and start client'
 	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 	cluster="some-name"
 	CLUSTER_SIZE=3
 
-	desc 'create first PSMDB cluster'
 	spinup_psmdb ${cluster}-rs0 $conf_dir/${cluster}-rs0.yml
+
+	desc 'check if statefulset created with expected config'
 	compare_kubectl "statefulset/${cluster}-rs0"
+
+	desc 'write data, read from all'
 	simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
 
 	desc 'initiate migration from replicaset to sharded cluster'
@@ -31,7 +35,7 @@ function main() {
 	sleep 10
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
-	wait_cluster_consistency "${cluster}" "${CLUSTER_SIZE}"
+	wait_cluster_consistency "${cluster}"
 
 	if [[ $(kubectl_bin get statefulset/${cluster}-mongos -o jsonpath='{.status.readyReplicas}') -lt 1 ]]; then
 		echo "Mongos hasn't been properly started. Exiting..."
@@ -45,6 +49,7 @@ function main() {
 	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
 
+	desc 'write data, read from all'
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
 	if [[ -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
@@ -53,11 +58,11 @@ function main() {
 		exit 1
 	fi
 
-	desc 'Get back from sharded cluster to replicaset'
+	desc 'get back from sharded cluster to replicaset'
 	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
 	sleep 20
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "true"
-
+	wait_cluster_consistency "${cluster}"
 	simple_data_check "${cluster}-rs0" "${CLUSTER_SIZE}"
 
 	if [[ -n "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
@@ -69,11 +74,13 @@ function main() {
 		exit 1
 	fi
 
-	desc 'cleanup'
+	desc 'cleanup CRDs and RBAC'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :
 	kubectl_bin delete -f "${src_dir}/deploy/rbac.yaml" || :
 	#   kubectl_bin delete pvc --all
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

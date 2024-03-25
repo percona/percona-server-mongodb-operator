@@ -20,7 +20,7 @@ spec:
         tls:
           mode: requireTLS
       operationProfiling:
-        mode: slowOp
+        mode: all
         slowOpThresholdMs: 100
         rateLimit: 100
       security:
@@ -69,6 +69,6 @@ spec:
     image: -pmm
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
-    mongodParams: "--environment=dev-mongod"
+    mongodParams: "--enable-all-collectors --environment=dev-mongod"
   secrets:
     users: some-users

@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -25,7 +24,7 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.MongosNamespacedName().Name,
 			Namespace: cr.MongosNamespacedName().Namespace,
-			Labels:    mongosLabels(cr),
+			Labels:    MongosLabels(cr),
 		},
 	}
 }
@@ -60,7 +59,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	return appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: mongosLabels(cr),
+			MatchLabels: MongosLabels(cr),
 		},
 		Template:       template,
 		UpdateStrategy: updateStrategy,
@@ -72,7 +71,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 	return appsv1.DeploymentSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: mongosLabels(cr),
+			MatchLabels: MongosLabels(cr),
 		},
 		Template: template,
 		Strategy: appsv1.DeploymentStrategy{
@@ -85,7 +84,7 @@ func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTempl
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
-	ls := mongosLabels(cr)
+	ls := MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
 		for k, v := range cr.Spec.Sharding.Mongos.Labels {
@@ -105,7 +104,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 
 	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
 	if !ok {
-		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
+		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
 	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations
@@ -123,42 +122,24 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			SecurityContext:   cr.Spec.Sharding.Mongos.PodSecurityContext,
-			Affinity:          PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
-			NodeSelector:      cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
-			Tolerations:       cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
-			PriorityClassName: cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
-			RestartPolicy:     corev1.RestartPolicyAlways,
-			ImagePullSecrets:  cr.Spec.ImagePullSecrets,
-			Containers:        containers,
-			InitContainers:    initContainers,
-			Volumes:           volumes(cr, customConf.Type),
-			SchedulerName:     cr.Spec.SchedulerName,
-			RuntimeClassName:  cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
+			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
+			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
+			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
+			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.MultiAZ.TopologySpreadConstraints, ls),
+			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
+			Tolerations:                   cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
+			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.MultiAZ.TerminationGracePeriodSeconds,
+			PriorityClassName:             cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
+			ServiceAccountName:            cr.Spec.Sharding.Mongos.MultiAZ.ServiceAccountName,
+			RestartPolicy:                 corev1.RestartPolicyAlways,
+			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
+			Containers:                    containers,
+			InitContainers:                initContainers,
+			Volumes:                       volumes(cr, customConf.Type),
+			SchedulerName:                 cr.Spec.SchedulerName,
+			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
 	}, nil
-}
-
-func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Container {
-	image := cr.Spec.InitImage
-	if len(image) == 0 {
-		if cr.CompareVersion(version.Version) != 0 {
-			image = strings.Split(initImage, ":")[0] + ":" + cr.Spec.CRVersion
-		} else {
-			image = initImage
-		}
-	}
-
-	initContainer := EntrypointInitContainer(image, cr.Spec.ImagePullPolicy)
-
-	if cr.CompareVersion("1.13.0") >= 0 {
-		initContainer.VolumeMounts = append(initContainer.VolumeMounts, corev1.VolumeMount{
-			Name:      BinVolumeName,
-			MountPath: BinMountPath,
-		})
-	}
-
-	return []corev1.Container{initContainer}
 }
 
 func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
@@ -199,6 +180,10 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			MountPath: "/etc/users-secret",
 			ReadOnly:  true,
 		})
+	}
+
+	if cr.CompareVersion("1.14.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
 	}
 
 	container := corev1.Container{
@@ -251,17 +236,31 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Command:         []string{"/data/db/ps-entry.sh"},
 	}
 
+	if cr.CompareVersion("1.14.0") >= 0 {
+		container.Command = []string{BinMountPath + "/ps-entry.sh"}
+	}
+
+	if cr.CompareVersion("1.15.0") >= 0 {
+		container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+	}
+
 	return container, nil
 }
 
 func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
-	mdSpec := cr.Spec.Mongod
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
+	cfgRsName := cfgRs.Name
+	name, err := cfgRs.CustomReplsetName()
+	if err == nil {
+		cfgRsName = name
+	}
+
 	// sort config instances to prevent unnecessary updates
 	sort.Strings(cfgInstances)
-	configDB := fmt.Sprintf("%s/%s", cfgRs.Name, strings.Join(cfgInstances, ","))
+	configDB := fmt.Sprintf("%s/%s", cfgRsName, strings.Join(cfgInstances, ","))
 	args := []string{
 		"mongos",
 		"--bind_ip_all",
@@ -281,33 +280,12 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		args = append(args, "--sslMode=preferSSL")
 	}
 
-	if cr.CompareVersion("1.12.0") < 0 && mdSpec.Security != nil && mdSpec.Security.RedactClientLogData {
-		args = append(args, "--redactClientLogData")
-	}
-
 	if msSpec.SetParameter != nil {
 		if msSpec.SetParameter.CursorTimeoutMillis > 0 {
 			args = append(args,
 				"--setParameter",
 				"cursorTimeoutMillis="+strconv.Itoa(msSpec.SetParameter.CursorTimeoutMillis),
 			)
-		}
-	}
-
-	if cr.CompareVersion("1.13.0") < 0 && msSpec.AuditLog != nil && msSpec.AuditLog.Destination == api.AuditLogDestinationFile {
-		if msSpec.AuditLog.Filter == "" {
-			msSpec.AuditLog.Filter = "{}"
-		}
-		args = append(args,
-			"--auditDestination=file",
-			"--auditFilter="+msSpec.AuditLog.Filter,
-			"--auditFormat="+string(msSpec.AuditLog.Format),
-		)
-		switch msSpec.AuditLog.Format {
-		case api.AuditLogFormatBSON:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.bson")
-		default:
-			args = append(args, "--auditPath="+MongodContainerDataDir+"/auditLog.json")
 		}
 	}
 
@@ -417,7 +395,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 		},
 	}
 	if cr.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = mongosLabels(cr)
+		svc.Labels = MongosLabels(cr)
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
@@ -433,7 +411,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 }
 
 func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.ServiceSpec {
-	ls := mongosLabels(cr)
+	ls := MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		ls["statefulset.kubernetes.io/pod-name"] = podName
@@ -446,8 +424,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
-		Selector:                 ls,
-		LoadBalancerSourceRanges: cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges,
+		Selector: ls,
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
@@ -457,6 +434,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	case corev1.ServiceTypeLoadBalancer:
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
+		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}

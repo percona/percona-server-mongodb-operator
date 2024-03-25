@@ -1,28 +1,30 @@
-FROM golang:1.19 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.21 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
 
 ARG GIT_COMMIT
 ARG GIT_BRANCH
 ARG GO_LDFLAGS
 ARG GOOS=linux
-ARG GOARCH=amd64
+ARG TARGETARCH
 ARG CGO_ENABLED=0
 
-RUN go mod download \
-    && mkdir -p build/_output/bin \
-    && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+COPY . .
+
+RUN mkdir -p build/_output/bin \
+    && GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
        go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
            -o build/_output/bin/percona-server-mongodb-operator \
                cmd/manager/main.go \
-    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator \
-    && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
+RUN GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
        go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
            -o build/_output/bin/mongodb-healthcheck \
                cmd/mongodb-healthcheck/main.go \
-    && cp -r build/_output/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck \
-    && cp -r $GOPATH/pkg/mod/github.com/hashicorp /lib/
+    && cp -r build/_output/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck
+RUN cp -r $GOPATH/pkg/mod/github.com/hashicorp /lib/
 
 # Looking for all possible License/Notice files and copying them to the image
 RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\.md|\.txt|$)' \
@@ -30,7 +32,7 @@ RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\
             sh -c 'mkdir -pv /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi") \
                    && cp -v "$0" /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi")' {} \;
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal AS ubi8
+FROM registry.access.redhat.com/ubi9/ubi-minimal AS ubi9
 RUN microdnf update -y && microdnf clean all
 
 LABEL name="Percona Server for MongoDB Operator" \
@@ -47,6 +49,7 @@ COPY --from=go_builder /usr/local/bin/mongodb-healthcheck /mongodb-healthcheck
 COPY  --from=go_builder /lib/hashicorp /lib
 COPY build/init-entrypoint.sh /init-entrypoint.sh
 COPY build/ps-entry.sh /ps-entry.sh
+COPY build/physical-restore-ps-entry.sh /physical-restore-ps-entry.sh
 COPY build/pbm-entry.sh /pbm-entry.sh
 
 USER 2

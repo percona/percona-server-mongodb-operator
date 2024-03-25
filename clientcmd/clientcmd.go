@@ -1,6 +1,7 @@
 package clientcmd
 
 import (
+	"context"
 	"io"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,9 +43,9 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Exec(pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
-	// Prepare the API URL used to execute another process within the Pod.  In
-	// this case, we'll run a remote shell.
+func (c *Client) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+	// Prepare the API URL used to execute another process within the Pod.
+	// In this case, we'll run a remote shell.
 	req := c.client.RESTClient().
 		Post().
 		Namespace(pod.Namespace).
@@ -66,7 +67,7 @@ func (c *Client) Exec(pod *corev1.Pod, containerName string, command []string, s
 	}
 
 	// Connect this process' std{in,out,err} to the remote shell process.
-	return exec.Stream(remotecommand.StreamOptions{
+	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,

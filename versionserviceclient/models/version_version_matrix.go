@@ -6,6 +6,8 @@ package models
 // Editing this file might prove futile when you re-run the swagger generate command
 
 import (
+	"context"
+
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
@@ -29,8 +31,14 @@ type VersionVersionMatrix struct {
 	// mongod
 	Mongod map[string]VersionVersion `json:"mongod,omitempty"`
 
+	// mysql
+	Mysql map[string]VersionVersion `json:"mysql,omitempty"`
+
 	// operator
 	Operator map[string]VersionVersion `json:"operator,omitempty"`
+
+	// orchestrator
+	Orchestrator map[string]VersionVersion `json:"orchestrator,omitempty"`
 
 	// pg operator
 	PgOperator map[string]VersionVersion `json:"pgOperator,omitempty"`
@@ -71,6 +79,9 @@ type VersionVersionMatrix struct {
 	// proxysql
 	Proxysql map[string]VersionVersion `json:"proxysql,omitempty"`
 
+	// ps operator
+	PsOperator map[string]VersionVersion `json:"psOperator,omitempty"`
+
 	// psmdb operator
 	PsmdbOperator map[string]VersionVersion `json:"psmdbOperator,omitempty"`
 
@@ -79,6 +90,9 @@ type VersionVersionMatrix struct {
 
 	// pxc operator
 	PxcOperator map[string]VersionVersion `json:"pxcOperator,omitempty"`
+
+	// router
+	Router map[string]VersionVersion `json:"router,omitempty"`
 }
 
 // Validate validates this version version matrix
@@ -101,7 +115,15 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateMysql(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateOperator(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateOrchestrator(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -157,6 +179,10 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validatePsOperator(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validatePsmdbOperator(formats); err != nil {
 		res = append(res, err)
 	}
@@ -169,6 +195,10 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateRouter(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
@@ -176,7 +206,6 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validateBackup(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Backup) { // not required
 		return nil
 	}
@@ -188,6 +217,11 @@ func (m *VersionVersionMatrix) validateBackup(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Backup[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("backup" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("backup" + "." + k)
+				}
 				return err
 			}
 		}
@@ -198,7 +232,6 @@ func (m *VersionVersionMatrix) validateBackup(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validateHaproxy(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Haproxy) { // not required
 		return nil
 	}
@@ -210,6 +243,11 @@ func (m *VersionVersionMatrix) validateHaproxy(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Haproxy[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("haproxy" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("haproxy" + "." + k)
+				}
 				return err
 			}
 		}
@@ -220,7 +258,6 @@ func (m *VersionVersionMatrix) validateHaproxy(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validateLogCollector(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.LogCollector) { // not required
 		return nil
 	}
@@ -232,6 +269,11 @@ func (m *VersionVersionMatrix) validateLogCollector(formats strfmt.Registry) err
 		}
 		if val, ok := m.LogCollector[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("logCollector" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("logCollector" + "." + k)
+				}
 				return err
 			}
 		}
@@ -242,7 +284,6 @@ func (m *VersionVersionMatrix) validateLogCollector(formats strfmt.Registry) err
 }
 
 func (m *VersionVersionMatrix) validateMongod(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Mongod) { // not required
 		return nil
 	}
@@ -254,6 +295,37 @@ func (m *VersionVersionMatrix) validateMongod(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Mongod[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("mongod" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("mongod" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validateMysql(formats strfmt.Registry) error {
+	if swag.IsZero(m.Mysql) { // not required
+		return nil
+	}
+
+	for k := range m.Mysql {
+
+		if err := validate.Required("mysql"+"."+k, "body", m.Mysql[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Mysql[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("mysql" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("mysql" + "." + k)
+				}
 				return err
 			}
 		}
@@ -264,7 +336,6 @@ func (m *VersionVersionMatrix) validateMongod(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validateOperator(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Operator) { // not required
 		return nil
 	}
@@ -276,6 +347,37 @@ func (m *VersionVersionMatrix) validateOperator(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Operator[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("operator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("operator" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validateOrchestrator(formats strfmt.Registry) error {
+	if swag.IsZero(m.Orchestrator) { // not required
+		return nil
+	}
+
+	for k := range m.Orchestrator {
+
+		if err := validate.Required("orchestrator"+"."+k, "body", m.Orchestrator[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Orchestrator[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("orchestrator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("orchestrator" + "." + k)
+				}
 				return err
 			}
 		}
@@ -286,7 +388,6 @@ func (m *VersionVersionMatrix) validateOperator(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validatePgOperator(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperator) { // not required
 		return nil
 	}
@@ -298,6 +399,11 @@ func (m *VersionVersionMatrix) validatePgOperator(formats strfmt.Registry) error
 		}
 		if val, ok := m.PgOperator[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperator" + "." + k)
+				}
 				return err
 			}
 		}
@@ -308,7 +414,6 @@ func (m *VersionVersionMatrix) validatePgOperator(formats strfmt.Registry) error
 }
 
 func (m *VersionVersionMatrix) validatePgOperatorApiserver(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperatorApiserver) { // not required
 		return nil
 	}
@@ -320,6 +425,11 @@ func (m *VersionVersionMatrix) validatePgOperatorApiserver(formats strfmt.Regist
 		}
 		if val, ok := m.PgOperatorApiserver[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperatorApiserver" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperatorApiserver" + "." + k)
+				}
 				return err
 			}
 		}
@@ -330,7 +440,6 @@ func (m *VersionVersionMatrix) validatePgOperatorApiserver(formats strfmt.Regist
 }
 
 func (m *VersionVersionMatrix) validatePgOperatorDeployer(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperatorDeployer) { // not required
 		return nil
 	}
@@ -342,6 +451,11 @@ func (m *VersionVersionMatrix) validatePgOperatorDeployer(formats strfmt.Registr
 		}
 		if val, ok := m.PgOperatorDeployer[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperatorDeployer" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperatorDeployer" + "." + k)
+				}
 				return err
 			}
 		}
@@ -352,7 +466,6 @@ func (m *VersionVersionMatrix) validatePgOperatorDeployer(formats strfmt.Registr
 }
 
 func (m *VersionVersionMatrix) validatePgOperatorEvent(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperatorEvent) { // not required
 		return nil
 	}
@@ -364,6 +477,11 @@ func (m *VersionVersionMatrix) validatePgOperatorEvent(formats strfmt.Registry) 
 		}
 		if val, ok := m.PgOperatorEvent[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperatorEvent" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperatorEvent" + "." + k)
+				}
 				return err
 			}
 		}
@@ -374,7 +492,6 @@ func (m *VersionVersionMatrix) validatePgOperatorEvent(formats strfmt.Registry) 
 }
 
 func (m *VersionVersionMatrix) validatePgOperatorRmdata(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperatorRmdata) { // not required
 		return nil
 	}
@@ -386,6 +503,11 @@ func (m *VersionVersionMatrix) validatePgOperatorRmdata(formats strfmt.Registry)
 		}
 		if val, ok := m.PgOperatorRmdata[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperatorRmdata" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperatorRmdata" + "." + k)
+				}
 				return err
 			}
 		}
@@ -396,7 +518,6 @@ func (m *VersionVersionMatrix) validatePgOperatorRmdata(formats strfmt.Registry)
 }
 
 func (m *VersionVersionMatrix) validatePgOperatorScheduler(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgOperatorScheduler) { // not required
 		return nil
 	}
@@ -408,6 +529,11 @@ func (m *VersionVersionMatrix) validatePgOperatorScheduler(formats strfmt.Regist
 		}
 		if val, ok := m.PgOperatorScheduler[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgOperatorScheduler" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgOperatorScheduler" + "." + k)
+				}
 				return err
 			}
 		}
@@ -418,7 +544,6 @@ func (m *VersionVersionMatrix) validatePgOperatorScheduler(formats strfmt.Regist
 }
 
 func (m *VersionVersionMatrix) validatePgbackrest(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Pgbackrest) { // not required
 		return nil
 	}
@@ -430,6 +555,11 @@ func (m *VersionVersionMatrix) validatePgbackrest(formats strfmt.Registry) error
 		}
 		if val, ok := m.Pgbackrest[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgbackrest" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgbackrest" + "." + k)
+				}
 				return err
 			}
 		}
@@ -440,7 +570,6 @@ func (m *VersionVersionMatrix) validatePgbackrest(formats strfmt.Registry) error
 }
 
 func (m *VersionVersionMatrix) validatePgbackrestRepo(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PgbackrestRepo) { // not required
 		return nil
 	}
@@ -452,6 +581,11 @@ func (m *VersionVersionMatrix) validatePgbackrestRepo(formats strfmt.Registry) e
 		}
 		if val, ok := m.PgbackrestRepo[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgbackrestRepo" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgbackrestRepo" + "." + k)
+				}
 				return err
 			}
 		}
@@ -462,7 +596,6 @@ func (m *VersionVersionMatrix) validatePgbackrestRepo(formats strfmt.Registry) e
 }
 
 func (m *VersionVersionMatrix) validatePgbadger(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Pgbadger) { // not required
 		return nil
 	}
@@ -474,6 +607,11 @@ func (m *VersionVersionMatrix) validatePgbadger(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Pgbadger[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgbadger" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgbadger" + "." + k)
+				}
 				return err
 			}
 		}
@@ -484,7 +622,6 @@ func (m *VersionVersionMatrix) validatePgbadger(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validatePgbouncer(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Pgbouncer) { // not required
 		return nil
 	}
@@ -496,6 +633,11 @@ func (m *VersionVersionMatrix) validatePgbouncer(formats strfmt.Registry) error 
 		}
 		if val, ok := m.Pgbouncer[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pgbouncer" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pgbouncer" + "." + k)
+				}
 				return err
 			}
 		}
@@ -506,7 +648,6 @@ func (m *VersionVersionMatrix) validatePgbouncer(formats strfmt.Registry) error 
 }
 
 func (m *VersionVersionMatrix) validatePmm(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Pmm) { // not required
 		return nil
 	}
@@ -518,6 +659,11 @@ func (m *VersionVersionMatrix) validatePmm(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Pmm[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pmm" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pmm" + "." + k)
+				}
 				return err
 			}
 		}
@@ -528,7 +674,6 @@ func (m *VersionVersionMatrix) validatePmm(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validatePostgresql(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Postgresql) { // not required
 		return nil
 	}
@@ -540,6 +685,11 @@ func (m *VersionVersionMatrix) validatePostgresql(formats strfmt.Registry) error
 		}
 		if val, ok := m.Postgresql[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("postgresql" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("postgresql" + "." + k)
+				}
 				return err
 			}
 		}
@@ -550,7 +700,6 @@ func (m *VersionVersionMatrix) validatePostgresql(formats strfmt.Registry) error
 }
 
 func (m *VersionVersionMatrix) validateProxysql(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Proxysql) { // not required
 		return nil
 	}
@@ -562,6 +711,37 @@ func (m *VersionVersionMatrix) validateProxysql(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Proxysql[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("proxysql" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("proxysql" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validatePsOperator(formats strfmt.Registry) error {
+	if swag.IsZero(m.PsOperator) { // not required
+		return nil
+	}
+
+	for k := range m.PsOperator {
+
+		if err := validate.Required("psOperator"+"."+k, "body", m.PsOperator[k]); err != nil {
+			return err
+		}
+		if val, ok := m.PsOperator[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("psOperator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("psOperator" + "." + k)
+				}
 				return err
 			}
 		}
@@ -572,7 +752,6 @@ func (m *VersionVersionMatrix) validateProxysql(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validatePsmdbOperator(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PsmdbOperator) { // not required
 		return nil
 	}
@@ -584,6 +763,11 @@ func (m *VersionVersionMatrix) validatePsmdbOperator(formats strfmt.Registry) er
 		}
 		if val, ok := m.PsmdbOperator[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("psmdbOperator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("psmdbOperator" + "." + k)
+				}
 				return err
 			}
 		}
@@ -594,7 +778,6 @@ func (m *VersionVersionMatrix) validatePsmdbOperator(formats strfmt.Registry) er
 }
 
 func (m *VersionVersionMatrix) validatePxc(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.Pxc) { // not required
 		return nil
 	}
@@ -606,6 +789,11 @@ func (m *VersionVersionMatrix) validatePxc(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Pxc[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pxc" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pxc" + "." + k)
+				}
 				return err
 			}
 		}
@@ -616,7 +804,6 @@ func (m *VersionVersionMatrix) validatePxc(formats strfmt.Registry) error {
 }
 
 func (m *VersionVersionMatrix) validatePxcOperator(formats strfmt.Registry) error {
-
 	if swag.IsZero(m.PxcOperator) { // not required
 		return nil
 	}
@@ -628,6 +815,522 @@ func (m *VersionVersionMatrix) validatePxcOperator(formats strfmt.Registry) erro
 		}
 		if val, ok := m.PxcOperator[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("pxcOperator" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("pxcOperator" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) validateRouter(formats strfmt.Registry) error {
+	if swag.IsZero(m.Router) { // not required
+		return nil
+	}
+
+	for k := range m.Router {
+
+		if err := validate.Required("router"+"."+k, "body", m.Router[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Router[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("router" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("router" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// ContextValidate validate this version version matrix based on the context it is used
+func (m *VersionVersionMatrix) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+	var res []error
+
+	if err := m.contextValidateBackup(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateHaproxy(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateLogCollector(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateMongod(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateMysql(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateOperator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateOrchestrator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperatorApiserver(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperatorDeployer(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperatorEvent(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperatorRmdata(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgOperatorScheduler(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgbackrest(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgbackrestRepo(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgbadger(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePgbouncer(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePmm(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePostgresql(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateProxysql(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePsOperator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePsmdbOperator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePxc(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidatePxcOperator(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateRouter(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if len(res) > 0 {
+		return errors.CompositeValidationError(res...)
+	}
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateBackup(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Backup {
+
+		if val, ok := m.Backup[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateHaproxy(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Haproxy {
+
+		if val, ok := m.Haproxy[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateLogCollector(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.LogCollector {
+
+		if val, ok := m.LogCollector[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateMongod(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Mongod {
+
+		if val, ok := m.Mongod[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateMysql(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Mysql {
+
+		if val, ok := m.Mysql[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateOperator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Operator {
+
+		if val, ok := m.Operator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateOrchestrator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Orchestrator {
+
+		if val, ok := m.Orchestrator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperator {
+
+		if val, ok := m.PgOperator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperatorApiserver(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperatorApiserver {
+
+		if val, ok := m.PgOperatorApiserver[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperatorDeployer(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperatorDeployer {
+
+		if val, ok := m.PgOperatorDeployer[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperatorEvent(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperatorEvent {
+
+		if val, ok := m.PgOperatorEvent[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperatorRmdata(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperatorRmdata {
+
+		if val, ok := m.PgOperatorRmdata[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgOperatorScheduler(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgOperatorScheduler {
+
+		if val, ok := m.PgOperatorScheduler[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgbackrest(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Pgbackrest {
+
+		if val, ok := m.Pgbackrest[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgbackrestRepo(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PgbackrestRepo {
+
+		if val, ok := m.PgbackrestRepo[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgbadger(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Pgbadger {
+
+		if val, ok := m.Pgbadger[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePgbouncer(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Pgbouncer {
+
+		if val, ok := m.Pgbouncer[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePmm(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Pmm {
+
+		if val, ok := m.Pmm[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePostgresql(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Postgresql {
+
+		if val, ok := m.Postgresql[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateProxysql(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Proxysql {
+
+		if val, ok := m.Proxysql[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePsOperator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PsOperator {
+
+		if val, ok := m.PsOperator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePsmdbOperator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PsmdbOperator {
+
+		if val, ok := m.PsmdbOperator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePxc(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Pxc {
+
+		if val, ok := m.Pxc[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidatePxcOperator(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.PxcOperator {
+
+		if val, ok := m.PxcOperator[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateRouter(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Router {
+
+		if val, ok := m.Router[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
 				return err
 			}
 		}

@@ -1,7 +1,9 @@
 package psmdb
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -85,7 +87,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		},
 		{
 			Name:  "DB_PORT",
-			Value: "27017",
+			Value: strconv.Itoa(int(api.DefaultMongodPort)),
 		},
 		{
 			Name:  "DB_PORT_MIN",
@@ -326,7 +328,15 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) (corev1.Container, error) {
+func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
+	if !cr.Spec.PMM.Enabled {
+		return nil
+	}
+
+	if !cr.Spec.PMM.HasSecret(secret) {
+		return nil
+	}
+
 	pmmC := PMMContainer(cr, secret, customAdminParams)
 	if cr.CompareVersion("1.2.0") >= 0 {
 		pmmC.Resources = cr.Spec.PMM.Resources
@@ -365,6 +375,31 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, custom
 		}
 		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
 	}
+	if cr.CompareVersion("1.15.0") >= 0 {
+		// PMM team moved temp directory to /usr/local/percona/pmm2/tmp
+		// but it doesn't work on OpenShift so we set it back to /tmp
+		sidecarEnvs := []corev1.EnvVar{
+			{
+				Name:  "PMM_AGENT_PATHS_TEMPDIR",
+				Value: "/tmp",
+			},
+		}
+		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+	}
 
-	return pmmC, nil
+	if cr.CompareVersion("1.16.0") >= 0 {
+		pmmC.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"bash",
+						"-c",
+						"pmm-admin unregister --force",
+					},
+				},
+			},
+		}
+	}
+
+	return &pmmC
 }

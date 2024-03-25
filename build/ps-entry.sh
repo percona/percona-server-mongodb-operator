@@ -19,16 +19,24 @@ if [[ $originalArgOne == mongo* ]] && [ "$(id -u)" = '0' ]; then
 	chown --dereference mongodb "/proc/$$/fd/1" "/proc/$$/fd/2" || :
 	# ignore errors thanks to https://github.com/docker-library/mongo/issues/149
 
-	exec gosu mongodb:1001 "$BASH_SOURCE" "$@"
+	exec gosu mongodb:1001 "${BASH_SOURCE[0]}" "$@"
 fi
 
 # you should use numactl to start your mongod instances, including the config servers, mongos instances, and any clients.
 # https://docs.mongodb.com/manual/administration/production-notes/#configuring-numa-on-linux
 if [[ $originalArgOne == mongo* ]]; then
-	numa='numactl --interleave=all'
-	if $numa true &>/dev/null; then
-		set -- "$numa" "$@"
+	numa=(numactl --interleave=all)
+	if "${numa[@]}" true &>/dev/null; then
+		set -- "${numa[@]}" "$@"
 	fi
+fi
+
+MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+
+mongo_shell="env HOME=${TMPDIR:-/tmp} mongosh"
+if [ "$MONGODB_VERSION" != 'v6.0' ]; then
+	echo "MongoDB version $MONGODB_VERSION present, using mongo shell"
+	mongo_shell=mongo
 fi
 
 # usage: file_env VAR [DEFAULT]
@@ -38,15 +46,15 @@ fi
 file_env() {
 	local var="$1"
 	local fileVar="${var}_FILE"
-	local def="${2:-}"
-	if [ "${!var:-}" ] && [ "${!fileVar:-}" ]; then
+	local def="${2-}"
+	if [ "${!var-}" ] && [ "${!fileVar-}" ]; then
 		echo >&2 "error: both $var and $fileVar are set (but are exclusive)"
 		exit 1
 	fi
 	local val="$def"
-	if [ "${!var:-}" ]; then
+	if [ "${!var-}" ]; then
 		val="${!var}"
-	elif [ "${!fileVar:-}" ]; then
+	elif [ "${!fileVar-}" ]; then
 		val="$(<"${!fileVar}")"
 	fi
 	export "$var"="$val"
@@ -80,7 +88,7 @@ _mongod_hack_get_arg_val() {
 				return 0
 				;;
 			"$checkArg"=*)
-				echo "${arg#$checkArg=}"
+				echo "${arg#"$checkArg"=}"
 				return 0
 				;;
 		esac
@@ -205,7 +213,14 @@ _parse_config() {
 	if configPath="$(_mongod_hack_get_arg_val --config "$@")"; then
 		# if --config is specified, parse it into a JSON file so we can remove a few problematic keys (especially SSL-related keys)
 		# see https://docs.mongodb.com/manual/reference/configuration-options/
-		mongo --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		if [[ $mongo_shell =~ 'mongosh' ]]; then
+			echo "parsing config with mongosh"
+			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js','/fs.js'); JSON.stringify((jsyaml.load(fs.readFileSync($(_js_escape "$configPath"),'utf8'))),null,2)" >"$jsonConfigFile"
+		else
+			echo "parsing config with mongo"
+			$mongo_shell --norc --nodb --quiet --eval "load('/js-yaml.js'); printjson(jsyaml.load(cat($(_js_escape "$configPath"))))" >"$jsonConfigFile"
+		fi
+
 		jq 'del(.systemLog, .processManagement, .net, .security)' "$jsonConfigFile" >"$tempConfigFile"
 		return 0
 	fi
@@ -230,7 +245,20 @@ _dbPath() {
 	echo "$dbPath"
 }
 
+is_manual_recovery() {
+	recovery_file='/data/db/sleep-forever'
+	if [ -f "${recovery_file}" ]; then
+		echo "The $recovery_file file is detected, node is going to infinity loop"
+		echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+		while [ -f "${recovery_file}" ]; do
+			sleep 1
+		done
+	fi
+}
+
 if [ "$originalArgOne" = 'mongod' ]; then
+	is_manual_recovery
+
 	file_env 'MONGO_INITDB_ROOT_USERNAME'
 	file_env 'MONGO_INITDB_ROOT_PASSWORD'
 	# pre-check a few factors to see if it's even worth bothering with initdb
@@ -324,7 +352,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=(mongo --host 127.0.0.1 --port 27017 --quiet)
+		mongo=("$mongo_shell" --host 127.0.0.1 --port 27017 --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
@@ -370,6 +398,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 			case "$f" in
 				*.sh)
 					echo "$0: running $f"
+					# shellcheck source=/dev/null
 					. "$f"
 					;;
 				*.js)
@@ -429,9 +458,8 @@ if [[ $originalArgOne == mongo* ]]; then
 		fi
 	fi
 
-	MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
-
 	if [ "$MONGODB_VERSION" != 'v4.0' ]; then
+
 		_mongod_hack_rename_arg_save_val --sslMode --tlsMode "${mongodHackedArgs[@]}"
 
 		if _mongod_hack_have_arg '--tlsMode' "${mongodHackedArgs[@]}"; then

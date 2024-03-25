@@ -1,0 +1,28 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: node-port
+spec:
+  #platform: openshift
+  image:
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: true
+      exposeType: NodePort
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      security:
+        enableEncryption: true
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+  secrets:
+    users: some-users

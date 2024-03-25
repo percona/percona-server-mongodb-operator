@@ -1,32 +1,38 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
-cluster="monitoring"
+set_debug
+
+get_node_id_from_pmm() {
+	local -a nodeList=()
+	for instance in $(kubectl_bin get pods --no-headers -l app.kubernetes.io/name=percona-server-mongodb --output=custom-columns='NAME:.metadata.name'); do
+		nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
+	done
+
+	echo "${nodeList[@]}"
+}
+
+does_node_id_exists() {
+	local -a nodeList=("$@")
+	local -a nodeList_from_pmm=()
+	for node_id in "${nodeList[@]}"; do
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-0 -- pmm-admin --server-url=https://admin:admin@$(get_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
+	done
+
+	echo "${nodeList_from_pmm[@]}"
+}
 
 deploy_cert_manager
 create_infra $namespace
 
 desc 'install PMM Server'
-platform=kubernetes
 
-helm uninstall monitoring || :
-helm repo remove stable || :
-helm repo add stable https://charts.helm.sh/stable
-if [[ -n ${OPENSHIFT} ]]; then
-	platform=openshift
-	oc adm policy add-scc-to-user privileged -z percona-server-mongodb-operator
-	oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
-	retry 10 60 helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform --set sa=percona-server-mongodb-operator --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VER}.tgz
-else
-	retry 10 60 helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VER}.tgz
-fi
+deploy_pmm_server
 sleep 20
-SERVICE="postgres"
-until kubectl_bin exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
+until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 	echo "Retry $retry"
 	sleep 5
 	let retry+=1
@@ -36,21 +42,49 @@ until kubectl_bin exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; d
 	fi
 done
 
-desc 'create PSMDB cluster'
+cluster="monitoring"
+
+desc 'create secrets and start client'
 kubectl_bin apply \
 	-f $conf_dir/secrets.yml \
-	-f $conf_dir/client.yml \
 	-f $test_dir/conf/secrets.yml
 
+yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
+	"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
 sleep 90
-API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
-kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
-apply_cluster $test_dir/conf/$cluster-rs0.yml
-desc 'check if all 3 Pods started'
+
+desc "create first PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 wait_for_running $cluster-rs0 3
 
+desc 'check if pmm-client container is not enabled'
+compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
+sleep 10
+
+run_mongos \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+run_mongos \
+	'sh.enableSharding("myApp")' \
+	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "" "" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100500" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100600" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+insert_data_mongos "100700" "myApp" \
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+
+desc 'add PMM_SERVER_API_KEY for secret some-users'
+API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
+kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
+
+desc 'check if all 3 Pods started'
+wait_for_running $cluster-rs0 3
 # wait for prometheus
 sleep 90
+
 desc 'check if pmm-client container enabled'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl service/$cluster-rs0
@@ -62,11 +96,11 @@ desc 'check mongod metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin
 get_metric_values mongodb_connections $namespace-$cluster-rs0-1 admin:admin
 
-#desc 'check mongo config  metrics'
+desc 'check mongo config  metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 admin:admin
 get_metric_values mongodb_connections $namespace-$cluster-cfg-1 admin:admin
 
-#desc 'check mongos metrics'
+desc 'check mongos metrics'
 MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
 get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 #get_metric_values mongodb_mongos_connections ${cluster%%-rs0}-mongos-0
@@ -75,13 +109,49 @@ get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
 sleep 90
 
 desc 'check QAN data'
-get_qan20_values $cluster-rs0-0 admin:admin
-get_qan20_values $cluster-cfg-0 admin:admin
-get_qan20_values $MONGOS_POD_NAME admin:admin
+get_qan_values mongodb "dev-mongod" admin:admin
+get_qan_values mongodb "dev-mongos" admin:admin
+
+nodeList=($(get_node_id_from_pmm))
+nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
+for node_id in "${nodeList_from_pmm[@]}"; do
+	if [ -z "$node_id" ]; then
+		echo "Can't get $node_id node_id from PMM server"
+		exit 1
+	fi
+done
+
+kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+wait_for_delete "pod/${cluster}-mongos-0"
+wait_for_delete "pod/${cluster}-rs0-0"
+wait_for_delete "pod/${cluster}-cfg-0"
+
+does_node_id_exists_in_pmm=($(does_node_id_exists "${nodeList[@]}"))
+for instance in "${does_node_id_exists_in_pmm[@]}"; do
+	if [ -n "$instance" ]; then
+		echo "The $instance pod was not deleted from server inventory"
+		exit 1
+	fi
+done
 
 if [[ -n ${OPENSHIFT} ]]; then
-	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator
+	oc adm policy remove-scc-from-user privileged -z pmm-server
+	if [ -n "$OPERATOR_NS" ]; then
+		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
+	else
+		oc delete rolebinding pmm-psmdb-operator-namespace-only
+	fi
 fi
+
+if [[ $(kubectl_bin logs monitoring-rs0-0 pmm-client | grep -c 'cannot auto discover databases and collections') != 0 ]]; then
+	echo "error: cannot auto discover databases and collections"
+	exit 1
+fi
+
+desc 'check for passwords leak'
+check_passwords_leak
 
 helm uninstall monitoring
 destroy $namespace
+
+desc 'test passed'

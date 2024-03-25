@@ -94,7 +94,7 @@ spec:
           requests:
             storage: 1Gi
 
-    size: 3
+    size: 4
     configuration: |
       net:
         tls:
@@ -119,6 +119,9 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+    arbiter:
+      enabled: true
+      size: 1
   - name: rs2
     affinity:
       antiAffinityTopologyKey: none
@@ -159,6 +162,28 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+    nonvoting:
+      enabled: true
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 2Gi
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
 
   secrets:
     users: some-users

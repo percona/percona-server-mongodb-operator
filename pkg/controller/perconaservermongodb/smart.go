@@ -4,13 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,11 +13,17 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec) error {
 
+	log := logf.FromContext(ctx)
 	if replset.Size == 0 {
 		return nil
 	}
@@ -95,12 +96,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
 
-	if hasActiveJobs {
+	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
+	if !ok && hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}
@@ -112,25 +114,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, *replset, roleClusterAdmin)
-	if err != nil {
-		return fmt.Errorf("failed to get mongo client: %v", err)
-	}
-
-	defer func() {
-		err := client.Disconnect(ctx)
-		if err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
-
-	primary, err := psmdb.GetPrimaryPod(ctx, client)
-	if err != nil {
-		return fmt.Errorf("get primary pod: %v", err)
-	}
-
-	log.Info(fmt.Sprintf("primary pod is %s", primary))
-
 	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
 
 	sort.Slice(list.Items, func(i, j int) bool {
@@ -139,19 +122,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
-		if replset.Expose.Enabled {
-			host, err := psmdb.MongoHost(ctx, r.client, cr, replset.Name, replset.Expose.Enabled, pod)
-			if err != nil {
-				return errors.Wrapf(err, "get mongo host for pod %s", pod.Name)
-			}
-
-			if host == primary {
-				primaryPod = pod
-				continue
-			}
+		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
 		}
-
-		if strings.HasPrefix(primary, fmt.Sprintf("%s.%s.%s", pod.Name, sfs.Name, sfs.Namespace)) {
+		if isPrimary {
 			primaryPod = pod
 			continue
 		}
@@ -178,7 +153,19 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
-		err = mongo.StepDown(ctx, client, forceStepDown)
+		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
+		if err != nil {
+			return fmt.Errorf("failed to get mongo client: %v", err)
+		}
+
+		defer func() {
+			err := client.Disconnect(ctx)
+			if err != nil {
+				log.Error(err, "failed to close connection")
+			}
+		}()
+
+		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
 			return errors.Wrap(err, "failed to do step down")
 		}
@@ -194,7 +181,123 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
+	primary, err := r.isPodPrimary(ctx, cr, expectedPrimary, rs)
+	if err != nil {
+		return errors.Wrap(err, "is pod primary")
+	}
+	if primary {
+		return nil
+	}
+
+	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
+	if err != nil {
+		return errors.Wrap(err, "get rs statefulset")
+	}
+	pods := &corev1.PodList{}
+	err = r.client.List(ctx,
+		pods,
+		&k8sclient.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get rs statefulset")
+	}
+
+	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items)
+
+	var primaryPod corev1.Pod
+	for _, pod := range pods.Items {
+		if expectedPrimary.Name == pod.Name {
+			continue
+		}
+		primary, err := r.isPodPrimary(ctx, cr, pod, rs)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		// If we found a primary, we need to call `replSetStepDown` on it after calling `replSetFreeze` on all other pods
+		if primary {
+			primaryPod = pod
+			continue
+		}
+		err = r.freezePod(ctx, cr, rs, pod, sleepSeconds)
+		if err != nil {
+			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
+		}
+	}
+
+	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {
+		return errors.Wrap(err, "failed to step down primary pod")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
+	log := logf.FromContext(ctx)
+
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+	if err := mgoClient.StepDown(ctx, seconds, false); err != nil {
+		return errors.Wrap(err, "failed to step down")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
+	log := logf.FromContext(ctx)
+
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+	if err := mgoClient.Freeze(ctx, seconds); err != nil {
+		return errors.Wrap(err, "failed to freeze")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		err := mgoClient.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	isMaster, err := mgoClient.IsMaster(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "is master")
+	}
+
+	return isMaster.IsMaster, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
 		return nil
 	}
@@ -224,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}
@@ -261,7 +364,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
 		}
 		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
-			log.Info("StatefulSet is not up to date", "sts", s.Name)
+			logf.FromContext(ctx).Info("StatefulSet is not up to date", "sts", s.Name)
 			return false, nil
 		}
 	}
@@ -286,7 +389,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
-		log.Info(fmt.Sprintf("pod %s is already updated", pod.Name))
+		logf.FromContext(ctx).Info("Pod already updated", "pod", pod.Name)
 	} else {
 		if err := r.client.Delete(ctx, pod); err != nil {
 			return errors.Wrap(err, "delete pod")
@@ -323,7 +426,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		}
 
 		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
-			log.Info(fmt.Sprintf("pod %s started", pod.Name))
+			logf.FromContext(ctx).Info("Pod started", "pod", pod.Name)
 			return nil
 		}
 	}

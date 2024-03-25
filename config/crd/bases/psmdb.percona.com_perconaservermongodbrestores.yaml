@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.11.1
   creationTimestamp: null
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
@@ -69,6 +69,8 @@ spec:
                     type: string
                   pbmName:
                     type: string
+                  pbmPod:
+                    type: string
                   replsetNames:
                     items:
                       type: string
@@ -89,6 +91,17 @@ spec:
                         type: string
                       region:
                         type: string
+                      serverSideEncryption:
+                        properties:
+                          kmsKeyID:
+                            type: string
+                          sseAlgorithm:
+                            type: string
+                          sseCustomerAlgorithm:
+                            type: string
+                          sseCustomerKey:
+                            type: string
+                        type: object
                       storageClass:
                         type: string
                       uploadPartSize:
@@ -102,6 +115,8 @@ spec:
                   state:
                     type: string
                   storageName:
+                    type: string
+                  type:
                     type: string
                 type: object
               clusterName:
@@ -130,6 +145,8 @@ spec:
                 type: string
               pbmName:
                 type: string
+              pitrTarget:
+                type: string
               state:
                 type: string
             type: object
@@ -138,9 +155,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

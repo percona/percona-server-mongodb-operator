@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -32,7 +33,7 @@ var secretFileMode int32 = 288
 
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
-func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
+func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, containerName string,
 	ls map[string]string, customLabels map[string]string, multiAZ api.MultiAZ, size int32, ikeyName string,
 	initContainers []corev1.Container, log logr.Logger, customConf CustomConfig,
 	resources corev1.ResourceRequirements, podSecurityContext *corev1.PodSecurityContext,
@@ -54,7 +55,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		},
 	}
 
-	if m.CompareVersion("1.13.0") >= 0 {
+	if cr.CompareVersion("1.13.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
 			Name: BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -63,26 +64,26 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		})
 	}
 
-	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
-	encryptionEnabled, err := isEncryptionEnabled(m, replset)
+	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
 	}
 
 	if encryptionEnabled {
-		if len(m.Spec.Secrets.Vault) != 0 {
+		if len(cr.Spec.Secrets.Vault) != 0 {
 			volumes = append(volumes,
 				corev1.Volume{
-					Name: m.Spec.Secrets.Vault,
+					Name: cr.Spec.Secrets.Vault,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							DefaultMode: &secretFileMode,
-							SecretName:  m.Spec.Secrets.Vault,
+							SecretName:  cr.Spec.Secrets.Vault,
 							Optional:    &fvar,
 						},
 					},
@@ -91,11 +92,11 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		} else {
 			volumes = append(volumes,
 				corev1.Volume{
-					Name: m.Spec.EncryptionKeySecretName(),
+					Name: cr.Spec.Secrets.EncryptionKey,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							DefaultMode: &secretFileMode,
-							SecretName:  m.Spec.EncryptionKeySecretName(),
+							SecretName:  cr.Spec.Secrets.EncryptionKey,
 							Optional:    &fvar,
 						},
 					},
@@ -104,7 +105,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		}
 	}
 
-	c, err := container(m, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources, ikeyName, customConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
@@ -116,7 +117,7 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 
 	containers, ok := multiAZ.WithSidecars(c)
 	if !ok {
-		log.Info(fmt.Sprintf("Sidecar container name cannot be %s. It's skipped", c.Name))
+		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
 	annotations := multiAZ.Annotations
@@ -124,12 +125,12 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 		annotations = make(map[string]string)
 	}
 
-	if m.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = customConf.HashHex
 	}
 
 	return appsv1.StatefulSetSpec{
-		ServiceName: m.Name + "-" + replset.Name,
+		ServiceName: cr.Name + "-" + replset.Name,
 		Replicas:    &size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -140,19 +141,22 @@ func StatefulSpec(m *api.PerconaServerMongoDB, replset *api.ReplsetSpec, contain
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				SecurityContext:    podSecurityContext,
-				Affinity:           PodAffinity(m, multiAZ.Affinity, customLabels),
-				NodeSelector:       multiAZ.NodeSelector,
-				Tolerations:        multiAZ.Tolerations,
-				PriorityClassName:  multiAZ.PriorityClassName,
-				ServiceAccountName: multiAZ.ServiceAccountName,
-				RestartPolicy:      corev1.RestartPolicyAlways,
-				ImagePullSecrets:   m.Spec.ImagePullSecrets,
-				Containers:         containers,
-				InitContainers:     initContainers,
-				Volumes:            volumes,
-				SchedulerName:      m.Spec.SchedulerName,
-				RuntimeClassName:   multiAZ.RuntimeClassName,
+				HostAliases:                   replset.HostAliases,
+				SecurityContext:               podSecurityContext,
+				Affinity:                      PodAffinity(cr, multiAZ.Affinity, customLabels),
+				TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, multiAZ.TopologySpreadConstraints, customLabels),
+				NodeSelector:                  multiAZ.NodeSelector,
+				Tolerations:                   multiAZ.Tolerations,
+				TerminationGracePeriodSeconds: multiAZ.TerminationGracePeriodSeconds,
+				PriorityClassName:             multiAZ.PriorityClassName,
+				ServiceAccountName:            multiAZ.ServiceAccountName,
+				RestartPolicy:                 corev1.RestartPolicyAlways,
+				ImagePullSecrets:              cr.Spec.ImagePullSecrets,
+				Containers:                    containers,
+				InitContainers:                initContainers,
+				Volumes:                       volumes,
+				SchedulerName:                 cr.Spec.SchedulerName,
+				RuntimeClassName:              multiAZ.RuntimeClassName,
 			},
 		},
 	}, nil
@@ -167,8 +171,8 @@ func MongosCustomConfigName(clusterName string) string {
 }
 
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
-func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolumeClaimSpec) corev1.PersistentVolumeClaim {
-	return corev1.PersistentVolumeClaim{
+func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
+	pvc := corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PersistentVolumeClaim",
 			APIVersion: "v1",
@@ -177,8 +181,12 @@ func PersistentVolumeClaim(name, namespace string, spec *corev1.PersistentVolume
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: *spec,
 	}
+
+	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
+	}
+	return pvc
 }
 
 // PodAffinity returns podAffinity options for the pod
@@ -221,19 +229,28 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	return nil
 }
 
-func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	if cr.CompareVersion("1.12.0") >= 0 {
-		enabled, err := replset.Configuration.IsEncryptionEnabled()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to parse replset configuration")
-		}
-		if enabled == nil {
-			if cr.Spec.Mongod.Security != nil && cr.Spec.Mongod.Security.EnableEncryption != nil {
-				return *cr.Spec.Mongod.Security.EnableEncryption, nil
+func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.TopologySpreadConstraint, ls map[string]string) []corev1.TopologySpreadConstraint {
+	result := make([]corev1.TopologySpreadConstraint, 0, len(tscs))
+
+	for _, tsc := range tscs {
+		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
+			tsc.LabelSelector = &metav1.LabelSelector{
+				MatchLabels: ls,
 			}
-			return true, nil // true by default
 		}
-		return *enabled, nil
+
+		result = append(result, tsc)
 	}
-	return *cr.Spec.Mongod.Security.EnableEncryption, nil
+	return result
+}
+
+func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+	enabled, err := replset.Configuration.IsEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
+	}
+	if enabled == nil {
+		return true, nil // true by default
+	}
+	return *enabled, nil
 }

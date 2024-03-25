@@ -3,23 +3,29 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/percona/percona-backup-mongodb/pbm"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
-	pbmStartingDeadline       = time.Duration(120)
+	pbmStartingDeadline       = time.Duration(120) * time.Second
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
 
 type Backup struct {
-	pbm  *backup.PBM
+	pbm  backup.PBM
 	spec api.BackupSpec
 }
 
@@ -36,7 +42,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup, priority map[string]float64) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -44,7 +50,7 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	err := b.pbm.SetConfig(ctx, stg, b.spec.PITR, priority)
+	err := b.pbm.SetConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
@@ -57,10 +63,11 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 		compLevel = &l
 	}
 
-	err = b.pbm.C.SendCmd(pbm.Cmd{
-		Cmd: pbm.CmdBackup,
-		Backup: pbm.BackupCmd{
+	err = b.pbm.SendCmd(ctx, ctrl.Cmd{
+		Cmd: ctrl.CmdBackup,
+		Backup: &ctrl.BackupCmd{
 			Name:             name,
+			Type:             cr.Spec.Type,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},
@@ -87,31 +94,43 @@ func (b *Backup) Start(ctx context.Context, cluster *api.PerconaServerMongoDB, c
 	switch stg.Type {
 	case api.BackupStorageS3:
 		status.S3 = &stg.S3
+
+		status.Destination = stg.S3.Bucket
+
 		if stg.S3.Prefix != "" {
-			status.Destination = stg.S3.Prefix + "/"
+			status.Destination = stg.S3.Bucket + "/" + stg.S3.Prefix
+		}
+		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
+			status.Destination = "s3://" + status.Destination
 		}
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
+
+		status.Destination = stg.Azure.Container
+
 		if stg.Azure.Prefix != "" {
-			status.Destination = stg.Azure.Prefix + "/"
+			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix
+		}
+		if !strings.HasPrefix(stg.Azure.Container, "azure://") {
+			status.Destination = "azure://" + status.Destination
 		}
 	}
-	status.Destination += status.PBMname
+	status.Destination += "/" + status.PBMname
 
 	return status, nil
 }
 
 // Status return backup status
-func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
-	meta, err := b.pbm.C.GetBackupMeta(cr.Status.PBMname)
-	if err != nil && !errors.Is(err, pbm.ErrNotFound) {
+	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm backup meta")
 	}
 
-	if meta == nil || meta.Name == "" || errors.Is(err, pbm.ErrNotFound) {
-		log.Info("Waiting for backup metadata", "PBM name", cr.Status.PBMname, "backup", cr.Name)
+	if meta == nil || meta.Name == "" || errors.Is(err, pbmErrors.ErrNotFound) {
+		logf.FromContext(ctx).Info("Waiting for backup metadata", "pbmName", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
 
@@ -122,15 +141,15 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	}
 
 	switch meta.Status {
-	case pbm.StatusError:
+	case defs.StatusError:
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
-	case pbm.StatusDone:
+	case defs.StatusDone:
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-	case pbm.StatusStarting:
+	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
 		if passed >= pbmStartingDeadline {
 			status.State = api.BackupStateError
@@ -146,6 +165,13 @@ func (b *Backup) Status(cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMo
 	status.LastTransition = &metav1.Time{
 		Time: time.Unix(meta.LastTransitionTS, 0),
 	}
+	status.Type = cr.Spec.Type
+
+	node, err := b.pbm.Node(ctx)
+	if err != nil {
+		return status, nil
+	}
+	status.PBMPod = node
 
 	return status, nil
 }

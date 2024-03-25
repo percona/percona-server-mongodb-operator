@@ -5,6 +5,9 @@ metadata:
 spec:
   image:
   imagePullPolicy: Always
+  initContainerSecurityContext: 
+    privileged: false
+    runAsUser: 2002
   allowUnsafeConfigurations: false
   replsets:
   - name: rs0

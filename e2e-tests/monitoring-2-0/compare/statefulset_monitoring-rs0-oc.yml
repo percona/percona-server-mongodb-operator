@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 2
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: monitoring
@@ -56,7 +56,7 @@ spec:
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
           command:
-            - /data/db/ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: monitoring
@@ -72,7 +72,7 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /data/db/mongodb-healthcheck
+                - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
                 - --ssl
@@ -94,12 +94,17 @@ spec:
               name: mongodb
               protocol: TCP
           readinessProbe:
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongod
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources: {}
           securityContext:
@@ -120,6 +125,8 @@ spec:
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
+            - mountPath: /opt/percona
+              name: bin
             - mountPath: /etc/mongodb-encryption
               name: monitoring-mongodb-encryption-key
               readOnly: true
@@ -193,7 +200,7 @@ spec:
             - name: PMM_AGENT_SETUP_METRICS_MODE
               value: push
             - name: PMM_ADMIN_CUSTOM_PARAMS
-              value: --environment=dev-mongod
+              value: --enable-all-collectors --environment=dev-mongod
             - name: PMM_AGENT_SERVER_USERNAME
               value: api_key
             - name: PMM_AGENT_SERVER_PASSWORD
@@ -213,6 +220,8 @@ spec:
               value: "true"
             - name: PMM_AGENT_SIDECAR_SLEEP
               value: "5"
+            - name: PMM_AGENT_PATHS_TEMPDIR
+              value: /tmp
           imagePullPolicy: Always
           lifecycle:
             preStop:
@@ -220,7 +229,7 @@ spec:
                 command:
                   - bash
                   - -c
-                  - pmm-admin inventory remove node --force $(pmm-admin status --json | python -c "import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])")
+                  - pmm-admin unregister --force
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -273,7 +282,7 @@ spec:
       securityContext: {}
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: monitoring-mongodb-keyfile
           secret:

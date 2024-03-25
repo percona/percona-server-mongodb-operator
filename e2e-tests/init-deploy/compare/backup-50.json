@@ -387,7 +387,6 @@
         },
         "actions": [
           "appendOplogNote",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",
           "getDefaultRWConcern",
