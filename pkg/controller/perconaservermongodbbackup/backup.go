@@ -112,7 +112,11 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 			status.Destination = stg.Azure.Container + "/" + stg.Azure.Prefix
 		}
 		if !strings.HasPrefix(stg.Azure.Container, "azure://") {
-			status.Destination = "azure://" + status.Destination
+			if stg.Azure.EndpointURL != "" {
+				status.Destination = stg.Azure.EndpointURL + "/" + status.Destination
+			} else {
+				status.Destination = "azure://" + status.Destination
+			}
 		}
 	}
 	status.Destination += "/" + status.PBMname
