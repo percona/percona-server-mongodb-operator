@@ -201,6 +201,26 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			},
 		},
 	)
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &t,
+						DefaultMode: &secretFileMode,
+					},
+				},
+			},
+			corev1.Volume{
+				Name: LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	}
 
 	if ls["app.kubernetes.io/component"] == "arbiter" {
 		volumes = append(volumes,

@@ -23,6 +23,11 @@ const (
 	BinVolumeName = "bin"
 	BinMountPath  = "/opt/percona"
 
+	LDAPConfVolClaimName = "ldap"
+	ldapConfDir          = "/etc/openldap"
+	LDAPTLSVolClaimName  = "ldap-tls"
+	ldapTLSDir           = "/etc/openldap/certs"
+
 	SSLDir           = "/etc/mongodb-ssl"
 	sslInternalDir   = "/etc/mongodb-ssl-internal"
 	vaultDir         = "/etc/mongodb-vault"
@@ -130,7 +135,7 @@ func (s *hashableSecret) GetHashHex() (string, error) {
 }
 
 func getCustomConfigHashHex(strData map[string]string, binData map[string][]byte) (string, error) {
-	var content = struct {
+	content := struct {
 		StrData map[string]string `json:"str_data,omitempty"`
 		BinData map[string][]byte `json:"bin_data,omitempty"`
 	}{
