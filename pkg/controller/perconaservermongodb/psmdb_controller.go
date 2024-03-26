@@ -276,46 +276,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	if cr.Spec.Backup.Configuration != nil {
-		log.Info("AAAAAAAAAA configuration", "config", cr.Spec.Backup.Configuration)
-
-		confBytes, err := yaml.Marshal(cr.Spec.Backup.Configuration)
-		if err != nil {
-			return rr, errors.Wrap(err, "marshal config 2")
-		}
-
-		conf := pbmConf.Config{}
-		if err := yaml.Unmarshal(confBytes, &conf); err != nil {
-			return rr, errors.Wrap(err, "unmarshal config 2")
-		}
-
-		log.Info("BBBB configuration", "config", conf)
-
-		// conf := config.Config{}
-		// confBytes, err := yaml.Marshal(conf)
-		// if err != nil {
-		// 	return conf, errors.Wrap(err, "marshal config 1")
-		// }
-
-		// var confMap map[string]interface{}
-		// if err := yaml.Unmarshal(confBytes, &confMap); err != nil {
-		// 	return conf, errors.Wrap(err, "unmarshal config 1")
-		// }
-
-		// for k, v := range cluster.Spec.Backup.Configuration {
-		// 	confMap[k] = v
-		// }
-
-		// confBytes, err = yaml.Marshal(confMap)
-		// if err != nil {
-		// 	return conf, errors.Wrap(err, "marshal config 2")
-		// }
-
-		// if err := yaml.Unmarshal(confBytes, &conf); err != nil {
-		// 	return conf, errors.Wrap(err, "unmarshal config 2")
-		// }
-	}
-
 	err = r.reconcilePause(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
