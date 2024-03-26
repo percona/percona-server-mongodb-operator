@@ -22,24 +22,40 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-type CertManagerController struct {
+type CertManagerController interface {
+	ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error)
+	ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error
+	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error
+	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
+	Check(ctx context.Context, config *rest.Config, ns string) error
+	IsDryRun() bool
+}
+
+type certManagerController struct {
 	cl     client.Client
 	scheme *runtime.Scheme
 	dryRun bool
 }
 
-func NewCertManagerController(cl client.Client, scheme *runtime.Scheme, dryRun bool) *CertManagerController {
+var _ CertManagerController = new(certManagerController)
+
+type NewCertManagerControllerFunc func(cl client.Client, scheme *runtime.Scheme, dryRun bool) CertManagerController
+
+func NewCertManagerController(cl client.Client, scheme *runtime.Scheme, dryRun bool) CertManagerController {
 	if dryRun {
 		cl = client.NewDryRunClient(cl)
 	}
-	return &CertManagerController{
+	return &certManagerController{
 		cl:     cl,
 		scheme: scheme,
 		dryRun: dryRun,
 	}
 }
 
-func (c *CertManagerController) IsDryRun() bool {
+func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
@@ -77,7 +93,7 @@ func CACertificateSecretName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-ca-cert"
 }
 
-func (c *CertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	issuer := new(cm.Issuer)
 	err := c.cl.Get(ctx, types.NamespacedName{
 		Name:      deprecatedIssuerName(cr),
@@ -92,7 +108,7 @@ func (c *CertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Conte
 	return c.cl.Delete(ctx, issuer)
 }
 
-func (c *CertManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
+func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
 	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
 		return "", errors.Wrap(err, "set controller reference")
 	}
@@ -104,7 +120,7 @@ func (c *CertManagerController) createOrUpdate(ctx context.Context, cr *api.Perc
 	return status, nil
 }
 
-func (c *CertManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	issuer := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      issuerName(cr),
@@ -130,7 +146,7 @@ func (c *CertManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
-func (c *CertManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	issuer := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caIssuerName(cr),
@@ -146,7 +162,7 @@ func (c *CertManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
-func (c *CertManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error) {
+func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error) {
 	isCA := false
 	if cr.CompareVersion("1.15.0") < 0 {
 		isCA = true
@@ -181,7 +197,7 @@ var (
 	ErrCertManagerNotReady = errors.New("cert-manager not ready")
 )
 
-func (c *CertManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
+func (c *certManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
 	log := logf.FromContext(ctx)
 	checker, err := cmapichecker.New(config, c.scheme, ns)
 	if err != nil {
@@ -201,7 +217,7 @@ func (c *CertManagerController) Check(ctx context.Context, config *rest.Config, 
 	return nil
 }
 
-func (c *CertManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	cert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CACertificateSecretName(cr),
@@ -223,7 +239,7 @@ func (c *CertManagerController) ApplyCACertificate(ctx context.Context, cr *api.
 	return c.createOrUpdate(ctx, cr, cert)
 }
 
-func (c *CertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {
+func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {
 	if c.dryRun {
 		return nil
 	}
@@ -265,7 +281,7 @@ func (c *CertManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 }
 
 // GetMergedCA returns merged CA from provided secrets. Result will not contain PEM duplicates.
-func (c *CertManagerController) GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error) {
+func (c *certManagerController) GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error) {
 	mergedCA := []byte{}
 
 	for _, secretName := range secretNames {

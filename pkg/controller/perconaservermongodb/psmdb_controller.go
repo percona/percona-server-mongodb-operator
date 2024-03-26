@@ -38,6 +38,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -75,14 +76,15 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDB{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		serverVersion: sv,
-		reconcileIn:   time.Second * 5,
-		crons:         NewCronRegistry(),
-		lockers:       newLockStore(),
-		newPBM:        backup.NewPBM,
-		restConfig:    mgr.GetConfig(),
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		serverVersion:      sv,
+		reconcileIn:        time.Second * 5,
+		crons:              NewCronRegistry(),
+		lockers:            newLockStore(),
+		newPBM:             backup.NewPBM,
+		restConfig:         mgr.GetConfig(),
+		newCertManagerCtrl: tls.NewCertManagerController,
 
 		initImage: initImage,
 
@@ -172,6 +174,8 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion       *version.ServerVersion
 	reconcileIn         time.Duration
 	mongoClientProvider MongoClientProvider
+
+	newCertManagerCtrl tls.NewCertManagerControllerFunc
 
 	newPBM backup.NewPBMFunc
 

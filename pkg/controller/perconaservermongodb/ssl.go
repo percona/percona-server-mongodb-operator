@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
-	c := tls.NewCertManagerController(r.client, r.scheme, true)
+	c := r.newCertManagerCtrl(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
 		switch err {
@@ -82,7 +82,7 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("createSSLByCertManager")
 
-	dryController := tls.NewCertManagerController(r.client, r.scheme, true)
+	dryController := r.newCertManagerCtrl(r.client, r.scheme, true)
 	// checking if certificates will be updated
 	applyStatus, err := r.applyCertManagerCertificates(ctx, cr, dryController)
 	if err != nil {
@@ -207,7 +207,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 		}
 	}
 
-	c := tls.NewCertManagerController(r.client, r.scheme, false)
+	c := r.newCertManagerCtrl(r.client, r.scheme, false)
 	log.Info("applying new certificates")
 	if _, err := r.applyCertManagerCertificates(ctx, cr, c); err != nil {
 		return errors.Wrap(err, "failed to apply cert-manager certificates")
@@ -287,7 +287,7 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context.Context, cr *api.PerconaServerMongoDB, c *tls.CertManagerController) (util.ApplyStatus, error) {
+func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context.Context, cr *api.PerconaServerMongoDB, c tls.CertManagerController) (util.ApplyStatus, error) {
 	applyStatus := util.ApplyStatusUnchanged
 	applyFunc := func(f func() (util.ApplyStatus, error)) error {
 		status, err := f()
