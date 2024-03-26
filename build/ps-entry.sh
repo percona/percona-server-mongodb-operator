@@ -430,6 +430,10 @@ if [[ $originalArgOne == mongo* ]]; then
 	if [ -f "${MONGO_SSL_DIR}/ca.crt" ]; then
 		CA="${MONGO_SSL_DIR}/ca.crt"
 	fi
+	LDAP_SSL_DIR=${LDAP_SSL_DIR:-/etc/openldap/certs}
+	if [ -f "${LDAP_SSL_DIR}/ca.crt" ]; then
+		echo "TLS_CACERT ${LDAP_SSL_DIR}/ca.crt" >/etc/openldap/ldap.conf
+	fi
 	if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
 		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
 		_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
