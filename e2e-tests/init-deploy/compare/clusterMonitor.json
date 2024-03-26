@@ -36,6 +36,15 @@
       },
       {
         "resource": {
+          "db": "admin",
+          "collection": "system.version"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
           "db": "config",
           "collection": ""
         },

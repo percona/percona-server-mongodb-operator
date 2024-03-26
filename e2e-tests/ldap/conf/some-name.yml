@@ -1,0 +1,29 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  image:
+  imagePullPolicy: Always
+  backup:
+    enabled: false
+  replsets:
+  - name: rs0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    expose:
+      enabled: false
+    size: 3
+  secrets:
+    users: some-users
