@@ -24,7 +24,8 @@ import (
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	mongosPods []corev1.Pod) (api.AppState, error) {
+	mongosPods []corev1.Pod,
+) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
@@ -505,7 +506,8 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 }
 
 func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
-	mongosPod corev1.Pod) error {
+	mongosPod corev1.Pod,
+) error {
 	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
 		return errors.Errorf("rsPod %s is not ready", rspod.Name)
 	}
@@ -795,6 +797,17 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 					},
 				},
 			}
+		}
+		if cr.CompareVersion("1.16.0") >= 0 {
+			privileges = append(privileges, mongo.RolePrivilege{
+				Resource: map[string]interface{}{
+					"db":         "admin",
+					"collection": "system.version",
+				},
+				Actions: []string{
+					"find",
+				},
+			})
 		}
 
 		err = r.createOrUpdateSystemRoles(ctx, cli, "explainRole", privileges)

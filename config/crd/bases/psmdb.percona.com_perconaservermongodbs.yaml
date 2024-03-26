@@ -7635,6 +7635,8 @@ spec:
                 properties:
                   encryptionKey:
                     type: string
+                  ldapSecret:
+                    type: string
                   ssl:
                     type: string
                   sslInternal:
@@ -17233,6 +17235,17 @@ spec:
                 properties:
                   certValidityDuration:
                     type: string
+                  issuerConf:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                 type: object
               unmanaged:
                 type: boolean
