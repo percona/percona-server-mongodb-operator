@@ -542,6 +542,7 @@ spec:
 #        azure:
 #          container: CONTAINER-NAME
 #          prefix: PREFIX-NAME
+#          https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false

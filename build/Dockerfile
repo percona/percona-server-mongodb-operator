@@ -1,27 +1,30 @@
-FROM golang:1.21 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.21 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
 
 ARG GIT_COMMIT
 ARG GIT_BRANCH
 ARG GO_LDFLAGS
 ARG GOOS=linux
+ARG TARGETARCH
 ARG CGO_ENABLED=0
 
-RUN go mod download \
-    && mkdir -p build/_output/bin \
-    && GOOS=$GOOS CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+COPY . .
+
+RUN mkdir -p build/_output/bin \
+    && GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
        go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
            -o build/_output/bin/percona-server-mongodb-operator \
                cmd/manager/main.go \
-    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator \
-    && GOOS=$GOOS CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
+RUN GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
        go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
            -o build/_output/bin/mongodb-healthcheck \
                cmd/mongodb-healthcheck/main.go \
-    && cp -r build/_output/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck \
-    && cp -r $GOPATH/pkg/mod/github.com/hashicorp /lib/
+    && cp -r build/_output/bin/mongodb-healthcheck /usr/local/bin/mongodb-healthcheck
+RUN cp -r $GOPATH/pkg/mod/github.com/hashicorp /lib/
 
 # Looking for all possible License/Notice files and copying them to the image
 RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\.md|\.txt|$)' \
