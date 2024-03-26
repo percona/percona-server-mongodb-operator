@@ -13,6 +13,8 @@ expose-sharded
 ignore-labels-annotations
 init-deploy
 finalizer
+ldap
+ldap-tls
 limits
 liveness
 mongod-major-upgrade
