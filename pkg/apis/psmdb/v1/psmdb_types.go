@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
@@ -90,7 +91,8 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type TLSSpec struct {
-	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
+	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
+	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {

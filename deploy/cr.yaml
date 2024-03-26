@@ -17,6 +17,10 @@ spec:
 #  tls:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
+#    issuerConf:
+#      name: special-selfsigned-issuer
+#      kind: ClusterIssuer
+#      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  initImage: perconalab/percona-server-mongodb-operator:main
