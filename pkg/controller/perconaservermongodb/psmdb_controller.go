@@ -1251,6 +1251,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Pause && cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
 	svcNames := make(map[string]struct{}, cr.Spec.Sharding.Mongos.Size)
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {

@@ -767,6 +767,7 @@ type BackupStorageAzureSpec struct {
 	Container         string `json:"container,omitempty"`
 	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
 type BackupStorageType string
