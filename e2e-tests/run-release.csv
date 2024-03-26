@@ -42,7 +42,7 @@ storage
 tls-issue-cert-manager
 upgrade
 upgrade-consistency
-upgrade-consistency-sharded
+upgrade-consistency-sharded-tls
 upgrade-sharded
 users
 version-service
