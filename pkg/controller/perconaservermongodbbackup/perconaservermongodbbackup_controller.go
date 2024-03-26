@@ -248,9 +248,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			return nil, errors.Wrap(err, "getting azure credentials secret name")
 		}
 		azureConf := azure.Conf{
-			Account:   string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
-			Container: cr.Status.Azure.Container,
-			Prefix:    cr.Status.Azure.Prefix,
+			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
+			Container:   cr.Status.Azure.Container,
+			EndpointURL: cr.Status.Azure.EndpointURL,
+			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
 				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
 			},

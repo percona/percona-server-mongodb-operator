@@ -295,9 +295,10 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		conf.Storage = config.StorageConf{
 			Type: storage.Azure,
 			Azure: azure.Conf{
-				Account:   string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
-				Container: stg.Azure.Container,
-				Prefix:    stg.Azure.Prefix,
+				Account:     string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
+				Container:   stg.Azure.Container,
+				EndpointURL: stg.Azure.EndpointURL,
+				Prefix:      stg.Azure.Prefix,
 				Credentials: azure.Credentials{
 					Key: string(azureSecret.Data[AzureStorageAccountKeySecretKey]),
 				},
