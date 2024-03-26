@@ -326,9 +326,9 @@ func (r *ReconcilePerconaServerMongoDB) hasFullBackup(ctx context.Context, cr *a
 	return false, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getLatestBackup(ctx context.Context, cr *api.PerconaServerMongoDB) (*api.PerconaServerMongoDBBackup, error) {
+func getLatestBackup(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*api.PerconaServerMongoDBBackup, error) {
 	backups := api.PerconaServerMongoDBBackupList{}
-	if err := r.client.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := cl.List(ctx, &backups, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return nil, nil
 		}
@@ -568,31 +568,45 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 		}
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 {
-		tl, err := pbm.GetLatestTimelinePITR(ctx)
-		if err != nil && err != backup.ErrNoOplogsForPITR {
-			return errors.Wrap(err, "get latest PITR timeline")
+	if err := updateLatestRestorableTime(ctx, r.client, pbm, cr); err != nil {
+		return errors.Wrap(err, "update latest restorable time")
+	}
+
+	return nil
+}
+
+func updateLatestRestorableTime(ctx context.Context, cl client.Client, pbm backup.PBM, cr *api.PerconaServerMongoDB) error {
+	if cr.CompareVersion("1.16.0") < 0 {
+		return nil
+	}
+
+	tl, err := pbm.GetLatestTimelinePITR(ctx)
+	if err != nil {
+		if err == backup.ErrNoOplogsForPITR {
+			return nil
 		}
-		if err == nil {
-			bcp, err := r.getLatestBackup(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "get latest backup")
-			}
-			if bcp != nil {
-				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					b := &api.PerconaServerMongoDBBackup{}
-					if err := r.client.Get(ctx, types.NamespacedName{Name: bcp.Name, Namespace: bcp.Namespace}, b); err != nil {
-						return errors.Wrap(err, "get backup")
-					}
-					b.Status.LatestRestorableTime = &metav1.Time{
-						Time: time.Unix(int64(tl.End), 0),
-					}
-					return r.client.Status().Update(ctx, b)
-				}); err != nil {
-					return errors.Wrap(err, "update latest restorable time")
-				}
-			}
+		return errors.Wrap(err, "get latest PITR timeline")
+	}
+
+	bcp, err := getLatestBackup(ctx, cl, cr)
+	if err != nil {
+		return errors.Wrap(err, "get latest backup")
+	}
+	if bcp == nil {
+		return nil
+	}
+
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		b := new(api.PerconaServerMongoDBBackup)
+		if err := cl.Get(ctx, types.NamespacedName{Name: bcp.Name, Namespace: bcp.Namespace}, b); err != nil {
+			return errors.Wrap(err, "get backup")
 		}
+		b.Status.LatestRestorableTime = &metav1.Time{
+			Time: time.Unix(int64(tl.End), 0),
+		}
+		return cl.Status().Update(ctx, b)
+	}); err != nil {
+		return errors.Wrap(err, "update status")
 	}
 
 	return nil
