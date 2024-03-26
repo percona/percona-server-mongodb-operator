@@ -234,7 +234,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr, cluster)
+	return bcp.Status(ctx, cr)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {

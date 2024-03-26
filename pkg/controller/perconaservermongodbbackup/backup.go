@@ -121,7 +121,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 }
 
 // Status return backup status
-func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup, cluster *api.PerconaServerMongoDB) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
