@@ -15,10 +15,8 @@ import (
 	"time"
 
 	v "github.com/hashicorp/go-version"
-	pbmConf "github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
-	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
