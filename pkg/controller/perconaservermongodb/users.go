@@ -158,7 +158,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods 
 
 					return nil
 				})
-
 				if err != nil {
 					return errors.Wrap(err, "failed to restart container")
 				}
@@ -212,7 +211,8 @@ func (su *systemUsers) len() int {
 }
 
 func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *api.PerconaServerMongoDB, newUsersSec, currUsersSec *corev1.Secret,
-	repls []*api.ReplsetSpec) ([]string, error) {
+	repls []*api.ReplsetSpec,
+) ([]string, error) {
 	su := systemUsers{
 		currData: currUsersSec.Data,
 		newData:  newUsersSec.Data,
