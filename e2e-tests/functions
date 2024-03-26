@@ -1371,3 +1371,78 @@ deploy_pmm_server() {
 
 	retry 10 60 helm install monitoring --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VER.tgz
 }
+
+wait_certificate() {
+	certificate="$1"
+
+	for i in {1..10}; do
+		kubectl wait --for=condition=Ready "certificate/$certificate" --timeout=60s
+		sleep 1
+	done
+}
+
+renew_certificate() {
+	certificate="$1"
+
+	wait_certificate "$certificate"
+	desc "renew $certificate"
+
+	local pod_name
+	pod_name=$(kubectl_bin get pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
+
+	local revision
+	revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
+
+	kubectl_bin exec "$pod_name" -- /tmp/cmctl renew "$certificate"
+
+	# wait for new revision
+	for i in {1..10}; do
+		local new_revision
+		new_revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
+		if [ "$((revision + 1))" == "$new_revision" ]; then
+			break
+		fi
+		sleep 1
+	done
+}
+
+deploy_cmctl() {
+	local service_account="cmctl"
+
+	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
+		| kubectl_bin apply -f -
+	kubectl_bin apply -f "$conf_dir/cmctl.yml"
+}
+
+stop_cluster() {
+	local cluster_name=$1
+	local max_wait_time=${2:-120}
+
+	local passed_time=0
+	local sleep_time=1
+	kubectl_bin patch psmdb "${cluster_name}" --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+	set +x
+	echo -n 'Waiting for cluster stop'
+	until [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.mongos.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get deployment "${cluster_name}-mongos" -o jsonpath='{.status.replicas}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.cfg.ready}') -le 0 ]] \
+		&& [[ $(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.replsets.rs0.ready}') -le 0 ]]; do
+		echo -n .
+		passed_time=$((passed_time + sleep_time))
+		sleep ${passed_time}
+		if [[ ${passed_time} -gt ${max_wait_time} ]]; then
+			echo "We've been waiting for cluster stop for too long. Exiting..."
+			exit 1
+		fi
+	done
+	echo
+	set -x
+}
+
+start_cluster() {
+	local cluster_name=$1
+
+	kubectl_bin patch psmdb "${cluster_name}" --type json -p='[{"op":"add","path":"/spec/pause","value":false}]'
+	wait_cluster_consistency "${cluster_name}"
+}
