@@ -140,6 +140,9 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	log.Info("Deleting statefulset", "name", sts.Name)
 
 	if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
 		return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 	}
 
