@@ -23,6 +23,10 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
+	if clusterState == api.AppStateNone {
+		clusterState = api.AppStateInit
+	}
+
 	log := logf.FromContext(ctx)
 
 	clusterCondition := api.ClusterCondition{
@@ -324,7 +328,6 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 
 	list, err := r.getMongosPods(ctx, cr)
 	if err != nil {
-
 		return api.MongosStatus{}, fmt.Errorf("get list: %v", err)
 	}
 
