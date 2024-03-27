@@ -79,9 +79,14 @@ func deprecatedIssuerName(cr *api.PerconaServerMongoDB) string {
 }
 
 func issuerName(cr *api.PerconaServerMongoDB) string {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+		return cr.Spec.TLS.IssuerConf.Name
+	}
+
 	if cr.CompareVersion("1.15.0") < 0 {
 		return deprecatedIssuerName(cr)
 	}
+
 	return cr.Name + "-psmdb-issuer"
 }
 
@@ -163,6 +168,13 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 }
 
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error) {
+	issuerKind := cm.IssuerKind
+	issuerGroup := ""
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+		issuerKind = cr.Spec.TLS.IssuerConf.Kind
+		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+
+	}
 	isCA := false
 	if cr.CompareVersion("1.15.0") < 0 {
 		isCA = true
@@ -183,8 +195,9 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 			IsCA:       isCA,
 			Duration:   &cr.Spec.TLS.CertValidityDuration,
 			IssuerRef: cmmeta.ObjectReference{
-				Name: issuerName(cr),
-				Kind: cm.IssuerKind,
+				Name:  issuerName(cr),
+				Kind:  issuerKind,
+				Group: issuerGroup,
 			},
 		},
 	}

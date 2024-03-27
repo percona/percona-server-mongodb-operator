@@ -11,8 +11,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-type fakeMongoClient struct {
-}
+type fakeMongoClient struct{}
 
 func NewClient() mongo.Client {
 	return &fakeMongoClient{}
@@ -22,8 +21,7 @@ func (c *fakeMongoClient) Disconnect(ctx context.Context) error {
 	return nil
 }
 
-type fakeMongoClientDatabase struct {
-}
+type fakeMongoClientDatabase struct{}
 
 func (c *fakeMongoClientDatabase) RunCommand(ctx context.Context, runCommand interface{}, opts ...*options.RunCmdOptions) *mgo.SingleResult {
 	return singleResult(mongo.OKResponse{
