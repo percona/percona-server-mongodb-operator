@@ -27,6 +27,7 @@ operator-self-healing-chaos
 pitr
 pitr-sharded
 pitr-physical
+pvc-resize
 recover-no-primary
 rs-shard-migration
 scaling
