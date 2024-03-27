@@ -3,6 +3,7 @@ package v1
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -70,6 +71,7 @@ type PerconaServerMongoDBSpec struct {
 	Image                        string                               `json:"image"`
 	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
@@ -87,6 +89,11 @@ type PerconaServerMongoDBSpec struct {
 	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+}
+
+type UnsafeFlags struct {
+	TLS         bool `json:"tls,omitempty"`
+	ReplSetSize bool `json:"replsetSize,omitempty"`
 }
 
 type TLSSpec struct {
@@ -416,6 +423,48 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 	}
 	options, _ := val.(map[interface{}]interface{})
 	return options, nil
+}
+
+type TLSMode string
+
+const (
+	TLSModeDisabled TLSMode = "disabled"
+	TLSModeAllow    TLSMode = "allowTLS"
+	TLSModePrefer   TLSMode = "preferTLS"
+	TLSModeRequire  TLSMode = "requireTLS"
+)
+
+func (conf MongoConfiguration) GetTLSMode() (TLSMode, error) {
+	m, err := conf.GetOptions("net")
+	if err != nil || m == nil {
+		return TLSModePrefer, err
+	}
+
+	tls, ok := m["tls"]
+	if !ok {
+		return TLSModePrefer, nil
+	}
+
+	tlsMap, ok := tls.(map[any]any)
+	if !ok {
+		return TLSModePrefer, errors.New("tls configuration is invalid")
+	}
+
+	tlsMode, ok := tlsMap["mode"]
+	if !ok {
+		return TLSModePrefer, nil
+	}
+
+	mode, ok := tlsMode.(string)
+	if !ok {
+		return TLSModePrefer, errors.Errorf("can't cast %s to string", mode)
+	}
+
+	if !slices.Contains([]TLSMode{TLSModeDisabled, TLSModeAllow, TLSModePrefer, TLSModeRequire}, TLSMode(mode)) {
+		return TLSModePrefer, errors.Errorf("net.tls.mode value is not valid: %s", mode)
+	}
+
+	return TLSMode(mode), nil
 }
 
 // IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field

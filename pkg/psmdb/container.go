@@ -157,6 +157,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 
 // containerArgs returns the args to pass to the mSpec container
 func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements, useConfigFile bool) []string {
+	log := logf.FromContext(ctx)
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
@@ -166,8 +167,6 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
-		"--sslAllowInvalidCertificates",
-		"--clusterAuthMode=x509",
 	}
 
 	name, err := replset.CustomReplsetName()
@@ -175,16 +174,23 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args[4] = "--replSet=" + name
 	}
 
-	if cr.Spec.UnsafeConf {
+	tlsMode, err := replset.Configuration.GetTLSMode()
+	if err != nil {
+		log.Error(err, "failed to get tls mode")
+	}
+
+	log.Info("TLS Mode", "tlsMode", tlsMode, "replset", replset.Name)
+
+	if cr.CompareVersion("1.16.0") >= 0 && tlsMode != api.TLSModeDisabled {
+		args = append(args, "--sslAllowInvalidCertificates")
+		args = append(args, "--clusterAuthMode=x509")
+	} else if cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
-	} else {
-		if cr.CompareVersion("1.12.0") <= 0 {
-			args = append(args, "--sslMode=preferSSL")
-		}
-		args = append(args, "--clusterAuthMode=x509")
+	} else if cr.CompareVersion("1.12.0") <= 0 {
+		args = append(args, "--sslMode=preferSSL")
 	}
 
 	// sharding

@@ -571,7 +571,13 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		rs.Arbiter.MultiAZ.reconcileOpts(cr)
 	}
 
-	if !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
+	if cr.CompareVersion("1.16.0") >= 0 {
+		if err := rs.checkSafeDefaults(cr.Spec.Unsafe); err != nil {
+			return errors.Wrap(err, "check safe defaults")
+		}
+	}
+
+	if cr.CompareVersion("1.16.0") < 0 && !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
 		rs.setSafeDefaults(log)
 	}
 
@@ -757,6 +763,42 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 			rs.Size++
 		}
 	}
+}
+
+func (rs *ReplsetSpec) checkSafeDefaults(unsafe UnsafeFlags) error {
+	if !unsafe.ReplSetSize {
+		if rs.Arbiter.Enabled {
+			if rs.Arbiter.Size != 1 {
+				return errors.New("arbiter size must be 1")
+			}
+			if rs.Size < minSafeReplicasetSizeWithArbiter {
+				return errors.Errorf("replset size must be at least %d with arbiter", minSafeReplicasetSizeWithArbiter)
+			}
+			if rs.Size%2 != 0 {
+				return errors.New("arbiter must disabled due to odd replset size")
+			}
+		} else {
+			if rs.Size < 2 {
+				return errors.Errorf("replset size must be at least %d", defaultMongodSize)
+			}
+			if rs.Size%2 == 0 {
+				return errors.New("replset size must be odd")
+			}
+		}
+	}
+
+	if !unsafe.TLS {
+		tlsMode, err := rs.Configuration.GetTLSMode()
+		if err != nil {
+			return errors.Wrap(err, "get TLS mode")
+		}
+
+		if tlsMode == TLSModeDisabled {
+			return errors.New("TLS must be enabled")
+		}
+	}
+
+	return nil
 }
 
 func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {

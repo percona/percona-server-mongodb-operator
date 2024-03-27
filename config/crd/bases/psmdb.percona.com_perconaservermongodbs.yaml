@@ -17235,6 +17235,13 @@ spec:
                 type: object
               unmanaged:
                 type: boolean
+              unsafeFlags:
+                properties:
+                  replsetSize:
+                    type: boolean
+                  tls:
+                    type: boolean
+                type: object
               updateStrategy:
                 type: string
               upgradeOptions:

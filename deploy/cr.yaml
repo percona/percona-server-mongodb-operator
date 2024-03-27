@@ -22,6 +22,8 @@ spec:
 #  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
   allowUnsafeConfigurations: false
+  unsafeFlags:
+    tls: true
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
@@ -64,10 +66,10 @@ spec:
 #      priority: 0
 #    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
-#    configuration: |
-#      net:
-#        tls:
-#          mode: preferTLS
+    configuration: |
+      net:
+        tls:
+          mode: disabled
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:

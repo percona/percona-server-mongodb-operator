@@ -224,7 +224,7 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 			}
 
 			for _, pod := range podList.Items {
-				host, err := psmdb.MongoHost(ctx, k8sclient, cluster, rs.Name, rs.Expose.Enabled, pod)
+				host, err := psmdb.MongoHost(ctx, k8sclient, cluster, cluster.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
 				if err != nil {
 					return priorities, errors.Wrapf(err, "get mongo hostname for pod %s", pod.Name)
 				}
