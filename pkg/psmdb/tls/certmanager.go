@@ -32,6 +32,7 @@ type CertManagerController interface {
 	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
 	Check(ctx context.Context, config *rest.Config, ns string) error
 	IsDryRun() bool
+	GetClient() client.Client
 }
 
 type certManagerController struct {
@@ -320,4 +321,8 @@ func (c *certManagerController) GetMergedCA(ctx context.Context, cr *api.Percona
 		}
 	}
 	return mergedCA, nil
+}
+
+func (c *certManagerController) GetClient() client.Client {
+	return c.cl
 }

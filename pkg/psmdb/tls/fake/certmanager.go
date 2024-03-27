@@ -14,6 +14,7 @@ import (
 
 type fakeCertManagerController struct {
 	dryRun bool
+	cl     client.Client
 }
 
 var _ tls.CertManagerController = new(fakeCertManagerController)
@@ -21,6 +22,7 @@ var _ tls.CertManagerController = new(fakeCertManagerController)
 func NewCertManagerController(cl client.Client, scheme *runtime.Scheme, dryRun bool) tls.CertManagerController {
 	return &fakeCertManagerController{
 		dryRun: dryRun,
+		cl:     cl,
 	}
 }
 
@@ -58,4 +60,8 @@ func (c *fakeCertManagerController) Check(ctx context.Context, config *rest.Conf
 
 func (c *fakeCertManagerController) IsDryRun() bool {
 	return false
+}
+
+func (c *fakeCertManagerController) GetClient() client.Client {
+	return c.cl
 }
