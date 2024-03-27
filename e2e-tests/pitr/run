@@ -93,6 +93,30 @@ check_recovery() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "$cmp_postfix"
 }
 
+get_latest_restorable_time() {
+	local cluster=$1
+	local timestamp
+
+	timestamp=$(kubectl exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+
+	$date -u -d @"$timestamp" "+%Y-%m-%dT%H:%M:%SZ"
+}
+
+compare_latest_restorable_time() {
+	local cluster=$1
+	local backup_name=$2
+	local latest_restorable_time
+	latest_restorable_time=$(get_latest_restorable_time "$cluster")
+	local backup_time
+	backup_time=$(kubectl get psmdb-backup "$backup_name" -o jsonpath='{.status.latestRestorableTime}')
+
+	if [[ $latest_restorable_time != "$backup_time" ]]; then
+		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
+		exit 1
+	fi
+
+}
+
 main() {
 	create_infra $namespace
 	deploy_minio
@@ -132,6 +156,8 @@ main() {
 
 	run_backup $backup_name_minio 1
 
+	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-1"
+
 	check_recovery $backup_name_minio-1 latest "" "-3rd" "" "${cluster/-rs0/}"
 
 	desc 'restore pitr using backupSource'
@@ -140,11 +166,15 @@ main() {
 
 	run_backup $backup_name_minio 2
 
+	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-2"
+
 	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
 
 	check_recovery "${backup_name_minio}-2" date "$time_now" "" backupSource "${cluster/-rs0/}"
 
 	run_backup $backup_name_minio 3
+
+	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-3"
 
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${cluster/-rs0/}"
 
