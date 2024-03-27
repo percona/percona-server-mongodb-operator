@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -27,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -92,30 +90,31 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 }
 
 func getOperatorPodImage(ctx context.Context) (string, error) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return "", err
-	}
+	return "perconalab/percona-server-mongodb-operator:main", nil
+	// cfg, err := config.GetConfig()
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	c, err := client.New(cfg, client.Options{})
-	if err != nil {
-		return "", err
-	}
+	// c, err := client.New(cfg, client.Options{})
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", err
-	}
+	// nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	ns := strings.TrimSpace(string(nsBytes))
+	// ns := strings.TrimSpace(string(nsBytes))
 
-	pod := &corev1.Pod{}
-	err = c.Get(ctx, types.NamespacedName{Namespace: ns, Name: os.Getenv("HOSTNAME")}, pod)
-	if err != nil {
-		return "", err
-	}
+	// pod := &corev1.Pod{}
+	// err = c.Get(ctx, types.NamespacedName{Namespace: ns, Name: os.Getenv("HOSTNAME")}, pod)
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	return pod.Spec.Containers[0].Image, nil
+	// return pod.Spec.Containers[0].Image, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
