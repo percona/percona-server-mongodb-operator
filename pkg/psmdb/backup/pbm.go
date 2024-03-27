@@ -311,18 +311,14 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	}
 
 	if cluster.Spec.Backup.Configuration != nil {
-		customConf, err := cluster.Spec.Backup.PBMConfig()
+		customConfigBytes, err := yaml.Marshal(cluster.Spec.Backup.Configuration)
 		if err != nil {
-			return conf, errors.Wrap(err, "get custom config")
-		}
-		customConfigBytes, err := yaml.Marshal(customConf)
-		if err != nil {
-			return conf, errors.Wrap(err, "get custom config bytes")
+			return conf, errors.Wrap(err, "marshal custom PBM config")
 		}
 
 		// This will merge customConfig with conf with customConfig having precedence
 		if err := yaml.Unmarshal(customConfigBytes, &conf); err != nil {
-			panic(err)
+			return conf, errors.Wrap(err, "unmarshal custom PBM config")
 		}
 	}
 
