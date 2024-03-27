@@ -1,0 +1,161 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+deploy_openldap() {
+	yq "$test_dir/conf/openldap.yaml" \
+		| yq "select(.metadata.name == \"ldap-ca\").spec.dnsNames[0]=\"openldap.$namespace.svc.cluster.local\"" \
+		| kubectl_bin apply -f -
+
+	kubectl rollout status deployment/openldap --timeout=120s
+}
+
+test_mongod_openldap() {
+	cluster="some-name"
+
+	kubectl_bin create secret generic $cluster-rs0-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
+
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+
+	run_mongo \
+		'db.getSiblingDB("admin").createRole(
+{
+ role: "cn=admin,ou=perconadba,dc=ldap,dc=local",
+ privileges: [],
+ roles : [
+   {
+     "role" : "readAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "dbAdminAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "clusterMonitor",
+     "db" : "admin"
+   },
+   {
+     "role" : "readWriteAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "restore",
+     "db" : "admin"
+   },
+   {
+     "role" : "backup",
+     "db" : "admin"
+   }
+ ]})' \
+		"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
+
+	run_mongo 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+		"percona:password@$cluster-rs0.$namespace" "" "" \
+		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
+		| jq '.authInfo' \
+		| jq '.authenticatedUserRoles |= sort_by(.role)' >"$tmp_dir/$cluster-$namespace-authInfo.json"
+
+	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
+
+	kubectl_bin delete psmdb $cluster
+	kubectl_bin delete pvc --all
+}
+
+test_sharded_openldap() {
+	cluster="some-name-sharded"
+
+	kubectl_bin create secret generic $cluster-mongos --from-literal=mongos.conf="$(yq "$test_dir/conf/mongos.conf" \
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
+
+	kubectl_bin create secret generic $cluster-cfg-mongod --from-literal=mongod.conf="$(yq "$test_dir/conf/mongod.conf" \
+		| yq ".security.ldap.servers=\"openldap.$namespace.svc.cluster.local:1636\"")"
+
+	desc "create first PSMDB cluster $cluster"
+
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+	wait_cluster_consistency $cluster
+
+	run_mongos \
+		'db.getSiblingDB("admin").createRole(
+{
+ role: "cn=admin,ou=perconadba,dc=ldap,dc=local",
+ privileges: [],
+ roles : [
+   {
+     "role" : "readAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "dbAdminAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "clusterMonitor",
+     "db" : "admin"
+   },
+   {
+     "role" : "readWriteAnyDatabase",
+     "db" : "admin"
+   },
+   {
+     "role" : "restore",
+     "db" : "admin"
+   },
+   {
+     "role" : "backup",
+     "db" : "admin"
+   }
+ ]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+
+	run_mongos 'JSON.stringify(db.runCommand({connectionStatus:1}))' \
+		"percona:password@$cluster-mongos.$namespace" "" "" \
+		"--authenticationMechanism 'PLAIN' --authenticationDatabase '\$external'" \
+		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye" \
+		| jq '.authInfo' \
+		| jq '.authenticatedUserRoles |= sort_by(.role)' >"$tmp_dir/$cluster-$namespace-authInfo.json"
+
+	diff "${test_dir}/compare/authInfo.json" "$tmp_dir/$cluster-$namespace-authInfo.json"
+
+	kubectl_bin delete psmdb $cluster
+	kubectl_bin delete pvc --all
+}
+
+main() {
+	create_infra "$namespace"
+
+	deploy_cert_manager
+
+	deploy_openldap
+
+	desc 'create secrets and start client'
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "$conf_dir/secrets.yml" \
+		-f "$conf_dir/client.yml"
+
+	test_mongod_openldap
+	test_sharded_openldap
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main

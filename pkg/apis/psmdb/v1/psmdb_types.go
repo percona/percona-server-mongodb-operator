@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
@@ -91,7 +92,8 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type TLSSpec struct {
-	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
+	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
+	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
@@ -598,6 +600,7 @@ type SecretsSpec struct {
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
+	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
 type MongosSpec struct {
@@ -744,6 +747,7 @@ type BackupStorageAzureSpec struct {
 	Container         string `json:"container,omitempty"`
 	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
 type BackupStorageType string

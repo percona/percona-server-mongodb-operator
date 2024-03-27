@@ -1,0 +1,130 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+CLUSTER='some-name'
+
+wait_cluster() {
+	wait_for_running ${CLUSTER}-rs0 3
+	wait_for_running ${CLUSTER}-cfg 3
+	wait_for_running ${CLUSTER}-mongos 3
+	wait_cluster_consistency ${CLUSTER}
+}
+
+main() {
+	create_infra "$namespace"
+	deploy_cert_manager
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+	deploy_cmctl
+
+	desc "create first PSMDB cluster 1.14.0 $CLUSTER"
+	apply_cluster "$test_dir/conf/${CLUSTER}.yml"
+
+	desc 'check if Pod started'
+	wait_cluster
+
+	compare_generation "1" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "1" "statefulset" "${CLUSTER}-cfg"
+
+	# TODO: uncomment when 1.14.0 will be removed,
+	#       renewal doesn't work on "1.14.0" version
+	#renew_certificate "some-name-ssl"
+	#renew_certificate "some-name-ssl-internal"
+	#wait_cluster
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1140"
+	compare_kubectl service/${CLUSTER}-cfg "-1140"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1140"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1140"
+
+	desc 'test 1.15.0'
+	# workaround to switch to updated certificate structure
+	# more details: https://github.com/percona/percona-server-mongodb-operator/pull/1287
+	# TODO: remove the workaround when 1.14.0 will be removed
+	stop_cluster $CLUSTER
+
+	compare_generation "4" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
+
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.15.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 20
+
+	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
+
+	kubectl_bin delete certificate "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
+	kubectl_bin delete issuer "$CLUSTER-psmdb-ca"
+	kubectl_bin delete secret "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
+	start_cluster $CLUSTER
+	compare_generation "6" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
+
+	# Wait for at least one reconciliation
+	sleep 20
+	desc 'check if Pod started'
+	wait_cluster
+
+	renew_certificate "some-name-ssl"
+	sleep 20
+	wait_cluster
+	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "6" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl-internal"
+	sleep 20
+	wait_cluster
+	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1150"
+	compare_kubectl service/${CLUSTER}-cfg "-1150"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1150"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1150"
+
+	desc 'test 1.16.0'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.16.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 20
+	desc 'check if Pod started'
+	wait_cluster
+	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl"
+	sleep 20
+	wait_cluster
+	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl-internal"
+	sleep 20
+	wait_cluster
+	compare_generation "10" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1160"
+	compare_kubectl service/${CLUSTER}-cfg "-1160"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1160"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1160"
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main
