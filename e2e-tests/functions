@@ -843,6 +843,9 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 6\.0 ]] && [ -f ${test_dir}/compare/$user-60.json ]; then
 		expected_result=${test_dir}/compare/$user-60.json
 	fi
+	if [[ $IMAGE_MONGOD =~ 7\.0 ]] && [ -f ${test_dir}/compare/$user-70.json ]; then
+		expected_result=${test_dir}/compare/$user-70.json
+	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" |
 		egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" |
