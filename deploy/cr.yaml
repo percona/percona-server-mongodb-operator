@@ -17,6 +17,10 @@ spec:
 #  tls:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
+#    issuerConf:
+#      name: special-selfsigned-issuer
+#      kind: ClusterIssuer
+#      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  initImage: perconalab/percona-server-mongodb-operator:main
@@ -39,6 +43,7 @@ spec:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
+#    ldapSecret: my-ldap-secret
   pmm:
     enabled: false
     image: perconalab/pmm-client:dev-latest
@@ -541,6 +546,7 @@ spec:
 #        azure:
 #          container: CONTAINER-NAME
 #          prefix: PREFIX-NAME
+#          https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false

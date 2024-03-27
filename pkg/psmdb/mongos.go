@@ -29,19 +29,6 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 	}
 }
 
-func MongosDeployment(cr *api.PerconaServerMongoDB) *appsv1.Deployment {
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.MongosNamespacedName().Name,
-			Namespace: cr.MongosNamespacedName().Namespace,
-		},
-	}
-}
-
 func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.StatefulSetSpec {
 	var updateStrategy appsv1.StatefulSetUpdateStrategy
 	switch cr.Spec.UpdateStrategy {
@@ -63,23 +50,6 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		},
 		Template:       template,
 		UpdateStrategy: updateStrategy,
-	}
-}
-
-func MongosDeploymentSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemplateSpec) appsv1.DeploymentSpec {
-	zero := intstr.FromInt(0)
-	return appsv1.DeploymentSpec{
-		Replicas: &cr.Spec.Sharding.Mongos.Size,
-		Selector: &metav1.LabelSelector{
-			MatchLabels: MongosLabels(cr),
-		},
-		Template: template,
-		Strategy: appsv1.DeploymentStrategy{
-			Type: appsv1.RollingUpdateDeploymentStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge: &zero,
-			},
-		},
 	}
 }
 
@@ -184,6 +154,20 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 
 	if cr.CompareVersion("1.14.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.VolumeMount{
+			{
+				Name:      LDAPTLSVolClaimName,
+				MountPath: ldapTLSDir,
+				ReadOnly:  true,
+			},
+			{
+				Name:      LDAPConfVolClaimName,
+				MountPath: ldapConfDir,
+			},
+		}...)
 	}
 
 	container := corev1.Container{
@@ -385,6 +369,27 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		})
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.Volume{
+			{
+				Name: LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &tvar,
+						DefaultMode: &secretFileMode,
+					},
+				},
+			},
+			{
+				Name: LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}...)
 	}
 
 	return volumes
