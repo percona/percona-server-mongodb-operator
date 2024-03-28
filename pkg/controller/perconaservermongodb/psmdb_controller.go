@@ -1206,6 +1206,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
+		if err == errWaitingTLS {
+			return nil
+		}
 		return errors.Wrap(err, "failed to get ssl annotations")
 	}
 	if templateSpec.Annotations == nil {
@@ -1368,24 +1371,28 @@ func ensurePVCs(
 	return nil
 }
 
+var errWaitingTLS = errors.New("waiting for TLS secret")
+
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
-	is110 := cr.CompareVersion("1.1.0") >= 0
-	if is110 {
-		sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
-		if err != nil {
-			return nil, errors.Wrap(err, "get secret hash error")
+	sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, errWaitingTLS
 		}
-		annotation["percona.com/ssl-hash"] = sslHash
-
-		sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return nil, errors.Wrap(err, "get secret hash error")
-		} else if err == nil {
-			annotation["percona.com/ssl-internal-hash"] = sslInternalHash
-		}
+		return nil, errors.Wrap(err, "get secret hash error")
 	}
+	annotation["percona.com/ssl-hash"] = sslHash
+
+	sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, errWaitingTLS
+		}
+		return nil, errors.Wrap(err, "get secret hash error")
+	}
+	annotation["percona.com/ssl-internal-hash"] = sslInternalHash
 
 	return annotation, nil
 }
@@ -1627,6 +1634,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
+		if err == errWaitingTLS {
+			return nil, nil
+		}
 		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
 	for k, v := range sslAnn {
