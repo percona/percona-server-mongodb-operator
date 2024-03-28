@@ -41,7 +41,7 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	cli, err := clientcmd.NewClient()
+	cli, err := clientcmd.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
@@ -237,7 +237,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore) error {
-	var backoff = wait.Backoff{
+	backoff := wait.Backoff{
 		Steps:    5,
 		Duration: 500 * time.Millisecond,
 		Factor:   5.0,

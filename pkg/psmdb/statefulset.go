@@ -176,7 +176,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
+					SecretName:  api.SSLSecretName(cr),
 					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
@@ -186,7 +186,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSLInternal,
+					SecretName:  api.SSLInternalSecretName(cr),
 					Optional:    &t,
 					DefaultMode: &secretFileMode,
 				},

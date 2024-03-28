@@ -90,6 +90,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl",
 					Namespace: tt.cr.Namespace,
 				},
+			}, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      crName + "-ssl-internal",
+					Namespace: tt.cr.Namespace,
+				},
 			})
 
 			rs := tt.cr.Spec.Replset(tt.rsName)
@@ -156,6 +161,7 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 
 	compareSpec := func(got, want appsv1.StatefulSetSpec) {
 		delete(got.Template.Annotations, "percona.com/ssl-hash")
+		delete(got.Template.Annotations, "percona.com/ssl-internal-hash")
 		gotBytes, err := yaml.Marshal(got)
 		if err != nil {
 			t.Fatalf("error marshaling got: %v", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -21,8 +22,8 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
-	replset *api.ReplsetSpec) error {
-
+	replset *api.ReplsetSpec,
+) error {
 	log := logf.FromContext(ctx)
 	if replset.Size == 0 {
 		return nil
@@ -167,7 +168,14 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
-			return errors.Wrap(err, "failed to do step down")
+			if strings.Contains(err.Error(), "No electable secondaries caught up") {
+				err = client.StepDown(ctx, 60, true)
+				if err != nil {
+					return errors.Wrap(err, "failed to do forced step down")
+				}
+			} else {
+				return errors.Wrap(err, "failed to do step down")
+			}
 		}
 
 		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -312,11 +320,6 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	}
 
 	log.Info("StatefulSet is changed, starting smart update", "name", sts.Name)
-
-	if sts.Status.ReadyReplicas < sts.Status.Replicas {
-		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
-		return nil
-	}
 
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
 	if err != nil {

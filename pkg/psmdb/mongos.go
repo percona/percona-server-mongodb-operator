@@ -305,7 +305,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSL,
+					SecretName:  api.SSLSecretName(cr),
 					Optional:    &cr.Spec.UnsafeConf,
 					DefaultMode: &secretFileMode,
 				},
@@ -315,7 +315,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			Name: "ssl-internal",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.SSLInternal,
+					SecretName:  api.SSLInternalSecretName(cr),
 					Optional:    &tvar,
 					DefaultMode: &secretFileMode,
 				},

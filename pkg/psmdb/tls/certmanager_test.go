@@ -37,11 +37,11 @@ func TestCreateIssuer(t *testing.T) {
 	issuer := &cm.Issuer{}
 
 	t.Run("Create issuer with custom name", func(t *testing.T) {
-		if err := r.CreateIssuer(ctx, cr); err != nil {
+		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.cl.Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -53,11 +53,11 @@ func TestCreateIssuer(t *testing.T) {
 
 	t.Run("Create issuer with default name", func(t *testing.T) {
 		cr.Spec.CRVersion = "1.15.0"
-		if err := r.CreateIssuer(ctx, cr); err != nil {
+		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.cl.Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,11 +97,11 @@ func TestCreateCertificate(t *testing.T) {
 	cert := &cm.Certificate{}
 
 	t.Run("Create certificate with custom issuer name", func(t *testing.T) {
-		if err := r.CreateCertificate(ctx, cr, false); err != nil {
+		if _, err := r.ApplyCertificate(ctx, cr, false); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.cl.Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,11 +115,11 @@ func TestCreateCertificate(t *testing.T) {
 		cr.Name = "psmdb-mock-1"
 		cr.Spec.CRVersion = "1.15.0"
 
-		if err := r.CreateCertificate(ctx, cr, false); err != nil {
+		if _, err := r.ApplyCertificate(ctx, cr, false); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.cl.Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +131,7 @@ func TestCreateCertificate(t *testing.T) {
 }
 
 // creates a fake client to mock API calls with the mock objects
-func buildFakeClient(objs ...client.Object) *CertManagerController {
+func buildFakeClient(objs ...client.Object) CertManagerController {
 	s := scheme.Scheme
 
 	s.AddKnownTypes(api.SchemeGroupVersion,
@@ -142,7 +142,7 @@ func buildFakeClient(objs ...client.Object) *CertManagerController {
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
-	return &CertManagerController{
+	return &certManagerController{
 		cl:     cl,
 		scheme: s,
 	}
