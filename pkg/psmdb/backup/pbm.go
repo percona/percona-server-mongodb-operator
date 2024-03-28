@@ -111,7 +111,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
 	tlsPemFile := fmt.Sprintf("/tmp/%s-tls.pem", cr.Name)
-	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", tlsPemFile)
 	}
@@ -122,7 +122,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 
 	caCert := sslSecret.Data["ca.crt"]
 	caCertFile := fmt.Sprintf("/tmp/%s-ca.crt", cr.Name)
-	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", caCertFile)
 	}
