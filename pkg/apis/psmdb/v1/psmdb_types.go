@@ -180,6 +180,7 @@ type MultiCluster struct {
 type AppState string
 
 const (
+	AppStateNone     AppState = ""
 	AppStateInit     AppState = "initializing"
 	AppStateStopping AppState = "stopping"
 	AppStatePaused   AppState = "paused"
@@ -551,6 +552,29 @@ func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	}
 
 	return cfg.Replication.ReplSetName, nil
+}
+
+func (r *ReplsetSpec) MongodLabels(cr *PerconaServerMongoDB) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    r.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+		"app.kubernetes.io/component":  "mongod",
+	}
+}
+
+func (r *ReplsetSpec) ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
+	ls := r.MongodLabels(cr)
+	ls["app.kubernetes.io/component"] = "arbiter"
+	return ls
+}
+
+func (r *ReplsetSpec) NonVotingLabels(cr *PerconaServerMongoDB) map[string]string {
+	ls := r.MongodLabels(cr)
+	ls["app.kubernetes.io/component"] = "nonVoting"
+	return ls
 }
 
 type LivenessProbeExtended struct {
