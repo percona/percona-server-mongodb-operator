@@ -52,6 +52,15 @@
       },
       {
         "resource": {
+          "db": "admin",
+          "collection": "system.version"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
           "db": "config",
           "collection": ""
         },
@@ -174,7 +183,6 @@
         },
         "actions": [
           "allCollectionStats",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "getDefaultRWConcern",
           "getCmdLineOpts",
@@ -184,6 +192,7 @@
           "hostInfo",
           "inprog",
           "listDatabases",
+          "listSampledQueries",
           "listSessions",
           "listShards",
           "netstat",
