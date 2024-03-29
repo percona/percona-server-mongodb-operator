@@ -73,10 +73,10 @@
           "grantRole",
           "indexStats",
           "insert",
+          "updateSearchIndex",
           "revokeRole",
           "setAuthenticationRestriction",
           "startBackup",
-          "updateSearchIndex",
           "viewRole",
           "viewUser"
         ]
@@ -123,9 +123,9 @@
           "dropCollection",
           "find",
           "insert",
+          "updateSearchIndex",
           "remove",
-          "update",
-          "updateSearchIndex"
+          "update"
         ]
       },
       {
@@ -152,11 +152,11 @@
           "listCollections",
           "listIndexes",
           "listSearchIndexes",
+          "updateSearchIndex",
           "planCacheRead",
           "remove",
           "renameCollectionSameDB",
-          "update",
-          "updateSearchIndex"
+          "update"
         ]
       },
       {
@@ -201,11 +201,11 @@
           "listCollections",
           "listIndexes",
           "listSearchIndexes",
+          "updateSearchIndex",
           "planCacheRead",
           "remove",
           "renameCollectionSameDB",
-          "update",
-          "updateSearchIndex"
+          "update"
         ]
       },
       {
@@ -215,7 +215,6 @@
         },
         "actions": [
           "createIndex",
-          "createSearchIndexes",
           "find"
         ]
       },
@@ -235,6 +234,15 @@
           "find",
           "insert",
           "updateSearchIndex"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
+          "collection": "system.views"
+        },
+        "actions": [
+          "dropCollection"
         ]
       },
       {
@@ -281,8 +289,8 @@
           "listCollections",
           "listIndexes",
           "listSearchIndexes",
-          "planCacheRead",
-          "updateSearchIndex"
+          "updateSearchIndex",
+          "planCacheRead"
         ]
       },
       {
@@ -353,8 +361,8 @@
           "listCollections",
           "listIndexes",
           "listSearchIndexes",
-          "planCacheRead",
-          "updateSearchIndex"
+          "updateSearchIndex",
+          "planCacheRead"
         ]
       },
       {
@@ -437,7 +445,6 @@
           "allCollectionStats",
           "appendOplogNote",
           "bypassWriteBlockingMode",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",
           "getDefaultRWConcern",
@@ -448,6 +455,7 @@
           "hostInfo",
           "inprog",
           "listDatabases",
+          "listSampledQueries",
           "listSessions",
           "listShards",
           "netstat",
