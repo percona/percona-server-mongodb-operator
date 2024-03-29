@@ -14,6 +14,8 @@ expose-sharded
 ignore-labels-annotations
 init-deploy
 finalizer
+ldap
+ldap-tls
 limits
 liveness
 mongod-major-upgrade
@@ -40,7 +42,7 @@ storage
 tls-issue-cert-manager
 upgrade
 upgrade-consistency
-upgrade-consistency-sharded
+upgrade-consistency-sharded-tls
 upgrade-sharded
 users
 version-service
