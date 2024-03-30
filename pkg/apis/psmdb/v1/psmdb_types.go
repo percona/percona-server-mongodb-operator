@@ -801,24 +801,6 @@ func (p PITRSpec) Disabled() PITRSpec {
 	return p
 }
 
-// SchemalessObject is a map compatible with JSON object.
-//
-// Use with the following markers:
-// - kubebuilder:pruning:PreserveUnknownFields
-// - kubebuilder:validation:Schemaless
-// - kubebuilder:validation:Type=object
-type SchemalessObject map[string]interface{}
-
-// DeepCopy creates a new SchemalessObject by copying the receiver.
-func (in *SchemalessObject) DeepCopy() *SchemalessObject {
-	if in == nil {
-		return nil
-	}
-	out := new(SchemalessObject)
-	*out = runtime.DeepCopyJSON(*in)
-	return out
-}
-
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Annotations              map[string]string            `json:"annotations,omitempty"`
@@ -832,29 +814,7 @@ type BackupSpec struct {
 	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
-
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	// +kubebuilder:validation:Schemaless
-	// +kubebuilder:validation:Type=object
-	Configuration SchemalessObject `json:"configuration,omitempty"`
-}
-
-func (b BackupSpec) PBMConfig() (*config.Config, error) {
-	if b.Configuration == nil {
-		return nil, nil
-	}
-	confBytes, err := yaml.Marshal(b.Configuration)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal PBM config")
-	}
-
-	conf := &config.Config{}
-	if err := yaml.Unmarshal(confBytes, &conf); err != nil {
-		return nil, errors.Wrap(err, "unmarshal PBM config")
-	}
-
-	return conf, nil
+	Configuration            *config.Config               `json:"configuration,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {
