@@ -175,6 +175,7 @@ main() {
 	check_recovery $backup_name_minio-1 date "${last_chunk}" "-2nd" "$cluster"
 
 	run_backup $backup_name_minio 3 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-3"
 
 	check_recovery $backup_name_minio-3 latest "" "-3rd" "$cluster"
 
