@@ -445,7 +445,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b 
 				{Key: "end_ts", Value: chnk.EndTS},
 			},
 		)
-
 		if err != nil {
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
