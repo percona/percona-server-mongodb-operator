@@ -150,7 +150,9 @@ main() {
 	# PBM doesn't start PiTR routine if there's no logical backup in storage
 	backup_name_minio="backup-minio"
 
-	run_backup $backup_name_minio 0 logical
+	# The sleep is needed to workaround a bug in PBM, check PBM-1265 for more info
+	sleep 360
+
 	run_backup $backup_name_minio 1 physical
 
 	write_document "-2nd"
@@ -172,8 +174,6 @@ main() {
 
 	check_recovery $backup_name_minio-1 date "${last_chunk}" "-2nd" "$cluster"
 
-	run_backup $backup_name_minio 2 logical
-	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-2"
 	run_backup $backup_name_minio 3 physical
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-3"
 
