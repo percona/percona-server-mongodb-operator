@@ -7,7 +7,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cert-manager/cert-manager v1.14.4
 	github.com/go-logr/logr v1.4.1
-	github.com/go-openapi/errors v0.21.0
+	github.com/go-openapi/errors v0.22.0
 	github.com/go-openapi/runtime v0.27.1
 	github.com/go-openapi/strfmt v0.22.0
 	github.com/go-openapi/swag v0.22.9
@@ -29,6 +29,7 @@ require (
 	k8s.io/client-go v0.29.2
 	sigs.k8s.io/controller-runtime v0.17.2
 	sigs.k8s.io/mcs-api v0.1.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -126,7 +127,6 @@ require (
 	sigs.k8s.io/gateway-api v1.0.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace (
