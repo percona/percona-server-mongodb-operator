@@ -317,7 +317,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			return conf, errors.Wrap(err, "marshal custom PBM config")
 		}
 
-		// This will merge customConfig with conf with customConfig having precedence
+		// This will merge customConfigBytes with conf with customConfig having the precedence
 		if err := yaml.Unmarshal(customConfigBytes, &conf); err != nil {
 			return conf, errors.Wrap(err, "unmarshal custom PBM config")
 		}

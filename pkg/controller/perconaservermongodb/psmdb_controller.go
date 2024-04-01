@@ -279,21 +279,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	log.Info("----------------------------------------")
-	log.Info(fmt.Sprintf("backup.pitr.enable: %v", cr.Spec.Backup.PITR.Enabled))
-	log.Info(fmt.Sprintf("backup.pitr.oplogOnly: %v", cr.Spec.Backup.PITR.OplogOnly))
-
-	customConf, err := cr.Spec.Backup.PBMConfig()
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed to get PBM config")
-	}
-
-	log.Info(fmt.Sprintf("Custom: pitr.oplogOnly: %v", customConf.PITR.OplogOnly))
-	log.Info(fmt.Sprintf("Custom: backup.oplogSpanMin: %v", customConf.Backup.OplogSpanMin))
-	log.Info(fmt.Sprintf("Custom: %v", customConf))
-
-	log.Info("----------------------------------------")
-
 	err = r.checkConfiguration(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
