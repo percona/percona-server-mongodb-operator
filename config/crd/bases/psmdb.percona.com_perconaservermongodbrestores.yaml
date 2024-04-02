@@ -82,8 +82,12 @@ spec:
                         type: string
                       credentialsSecret:
                         type: string
+                      debugLogLevels:
+                        type: string
                       endpointUrl:
                         type: string
+                      forcePathStyle:
+                        type: boolean
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
@@ -92,6 +96,15 @@ spec:
                         type: string
                       region:
                         type: string
+                      retryer:
+                        properties:
+                          maxRetryDelay:
+                            type: string
+                          minRetryDelay:
+                            type: string
+                          numMaxRetries:
+                            type: integer
+                        type: object
                       serverSideEncryption:
                         properties:
                           kmsKeyID:

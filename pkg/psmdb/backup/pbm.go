@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -309,18 +308,6 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		return conf, errors.New("filesystem backup storage not supported yet, skipping storage name")
 	default:
 		return conf, errors.New("unsupported backup storage type")
-	}
-
-	if cluster.Spec.Backup.Configuration != nil {
-		customConfigBytes, err := yaml.Marshal(cluster.Spec.Backup.Configuration)
-		if err != nil {
-			return conf, errors.Wrap(err, "marshal custom PBM config")
-		}
-
-		// This will merge customConfigBytes with conf with customConfig having the precedence
-		if err := yaml.Unmarshal(customConfigBytes, &conf); err != nil {
-			return conf, errors.Wrap(err, "unmarshal custom PBM config")
-		}
 	}
 
 	return conf, nil

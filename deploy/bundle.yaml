@@ -111,8 +111,12 @@ spec:
                     type: string
                   credentialsSecret:
                     type: string
+                  debugLogLevels:
+                    type: string
                   endpointUrl:
                     type: string
+                  forcePathStyle:
+                    type: boolean
                   insecureSkipTLSVerify:
                     type: boolean
                   maxUploadParts:
@@ -121,6 +125,15 @@ spec:
                     type: string
                   region:
                     type: string
+                  retryer:
+                    properties:
+                      maxRetryDelay:
+                        type: string
+                      minRetryDelay:
+                        type: string
+                      numMaxRetries:
+                        type: integer
+                    type: object
                   serverSideEncryption:
                     properties:
                       kmsKeyID:
@@ -238,8 +251,12 @@ spec:
                         type: string
                       credentialsSecret:
                         type: string
+                      debugLogLevels:
+                        type: string
                       endpointUrl:
                         type: string
+                      forcePathStyle:
+                        type: boolean
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
@@ -248,6 +265,15 @@ spec:
                         type: string
                       region:
                         type: string
+                      retryer:
+                        properties:
+                          maxRetryDelay:
+                            type: string
+                          minRetryDelay:
+                            type: string
+                          numMaxRetries:
+                            type: integer
+                        type: object
                       serverSideEncryption:
                         properties:
                           kmsKeyID:
@@ -681,17 +707,17 @@ spec:
                     type: object
                   configuration:
                     properties:
-                      backup:
+                      backupOptions:
                         properties:
                           compression:
                             type: string
                           compressionLevel:
                             type: integer
                           oplogSpanMin:
-                            type: number
+                            type: string
                           priority:
                             additionalProperties:
-                              type: number
+                              type: string
                             type: object
                           timeouts:
                             properties:
@@ -702,23 +728,7 @@ spec:
                         required:
                         - oplogSpanMin
                         type: object
-                      pitr:
-                        properties:
-                          compression:
-                            type: string
-                          compressionLevel:
-                            type: integer
-                          enabled:
-                            type: boolean
-                          oplogOnly:
-                            type: boolean
-                          oplogSpanMin:
-                            type: number
-                        required:
-                        - enabled
-                        - oplogSpanMin
-                        type: object
-                      restore:
+                      restoreOptions:
                         properties:
                           batchSize:
                             type: integer
@@ -737,95 +747,6 @@ spec:
                           numInsertionWorkers:
                             type: integer
                         type: object
-                      storage:
-                        properties:
-                          azure:
-                            properties:
-                              account:
-                                type: string
-                              container:
-                                type: string
-                              endpointUrl:
-                                type: string
-                              prefix:
-                                type: string
-                            type: object
-                          filesystem:
-                            properties:
-                              path:
-                                type: string
-                            required:
-                            - path
-                            type: object
-                          s3:
-                            properties:
-                              bucket:
-                                type: string
-                              debugLogLevels:
-                                type: string
-                              endpointUrl:
-                                type: string
-                              forcePathStyle:
-                                type: boolean
-                              insecureSkipTLSVerify:
-                                type: boolean
-                              maxUploadParts:
-                                type: integer
-                              prefix:
-                                type: string
-                              provider:
-                                type: string
-                              region:
-                                type: string
-                              retryer:
-                                properties:
-                                  maxRetryDelay:
-                                    format: int64
-                                    type: integer
-                                  minRetryDelay:
-                                    format: int64
-                                    type: integer
-                                  numMaxRetries:
-                                    type: integer
-                                required:
-                                - maxRetryDelay
-                                - minRetryDelay
-                                - numMaxRetries
-                                type: object
-                              serverSideEncryption:
-                                properties:
-                                  kmsKeyID:
-                                    type: string
-                                  sseAlgorithm:
-                                    type: string
-                                  sseCustomerAlgorithm:
-                                    type: string
-                                  sseCustomerKey:
-                                    type: string
-                                required:
-                                - kmsKeyID
-                                - sseAlgorithm
-                                - sseCustomerAlgorithm
-                                - sseCustomerKey
-                                type: object
-                              storageClass:
-                                type: string
-                              uploadPartSize:
-                                type: integer
-                            required:
-                            - bucket
-                            - endpointUrl
-                            - insecureSkipTLSVerify
-                            - region
-                            type: object
-                          type:
-                            type: string
-                        required:
-                        - type
-                        type: object
-                    required:
-                    - pitr
-                    - storage
                     type: object
                   containerSecurityContext:
                     properties:
@@ -1030,8 +951,12 @@ spec:
                               type: string
                             credentialsSecret:
                               type: string
+                            debugLogLevels:
+                              type: string
                             endpointUrl:
                               type: string
+                            forcePathStyle:
+                              type: boolean
                             insecureSkipTLSVerify:
                               type: boolean
                             maxUploadParts:
@@ -1040,6 +965,15 @@ spec:
                               type: string
                             region:
                               type: string
+                            retryer:
+                              properties:
+                                maxRetryDelay:
+                                  type: string
+                                minRetryDelay:
+                                  type: string
+                                numMaxRetries:
+                                  type: integer
+                              type: object
                             serverSideEncryption:
                               properties:
                                 kmsKeyID:
