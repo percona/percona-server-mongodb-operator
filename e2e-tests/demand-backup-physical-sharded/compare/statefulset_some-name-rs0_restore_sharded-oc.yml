@@ -57,7 +57,7 @@ spec:
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
-        - --quiet
+            - --quiet
           command:
             - /opt/percona/physical-restore-ps-entry.sh
           env:
