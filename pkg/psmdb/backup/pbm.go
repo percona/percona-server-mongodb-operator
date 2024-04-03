@@ -243,6 +243,25 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		},
 	}
 
+	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
+		conf.Backup.OplogSpanMin = cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin
+		conf.Backup.Timeouts = &config.BackupTimeouts{
+			Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
+		}
+	}
+
+	if cluster.Spec.Backup.Configuration.RestoreOptions != nil {
+		conf.Restore = config.RestoreConf{
+			BatchSize:           cluster.Spec.Backup.Configuration.RestoreOptions.BatchSize,
+			NumInsertionWorkers: cluster.Spec.Backup.Configuration.RestoreOptions.NumInsertionWorkers,
+			NumDownloadWorkers:  cluster.Spec.Backup.Configuration.RestoreOptions.NumDownloadWorkers,
+			MaxDownloadBufferMb: cluster.Spec.Backup.Configuration.RestoreOptions.MaxDownloadBufferMb,
+			DownloadChunkMb:     cluster.Spec.Backup.Configuration.RestoreOptions.DownloadChunkMb,
+			MongodLocation:      cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocation,
+			MongodLocationMap:   cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocationMap,
+		}
+	}
+
 	switch stg.Type {
 	case api.BackupStorageS3:
 		conf.Storage = config.StorageConf{
@@ -282,6 +301,14 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			conf.Storage.S3.Credentials = s3.Credentials{
 				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+			}
+		}
+
+		if stg.S3.Retryer != nil {
+			conf.Storage.S3.Retryer = &s3.Retryer{
+				NumMaxRetries: stg.S3.Retryer.NumMaxRetries,
+				MinRetryDelay: stg.S3.Retryer.MinRetryDelay.Duration,
+				MaxRetryDelay: stg.S3.Retryer.MaxRetryDelay.Duration,
 			}
 		}
 	case api.BackupStorageAzure:

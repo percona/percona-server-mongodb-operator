@@ -814,11 +814,13 @@ type BackupTimeouts struct {
 }
 
 type BackupOptions struct {
-	OplogSpanMin     string                   `json:"oplogSpanMin"`
-	Priority         map[string]string        `json:"priority,omitempty"`
-	Timeouts         *BackupTimeouts          `json:"timeouts,omitempty"`
-	Compression      compress.CompressionType `json:"compression,omitempty"`
-	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
+	OplogSpanMin float64           `json:"oplogSpanMin"`
+	Priority     map[string]string `json:"priority,omitempty"`
+	Timeouts     *BackupTimeouts   `json:"timeouts,omitempty"`
+
+	// TODO: Do we need to set these here since we have them in BackupTaskSpec?
+	// Compression      compress.CompressionType `json:"compression,omitempty"`
+	// CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
 type RestoreOptions struct {
