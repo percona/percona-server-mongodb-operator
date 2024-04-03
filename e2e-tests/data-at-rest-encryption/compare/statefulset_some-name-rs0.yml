@@ -54,6 +54,7 @@ spec:
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+        - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:

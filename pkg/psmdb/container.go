@@ -268,6 +268,10 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
 	}
 
+	if cr.CompareVersion("1.16.0") >= 0 {
+		args = append(args, "--quiet")
+	}
+
 	return args
 }
 

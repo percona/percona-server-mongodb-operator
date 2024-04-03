@@ -53,6 +53,7 @@ spec:
             - --configsvr
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+        - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
