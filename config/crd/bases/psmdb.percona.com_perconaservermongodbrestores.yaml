@@ -68,6 +68,9 @@ spec:
                   lastTransition:
                     format: date-time
                     type: string
+                  latestRestorableTime:
+                    format: date-time
+                    type: string
                   pbmName:
                     type: string
                   pbmPod:

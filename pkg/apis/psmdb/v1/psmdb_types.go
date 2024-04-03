@@ -895,6 +895,7 @@ type Expose struct {
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
+	NodePort                 int32              `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {

@@ -97,6 +97,9 @@ spec:
               lastTransition:
                 format: date-time
                 type: string
+              latestRestorableTime:
+                format: date-time
+                type: string
               pbmName:
                 type: string
               pbmPod:
@@ -235,6 +238,9 @@ spec:
                   error:
                     type: string
                   lastTransition:
+                    format: date-time
+                    type: string
+                  latestRestorableTime:
                     format: date-time
                     type: string
                   pbmName:
@@ -3756,6 +3762,9 @@ spec:
                           items:
                             type: string
                           type: array
+                        nodePort:
+                          format: int32
+                          type: integer
                         serviceAnnotations:
                           additionalProperties:
                             type: string
@@ -10946,6 +10955,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -16022,6 +16034,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
