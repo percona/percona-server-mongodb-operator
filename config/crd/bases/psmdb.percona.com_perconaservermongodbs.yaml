@@ -50,12 +50,8 @@ spec:
                     properties:
                       backupOptions:
                         properties:
-                          compression:
-                            type: string
-                          compressionLevel:
-                            type: integer
                           oplogSpanMin:
-                            type: string
+                            type: number
                           priority:
                             additionalProperties:
                               type: string
