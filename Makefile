@@ -85,6 +85,7 @@ kustomize: ## Download kustomize locally if necessary.
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
+	sed -i "/Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" version/version.go
 	sed -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: percona/percona-server-mongodb:@@SET_TAG@@#}" deploy/cr-minimal.yaml
@@ -92,6 +93,7 @@ release: manifests
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: percona/percona-server-mongodb:@@SET_TAG@@#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-backup-mongodb:@@SET_TAG@@#}" \
+		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:@@SET_TAG@@#}" deploy/cr.yaml
 
 # Prepare main branch after release
@@ -107,4 +109,5 @@ after-release: manifests
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod6.0#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-backup#}" \
+		-e "s#initImage: .*#initImage: perconalab/percona-server-mongodb-operator:main#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml
