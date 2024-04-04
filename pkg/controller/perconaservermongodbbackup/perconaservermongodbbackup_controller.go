@@ -233,8 +233,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return bcp.Start(ctx, r.client, cluster, cr)
 	}
 
+	rsNames := make([]string, 0, len(cluster.Spec.Replsets))
+	for _, rs := range cluster.Spec.Replsets {
+		rsNames = append(rsNames, rs.Name)
+	}
+
 	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
+	return bcp.Status(ctx, cr, rsNames)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {

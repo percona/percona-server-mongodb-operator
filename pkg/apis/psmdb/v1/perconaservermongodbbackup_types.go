@@ -47,6 +47,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	ReplsetNames         []string                `json:"replsetNames,omitempty"`
 	PBMname              string                  `json:"pbmName,omitempty"`
 	PBMPod               string                  `json:"pbmPod,omitempty"`
+	// PBMPods              map[string]string       `json:"pbmPods,omitempty"`
 	Error                string                  `json:"error,omitempty"`
 	LatestRestorableTime *metav1.Time            `json:"latestRestorableTime,omitempty"`
 }

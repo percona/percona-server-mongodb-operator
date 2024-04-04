@@ -125,7 +125,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 }
 
 // Status return backup status
-func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup, rsNames []string) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
@@ -176,6 +176,12 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		return status, nil
 	}
 	status.PBMPod = node
+
+	// nodes, err := b.pbm.Nodes(ctx, rsNames)
+	// if err != nil {
+	// 	return status, nil
+	// }
+	// status.PBMPods = nodes
 
 	return status, nil
 }
