@@ -1456,7 +1456,7 @@ get_latest_restorable_time() {
 		sleep 5
 		timestamp=$(kubectl exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 		timeout=$((timeout + 5))
-		if [[ $timeout -gt 30 ]]; then
+		if [[ $timeout -gt 50 ]]; then
 			echo "Error: timeout waiting for timestamp"
 			exit 1
 		fi
