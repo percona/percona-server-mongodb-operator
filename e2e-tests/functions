@@ -1450,7 +1450,7 @@ start_cluster() {
 get_latest_restorable_time() {
 	local cluster=$1
 	local first_timestamp
-	local seconf_timestamp
+	local second_timestamp
 	local retry=0
 
 	# "pbm-agent status" can return different timestamp in first few seconds
