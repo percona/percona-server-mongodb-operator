@@ -177,11 +177,11 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup,
 	}
 	status.PBMPod = node
 
-	// nodes, err := b.pbm.Nodes(ctx, rsNames)
-	// if err != nil {
-	// 	return status, nil
-	// }
-	// status.PBMPods = nodes
+	nodes, err := b.pbm.Nodes(ctx, rsNames)
+	if err != nil {
+		return status, nil
+	}
+	status.PBMPods = nodes
 
 	return status, nil
 }
