@@ -197,6 +197,8 @@
           "listShards",
           "netstat",
           "operationMetrics",
+          "queryStatsRead",
+          "queryStatsReadTransformed",
           "replSetGetConfig",
           "replSetGetStatus",
           "serverStatus",
