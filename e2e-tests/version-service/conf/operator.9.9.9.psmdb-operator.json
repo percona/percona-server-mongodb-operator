@@ -5,6 +5,12 @@
       "product": "psmdb-operator",
       "matrix": {
         "mongod": {
+          "7.0.7-4": {
+            "image_path": "percona/percona-server-mongodb:7.0.7-4",
+            "image_hash": "36b99f78b13871e5caf458faaec83176c90271586010fa3130d1a544f31d06f4",
+            "status": "available",
+            "critical": false
+          },
           "7.0.5-3": {
             "image_path": "percona/percona-server-mongodb:7.0.5-3",
             "image_hash": "d1a8d3403bd57b260652056ba77ee4305e9628067f51ae310f1741ee08b19cf0",
