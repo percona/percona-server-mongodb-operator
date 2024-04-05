@@ -1453,6 +1453,8 @@ get_latest_restorable_time() {
 	local seconf_timestamp
 	local retry=0
 
+	# "pbm-agent status" can return different timestamp in first few seconds
+	# we need to get it twice to be sure that timestamp was not changed
 	until [[ $first_timestamp != "" && $first_timestamp != "null" && $first_timestamp == $second_timestamp ]]; do
 		sleep 5
 		if [[ $first_timestamp != "" && $first_timestamp != "null" ]]; then
