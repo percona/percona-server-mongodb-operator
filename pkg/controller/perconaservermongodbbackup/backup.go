@@ -66,17 +66,17 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
-	bcp := &ctrl.BackupCmd{
-		Name:             name,
-		Type:             cr.Spec.Type,
-		Compression:      cr.Spec.Compression,
-		CompressionLevel: compLevel,
+	cmd := ctrl.Cmd{
+		Cmd: ctrl.CmdBackup,
+		Backup: &ctrl.BackupCmd{
+			Name:             name,
+			Type:             cr.Spec.Type,
+			Compression:      cr.Spec.Compression,
+			CompressionLevel: compLevel,
+		},
 	}
-	log.Info("Sending backup command", "backup", bcp)
-	err = b.pbm.SendCmd(ctx, ctrl.Cmd{
-		Cmd:    ctrl.CmdBackup,
-		Backup: bcp,
-	})
+	log.Info("Sending backup command", "backupCmd", cmd)
+	err = b.pbm.SendCmd(ctx, cmd)
 	if err != nil {
 		return status, err
 	}
