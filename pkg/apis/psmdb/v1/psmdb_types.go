@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"context"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
