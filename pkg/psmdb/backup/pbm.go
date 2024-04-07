@@ -79,7 +79,6 @@ type PBM interface {
 	DeleteConfigVar(ctx context.Context, key string) error
 
 	Node(ctx context.Context) (string, error)
-	Nodes(ctx context.Context, rsNames []string) (map[string]string, error)
 }
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
@@ -519,21 +518,6 @@ func (b *pbmC) Node(ctx context.Context) (string, error) {
 	}
 
 	return strings.Split(lock.Node, ".")[0], nil
-}
-
-// Nodes returns replset nodes chosen to run the backup
-func (b *pbmC) Nodes(ctx context.Context, rsNames []string) (map[string]string, error) {
-	nodes := make(map[string]string)
-
-	for _, rs := range rsNames {
-		lock, err := lock.GetLockData(ctx, b.Client, &lock.LockHeader{Replset: rs})
-		if err != nil {
-			return nil, err
-		}
-		nodes[rs] = strings.Split(lock.Node, ".")[0]
-	}
-
-	return nodes, nil
 }
 
 func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error) {

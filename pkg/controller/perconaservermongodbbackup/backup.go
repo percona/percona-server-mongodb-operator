@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
@@ -177,13 +178,22 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup,
 	}
 	status.PBMPod = node
 
-	nodes, err := b.pbm.Nodes(ctx, rsNames)
-	if err != nil {
+	meta, err = b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if err != nil || meta == nil || meta.Replsets == nil {
 		return status, nil
 	}
-	status.PBMPods = nodes
+
+	status.PBMPods = backupPods(meta.Replsets)
 
 	return status, nil
+}
+
+func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
+	pods := make(map[string]string)
+	for _, rs := range replsets {
+		pods[rs.Name] = rs.Node
+	}
+	return pods
 }
 
 // Close closes the PBM connection
