@@ -44,6 +44,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 
 // Start requests backup on PBM
 func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+	log := logf.FromContext(ctx)
+	log.Info("Starting backup", "backup", cr.Name, "storage", cr.Spec.StorageName)
+
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -64,7 +67,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
-	err = b.pbm.SendCmd(ctx, ctrl.Cmd{
+	cmd := ctrl.Cmd{
 		Cmd: ctrl.CmdBackup,
 		Backup: &ctrl.BackupCmd{
 			Name:             name,
@@ -72,7 +75,9 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},
-	})
+	}
+	log.Info("Sending backup command", "backupCmd", cmd)
+	err = b.pbm.SendCmd(ctx, cmd)
 	if err != nil {
 		return status, err
 	}

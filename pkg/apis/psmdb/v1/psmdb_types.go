@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -968,7 +970,9 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
-func (cr *PerconaServerMongoDB) CanBackup() error {
+func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
+	logf.FromContext(ctx).V(1).Info("checking if backup is allowed", "backup", cr.Name)
+
 	if cr.Spec.Unmanaged {
 		return errors.Errorf("backups are not allowed on unmanaged clusters")
 	}
