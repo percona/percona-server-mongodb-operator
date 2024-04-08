@@ -12,9 +12,9 @@ metadata:
     app.kubernetes.io/replset: rs0
   name: arbiter-clusterip-rs0-arbiter
   ownerReferences:
-  - controller: true
-    kind: PerconaServerMongoDB
-    name: arbiter-clusterip
+    - controller: true
+      kind: PerconaServerMongoDB
+      name: arbiter-clusterip
 spec:
   podManagementPolicy: OrderedReady
   replicas: 1
@@ -42,116 +42,117 @@ spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                app.kubernetes.io/instance: arbiter-clusterip
-                app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                app.kubernetes.io/name: percona-server-mongodb
-                app.kubernetes.io/part-of: percona-server-mongodb
-                app.kubernetes.io/replset: rs0
-            topologyKey: kubernetes.io/hostname
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: arbiter-clusterip
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
       containers:
-      - args:
-        - --bind_ip_all
-        - --auth
-        - --dbpath=/data/db
-        - --port=27017
-        - --replSet=rs0
-        - --storageEngine=wiredTiger
-        - --relaxPermChecks
-        - --sslAllowInvalidCertificates
-        - --clusterAuthMode=x509
-        - --enableEncryption
-        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-        - --wiredTigerIndexPrefixCompression=true
-        - --config=/etc/mongodb-config/mongod.conf
-        command:
-        - /opt/percona/ps-entry.sh
-        env:
-        - name: SERVICE_NAME
-          value: arbiter-clusterip
-        - name: MONGODB_PORT
-          value: "27017"
-        - name: MONGODB_REPLSET
-          value: rs0
-        envFrom:
-        - secretRef:
-            name: internal-arbiter-users
-            optional: false
-        imagePullPolicy: Always
-        livenessProbe:
-          exec:
-            command:
-            - /opt/percona/mongodb-healthcheck
-            - k8s
-            - liveness
-            - --startupDelaySeconds
-            - "7200"
-          failureThreshold: 4
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          successThreshold: 1
-          timeoutSeconds: 10
-        name: mongod-arbiter
-        ports:
-        - containerPort: 27017
-          name: mongodb
-          protocol: TCP
-        readinessProbe:
-          exec:
-            command:
-              - /opt/percona/mongodb-healthcheck
-              - k8s
-              - readiness
-              - --component
-              - mongod
-          failureThreshold: 8
-          initialDelaySeconds: 10
-          periodSeconds: 3
-          successThreshold: 1
-          timeoutSeconds: 2
-        resources: {}
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
-        - mountPath: /etc/mongodb-secrets
-          name: arbiter-clusterip-mongodb-keyfile
-          readOnly: true
-        - mountPath: /etc/mongodb-ssl
-          name: ssl
-          readOnly: true
-        - mountPath: /etc/mongodb-ssl-internal
-          name: ssl-internal
-          readOnly: true
-        - mountPath: /etc/mongodb-config
-          name: config
-        - mountPath: /opt/percona
-          name: bin
-        - mountPath: /etc/mongodb-encryption
-          name: arbiter-clusterip-mongodb-encryption-key
-          readOnly: true
-        - mountPath: /etc/users-secret
-          name: users-secret-file
-        workingDir: /data/db
+        - args:
+            - --bind_ip_all
+            - --auth
+            - --dbpath=/data/db
+            - --port=27017
+            - --replSet=rs0
+            - --storageEngine=wiredTiger
+            - --relaxPermChecks
+            - --sslAllowInvalidCertificates
+            - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
+            - --enableEncryption
+            - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
+          command:
+            - /opt/percona/ps-entry.sh
+          env:
+            - name: SERVICE_NAME
+              value: arbiter-clusterip
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_REPLSET
+              value: rs0
+          envFrom:
+            - secretRef:
+                name: internal-arbiter-users
+                optional: false
+          imagePullPolicy: Always
+          livenessProbe:
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - liveness
+                - --startupDelaySeconds
+                - "7200"
+            failureThreshold: 4
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 10
+          name: mongod-arbiter
+          ports:
+            - containerPort: 27017
+              name: mongodb
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongod
+            failureThreshold: 8
+            initialDelaySeconds: 10
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 2
+          resources: {}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /etc/mongodb-secrets
+              name: arbiter-clusterip-mongodb-keyfile
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /etc/mongodb-ssl-internal
+              name: ssl-internal
+              readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
+            - mountPath: /opt/percona
+              name: bin
+            - mountPath: /etc/mongodb-encryption
+              name: arbiter-clusterip-mongodb-encryption-key
+              readOnly: true
+            - mountPath: /etc/users-secret
+              name: users-secret-file
+          workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
-      - command:
-        - /init-entrypoint.sh
-        imagePullPolicy: Always
-        name: mongo-init
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
-        - mountPath: /opt/percona
-          name: bin
+        - command:
+            - /init-entrypoint.sh
+          imagePullPolicy: Always
+          name: mongo-init
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -160,39 +161,39 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: arbiter-clusterip-mongodb-keyfile
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: arbiter-clusterip-mongodb-keyfile
-      - emptyDir: {}
-        name: bin
-      - configMap:
-          defaultMode: 420
-          name: arbiter-clusterip-rs0-mongod
-          optional: true
-        name: config
-      - name: arbiter-clusterip-mongodb-encryption-key
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: arbiter-clusterip-mongodb-encryption-key
-      - name: ssl
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: arbiter-clusterip-ssl
-      - name: ssl-internal
-        secret:
-          defaultMode: 288
-          optional: true
-          secretName: arbiter-clusterip-ssl-internal
-      - name: users-secret-file
-        secret:
-          defaultMode: 420
-          secretName: internal-arbiter-users
-      - emptyDir: {}
-        name: mongod-data
+        - name: arbiter-clusterip-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: arbiter-clusterip-mongodb-keyfile
+        - emptyDir: {}
+          name: bin
+        - configMap:
+            defaultMode: 420
+            name: arbiter-clusterip-rs0-mongod
+            optional: true
+          name: config
+        - name: arbiter-clusterip-mongodb-encryption-key
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: arbiter-clusterip-mongodb-encryption-key
+        - name: ssl
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: arbiter-clusterip-ssl
+        - name: ssl-internal
+          secret:
+            defaultMode: 288
+            optional: true
+            secretName: arbiter-clusterip-ssl-internal
+        - name: users-secret-file
+          secret:
+            defaultMode: 420
+            secretName: internal-arbiter-users
+        - emptyDir: {}
+          name: mongod-data
   updateStrategy:
     rollingUpdate:
       partition: 0
