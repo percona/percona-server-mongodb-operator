@@ -8279,6 +8279,8 @@ spec:
                     type: string
                   ldapSecret:
                     type: string
+                  sse:
+                    type: string
                   ssl:
                     type: string
                   sslInternal:
