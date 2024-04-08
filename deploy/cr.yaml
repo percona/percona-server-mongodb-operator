@@ -44,6 +44,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
+#    sse: my-cluster-name-sse
   pmm:
     enabled: false
     image: perconalab/pmm-client:dev-latest
