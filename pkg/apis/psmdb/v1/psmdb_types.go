@@ -597,7 +597,6 @@ type SecretsSpec struct {
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
-	SSE           string `json:"sse,omitempty"`
 }
 
 type MongosSpec struct {

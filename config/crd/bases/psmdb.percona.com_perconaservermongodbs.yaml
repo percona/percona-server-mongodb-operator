@@ -7636,8 +7636,6 @@ spec:
                 properties:
                   encryptionKey:
                     type: string
-                  sse:
-                    type: string
                   ssl:
                     type: string
                   sslInternal:
