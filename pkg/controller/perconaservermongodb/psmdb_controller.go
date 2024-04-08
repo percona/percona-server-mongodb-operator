@@ -294,6 +294,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile users secret")
 	}
 
+	if len(cr.Spec.Secrets.SSE) != 0 {
+		err = r.reconcileSSESecret(ctx, cr)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "reconcile sse secret")
+		}
+	}
+
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
@@ -1292,6 +1299,27 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateMongosSvc(ctx context.Cont
 	err = r.createOrUpdateSvc(ctx, cr, &svc, cr.Spec.Sharding.Mongos.Expose.SaveOldMeta())
 	if err != nil {
 		return errors.Wrap(err, "create or update mongos service")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileSSESecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+	secretObj := corev1.Secret{}
+	err := r.client.Get(ctx,
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.Secrets.SSE,
+		},
+		&secretObj,
+	)
+	if err == nil {
+		log.Info("reconcile sse secret")
+		err = r.client.Update(ctx, &secretObj)
+		return errors.Wrap(err, "update sse secret")
+
+	} else if !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get sse secret")
 	}
 	return nil
 }
