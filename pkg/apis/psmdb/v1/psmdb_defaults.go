@@ -496,8 +496,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 
 			if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 &&
-				len(stg.S3.ServerSideEncryption.SSECustomerKey) != 0 &&
-				len(stg.S3.ServerSideEncryption.KMSKeyID) != 0 &&
 				len(stg.S3.ServerSideEncryption.SSEAlgorithm) != 0 {
 				return errors.New("For S3 storage only one encryption method can be used. Set either (sseAlgorithm and kmsKeyID) or (sseCustomerAlgorithm and sseCustomerKey)")
 			}
