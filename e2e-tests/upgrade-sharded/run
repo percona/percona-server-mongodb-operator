@@ -161,8 +161,8 @@ function main() {
 	if [ -n "$OPERATOR_NS" ]; then
 		rbac="cw-rbac"
 	fi
-	deploy_cert_manager
 	create_infra_gh "${namespace}" "${GIT_TAG}"
+	deploy_cert_manager
 	apply_s3_storage_secrets
 	deploy_minio
 

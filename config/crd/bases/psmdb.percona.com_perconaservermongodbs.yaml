@@ -3,8 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.1
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -3042,6 +3041,9 @@ spec:
                           items:
                             type: string
                           type: array
+                        nodePort:
+                          format: int32
+                          type: integer
                         serviceAnnotations:
                           additionalProperties:
                             type: string
@@ -7638,6 +7640,8 @@ spec:
                     type: string
                   sse:
                     type: string
+                  ldapSecret:
+                    type: string
                   ssl:
                     type: string
                   sslInternal:
@@ -10232,6 +10236,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -15308,6 +15315,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -17236,6 +17246,17 @@ spec:
                 properties:
                   certValidityDuration:
                     type: string
+                  issuerConf:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                 type: object
               unmanaged:
                 type: boolean

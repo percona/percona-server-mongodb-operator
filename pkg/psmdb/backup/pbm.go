@@ -112,7 +112,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
 	tlsPemFile := fmt.Sprintf("/tmp/%s-tls.pem", cr.Name)
-	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", tlsPemFile)
 	}
@@ -123,7 +123,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 
 	caCert := sslSecret.Data["ca.crt"]
 	caCertFile := fmt.Sprintf("/tmp/%s-ca.crt", cr.Name)
-	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", caCertFile)
 	}
@@ -438,7 +438,7 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	return false, nil
 }
 
-var errNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
+var ErrNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
 
 func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) {
 	nodeInfo, err := topo.GetNodeInfo(context.TODO(), b.Client.MongoClient())
@@ -449,13 +449,13 @@ func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) 
 	c, err := oplog.PITRLastChunkMeta(ctx, b.Client, nodeInfo.SetName)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errNoOplogsForPITR
+			return nil, ErrNoOplogsForPITR
 		}
 		return nil, errors.Wrap(err, "getting last PITR chunk")
 	}
 
 	if c == nil {
-		return nil, errNoOplogsForPITR
+		return nil, ErrNoOplogsForPITR
 	}
 
 	return c, nil
@@ -491,7 +491,7 @@ func (b *pbmC) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error
 	}
 
 	if len(timelines) == 0 {
-		return oplog.Timeline{}, errNoOplogsForPITR
+		return oplog.Timeline{}, ErrNoOplogsForPITR
 	}
 
 	return timelines[len(timelines)-1], nil
@@ -526,13 +526,13 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.O
 	c, err := b.pitrGetChunkContains(ctx, nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errNoOplogsForPITR
+			return nil, ErrNoOplogsForPITR
 		}
 		return nil, errors.Wrap(err, "getting PITR chunk for ts")
 	}
 
 	if c == nil {
-		return nil, errNoOplogsForPITR
+		return nil, ErrNoOplogsForPITR
 	}
 
 	return c, nil
@@ -579,6 +579,7 @@ func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
 func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error) {
 	return restore.GetRestoreMeta(ctx, b.Client, name)
 }
+
 func (b *pbmC) ResyncStorage(ctx context.Context, e pbmLog.LogEvent) error {
 	return resync.ResyncStorage(ctx, b.Client, e)
 }

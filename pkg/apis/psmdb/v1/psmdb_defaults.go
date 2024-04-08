@@ -193,11 +193,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
 				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
-				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command =
-					append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
-						"--ssl", "--sslInsecure",
-						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-						"--sslPEMKeyFile", "/tmp/tls.pem")
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -239,11 +238,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
 				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command =
-					append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
-						"--ssl", "--sslInsecure",
-						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-						"--sslPEMKeyFile", "/tmp/tls.pem")
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -370,11 +368,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 				if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
 					cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
-					replset.LivenessProbe.Probe.Exec.Command =
-						append(replset.LivenessProbe.Probe.Exec.Command,
-							"--ssl", "--sslInsecure",
-							"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-							"--sslPEMKeyFile", "/tmp/tls.pem")
+					replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls.pem")
 				}
 			}
 

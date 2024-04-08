@@ -35,8 +35,8 @@ main() {
 		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 	fi
 
-	deploy_cert_manager
 	create_infra "$namespace"
+	deploy_cert_manager
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "$conf_dir/secrets.yml"

@@ -17,6 +17,10 @@ spec:
 #  tls:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
+#    issuerConf:
+#      name: special-selfsigned-issuer
+#      kind: ClusterIssuer
+#      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  initImage: perconalab/percona-server-mongodb-operator:main
@@ -40,6 +44,8 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
 #    sse: my-cluster-name-sse
+#    ldapSecret: my-ldap-secret
+
   pmm:
     enabled: false
     image: perconalab/pmm-client:dev-latest
@@ -493,6 +499,7 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
+#        nodePort: 32017
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:

@@ -25,8 +25,8 @@ does_node_id_exists() {
 	echo "${nodeList_from_pmm[@]}"
 }
 
-deploy_cert_manager
 create_infra $namespace
+deploy_cert_manager
 
 desc 'install PMM Server'
 

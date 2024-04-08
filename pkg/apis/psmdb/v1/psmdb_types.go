@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
@@ -90,7 +91,8 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type TLSSpec struct {
-	CertValidityDuration metav1.Duration `json:"certValidityDuration,omitempty"`
+	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
+	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
@@ -178,6 +180,7 @@ type MultiCluster struct {
 type AppState string
 
 const (
+	AppStateNone     AppState = ""
 	AppStateInit     AppState = "initializing"
 	AppStateStopping AppState = "stopping"
 	AppStatePaused   AppState = "paused"
@@ -551,6 +554,29 @@ func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	return cfg.Replication.ReplSetName, nil
 }
 
+func (r *ReplsetSpec) MongodLabels(cr *PerconaServerMongoDB) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/replset":    r.Name,
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+		"app.kubernetes.io/component":  "mongod",
+	}
+}
+
+func (r *ReplsetSpec) ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
+	ls := r.MongodLabels(cr)
+	ls["app.kubernetes.io/component"] = "arbiter"
+	return ls
+}
+
+func (r *ReplsetSpec) NonVotingLabels(cr *PerconaServerMongoDB) map[string]string {
+	ls := r.MongodLabels(cr)
+	ls["app.kubernetes.io/component"] = "nonVoting"
+	return ls
+}
+
 type LivenessProbeExtended struct {
 	corev1.Probe        `json:",inline"`
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
@@ -598,6 +624,7 @@ type SecretsSpec struct {
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`
+	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
 type MongosSpec struct {
@@ -830,6 +857,7 @@ type Expose struct {
 	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
 	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
+	NodePort                 int32              `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {

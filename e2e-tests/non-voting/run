@@ -35,8 +35,8 @@ spinup_psmdb() {
 
 main() {
 	local cluster="nonvoting-rs0"
-	deploy_cert_manager
 	create_infra $namespace
+	deploy_cert_manager
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \

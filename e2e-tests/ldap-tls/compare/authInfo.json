@@ -1,0 +1,38 @@
+{
+  "authenticatedUsers": [
+    {
+      "user": "percona",
+      "db": "$external"
+    }
+  ],
+  "authenticatedUserRoles": [
+    {
+      "role": "backup",
+      "db": "admin"
+    },
+    {
+      "role": "clusterMonitor",
+      "db": "admin"
+    },
+    {
+      "role": "cn=admin,ou=perconadba,dc=ldap,dc=local",
+      "db": "admin"
+    },
+    {
+      "role": "dbAdminAnyDatabase",
+      "db": "admin"
+    },
+    {
+      "role": "readAnyDatabase",
+      "db": "admin"
+    },
+    {
+      "role": "readWriteAnyDatabase",
+      "db": "admin"
+    },
+    {
+      "role": "restore",
+      "db": "admin"
+    }
+  ]
+}
