@@ -466,7 +466,12 @@ func (b *pbmC) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error
 		return oplog.Timeline{}, ErrNoOplogsForPITR
 	}
 
-	return timelines[len(timelines)-1], nil
+	tl := timelines[len(timelines)-1]
+	if tl.Start == 0 || tl.End == 0 {
+		return oplog.Timeline{}, ErrNoOplogsForPITR
+	}
+
+	return tl, nil
 }
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
