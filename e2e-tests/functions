@@ -1449,29 +1449,54 @@ start_cluster() {
 
 get_latest_restorable_time() {
 	local cluster=$1
-	local timestamp
-	local timeout
+	local first_timestamp
+	local second_timestamp
+	local retry=0
 
-	until [[ $timestamp != "" && $timestamp != "null" ]]; do
+	# "pbm-agent status" can return different timestamp in first few seconds
+	# we need to get it twice to be sure that timestamp was not changed
+	until [[ $first_timestamp != "" && $first_timestamp != "null" && $first_timestamp == $second_timestamp ]]; do
 		sleep 5
-		timestamp=$(kubectl exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
-		timeout=$((timeout + 5))
-		if [[ $timeout -gt 50 ]]; then
+		if [[ $first_timestamp != "" && $first_timestamp != "null" ]]; then
+			second_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+		else
+			first_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+		fi
+		let retry+=1
+		if [[ $retry -gt 30 ]]; then
 			echo "Error: timeout waiting for timestamp"
 			exit 1
 		fi
 	done
 
-	$date -u -d @"$timestamp" "+%Y-%m-%dT%H:%M:%SZ"
+	$date -u -d @"$first_timestamp" "+%Y-%m-%dT%H:%M:%SZ"
 }
 
+get_latest_restorable_time_from_backup_object() {
+	local backup_name=$1
+	local latestRestorableTime
+	local retry=0
+
+	until [[ $latestRestorableTime != "" && $latestRestorableTime != "null" ]]; do
+		sleep 5
+		latestRestorableTime=$(kubectl_bin get psmdb-backup "$backup_name" -o jsonpath='{.status.latestRestorableTime}')
+		let retry+=1
+		if [[ $retry -gt 30 ]]; then
+			echo "Error: timeout waiting for latestRestorableTime"
+			exit 1
+		fi
+	done
+
+	echo "$latestRestorableTime"
+}
 compare_latest_restorable_time() {
 	local cluster=$1
 	local backup_name=$2
 	local latest_restorable_time
-	latest_restorable_time=$(get_latest_restorable_time "$cluster")
 	local backup_time
-	backup_time=$(kubectl get psmdb-backup "$backup_name" -o jsonpath='{.status.latestRestorableTime}')
+
+	latest_restorable_time=$(get_latest_restorable_time "$cluster")
+	backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
 
 	if [[ $latest_restorable_time != "$backup_time" ]]; then
 		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
