@@ -6,7 +6,6 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  allowUnsafeConfigurations: true
   backup:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:main-backup

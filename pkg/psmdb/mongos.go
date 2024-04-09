@@ -244,6 +244,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 		"mongos",
 		"--bind_ip_all",
 		"--port=" + strconv.Itoa(int(msSpec.Port)),
+		"--sslAllowInvalidCertificates",
 		"--configdb",
 		configDB,
 	}
@@ -255,7 +256,6 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 
 	if cr.TLSEnabled() {
 		args = append(args,
-			"--sslAllowInvalidCertificates",
 			"--clusterAuthMode=x509",
 		)
 	} else if (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf) {

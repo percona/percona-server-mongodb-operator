@@ -1,5 +1,6 @@
 #!/bin/bash
 set -Eeuo pipefail
+set -o xtrace
 
 if [ "${1:0:1}" = '-' ]; then
 	set -- mongod "$@"
@@ -409,8 +410,11 @@ fi
 if [[ $originalArgOne == mongo* ]]; then
 	mongodHackedArgs=("$@")
 
+	tlsMode=""
 	# if --tlsMode arg is present, get it
-	tlsMode="$(_mongod_hack_get_arg_val --tlsMode "${mongodHackedArgs[@]}")"
+	if _mongod_hack_have_arg --tlsMode "${mongodHackedArgs[@]}"; then
+		tlsMode="$(_mongod_hack_get_arg_val --tlsMode "${mongodHackedArgs[@]}")"
+	fi
 
 	if [[ -z ${tlsMode} ]]; then
 		# if neither --tlsMode arg or net.tls.mode is present, set it to preferTLS
