@@ -93,30 +93,6 @@ check_recovery() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "$cmp_postfix"
 }
 
-get_latest_restorable_time() {
-	local cluster=$1
-	local timestamp
-
-	timestamp=$(kubectl exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
-
-	$date -u -d @"$timestamp" "+%Y-%m-%dT%H:%M:%SZ"
-}
-
-compare_latest_restorable_time() {
-	local cluster=$1
-	local backup_name=$2
-	local latest_restorable_time
-	latest_restorable_time=$(get_latest_restorable_time "$cluster")
-	local backup_time
-	backup_time=$(kubectl get psmdb-backup "$backup_name" -o jsonpath='{.status.latestRestorableTime}')
-
-	if [[ $latest_restorable_time != "$backup_time" ]]; then
-		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
-		exit 1
-	fi
-
-}
-
 main() {
 	create_infra $namespace
 	deploy_minio

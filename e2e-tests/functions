@@ -1460,11 +1460,10 @@ get_latest_restorable_time() {
 	# "pbm-agent status" can return different timestamp in first few seconds
 	# we need to get it twice to be sure that timestamp was not changed
 	until [[ $first_timestamp != "" && $first_timestamp != "null" && $first_timestamp == $second_timestamp ]]; do
+		first_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 		sleep 5
 		if [[ $first_timestamp != "" && $first_timestamp != "null" ]]; then
 			second_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
-		else
-			first_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 		fi
 		let retry+=1
 		if [[ $retry -gt 30 ]]; then
