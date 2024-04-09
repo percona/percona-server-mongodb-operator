@@ -519,7 +519,7 @@ func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to p
 	return oplog.PITRGetChunksSlice(ctx, b.Client, rsName, from, to)
 }
 
-// Node returns replset node chosen to run the backup
+// Node returns replset node chosen to run the backup for a replset related to pbmC
 func (b *pbmC) Node(ctx context.Context) (string, error) {
 	lock, err := lock.GetLockData(ctx, b.Client, &lock.LockHeader{Replset: b.rsName})
 	if err != nil {
