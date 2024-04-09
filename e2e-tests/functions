@@ -5,11 +5,12 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1"
 OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod5.0"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod7.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod4.4
 perconalab/percona-server-mongodb-operator:main-mongod5.0
-perconalab/percona-server-mongodb-operator:main-mongod6.0'}
+
+perconalab/percona-server-mongodb-operator:main-mongod6.0
+perconalab/percona-server-mongodb-operator:main-mongod7.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
@@ -843,6 +844,9 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 6\.0 ]] && [ -f ${test_dir}/compare/$user-60.json ]; then
 		expected_result=${test_dir}/compare/$user-60.json
 	fi
+	if [[ $IMAGE_MONGOD =~ 7\.0 ]] && [ -f ${test_dir}/compare/$user-70.json ]; then
+		expected_result=${test_dir}/compare/$user-70.json
+	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
@@ -1456,11 +1460,10 @@ get_latest_restorable_time() {
 	# "pbm-agent status" can return different timestamp in first few seconds
 	# we need to get it twice to be sure that timestamp was not changed
 	until [[ $first_timestamp != "" && $first_timestamp != "null" && $first_timestamp == $second_timestamp ]]; do
+		first_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 		sleep 5
 		if [[ $first_timestamp != "" && $first_timestamp != "null" ]]; then
 			second_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
-		else
-			first_timestamp=$(kubectl_bin exec "$cluster-0" -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 		fi
 		let retry+=1
 		if [[ $retry -gt 30 ]]; then

@@ -160,6 +160,9 @@ func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec
 }
 
 func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
+	log := logf.FromContext(ctx)
+	log.Info("Starting logical restore", "backup", backup)
+
 	e := pbmc.Logger().NewEvent(string(ctrl.CmdResync), "", "", primitive.Timestamp{})
 	err := pbmc.ResyncStorage(ctx, e)
 	if err != nil {
@@ -211,6 +214,7 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		}
 	}
 
+	log.Info("Sending restore command", "restoreCmd", cmd.Restore)
 	if err = pbmc.SendCmd(ctx, cmd); err != nil {
 		return "", errors.Wrap(err, "send restore cmd")
 	}
