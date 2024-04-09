@@ -101,20 +101,20 @@ main() {
 	sleep 20
 	desc 'check if Pod started'
 	wait_cluster
-	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "10" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
-	compare_generation "10" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "11" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "10" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1160"

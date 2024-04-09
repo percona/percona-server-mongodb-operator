@@ -8,6 +8,8 @@ spec:
   imagePullPolicy: Always
   unsafeFlags:
     tls: true
+  tls:
+    mode: disabled
   backup:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:0.4.0-backup

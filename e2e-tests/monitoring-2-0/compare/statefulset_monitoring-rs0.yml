@@ -50,7 +50,7 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
-            - --tlsMode=preferTLS
+            - --tlsMode=requireTLS
             - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key

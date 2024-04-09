@@ -580,7 +580,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 {
+	if cr.CompareVersion("1.16.0") >= 0 && cr.DeletionTimestamp == nil && !cr.Spec.Pause {
 		if cr.Spec.TLS.Mode == "" {
 			cr.Spec.TLS.Mode = TLSModePrefer
 		}

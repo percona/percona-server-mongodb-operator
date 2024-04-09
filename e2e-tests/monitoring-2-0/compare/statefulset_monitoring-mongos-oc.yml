@@ -57,7 +57,7 @@ spec:
             - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
             - --clusterAuthMode=x509
-            - --tlsMode=preferTLS
+            - --tlsMode=requireTLS
             - --config=/etc/mongos-config/mongos.conf
           command:
             - /opt/percona/ps-entry.sh
