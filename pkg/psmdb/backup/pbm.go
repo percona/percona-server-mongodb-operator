@@ -416,8 +416,15 @@ func NotJobLock(j Job) LockHeaderPredicate {
 func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
 	locks, err := lock.GetLocks(ctx, b.Client, &lock.LockHeader{})
 	if err != nil {
-		return false, errors.Wrap(err, "getting lock data")
+		return false, errors.Wrap(err, "get lock data")
 	}
+
+	opLocks, err := lock.GetOpLocks(ctx, b.Client, &lock.LockHeader{})
+	if err != nil {
+		return false, errors.Wrap(err, "get op lock data")
+	}
+
+	locks = append(locks, opLocks...)
 
 	allowedByAllPredicates := func(l lock.LockHeader) bool {
 		for _, allow := range predicates {
@@ -546,7 +553,7 @@ func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to p
 	return oplog.PITRGetChunksSlice(ctx, b.Client, rsName, from, to)
 }
 
-// Node returns replset node chosen to run the backup
+// Node returns replset node chosen to run the backup for a replset related to pbmC
 func (b *pbmC) Node(ctx context.Context) (string, error) {
 	lock, err := lock.GetLockData(ctx, b.Client, &lock.LockHeader{Replset: b.rsName})
 	if err != nil {

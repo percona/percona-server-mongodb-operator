@@ -1038,6 +1038,13 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.PBMPods != nil {
+		in, out := &in.PBMPods, &out.PBMPods
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.LatestRestorableTime != nil {
 		in, out := &in.LatestRestorableTime, &out.LatestRestorableTime
 		*out = (*in).DeepCopy()
