@@ -238,7 +238,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
-	log := logf.FromContext(ctx)
 	switch {
 	case cr.Status.Azure != nil:
 		if cr.Status.Azure.CredentialsSecret == "" {
@@ -278,7 +277,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
-
 			switch {
 			case len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0:
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
@@ -287,11 +285,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 			case len(cluster.Spec.Secrets.SSE) != 0:
 				ssesecret, err := secret(ctx, r.client, cr.Namespace, cluster.Spec.Secrets.SSE)
-
 				if err != nil {
 					return nil, errors.Wrap(err, "get sse credentials secret")
 				}
-				log.Info("nothing to delete %s", string(ssesecret.Data[backup.SSECustomerKey]))
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
 					SseCustomerKey:       string(ssesecret.Data[backup.SSECustomerKey]),
@@ -314,7 +310,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				if err != nil {
 					return nil, errors.Wrap(err, "get sse credentials secret")
 				}
-				log.Info("nothing to delete %s", string(ssesecret.Data[backup.KMSKeyID]))
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseAlgorithm: cr.Status.S3.ServerSideEncryption.SSEAlgorithm,
 					KmsKeyID:     string(ssesecret.Data[backup.KMSKeyID]),
