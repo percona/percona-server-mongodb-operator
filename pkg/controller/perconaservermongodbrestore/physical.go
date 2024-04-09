@@ -162,54 +162,53 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
+		waitErr := errors.New("waiting for PBM operation to finish")
+		err = retry.OnError(wait.Backoff{
+			Duration: 5 * time.Second,
+			Factor:   2.0,
+			Cap:      time.Hour,
+			Steps:    11,
+		}, func(err error) bool { return err == waitErr }, func() error {
+			err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
+				stdoutBuf.Reset()
+				stderrBuf.Reset()
 
-		timeout := time.NewTimer(900 * time.Second)
-		defer timeout.Stop()
-
-	outer:
-		for {
-			select {
-			case <-timeout.C:
-				return status, errors.Errorf("timeout while waiting PBM operation to finish")
-			case <-ticker.C:
-				err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-					stdoutBuf.Reset()
-					stderrBuf.Reset()
-
-					command := []string{"/opt/percona/pbm", "status", "--out", "json"}
-					err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-					if err != nil {
-						log.Error(err, "failed to get PBM status")
-						return err
-					}
-
-					log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-					return nil
-				})
+				command := []string{"/opt/percona/pbm", "status", "--out", "json"}
+				err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
 				if err != nil {
-					return status, errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+					log.Error(err, "failed to get PBM status")
+					return err
 				}
 
-				var pbmStatus struct {
-					Running struct {
-						Type string `json:"type,omitempty"`
-						OpId string `json:"opID,omitempty"`
-					} `json:"running"`
-				}
+				log.V(1).Info("PBM status", "status", stdoutBuf.String())
 
-				if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-					return status, errors.Wrap(err, "unmarshal PBM status output")
-				}
-
-				if len(pbmStatus.Running.OpId) == 0 {
-					break outer
-				}
-
-				log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 			}
+
+			var pbmStatus struct {
+				Running struct {
+					Type string `json:"type,omitempty"`
+					OpId string `json:"opID,omitempty"`
+				} `json:"running"`
+			}
+
+			if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+				return errors.Wrap(err, "unmarshal PBM status output")
+			}
+
+			if len(pbmStatus.Running.OpId) == 0 {
+				return nil
+			}
+
+			log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+
+			return waitErr
+		})
+		if err != nil {
+			return status, err
 		}
 
 		var restoreCommand []string
