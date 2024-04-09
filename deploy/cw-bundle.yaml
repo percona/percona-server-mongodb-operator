@@ -97,10 +97,17 @@ spec:
               lastTransition:
                 format: date-time
                 type: string
+              latestRestorableTime:
+                format: date-time
+                type: string
               pbmName:
                 type: string
               pbmPod:
                 type: string
+              pbmPods:
+                additionalProperties:
+                  type: string
+                type: object
               replsetNames:
                 items:
                   type: string
@@ -224,10 +231,17 @@ spec:
                   lastTransition:
                     format: date-time
                     type: string
+                  latestRestorableTime:
+                    format: date-time
+                    type: string
                   pbmName:
                     type: string
                   pbmPod:
                     type: string
+                  pbmPods:
+                    additionalProperties:
+                      type: string
+                    type: object
                   replsetNames:
                     items:
                       type: string
@@ -3674,6 +3688,9 @@ spec:
                           items:
                             type: string
                           type: array
+                        nodePort:
+                          format: int32
+                          type: integer
                         serviceAnnotations:
                           additionalProperties:
                             type: string
@@ -10864,6 +10881,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -15940,6 +15960,9 @@ spec:
                             items:
                               type: string
                             type: array
+                          nodePort:
+                            format: int32
+                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string

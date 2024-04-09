@@ -211,7 +211,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.New("cluster not found")
 	}
 
-	if err := cluster.CanBackup(); err != nil {
+	if err := cluster.CanBackup(ctx); err != nil {
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
@@ -445,7 +445,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b 
 				{Key: "end_ts", Value: chnk.EndTS},
 			},
 		)
-
 		if err != nil {
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}

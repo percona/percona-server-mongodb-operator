@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -320,6 +321,9 @@ func (b *pbmC) Conn() *mongo.Client {
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
 func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	log := logf.FromContext(ctx)
+	log.Info("Setting PBM config", "backup", cluster.Name)
+
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
@@ -406,7 +410,7 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	return false, nil
 }
 
-var errNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
+var ErrNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
 
 func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) {
 	nodeInfo, err := topo.GetNodeInfo(context.TODO(), b.Client.MongoClient())
@@ -417,13 +421,13 @@ func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) 
 	c, err := oplog.PITRLastChunkMeta(ctx, b.Client, nodeInfo.SetName)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errNoOplogsForPITR
+			return nil, ErrNoOplogsForPITR
 		}
 		return nil, errors.Wrap(err, "getting last PITR chunk")
 	}
 
 	if c == nil {
-		return nil, errNoOplogsForPITR
+		return nil, ErrNoOplogsForPITR
 	}
 
 	return c, nil
@@ -459,10 +463,15 @@ func (b *pbmC) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error
 	}
 
 	if len(timelines) == 0 {
-		return oplog.Timeline{}, errNoOplogsForPITR
+		return oplog.Timeline{}, ErrNoOplogsForPITR
 	}
 
-	return timelines[len(timelines)-1], nil
+	tl := timelines[len(timelines)-1]
+	if tl.Start == 0 || tl.End == 0 {
+		return oplog.Timeline{}, ErrNoOplogsForPITR
+	}
+
+	return tl, nil
 }
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
@@ -494,13 +503,13 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.O
 	c, err := b.pitrGetChunkContains(ctx, nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, errNoOplogsForPITR
+			return nil, ErrNoOplogsForPITR
 		}
 		return nil, errors.Wrap(err, "getting PITR chunk for ts")
 	}
 
 	if c == nil {
-		return nil, errNoOplogsForPITR
+		return nil, ErrNoOplogsForPITR
 	}
 
 	return c, nil
@@ -510,7 +519,7 @@ func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to p
 	return oplog.PITRGetChunksSlice(ctx, b.Client, rsName, from, to)
 }
 
-// Node returns replset node chosen to run the backup
+// Node returns replset node chosen to run the backup for a replset related to pbmC
 func (b *pbmC) Node(ctx context.Context) (string, error) {
 	lock, err := lock.GetLockData(ctx, b.Client, &lock.LockHeader{Replset: b.rsName})
 	if err != nil {
@@ -547,6 +556,7 @@ func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
 func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error) {
 	return restore.GetRestoreMeta(ctx, b.Client, name)
 }
+
 func (b *pbmC) ResyncStorage(ctx context.Context, e pbmLog.LogEvent) error {
 	return resync.ResyncStorage(ctx, b.Client, e)
 }

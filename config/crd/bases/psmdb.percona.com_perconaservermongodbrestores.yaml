@@ -68,10 +68,17 @@ spec:
                   lastTransition:
                     format: date-time
                     type: string
+                  latestRestorableTime:
+                    format: date-time
+                    type: string
                   pbmName:
                     type: string
                   pbmPod:
                     type: string
+                  pbmPods:
+                    additionalProperties:
+                      type: string
+                    type: object
                   replsetNames:
                     items:
                       type: string

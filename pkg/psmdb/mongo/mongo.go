@@ -394,10 +394,14 @@ func (client *mongoClient) GetFCV(ctx context.Context) (string, error) {
 
 func (client *mongoClient) SetFCV(ctx context.Context, version string) error {
 	res := OKResponse{}
-
 	command := "setFeatureCompatibilityVersion"
 
-	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: version}})
+	var resp *mongo.SingleResult
+	if version == "4.4" || version == "5.0" || version == "6.0" {
+		resp = client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: version}})
+	} else {
+		resp = client.Database("admin").RunCommand(ctx, bson.D{{Key: command, Value: version}, {Key: "confirm", Value: true}})
+	}
 	if resp.Err() != nil {
 		return errors.Wrap(resp.Err(), command)
 	}

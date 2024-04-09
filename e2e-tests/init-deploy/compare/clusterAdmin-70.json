@@ -1,0 +1,321 @@
+{
+  "authInfo": {
+    "authenticatedUsers": [
+      {
+        "user": "clusterAdmin",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserRoles": [
+      {
+        "role": "clusterAdmin",
+        "db": "admin"
+      }
+    ],
+    "authenticatedUserPrivileges": [
+      {
+        "resource": {
+          "system_buckets": ""
+        },
+        "actions": [
+          "analyzeShardKey",
+          "clearJumboFlag",
+          "configureQueryAnalyzer",
+          "enableSharding",
+          "moveChunk",
+          "refineCollectionShardKey",
+          "reshardCollection",
+          "splitChunk",
+          "splitVector"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": ""
+        },
+        "actions": [
+          "analyzeShardKey",
+          "clearJumboFlag",
+          "collStats",
+          "configureQueryAnalyzer",
+          "dbStats",
+          "dropDatabase",
+          "enableSharding",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "killCursors",
+          "moveChunk",
+          "refineCollectionShardKey",
+          "reshardCollection",
+          "splitChunk",
+          "splitVector"
+        ]
+      },
+      {
+        "resource": {
+          "db": "",
+          "collection": "system.profile"
+        },
+        "actions": [
+          "find"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": ""
+        },
+        "actions": [
+          "analyzeShardKey",
+          "changeStream",
+          "clearJumboFlag",
+          "collStats",
+          "configureQueryAnalyzer",
+          "dbHash",
+          "dbStats",
+          "enableSharding",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "moveChunk",
+          "planCacheRead",
+          "refineCollectionShardKey",
+          "remove",
+          "reshardCollection",
+          "splitChunk",
+          "splitVector",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "config",
+          "collection": "system.sessions"
+        },
+        "actions": [
+          "collStats",
+          "dbStats",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": ""
+        },
+        "actions": [
+          "analyzeShardKey",
+          "changeStream",
+          "clearJumboFlag",
+          "collStats",
+          "configureQueryAnalyzer",
+          "dbHash",
+          "dbStats",
+          "enableSharding",
+          "find",
+          "getDatabaseVersion",
+          "getShardVersion",
+          "indexStats",
+          "insert",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "moveChunk",
+          "planCacheRead",
+          "refineCollectionShardKey",
+          "remove",
+          "reshardCollection",
+          "splitChunk",
+          "splitVector",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.election"
+        },
+        "actions": [
+          "find",
+          "insert",
+          "remove",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "replset.minvalid"
+        },
+        "actions": [
+          "find",
+          "insert",
+          "remove",
+          "update"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.healthlog"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.js"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "db": "local",
+          "collection": "system.replset"
+        },
+        "actions": [
+          "changeStream",
+          "collStats",
+          "dbHash",
+          "dbStats",
+          "find",
+          "killCursors",
+          "listCollections",
+          "listIndexes",
+          "listSearchIndexes",
+          "planCacheRead"
+        ]
+      },
+      {
+        "resource": {
+          "cluster": true
+        },
+        "actions": [
+          "addShard",
+          "allCollectionStats",
+          "appendOplogNote",
+          "applicationMessage",
+          "auditConfigure",
+          "checkMetadataConsistency",
+          "cleanupOrphaned",
+          "connPoolStats",
+          "connPoolSync",
+          "dropConnections",
+          "flushRouterConfig",
+          "fsync",
+          "getClusterParameter",
+          "getDefaultRWConcern",
+          "getCmdLineOpts",
+          "getLog",
+          "getParameter",
+          "getShardMap",
+          "hostInfo",
+          "inprog",
+          "invalidateUserCache",
+          "killAnyCursor",
+          "killAnySession",
+          "killop",
+          "listDatabases",
+          "listSampledQueries",
+          "listSessions",
+          "listShards",
+          "logRotate",
+          "netstat",
+          "oidcListKeys",
+          "oidcRefreshKeys",
+          "oidReset",
+          "operationMetrics",
+          "queryStatsRead",
+          "queryStatsReadTransformed",
+          "removeShard",
+          "replSetConfigure",
+          "replSetGetConfig",
+          "replSetGetStatus",
+          "replSetResizeOplog",
+          "replSetStateChange",
+          "resync",
+          "rotateCertificates",
+          "runTenantMigration",
+          "serverStatus",
+          "setClusterParameter",
+          "setDefaultRWConcern",
+          "setFeatureCompatibilityVersion",
+          "setParameter",
+          "shardedDataDistribution",
+          "shardingState",
+          "shutdown",
+          "top",
+          "touch",
+          "trafficRecord",
+          "transitionFromDedicatedConfigServer",
+          "transitionToDedicatedConfigServer",
+          "unlock",
+          "useUUID",
+          "setChangeStreamState",
+          "getChangeStreamState"
+        ]
+      },
+      {
+        "resource": {
+          "anyResource": true
+        },
+        "actions": [
+          "dbCheck",
+          "exportCollection",
+          "importCollection"
+        ]
+      }
+    ]
+  }
+}
