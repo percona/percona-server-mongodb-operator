@@ -46,8 +46,12 @@ type PerconaServerMongoDBBackupStatus struct {
 	Azure          *BackupStorageAzureSpec `json:"azure,omitempty"`
 	ReplsetNames   []string                `json:"replsetNames,omitempty"`
 	PBMname        string                  `json:"pbmName,omitempty"`
-	PBMPod         string                  `json:"pbmPod,omitempty"`
-	Error          string                  `json:"error,omitempty"`
+
+	// Deprecated: Use PBMPods instead
+	PBMPod               string            `json:"pbmPod,omitempty"`
+	PBMPods              map[string]string `json:"pbmPods,omitempty"`
+	Error                string            `json:"error,omitempty"`
+	LatestRestorableTime *metav1.Time      `json:"latestRestorableTime,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

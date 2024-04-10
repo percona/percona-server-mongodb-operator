@@ -223,7 +223,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.New("cluster not found")
 	}
 
-	if err := cluster.CanBackup(); err != nil {
+	if err := cluster.CanBackup(ctx); err != nil {
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
