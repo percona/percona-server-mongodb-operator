@@ -104,6 +104,10 @@ spec:
                 type: string
               pbmPod:
                 type: string
+              pbmPods:
+                additionalProperties:
+                  type: string
+                type: object
               replsetNames:
                 items:
                   type: string
@@ -234,6 +238,10 @@ spec:
                     type: string
                   pbmPod:
                     type: string
+                  pbmPods:
+                    additionalProperties:
+                      type: string
+                    type: object
                   replsetNames:
                     items:
                       type: string
