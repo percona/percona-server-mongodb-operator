@@ -10,7 +10,7 @@ deploy_openldap() {
 	if [[ $OPENSHIFT ]]; then
 		yq 'select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.drop[0]="ALL" |
 			select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.add[0]="NET_BIND_SERVICE"' "$test_dir/conf/openldap.yaml" \
-				| kubectl_bin apply -f -
+			| kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
 	fi
