@@ -162,12 +162,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
+		time.Sleep(5 * time.Second) // wait until pbm will start resync
+
 		waitErr := errors.New("waiting for PBM operation to finish")
 		err = retry.OnError(wait.Backoff{
 			Duration: 5 * time.Second,
 			Factor:   2.0,
 			Cap:      time.Hour,
-			Steps:    11,
+			Steps:    12,
 		}, func(err error) bool { return err == waitErr }, func() error {
 			err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
 				stdoutBuf.Reset()
