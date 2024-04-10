@@ -21,6 +21,10 @@ spec:
     pitr:
       enabled: true
       oplogSpanMin: 2
+      oplogOnly: false
+      oplogSpanMin: 10
+      compressionType: gzip
+      compressionLevel: 6
   replsets:
   - name: rs0
     affinity:
