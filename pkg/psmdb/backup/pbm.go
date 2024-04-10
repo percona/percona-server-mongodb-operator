@@ -421,8 +421,15 @@ func NotJobLock(j Job) LockHeaderPredicate {
 func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
 	locks, err := lock.GetLocks(ctx, b.Client, &lock.LockHeader{})
 	if err != nil {
-		return false, errors.Wrap(err, "getting lock data")
+		return false, errors.Wrap(err, "get lock data")
 	}
+
+	opLocks, err := lock.GetOpLocks(ctx, b.Client, &lock.LockHeader{})
+	if err != nil {
+		return false, errors.Wrap(err, "get op lock data")
+	}
+
+	locks = append(locks, opLocks...)
 
 	allowedByAllPredicates := func(l lock.LockHeader) bool {
 		for _, allow := range predicates {
