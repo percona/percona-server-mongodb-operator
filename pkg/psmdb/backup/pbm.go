@@ -276,14 +276,14 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 						SseCustomerKey:       stg.S3.ServerSideEncryption.SSECustomerKey,
 					}
 				case len(cluster.Spec.Secrets.SSE) != 0:
-					ssesecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
+					sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
 
 					if err != nil {
 						return conf, errors.Wrap(err, "get sse credentials secret")
 					}
 					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
 						SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-						SseCustomerKey:       string(ssesecret.Data[SSECustomerKey]),
+						SseCustomerKey:       string(sseSecret.Data[SSECustomerKey]),
 					}
 				default:
 					return conf, errors.New("no SseCustomerKey specified")
@@ -299,13 +299,13 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 					}
 
 				case len(cluster.Spec.Secrets.SSE) != 0:
-					ssesecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
+					sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
 					if err != nil {
 						return conf, errors.Wrap(err, "get sse credentials secret")
 					}
 					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
 						SseAlgorithm: stg.S3.ServerSideEncryption.SSEAlgorithm,
-						KmsKeyID:     string(ssesecret.Data[KMSKeyID]),
+						KmsKeyID:     string(sseSecret.Data[KMSKeyID]),
 					}
 				default:
 					return conf, errors.New("no KmsKeyID specified")
