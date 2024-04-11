@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
@@ -43,6 +44,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 
 // Start requests backup on PBM
 func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+	log := logf.FromContext(ctx)
+	log.Info("Starting backup", "backup", cr.Name, "storage", cr.Spec.StorageName)
+
 	var status api.PerconaServerMongoDBBackupStatus
 
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
@@ -63,7 +67,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
-	err = b.pbm.SendCmd(ctx, ctrl.Cmd{
+	cmd := ctrl.Cmd{
 		Cmd: ctrl.CmdBackup,
 		Backup: &ctrl.BackupCmd{
 			Name:             name,
@@ -71,7 +75,9 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},
-	})
+	}
+	log.Info("Sending backup command", "backupCmd", cmd)
+	err = b.pbm.SendCmd(ctx, cmd)
 	if err != nil {
 		return status, err
 	}
@@ -177,7 +183,26 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 	}
 	status.PBMPod = node
 
+	meta, err = b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if err != nil || meta == nil || meta.Replsets == nil {
+		return status, nil
+	}
+
+	status.PBMPods = backupPods(meta.Replsets)
+
 	return status, nil
+}
+
+func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
+	pods := make(map[string]string)
+	for _, rs := range replsets {
+		spl := strings.Split(rs.Node, ".")
+		if len(spl) == 0 {
+			continue
+		}
+		pods[rs.Name] = spl[0]
+	}
+	return pods
 }
 
 // Close closes the PBM connection

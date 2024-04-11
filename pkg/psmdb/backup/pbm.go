@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -352,6 +353,9 @@ func (b *pbmC) Conn() *mongo.Client {
 // SetConfig sets the pbm config with storage defined in the cluster CR
 // by given storageName
 func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	log := logf.FromContext(ctx)
+	log.Info("Setting PBM config", "backup", cluster.Name)
+
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
@@ -417,8 +421,15 @@ func NotJobLock(j Job) LockHeaderPredicate {
 func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
 	locks, err := lock.GetLocks(ctx, b.Client, &lock.LockHeader{})
 	if err != nil {
-		return false, errors.Wrap(err, "getting lock data")
+		return false, errors.Wrap(err, "get lock data")
 	}
+
+	opLocks, err := lock.GetOpLocks(ctx, b.Client, &lock.LockHeader{})
+	if err != nil {
+		return false, errors.Wrap(err, "get op lock data")
+	}
+
+	locks = append(locks, opLocks...)
 
 	allowedByAllPredicates := func(l lock.LockHeader) bool {
 		for _, allow := range predicates {
@@ -494,7 +505,12 @@ func (b *pbmC) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error
 		return oplog.Timeline{}, ErrNoOplogsForPITR
 	}
 
-	return timelines[len(timelines)-1], nil
+	tl := timelines[len(timelines)-1]
+	if tl.Start == 0 || tl.End == 0 {
+		return oplog.Timeline{}, ErrNoOplogsForPITR
+	}
+
+	return tl, nil
 }
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
@@ -542,7 +558,7 @@ func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to p
 	return oplog.PITRGetChunksSlice(ctx, b.Client, rsName, from, to)
 }
 
-// Node returns replset node chosen to run the backup
+// Node returns replset node chosen to run the backup for a replset related to pbmC
 func (b *pbmC) Node(ctx context.Context) (string, error) {
 	lock, err := lock.GetLockData(ctx, b.Client, &lock.LockHeader{Replset: b.rsName})
 	if err != nil {

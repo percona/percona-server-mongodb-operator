@@ -77,7 +77,6 @@ func (p *fakePBM) GetConfigVar(ctx context.Context, key string) (any, error) {
 func (p *fakePBM) DeleteConfigVar(ctx context.Context, key string) error {
 	return nil
 }
-
 func (p *fakePBM) Node(ctx context.Context) (string, error) {
 	return "", nil
 }
