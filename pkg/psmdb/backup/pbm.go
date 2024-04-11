@@ -42,6 +42,8 @@ const (
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
+	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
+	KMSKeyID                         = "KMS_KEY_ID"
 )
 
 type pbmC struct {
@@ -279,26 +281,56 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 
-		if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 && len(stg.S3.ServerSideEncryption.SSECustomerKey) != 0 {
-			conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
-				SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-				SseCustomerKey:       stg.S3.ServerSideEncryption.SSECustomerKey,
-			}
-		}
-
-		if len(stg.S3.ServerSideEncryption.SSEAlgorithm) != 0 && len(stg.S3.ServerSideEncryption.KMSKeyID) != 0 {
-			conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
-				SseAlgorithm: stg.S3.ServerSideEncryption.SSEAlgorithm,
-				KmsKeyID:     stg.S3.ServerSideEncryption.KMSKeyID,
-			}
-		}
-
 		if len(stg.S3.CredentialsSecret) != 0 {
 			s3secret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.S3.CredentialsSecret)
 			if err != nil {
 				return conf, errors.Wrap(err, "get s3 credentials secret")
 			}
 
+			if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
+
+				switch {
+				case len(stg.S3.ServerSideEncryption.SSECustomerKey) != 0:
+					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+						SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
+						SseCustomerKey:       stg.S3.ServerSideEncryption.SSECustomerKey,
+					}
+				case len(cluster.Spec.Secrets.SSE) != 0:
+					sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
+
+					if err != nil {
+						return conf, errors.Wrap(err, "get sse credentials secret")
+					}
+					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+						SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
+						SseCustomerKey:       string(sseSecret.Data[SSECustomerKey]),
+					}
+				default:
+					return conf, errors.New("no SseCustomerKey specified")
+				}
+			}
+
+			if len(stg.S3.ServerSideEncryption.SSEAlgorithm) != 0 {
+				switch {
+				case len(stg.S3.ServerSideEncryption.KMSKeyID) != 0:
+					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+						SseAlgorithm: stg.S3.ServerSideEncryption.SSEAlgorithm,
+						KmsKeyID:     stg.S3.ServerSideEncryption.KMSKeyID,
+					}
+
+				case len(cluster.Spec.Secrets.SSE) != 0:
+					sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
+					if err != nil {
+						return conf, errors.Wrap(err, "get sse credentials secret")
+					}
+					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
+						SseAlgorithm: stg.S3.ServerSideEncryption.SSEAlgorithm,
+						KmsKeyID:     string(sseSecret.Data[KMSKeyID]),
+					}
+				default:
+					return conf, errors.New("no KmsKeyID specified")
+				}
+			}
 			conf.Storage.S3.Credentials = s3.Credentials{
 				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
