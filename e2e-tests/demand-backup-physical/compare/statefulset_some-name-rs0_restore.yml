@@ -238,7 +238,7 @@ spec:
         - name: pbm-config
           secret:
             defaultMode: 420
-            secretName: pbm-config
+            secretName: some-name-pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0
