@@ -38,12 +38,12 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 		return nil
 	}
 
-	if ok && schedule.CronShedule == cr.Spec.UpgradeOptions.Schedule {
+	if ok && schedule.CronSchedule == cr.Spec.UpgradeOptions.Schedule {
 		return nil
 	}
 
 	if ok {
-		log.Info("remove job because of new", "old", schedule.CronShedule, "new", cr.Spec.UpgradeOptions.Schedule)
+		log.Info("remove job because of new", "old", schedule.CronSchedule, "new", cr.Spec.UpgradeOptions.Schedule)
 		r.deleteEnsureVersion(cr, schedule.ID)
 	}
 
@@ -91,9 +91,9 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 
 	jn := jobName(cr)
 	log.Info("add new job", "name", jn, "schedule", cr.Spec.UpgradeOptions.Schedule)
-	r.crons.jobs[jn] = Shedule{
-		ID:          int(id),
-		CronShedule: cr.Spec.UpgradeOptions.Schedule,
+	r.crons.jobs[jn] = Schedule{
+		ID:           int(id),
+		CronSchedule: cr.Spec.UpgradeOptions.Schedule,
 	}
 
 	return nil
