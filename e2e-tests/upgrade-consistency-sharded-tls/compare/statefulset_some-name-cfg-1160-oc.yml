@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 9
+  generation: 10
   labels:
     app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
@@ -67,6 +67,7 @@ spec:
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:

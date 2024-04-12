@@ -450,6 +450,27 @@ func (conf MongoConfiguration) VaultEnabled() bool {
 	return ok
 }
 
+// QuietEnabled returns whether mongo config has `quiet` set to true under `systemLog` section.
+// If `quiet` or `systemLog` sections are not present, returns true.
+func (conf MongoConfiguration) QuietEnabled() bool {
+	defaultValue := true
+
+	m, err := conf.GetOptions("systemLog")
+	if err != nil || m == nil {
+		return defaultValue
+	}
+	v, ok := m["quiet"]
+	if !ok {
+		return defaultValue
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return defaultValue
+	}
+
+	return b
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
