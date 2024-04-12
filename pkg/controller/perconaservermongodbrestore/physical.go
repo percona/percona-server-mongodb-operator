@@ -61,7 +61,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pbmConf := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pbm-config",
+				Name:      r.pbmConfigName(cluster),
 				Namespace: cluster.Namespace,
 			},
 		}
@@ -464,7 +464,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		Name: "pbm-config",
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: "pbm-config",
+				SecretName: r.pbmConfigName(cluster),
 			},
 		},
 	})
@@ -743,7 +743,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 	log := logf.FromContext(ctx)
 
 	secret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: "pbm-config", Namespace: cluster.Namespace}, &secret)
+	err := r.client.Get(ctx, types.NamespacedName{Name: r.pbmConfigName(cluster), Namespace: cluster.Namespace}, &secret)
 	if err == nil {
 		return nil
 	} else if !k8serrors.IsNotFound(err) {
@@ -771,7 +771,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 
 	secret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pbm-config",
+			Name:      r.pbmConfigName(cluster),
 			Namespace: cluster.Namespace,
 		},
 		Data: map[string][]byte{
@@ -907,4 +907,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) disablePITR(ctx context.Context, 
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) pbmConfigName(cluster *psmdbv1.PerconaServerMongoDB) string {
+	if cluster.CompareVersion("1.16.0") < 0 {
+		return "pbm-config"
+	}
+	return cluster.Name + "-pbm-config"
 }

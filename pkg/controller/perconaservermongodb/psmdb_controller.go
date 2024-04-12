@@ -138,19 +138,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 type CronRegistry struct {
 	crons      *cron.Cron
-	jobs       map[string]Shedule
+	jobs       map[string]Schedule
 	backupJobs *sync.Map
 }
 
-type Shedule struct {
-	ID          int
-	CronShedule string
+type Schedule struct {
+	ID           int
+	CronSchedule string
 }
 
 func NewCronRegistry() CronRegistry {
 	c := CronRegistry{
 		crons:      cron.New(),
-		jobs:       make(map[string]Shedule),
+		jobs:       make(map[string]Schedule),
 		backupJobs: new(sync.Map),
 	}
 
@@ -297,7 +297,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile users secret")
 	}
-
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
