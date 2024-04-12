@@ -118,8 +118,12 @@ spec:
                     type: string
                   credentialsSecret:
                     type: string
+                  debugLogLevels:
+                    type: string
                   endpointUrl:
                     type: string
+                  forcePathStyle:
+                    type: boolean
                   insecureSkipTLSVerify:
                     type: boolean
                   maxUploadParts:
@@ -128,6 +132,15 @@ spec:
                     type: string
                   region:
                     type: string
+                  retryer:
+                    properties:
+                      maxRetryDelay:
+                        type: string
+                      minRetryDelay:
+                        type: string
+                      numMaxRetries:
+                        type: integer
+                    type: object
                   serverSideEncryption:
                     properties:
                       kmsKeyID:
@@ -252,8 +265,12 @@ spec:
                         type: string
                       credentialsSecret:
                         type: string
+                      debugLogLevels:
+                        type: string
                       endpointUrl:
                         type: string
+                      forcePathStyle:
+                        type: boolean
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
@@ -262,6 +279,15 @@ spec:
                         type: string
                       region:
                         type: string
+                      retryer:
+                        properties:
+                          maxRetryDelay:
+                            type: string
+                          minRetryDelay:
+                            type: string
+                          numMaxRetries:
+                            type: integer
+                        type: object
                       serverSideEncryption:
                         properties:
                           kmsKeyID:
@@ -693,6 +719,45 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  configuration:
+                    properties:
+                      backupOptions:
+                        properties:
+                          oplogSpanMin:
+                            type: number
+                          priority:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          timeouts:
+                            properties:
+                              startingStatus:
+                                format: int32
+                                type: integer
+                            type: object
+                        required:
+                        - oplogSpanMin
+                        type: object
+                      restoreOptions:
+                        properties:
+                          batchSize:
+                            type: integer
+                          downloadChunkMb:
+                            type: integer
+                          maxDownloadBufferMb:
+                            type: integer
+                          mongodLocation:
+                            type: string
+                          mongodLocationMap:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          numDownloadWorkers:
+                            type: integer
+                          numInsertionWorkers:
+                            type: integer
+                        type: object
+                    type: object
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -896,8 +961,12 @@ spec:
                               type: string
                             credentialsSecret:
                               type: string
+                            debugLogLevels:
+                              type: string
                             endpointUrl:
                               type: string
+                            forcePathStyle:
+                              type: boolean
                             insecureSkipTLSVerify:
                               type: boolean
                             maxUploadParts:
@@ -906,6 +975,15 @@ spec:
                               type: string
                             region:
                               type: string
+                            retryer:
+                              properties:
+                                maxRetryDelay:
+                                  type: string
+                                minRetryDelay:
+                                  type: string
+                                numMaxRetries:
+                                  type: integer
+                              type: object
                             serverSideEncryption:
                               properties:
                                 kmsKeyID:
@@ -8286,6 +8364,8 @@ spec:
                   encryptionKey:
                     type: string
                   ldapSecret:
+                    type: string
+                  sse:
                     type: string
                   ssl:
                     type: string
