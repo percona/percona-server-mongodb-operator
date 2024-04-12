@@ -83,8 +83,9 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	}
 
 	status = api.PerconaServerMongoDBBackupStatus{
-		StorageName: cr.Spec.StorageName,
-		PBMname:     name,
+		StorageName:        cr.Spec.StorageName,
+		PBMname:            name,
+		ServiceAccountName: cluster.Spec.Backup.ServiceAccountName,
 		LastTransition: &metav1.Time{
 			Time: time.Unix(time.Now().Unix(), 0),
 		},

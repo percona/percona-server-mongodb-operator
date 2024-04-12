@@ -147,6 +147,8 @@ spec:
                 required:
                 - bucket
                 type: object
+              serviceAccountName:
+                type: string
               start:
                 format: date-time
                 type: string
