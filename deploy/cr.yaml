@@ -530,8 +530,8 @@ spec:
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          retryer:
 #            numMaxRetries: 3
-#            minRetryDelay: 30
-#            maxRetryDelay: 5
+#            minRetryDelay: "30"
+#            maxRetryDelay: "5"
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -565,11 +565,9 @@ spec:
 #        priority:
 #          "localhost:28019": 2.5
 #          "localhost:27018": 2.5
-#        compression: gzip
-#        compressionLevel: 0
 #        timeouts:
 #          startingStatus: 33
-#        oplogSpanMin: 
+#        oplogSpanMin: 10
 #      restoreOptions:
 #        batchSize: 500
 #        numInsertionWorkers: 10

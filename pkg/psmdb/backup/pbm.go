@@ -228,28 +228,30 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 }
 
 func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) (config.Config, error) {
-	conf := config.Config{}
-
-	priority, err := GetPriorities(ctx, k8sclient, cluster)
-	if err != nil {
-		return conf, errors.Wrap(err, "get priorities")
-	}
-
-	conf = config.Config{
+	conf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cluster.Spec.Backup.PITR.Enabled,
 			Compression:      cluster.Spec.Backup.PITR.CompressionType,
 			CompressionLevel: cluster.Spec.Backup.PITR.CompressionLevel,
 		},
-		Backup: config.BackupConf{
-			Priority: priority,
-		},
 	}
 
 	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
-		conf.Backup.OplogSpanMin = cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin
-		conf.Backup.Timeouts = &config.BackupTimeouts{
-			Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
+		conf.Backup = config.BackupConf{
+			OplogSpanMin: cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
+			Timeouts: &config.BackupTimeouts{
+				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
+			},
+		}
+
+		if cluster.Spec.Backup.Configuration.BackupOptions.Priority != nil {
+			conf.Backup.Priority = cluster.Spec.Backup.Configuration.BackupOptions.Priority
+		} else {
+			priority, err := GetPriorities(ctx, k8sclient, cluster)
+			if err != nil {
+				return conf, errors.Wrap(err, "get priorities")
+			}
+			conf.Backup.Priority = priority
 		}
 	}
 

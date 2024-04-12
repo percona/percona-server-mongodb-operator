@@ -727,7 +727,7 @@ spec:
                             type: number
                           priority:
                             additionalProperties:
-                              type: string
+                              type: number
                             type: object
                           timeouts:
                             properties:

@@ -838,9 +838,9 @@ type BackupTimeouts struct {
 }
 
 type BackupOptions struct {
-	OplogSpanMin float64           `json:"oplogSpanMin"`
-	Priority     map[string]string `json:"priority,omitempty"`
-	Timeouts     *BackupTimeouts   `json:"timeouts,omitempty"`
+	OplogSpanMin float64            `json:"oplogSpanMin"`
+	Priority     map[string]float64 `json:"priority,omitempty"`
+	Timeouts     *BackupTimeouts    `json:"timeouts,omitempty"`
 }
 
 type RestoreOptions struct {
