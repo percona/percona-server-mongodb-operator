@@ -67,6 +67,7 @@ spec:
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
         - --wiredTigerCacheSizeGB=0.25
         - --wiredTigerIndexPrefixCompression=true
+        - --quiet
         command:
         - /opt/percona/ps-entry.sh
         env:
@@ -82,7 +83,7 @@ spec:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: perconalab/percona-server-mongodb-operator:main-mongod6.0
+        image: perconalab/percona-server-mongodb-operator:main-mongod7.0
         imagePullPolicy: Always
         livenessProbe:
           exec:

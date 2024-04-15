@@ -20,6 +20,7 @@ spec:
     configuration: |
       systemLog:
         verbosity: 1
+        quiet: false
       security:
         redactClientLogData: false
         enableEncryption: false

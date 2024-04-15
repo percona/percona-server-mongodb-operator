@@ -35,8 +35,8 @@ fi
 MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 mongo_shell="env HOME=${TMPDIR:-/tmp} mongosh"
-if [ "$MONGODB_VERSION" != 'v6.0' ]; then
-	echo "MongoDB version $MONGODB_VERSION present, using mongo shell"
+if [ "$MONGODB_VERSION" == 'v4.4' ] || [ "$MONGODB_VERSION" == 'v5.0' ]; then
+	echo "MongoDB version $MONGODB_VERSION present, using old mongo client"
 	mongo_shell=mongo
 fi
 

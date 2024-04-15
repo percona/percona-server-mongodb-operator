@@ -58,6 +58,7 @@ spec:
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/physical-restore-ps-entry.sh
           env:
@@ -237,7 +238,7 @@ spec:
         - name: pbm-config
           secret:
             defaultMode: 420
-            secretName: pbm-config
+            secretName: some-name-pbm-config
   updateStrategy:
     rollingUpdate:
       partition: 0

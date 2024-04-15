@@ -12,7 +12,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.16.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod6.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -50,6 +50,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
+#    sse: my-cluster-name-sse
   pmm:
     enabled: false
     image: perconalab/pmm-client:dev-latest
@@ -530,6 +531,10 @@ spec:
 #            sseAlgorithm: aws:kms
 #            sseCustomerAlgorithm: AES256
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
+#          retryer:
+#            numMaxRetries: 3
+#            minRetryDelay: 30
+#            maxRetryDelay: 5
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -550,7 +555,7 @@ spec:
 #        azure:
 #          container: CONTAINER-NAME
 #          prefix: PREFIX-NAME
-#          https://accountName.blob.core.windows.net
+#          endpointUrl: https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
@@ -558,6 +563,25 @@ spec:
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
+#    backup:
+#      priority:
+#        "localhost:28019": 2.5
+#        "localhost:27018": 2.5
+#      compression: gzip
+#      compressionLevel: 0
+#      timeouts:
+#        startingStatus: 33
+#      oplogSpanMin: 
+#    restore:
+#      batchSize: 500
+#      numInsertionWorkers: 10
+#      numDownloadWorkers: 4
+#      maxDownloadBufferMb: 0
+#      downloadChunkMb: 32
+#      mongodLocation: /usr/bin/mongo
+#      mongodLocationMap:
+#        "node01:2017": /usr/bin/mongo
+#        "node03:27017": /usr/bin/mongo
 #    tasks:
 #      - name: daily-s3-us-west
 #        enabled: true

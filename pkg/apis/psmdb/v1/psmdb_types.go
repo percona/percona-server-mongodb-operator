@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -496,6 +498,27 @@ func (conf MongoConfiguration) VaultEnabled() bool {
 	return ok
 }
 
+// QuietEnabled returns whether mongo config has `quiet` set to true under `systemLog` section.
+// If `quiet` or `systemLog` sections are not present, returns true.
+func (conf MongoConfiguration) QuietEnabled() bool {
+	defaultValue := true
+
+	m, err := conf.GetOptions("systemLog")
+	if err != nil || m == nil {
+		return defaultValue
+	}
+	v, ok := m["quiet"]
+	if !ok {
+		return defaultValue
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return defaultValue
+	}
+
+	return b
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
@@ -671,6 +694,7 @@ type SecretsSpec struct {
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
+	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
@@ -801,6 +825,12 @@ type S3ServiceSideEncryption struct {
 	SSECustomerKey string `json:"sseCustomerKey,omitempty"`
 }
 
+type Retryer struct {
+	NumMaxRetries int             `json:"numMaxRetries,omitempty"`
+	MinRetryDelay metav1.Duration `json:"minRetryDelay,omitempty"`
+	MaxRetryDelay metav1.Duration `json:"maxRetryDelay,omitempty"`
+}
+
 type BackupStorageS3Spec struct {
 	Bucket                string                  `json:"bucket"`
 	Prefix                string                  `json:"prefix,omitempty"`
@@ -811,6 +841,9 @@ type BackupStorageS3Spec struct {
 	MaxUploadParts        int                     `json:"maxUploadParts,omitempty"`
 	StorageClass          string                  `json:"storageClass,omitempty"`
 	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
+	ForcePathStyle        *bool                   `json:"forcePathStyle,omitempty"`
+	DebugLogLevels        string                  `json:"debugLogLevels,omitempty"`
+	Retryer               *Retryer                `json:"retryer,omitempty"`
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
@@ -848,6 +881,31 @@ func (p PITRSpec) Disabled() PITRSpec {
 	return p
 }
 
+type BackupTimeouts struct {
+	Starting *uint32 `json:"startingStatus,omitempty"`
+}
+
+type BackupOptions struct {
+	OplogSpanMin float64           `json:"oplogSpanMin"`
+	Priority     map[string]string `json:"priority,omitempty"`
+	Timeouts     *BackupTimeouts   `json:"timeouts,omitempty"`
+}
+
+type RestoreOptions struct {
+	BatchSize           int               `json:"batchSize,omitempty"`
+	NumInsertionWorkers int               `json:"numInsertionWorkers,omitempty"`
+	NumDownloadWorkers  int               `json:"numDownloadWorkers,omitempty"`
+	MaxDownloadBufferMb int               `json:"maxDownloadBufferMb,omitempty"`
+	DownloadChunkMb     int               `json:"downloadChunkMb,omitempty"`
+	MongodLocation      string            `json:"mongodLocation,omitempty"`
+	MongodLocationMap   map[string]string `json:"mongodLocationMap,omitempty"`
+}
+
+type BackupConfig struct {
+	BackupOptions  *BackupOptions  `json:"backupOptions,omitempty"`
+	RestoreOptions *RestoreOptions `json:"restoreOptions,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Annotations              map[string]string            `json:"annotations,omitempty"`
@@ -861,6 +919,7 @@ type BackupSpec struct {
 	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
+	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {
@@ -1016,7 +1075,9 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
-func (cr *PerconaServerMongoDB) CanBackup() error {
+func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
+	logf.FromContext(ctx).V(1).Info("checking if backup is allowed", "backup", cr.Name)
+
 	if cr.Spec.Unmanaged {
 		return errors.Errorf("backups are not allowed on unmanaged clusters")
 	}

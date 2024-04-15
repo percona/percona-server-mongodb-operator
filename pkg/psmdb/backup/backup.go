@@ -52,6 +52,7 @@ func IsPBMNotConfiguredError(err error) bool {
 // in given cluster and namespace
 func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client, cluster *api.PerconaServerMongoDB, current Job, allowLock ...LockHeaderPredicate) (bool, error) {
 	l := log.FromContext(ctx)
+	l.V(1).Info("Checking for active jobs", "currentJob", current)
 
 	bcps := &api.PerconaServerMongoDBBackupList{}
 	err := cl.List(ctx,
