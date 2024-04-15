@@ -66,9 +66,6 @@ spec:
             requests:
               storage: 3Gi
     configuration: |
-      net:
-        tls:
-          mode: preferTLS
       operationProfiling:
         mode: slowOp
     arbiter:
@@ -106,9 +103,6 @@ spec:
             requests:
               storage: 3Gi
       configuration: |
-        net:
-          tls:
-            mode: preferTLS
         operationProfiling:
           mode: slowOp
 
