@@ -530,8 +530,8 @@ spec:
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          retryer:
 #            numMaxRetries: 3
-#            minRetryDelay: "30"
-#            maxRetryDelay: "5"
+#            minRetryDelay: 30ms
+#            maxRetryDelay: 5m
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
