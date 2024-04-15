@@ -1144,4 +1144,12 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	return orderedFinalizers
 }
 
-const AnnotationResyncPBM = "percona.com/resync-pbm"
+const (
+	AnnotationResyncPBM           = "percona.com/resync-pbm"
+	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
+)
+
+func (cr *PerconaServerMongoDB) PVCResizeInProgress() bool {
+	_, ok := cr.Annotations[AnnotationPVCResizeInProgress]
+	return ok
+}
