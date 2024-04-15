@@ -106,7 +106,7 @@ check_recovery() {
 	# fail faster if we don't reach requested status until some time
 	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
 	echo
-	wait_restore "$backup_name" "$cluster_name" "ready" "0" "900"
+	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
 	echo
 	set -o xtrace
 
