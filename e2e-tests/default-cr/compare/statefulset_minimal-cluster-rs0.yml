@@ -67,6 +67,7 @@ spec:
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
