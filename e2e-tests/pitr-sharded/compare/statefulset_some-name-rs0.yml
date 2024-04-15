@@ -41,21 +41,22 @@ spec:
     spec:
       containers:
         - args:
-          - --bind_ip_all
-          - --auth
-          - --dbpath=/data/db
-          - --port=27017
-          - --replSet=rs0
-          - --storageEngine=wiredTiger
-          - --relaxPermChecks
-          - --sslAllowInvalidCertificates
-          - --clusterAuthMode=x509
-          - --shardsvr
-          - --enableEncryption
-          - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-          - --wiredTigerCacheSizeGB=0.25
-          - --wiredTigerIndexPrefixCompression=true
-          - --config=/etc/mongodb-config/mongod.conf
+            - --bind_ip_all
+            - --auth
+            - --dbpath=/data/db
+            - --port=27017
+            - --replSet=rs0
+            - --storageEngine=wiredTiger
+            - --relaxPermChecks
+            - --sslAllowInvalidCertificates
+            - --clusterAuthMode=x509
+            - --shardsvr
+            - --enableEncryption
+            - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+            - --wiredTigerCacheSizeGB=0.25
+            - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
           - /opt/percona/ps-entry.sh
           env:
