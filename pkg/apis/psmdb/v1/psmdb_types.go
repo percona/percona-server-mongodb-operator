@@ -1203,6 +1203,10 @@ func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 	}
 }
 
+func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
+	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
+}
+
 const (
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"

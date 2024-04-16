@@ -198,7 +198,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		} else {
 			args = append(args, "--clusterAuthMode=x509")
 		}
-	} else if (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf) {
+	} else if cr.UnsafeTLSDisabled() {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
