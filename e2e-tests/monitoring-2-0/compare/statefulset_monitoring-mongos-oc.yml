@@ -58,7 +58,6 @@ spec:
             - --relaxPermChecks
             - --clusterAuthMode=x509
             - --tlsMode=requireTLS
-            - --config=/etc/mongos-config/mongos.conf
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -140,8 +139,6 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongos-config
-              name: config
             - mountPath: /etc/users-secret
               name: users-secret-file
               readOnly: true
@@ -326,11 +323,6 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-users
-        - configMap:
-            defaultMode: 420
-            name: monitoring-mongos
-            optional: true
-          name: config
         - emptyDir: {}
           name: bin
   updateStrategy:
