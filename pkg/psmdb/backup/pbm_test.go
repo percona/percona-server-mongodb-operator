@@ -16,7 +16,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func TestGetPBMConfig(t *testing.T) {
+func TestApplyCustomPBMConfig(t *testing.T) {
 	cr := expectedCR(t)
 
 	storage := cr.Spec.Backup.Storages["test-s3-storage"]
