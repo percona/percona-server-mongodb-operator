@@ -155,8 +155,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return errors.Wrap(err, "update cert mangager certs")
 	}
 
+	c := r.newCertManagerCtrl(r.client, r.scheme, false)
 	if cr.CompareVersion("1.15.0") >= 0 {
-		if err := dryController.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
+		if err := c.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
 			return errors.Wrap(err, "delete deprecated issuer")
 		}
 	}
