@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
-	c := r.newCertManagerCtrl(r.client, r.scheme, true)
+	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
 		switch err {
@@ -82,7 +82,7 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("createSSLByCertManager")
 
-	dryController := r.newCertManagerCtrl(r.client, r.scheme, true)
+	dryController := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	// checking if certificates will be updated
 	applyStatus, err := r.applyCertManagerCertificates(ctx, cr, dryController)
 	if err != nil {
@@ -155,7 +155,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return errors.Wrap(err, "update cert mangager certs")
 	}
 
-	c := r.newCertManagerCtrl(r.client, r.scheme, false)
+	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
 	if cr.CompareVersion("1.15.0") >= 0 {
 		if err := c.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
 			return errors.Wrap(err, "delete deprecated issuer")
@@ -208,7 +208,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 		}
 	}
 
-	c := r.newCertManagerCtrl(r.client, r.scheme, false)
+	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
 	log.Info("applying new certificates")
 	if _, err := r.applyCertManagerCertificates(ctx, cr, c); err != nil {
 		return errors.Wrap(err, "failed to apply cert-manager certificates")

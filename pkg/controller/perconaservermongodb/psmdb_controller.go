@@ -76,15 +76,15 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDB{
-		client:             mgr.GetClient(),
-		scheme:             mgr.GetScheme(),
-		serverVersion:      sv,
-		reconcileIn:        time.Second * 5,
-		crons:              NewCronRegistry(),
-		lockers:            newLockStore(),
-		newPBM:             backup.NewPBM,
-		restConfig:         mgr.GetConfig(),
-		newCertManagerCtrl: tls.NewCertManagerController,
+		client:                 mgr.GetClient(),
+		scheme:                 mgr.GetScheme(),
+		serverVersion:          sv,
+		reconcileIn:            time.Second * 5,
+		crons:                  NewCronRegistry(),
+		lockers:                newLockStore(),
+		newPBM:                 backup.NewPBM,
+		restConfig:             mgr.GetConfig(),
+		newCertManagerCtrlFunc: tls.NewCertManagerController,
 
 		initImage: initImage,
 
@@ -175,7 +175,7 @@ type ReconcilePerconaServerMongoDB struct {
 	reconcileIn         time.Duration
 	mongoClientProvider MongoClientProvider
 
-	newCertManagerCtrl tls.NewCertManagerControllerFunc
+	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
 	newPBM backup.NewPBMFunc
 
@@ -1186,7 +1186,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
-		if err == errWaitingTLS {
+		if err == errTLSNotReady {
 			return nil
 		}
 		return errors.Wrap(err, "failed to get ssl annotations")
@@ -1332,7 +1332,7 @@ func ensurePVCs(
 	return nil
 }
 
-var errWaitingTLS = errors.New("waiting for TLS secret")
+var errTLSNotReady = errors.New("waiting for TLS secret")
 
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
@@ -1340,7 +1340,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return nil, errWaitingTLS
+			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrap(err, "get secret hash error")
 	}
@@ -1349,7 +1349,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return nil, errWaitingTLS
+			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrap(err, "get secret hash error")
 	}

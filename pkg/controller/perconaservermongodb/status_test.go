@@ -39,11 +39,11 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDB{
-		client:             cl,
-		scheme:             s,
-		lockers:            newLockStore(),
-		newPBM:             fakeBackup.NewPBM,
-		newCertManagerCtrl: faketls.NewCertManagerController,
+		client:                 cl,
+		scheme:                 s,
+		lockers:                newLockStore(),
+		newPBM:                 fakeBackup.NewPBM,
+		newCertManagerCtrlFunc: faketls.NewCertManagerController,
 	}
 }
 
