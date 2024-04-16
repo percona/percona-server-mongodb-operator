@@ -58,7 +58,7 @@ func (in *BackupOptions) DeepCopyInto(out *BackupOptions) {
 	*out = *in
 	if in.Priority != nil {
 		in, out := &in.Priority, &out.Priority
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]float64, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}

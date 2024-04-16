@@ -533,8 +533,8 @@ spec:
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
 #          retryer:
 #            numMaxRetries: 3
-#            minRetryDelay: 30
-#            maxRetryDelay: 5
+#            minRetryDelay: 30ms
+#            maxRetryDelay: 5m
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -563,25 +563,24 @@ spec:
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
-#    backup:
-#      priority:
-#        "localhost:28019": 2.5
-#        "localhost:27018": 2.5
-#      compression: gzip
-#      compressionLevel: 0
-#      timeouts:
-#        startingStatus: 33
-#      oplogSpanMin: 
-#    restore:
-#      batchSize: 500
-#      numInsertionWorkers: 10
-#      numDownloadWorkers: 4
-#      maxDownloadBufferMb: 0
-#      downloadChunkMb: 32
-#      mongodLocation: /usr/bin/mongo
-#      mongodLocationMap:
-#        "node01:2017": /usr/bin/mongo
-#        "node03:27017": /usr/bin/mongo
+#    configuration:
+#      backupOptions:
+#        priority:
+#          "localhost:28019": 2.5
+#          "localhost:27018": 2.5
+#        timeouts:
+#          startingStatus: 33
+#        oplogSpanMin: 10
+#      restoreOptions:
+#        batchSize: 500
+#        numInsertionWorkers: 10
+#        numDownloadWorkers: 4
+#        maxDownloadBufferMb: 0
+#        downloadChunkMb: 32
+#        mongodLocation: /usr/bin/mongo
+#        mongodLocationMap:
+#          "node01:2017": /usr/bin/mongo
+#          "node03:27017": /usr/bin/mongo
 #    tasks:
 #      - name: daily-s3-us-west
 #        enabled: true
