@@ -269,9 +269,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 
 		labels, err := psmdb.GetNodeLabels(ctx, r.client, cr, pod)
-		if err != nil {
-			log.Info("failed to get node labels, continue without node labels", "pod", pod.Name, "error", err.Error())
-		} else {
+		if err == nil {
 			nodeLabels = util.MapMerge(nodeLabels, mongo.ReplsetTags{
 				"region": labels[corev1.LabelTopologyRegion],
 				"zone":   labels[corev1.LabelTopologyZone],
