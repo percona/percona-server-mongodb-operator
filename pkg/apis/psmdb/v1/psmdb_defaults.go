@@ -97,16 +97,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.TLS.Mode = TLSModePrefer
 	}
 
-	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
-		return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
-        }
-
 	if cr.Spec.TLS.CertValidityDuration.Duration == 0 {
 		cr.Spec.TLS.CertValidityDuration = metav1.Duration{Duration: time.Hour * 24 * 90}
 	}
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
 		cr.Spec.TLS.AllowInvalidCertificates = &t
+	}
+
+	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
+		return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
 	}
 
 	if len(cr.Spec.Replsets) == 0 {
