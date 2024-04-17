@@ -90,6 +90,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	if cr.Spec.TLS.Mode == "" {
+		cr.Spec.TLS.Mode = TLSModePrefer
+	}
+
+	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
+		return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
+	}
+
 	if len(cr.Spec.Replsets) == 0 {
 		cr.Spec.Replsets = []*ReplsetSpec{
 			{
@@ -579,14 +587,6 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && cr.DeletionTimestamp == nil && !cr.Spec.Pause {
-		if cr.Spec.TLS.Mode == "" {
-			cr.Spec.TLS.Mode = TLSModePrefer
-		}
-
-		if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
-			return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
-		}
-
 		if err := rs.checkSafeDefaults(cr.Spec.Unsafe); err != nil {
 			return errors.Wrap(err, "check safe defaults")
 		}
