@@ -3,7 +3,9 @@ kind: PerconaServerMongoDB
 metadata:
   name: mydb
 spec:
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    replsetSize: true
+    mongosSize: true
   clusterServiceDNSMode: "Internal"
   image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
@@ -64,9 +66,6 @@ spec:
             requests:
               storage: 3Gi
     configuration: |
-      net:
-        tls:
-          mode: preferTLS
       operationProfiling:
         mode: slowOp
     arbiter:
@@ -104,9 +103,6 @@ spec:
             requests:
               storage: 3Gi
       configuration: |
-        net:
-          tls:
-            mode: preferTLS
         operationProfiling:
           mode: slowOp
 

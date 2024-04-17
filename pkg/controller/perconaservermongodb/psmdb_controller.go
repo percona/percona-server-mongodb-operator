@@ -350,12 +350,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	if !cr.Spec.UnsafeConf {
-		err = r.reconsileSSL(ctx, cr)
-		if err != nil {
-			err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
-			return reconcile.Result{}, err
-		}
+	err = r.reconcileSSL(ctx, cr)
+	if err != nil {
+		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+cr.Spec.Secrets.SSL+` manually or setup cert-manager correctly`, err)
+		return reconcile.Result{}, err
 	}
 
 	internalKey := psmdb.InternalKey(cr)
@@ -1180,16 +1178,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
 
-	sslAnn, err := r.sslAnnotation(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get ssl annotations")
-	}
-	if templateSpec.Annotations == nil {
-		templateSpec.Annotations = make(map[string]string)
-	}
+	if cr.TLSEnabled() {
+		sslAnn, err := r.sslAnnotation(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "failed to get ssl annotations")
+		}
+		if templateSpec.Annotations == nil {
+			templateSpec.Annotations = make(map[string]string)
+		}
 
-	for k, v := range sslAnn {
-		templateSpec.Annotations[k] = v
+		for k, v := range sslAnn {
+			templateSpec.Annotations[k] = v
+		}
 	}
 
 	secret := new(corev1.Secret)
@@ -1348,9 +1348,6 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 }
 
 func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.PerconaServerMongoDB, secretName string) (string, error) {
-	if cr.Spec.UnsafeConf {
-		return "", nil
-	}
 	secretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{

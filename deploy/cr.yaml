@@ -15,6 +15,7 @@ spec:
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
 #  tls:
+#    mode: preferTLS
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    issuerConf:
@@ -25,7 +26,12 @@ spec:
 #    - name: private-registry-credentials
 #  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
-  allowUnsafeConfigurations: false
+#  unsafeFlags:
+#    tls: false
+#    replsetSize: false
+#    mongosSize: false
+#    terminationGracePeriod: false
+#    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
@@ -71,9 +77,6 @@ spec:
 #    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
-#      net:
-#        tls:
-#          mode: preferTLS
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:

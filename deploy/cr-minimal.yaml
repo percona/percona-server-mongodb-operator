@@ -5,7 +5,9 @@ metadata:
 spec:
   crVersion: 1.16.0
   image: perconalab/percona-server-mongodb-operator:main-mongod6.0
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    replsetSize: true
+    mongosSize: true
   upgradeOptions:
     apply: disabled
     schedule: "0 2 * * *"

@@ -23,6 +23,6 @@ spec:
         resources:
           requests:
             storage: 1Gi
-    size: 2
+    size: 4
   secrets:
     users: some-users

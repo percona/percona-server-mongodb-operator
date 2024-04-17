@@ -73,6 +73,7 @@ type PerconaServerMongoDBSpec struct {
 	Image                        string                               `json:"image"`
 	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
@@ -92,7 +93,25 @@ type PerconaServerMongoDBSpec struct {
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 }
 
+type UnsafeFlags struct {
+	TLS                    bool `json:"tls,omitempty"`
+	ReplsetSize            bool `json:"replsetSize,omitempty"`
+	MongosSize             bool `json:"mongosSize,omitempty"`
+	TerminationGracePeriod bool `json:"terminationGracePeriod,omitempty"`
+	BackupIfUnhealthy      bool `json:"backupIfUnhealthy,omitempty"`
+}
+
+type TLSMode string
+
+const (
+	TLSModeDisabled TLSMode = "disabled"
+	TLSModeAllow    TLSMode = "allowTLS"
+	TLSModePrefer   TLSMode = "preferTLS"
+	TLSModeRequire  TLSMode = "requireTLS"
+)
+
 type TLSSpec struct {
+	Mode                 TLSMode                 `json:"mode,omitempty"`
 	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
 	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
@@ -421,6 +440,35 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 	}
 	options, _ := val.(map[interface{}]interface{})
 	return options, nil
+}
+
+func (conf MongoConfiguration) GetTLSMode() (string, error) {
+	m, err := conf.GetOptions("net")
+	if err != nil || m == nil {
+		return "", err
+	}
+
+	tls, ok := m["tls"]
+	if !ok {
+		return "", nil
+	}
+
+	tlsMap, ok := tls.(map[any]any)
+	if !ok {
+		return "", errors.New("tls configuration is invalid")
+	}
+
+	tlsMode, ok := tlsMap["mode"]
+	if !ok {
+		return "", nil
+	}
+
+	mode, ok := tlsMode.(string)
+	if !ok {
+		return "", errors.Errorf("can't cast %s to string", mode)
+	}
+
+	return mode, nil
 }
 
 // IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
@@ -1038,8 +1086,12 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 		return nil
 	}
 
-	if !cr.Spec.UnsafeConf {
+	if cr.CompareVersion("1.15.0") <= 0 && !cr.Spec.UnsafeConf {
 		return errors.Errorf("allowUnsafeConfigurations must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && !cr.Spec.Unsafe.BackupIfUnhealthy {
+		return errors.Errorf("spec.unsafeFlags.backupIfUnhealthy must be true to run backup on cluster with status %s", cr.Status.State)
 	}
 
 	for rsName, rs := range cr.Status.Replsets {
@@ -1134,6 +1186,25 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 
 	orderedFinalizers = append(orderedFinalizers, finalizers...)
 	return orderedFinalizers
+}
+
+func (cr *PerconaServerMongoDB) TLSEnabled() bool {
+	if cr.CompareVersion("1.16.0") < 0 {
+		return !cr.Spec.UnsafeConf
+	}
+
+	switch cr.Spec.TLS.Mode {
+	case TLSModeDisabled:
+		return false
+	case TLSModeAllow, TLSModePrefer, TLSModeRequire:
+		return true
+	default:
+		return true
+	}
+}
+
+func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
+	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
 }
 
 const (

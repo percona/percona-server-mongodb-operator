@@ -84,7 +84,7 @@ type PBM interface {
 	Node(ctx context.Context) (string, error)
 }
 
-func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
+func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string, tlsEnabled bool) (string, error) {
 	usersSecretName := api.UserSecretName(cr)
 	scr, err := getSecret(ctx, k8sclient, cr.Namespace, usersSecretName)
 	if err != nil {
@@ -97,7 +97,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		strings.Join(addrs, ","),
 	)
 
-	if cr.Spec.UnsafeConf {
+	if !tlsEnabled {
 		return murl, nil
 	}
 
@@ -163,7 +163,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
 
-	murl, err := getMongoUri(ctx, c, cluster, addrs)
+	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo uri")
 	}
