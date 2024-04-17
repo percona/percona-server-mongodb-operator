@@ -5,11 +5,9 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -49,6 +47,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
+	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec.PersistentVolumeClaim); err != nil {
+		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+	}
+
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
@@ -57,10 +59,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	err = r.reconcilePDB(ctx, pdbspec, ls, cr.Namespace, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
-	}
-
-	if err := r.reconcilePVCs(ctx, sfs, ls, volumeSpec.PersistentVolumeClaim); err != nil {
-		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
 	if err := r.smartUpdate(ctx, cr, sfs, rs); err != nil {
@@ -116,49 +114,15 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
 
-	sslAnn, err := r.sslAnnotation(ctx, cr)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get ssl annotations")
-	}
-	for k, v := range sslAnn {
-		sfsSpec.Template.Annotations[k] = v
+	if cr.TLSEnabled() {
+		sslAnn, err := r.sslAnnotation(ctx, cr)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get ssl annotations")
+		}
+		for k, v := range sslAnn {
+			sfsSpec.Template.Annotations[k] = v
+		}
 	}
 
 	return sfs, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
-	})
-	if err != nil {
-		return errors.Wrap(err, "list PVCs")
-	}
-
-	for _, pvc := range pvcList.Items {
-		orig := pvc.DeepCopy()
-
-		for k, v := range pvcSpec.Labels {
-			pvc.Labels[k] = v
-		}
-		for k, v := range sts.Labels {
-			pvc.Labels[k] = v
-		}
-		for k, v := range pvcSpec.Annotations {
-			pvc.Annotations[k] = v
-		}
-
-		if util.MapEqual(orig.Labels, pvc.Labels) && util.MapEqual(orig.Annotations, pvc.Annotations) {
-			continue
-		}
-		patch := client.MergeFrom(orig)
-
-		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
-		}
-	}
-
-	return nil
 }

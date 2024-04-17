@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 10
+  generation: 11
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -62,12 +62,14 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
             - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:

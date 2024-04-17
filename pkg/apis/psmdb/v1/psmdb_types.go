@@ -73,6 +73,7 @@ type PerconaServerMongoDBSpec struct {
 	Image                        string                               `json:"image"`
 	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
 	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
 	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
 	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
@@ -92,7 +93,25 @@ type PerconaServerMongoDBSpec struct {
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 }
 
+type UnsafeFlags struct {
+	TLS                    bool `json:"tls,omitempty"`
+	ReplsetSize            bool `json:"replsetSize,omitempty"`
+	MongosSize             bool `json:"mongosSize,omitempty"`
+	TerminationGracePeriod bool `json:"terminationGracePeriod,omitempty"`
+	BackupIfUnhealthy      bool `json:"backupIfUnhealthy,omitempty"`
+}
+
+type TLSMode string
+
+const (
+	TLSModeDisabled TLSMode = "disabled"
+	TLSModeAllow    TLSMode = "allowTLS"
+	TLSModePrefer   TLSMode = "preferTLS"
+	TLSModeRequire  TLSMode = "requireTLS"
+)
+
 type TLSSpec struct {
+	Mode                 TLSMode                 `json:"mode,omitempty"`
 	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
 	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
@@ -423,6 +442,35 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 	return options, nil
 }
 
+func (conf MongoConfiguration) GetTLSMode() (string, error) {
+	m, err := conf.GetOptions("net")
+	if err != nil || m == nil {
+		return "", err
+	}
+
+	tls, ok := m["tls"]
+	if !ok {
+		return "", nil
+	}
+
+	tlsMap, ok := tls.(map[any]any)
+	if !ok {
+		return "", errors.New("tls configuration is invalid")
+	}
+
+	tlsMode, ok := tlsMap["mode"]
+	if !ok {
+		return "", nil
+	}
+
+	mode, ok := tlsMode.(string)
+	if !ok {
+		return "", errors.Errorf("can't cast %s to string", mode)
+	}
+
+	return mode, nil
+}
+
 // IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
 func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
@@ -448,6 +496,27 @@ func (conf MongoConfiguration) VaultEnabled() bool {
 	}
 	_, ok := m["vault"]
 	return ok
+}
+
+// QuietEnabled returns whether mongo config has `quiet` set to true under `systemLog` section.
+// If `quiet` or `systemLog` sections are not present, returns true.
+func (conf MongoConfiguration) QuietEnabled() bool {
+	defaultValue := true
+
+	m, err := conf.GetOptions("systemLog")
+	if err != nil || m == nil {
+		return defaultValue
+	}
+	v, ok := m["quiet"]
+	if !ok {
+		return defaultValue
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return defaultValue
+	}
+
+	return b
 }
 
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
@@ -625,6 +694,7 @@ type SecretsSpec struct {
 	SSLInternal   string `json:"sslInternal,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
+	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
@@ -755,6 +825,12 @@ type S3ServiceSideEncryption struct {
 	SSECustomerKey string `json:"sseCustomerKey,omitempty"`
 }
 
+type Retryer struct {
+	NumMaxRetries int             `json:"numMaxRetries,omitempty"`
+	MinRetryDelay metav1.Duration `json:"minRetryDelay,omitempty"`
+	MaxRetryDelay metav1.Duration `json:"maxRetryDelay,omitempty"`
+}
+
 type BackupStorageS3Spec struct {
 	Bucket                string                  `json:"bucket"`
 	Prefix                string                  `json:"prefix,omitempty"`
@@ -765,6 +841,9 @@ type BackupStorageS3Spec struct {
 	MaxUploadParts        int                     `json:"maxUploadParts,omitempty"`
 	StorageClass          string                  `json:"storageClass,omitempty"`
 	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
+	ForcePathStyle        *bool                   `json:"forcePathStyle,omitempty"`
+	DebugLogLevels        string                  `json:"debugLogLevels,omitempty"`
+	Retryer               *Retryer                `json:"retryer,omitempty"`
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
@@ -802,6 +881,31 @@ func (p PITRSpec) Disabled() PITRSpec {
 	return p
 }
 
+type BackupTimeouts struct {
+	Starting *uint32 `json:"startingStatus,omitempty"`
+}
+
+type BackupOptions struct {
+	OplogSpanMin float64            `json:"oplogSpanMin"`
+	Priority     map[string]float64 `json:"priority,omitempty"`
+	Timeouts     *BackupTimeouts    `json:"timeouts,omitempty"`
+}
+
+type RestoreOptions struct {
+	BatchSize           int               `json:"batchSize,omitempty"`
+	NumInsertionWorkers int               `json:"numInsertionWorkers,omitempty"`
+	NumDownloadWorkers  int               `json:"numDownloadWorkers,omitempty"`
+	MaxDownloadBufferMb int               `json:"maxDownloadBufferMb,omitempty"`
+	DownloadChunkMb     int               `json:"downloadChunkMb,omitempty"`
+	MongodLocation      string            `json:"mongodLocation,omitempty"`
+	MongodLocationMap   map[string]string `json:"mongodLocationMap,omitempty"`
+}
+
+type BackupConfig struct {
+	BackupOptions  *BackupOptions  `json:"backupOptions,omitempty"`
+	RestoreOptions *RestoreOptions `json:"restoreOptions,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                         `json:"enabled"`
 	Annotations              map[string]string            `json:"annotations,omitempty"`
@@ -815,6 +919,7 @@ type BackupSpec struct {
 	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
+	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {
@@ -981,8 +1086,12 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 		return nil
 	}
 
-	if !cr.Spec.UnsafeConf {
+	if cr.CompareVersion("1.15.0") <= 0 && !cr.Spec.UnsafeConf {
 		return errors.Errorf("allowUnsafeConfigurations must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && !cr.Spec.Unsafe.BackupIfUnhealthy {
+		return errors.Errorf("spec.unsafeFlags.backupIfUnhealthy must be true to run backup on cluster with status %s", cr.Status.State)
 	}
 
 	for rsName, rs := range cr.Status.Replsets {
@@ -1079,4 +1188,31 @@ func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	return orderedFinalizers
 }
 
-const AnnotationResyncPBM = "percona.com/resync-pbm"
+func (cr *PerconaServerMongoDB) TLSEnabled() bool {
+	if cr.CompareVersion("1.16.0") < 0 {
+		return !cr.Spec.UnsafeConf
+	}
+
+	switch cr.Spec.TLS.Mode {
+	case TLSModeDisabled:
+		return false
+	case TLSModeAllow, TLSModePrefer, TLSModeRequire:
+		return true
+	default:
+		return true
+	}
+}
+
+func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
+	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
+}
+
+const (
+	AnnotationResyncPBM           = "percona.com/resync-pbm"
+	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
+)
+
+func (cr *PerconaServerMongoDB) PVCResizeInProgress() bool {
+	_, ok := cr.Annotations[AnnotationPVCResizeInProgress]
+	return ok
+}

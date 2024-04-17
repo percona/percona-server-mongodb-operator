@@ -48,14 +48,15 @@ spec:
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
-            - --sslAllowInvalidCertificates
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
+            - --tlsMode=disabled
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:

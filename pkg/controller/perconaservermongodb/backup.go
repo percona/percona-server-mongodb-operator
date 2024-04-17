@@ -439,7 +439,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	enabled, ok := val.(bool)
 	if !ok {
-		return errors.Wrap(err, "unexpected value of pitr.enabled")
+		return errors.Errorf("unexpected value of pitr.enabled: %T", val)
 	}
 
 	if enabled != cr.Spec.Backup.PITR.Enabled {
@@ -469,7 +469,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	oplogOnly, ok := val.(bool)
 	if !ok {
-		return errors.Wrap(err, "unexpected value of pitr.oplogOnly")
+		return errors.Errorf("unexpected value of pitr.oplogOnly: %T", val)
 	}
 
 	if oplogOnly != cr.Spec.Backup.PITR.OplogOnly {
@@ -491,7 +491,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	oplogSpanMin, ok := val.(float64)
 	if !ok {
-		return errors.Wrap(err, "unexpected value of pitr.oplogSpanMin")
+		return errors.Errorf("unexpected value of pitr.oplogSpanMin: %T", val)
 	}
 
 	if oplogSpanMin != cr.Spec.Backup.PITR.OplogSpanMin.Float64() {
@@ -512,7 +512,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 	} else {
 		compression, ok = val.(string)
 		if !ok {
-			return errors.Wrap(err, "unexpected value of pitr.compression")
+			return errors.Errorf("unexpected value of pitr.compression: %T", val)
 		}
 	}
 
@@ -543,11 +543,16 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 			return errors.Wrap(err, "get pitr.compressionLevel")
 		}
 	} else {
-		tmpCompressionLevel, ok := val.(int)
-		if !ok {
-			return errors.Wrap(err, "unexpected value of pitr.compressionLevel")
+		var iVal int
+		switch v := val.(type) {
+		case int64:
+			iVal = int(v)
+		case int32:
+			iVal = int(v)
+		default:
+			return errors.Errorf("unexpected value of pitr.compressionLevel: %T", val)
 		}
-		compressionLevel = &tmpCompressionLevel
+		compressionLevel = &iVal
 	}
 
 	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {

@@ -21,13 +21,13 @@ require (
 	go.mongodb.org/mongo-driver v1.14.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.7.0
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.63.2
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.29.3
 	k8s.io/apimachinery v0.29.3
 	k8s.io/client-go v0.29.3
-	sigs.k8s.io/controller-runtime v0.17.2
+	sigs.k8s.io/controller-runtime v0.17.3
 	sigs.k8s.io/mcs-api v0.1.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -119,8 +119,8 @@ require (
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.29.0 // indirect
-	k8s.io/component-base v0.29.0 // indirect
+	k8s.io/apiextensions-apiserver v0.29.2 // indirect
+	k8s.io/component-base v0.29.2 // indirect
 	k8s.io/klog/v2 v2.110.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240103051144-eec4567ac022 // indirect
 	k8s.io/utils v0.0.0-20240102154912-e7106e64919e // indirect

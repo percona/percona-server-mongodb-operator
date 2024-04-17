@@ -181,7 +181,6 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
-		"--sslAllowInvalidCertificates",
 	}
 
 	name, err := replset.CustomReplsetName()
@@ -189,16 +188,25 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args[4] = "--replSet=" + name
 	}
 
-	if cr.Spec.UnsafeConf {
+	if cr.TLSEnabled() {
+		args = append(args, "--sslAllowInvalidCertificates")
+		if cr.Spec.TLS.Mode == api.TLSModeAllow {
+			args = append(args,
+				"--clusterAuthMode=keyFile",
+				"--keyFile="+mongodSecretsDir+"/mongodb-key",
+			)
+		} else {
+			args = append(args, "--clusterAuthMode=x509")
+		}
+	} else if cr.UnsafeTLSDisabled() {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
-	} else {
-		if cr.CompareVersion("1.12.0") <= 0 {
-			args = append(args, "--sslMode=preferSSL")
-		}
-		args = append(args, "--clusterAuthMode=x509")
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 {
+		args = append(args, "--tlsMode="+string(cr.Spec.TLS.Mode))
 	}
 
 	// sharding
@@ -266,6 +274,10 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && replset.Configuration.QuietEnabled() {
+		args = append(args, "--quiet")
 	}
 
 	return args

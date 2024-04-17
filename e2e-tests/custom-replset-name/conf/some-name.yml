@@ -3,8 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.14.0
-  allowUnsafeConfigurations: true
+  crVersion: 1.16.0
   backup:
     enabled: true
     image: percona/percona-backup-mongodb:2.0.4
@@ -40,10 +39,10 @@ spec:
     enabled: false
   replsets:
   - affinity:
-      antiAffinityTopologyKey: topology.kubernetes.io/zone
+      antiAffinityTopologyKey: none
     arbiter:
       affinity:
-        antiAffinityTopologyKey: topology.kubernetes.io/zone
+        antiAffinityTopologyKey: none
       enabled: false
       size: 1
     configuration: |
@@ -68,10 +67,10 @@ spec:
             storage: 2Gi
         storageClassName: standard-rwo
   - affinity:
-      antiAffinityTopologyKey: topology.kubernetes.io/zone
+      antiAffinityTopologyKey: none
     arbiter:
       affinity:
-        antiAffinityTopologyKey: topology.kubernetes.io/zone
+        antiAffinityTopologyKey: none
       enabled: false
       size: 1
     configuration: |
@@ -96,10 +95,10 @@ spec:
             storage: 2Gi
         storageClassName: standard-rwo
   - affinity:
-      antiAffinityTopologyKey: topology.kubernetes.io/zone
+      antiAffinityTopologyKey: none
     arbiter:
       affinity:
-        antiAffinityTopologyKey: topology.kubernetes.io/zone
+        antiAffinityTopologyKey: none
       enabled: false
       size: 1
     configuration: |
@@ -124,10 +123,10 @@ spec:
             storage: 2Gi
         storageClassName: standard-rwo
   - affinity:
-      antiAffinityTopologyKey: topology.kubernetes.io/zone
+      antiAffinityTopologyKey: none
     arbiter:
       affinity:
-        antiAffinityTopologyKey: topology.kubernetes.io/zone
+        antiAffinityTopologyKey: none
       enabled: false
       size: 1
     configuration: |
@@ -156,7 +155,7 @@ spec:
   sharding:
     configsvrReplSet:
       affinity:
-        antiAffinityTopologyKey: topology.kubernetes.io/zone
+        antiAffinityTopologyKey: none
       configuration: |
         replication:
           replSetName: csReplSet
@@ -182,7 +181,7 @@ spec:
     enabled: true
     mongos:
       affinity:
-        antiAffinityTopologyKey: kubernetes.io/hostname
+        antiAffinityTopologyKey: none
       expose:
         exposeType: LoadBalancer
         serviceAnnotations:

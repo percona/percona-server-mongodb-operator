@@ -1,0 +1,164 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: test-cluster
+  namespace: test-namespace
+spec:
+  crVersion: 1.16.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: disabled
+    schedule: "0 2 * * *"
+    setFCV: false
+  secrets:
+    users: my-cluster-name-secrets
+    encryptionKey: my-cluster-name-mongodb-encryption-key
+  pmm:
+    enabled: false
+    image: perconalab/pmm-client:dev-latest
+    serverHost: monitoring-service
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: false
+      exposeType: ClusterIP
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    arbiter:
+      enabled: false
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: false
+        exposeType: ClusterIP
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        exposeType: ClusterIP
+
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    storages:
+      test-s3-storage:
+        type: s3
+        s3:
+          bucket: test-bucket
+          credentialsSecret: test-secret
+          serverSideEncryption:
+            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
+            sseAlgorithm: aws:kms
+            sseCustomerAlgorithm: AES256
+            sseCustomerKey: Y3VzdG9tZXIta2V5
+          retryer:
+            numMaxRetries: 5
+            minRetryDelay: 35ms
+            maxRetryDelay: 10m
+          region: us-west-2
+          prefix: ""
+          uploadPartSize: 10485760
+          maxUploadParts: 10000
+          storageClass: STANDARD
+          insecureSkipTLSVerify: false
+    pitr:
+      enabled: false
+      oplogOnly: false
+#      oplogSpanMin: 10
+      compressionType: gzip
+      compressionLevel: 6
+    configuration:
+      backupOptions:
+        priority:
+          "localhost:28019": 2.5
+        timeouts:
+          startingStatus: 33
+        oplogSpanMin: 20
+      restoreOptions:
+        batchSize: 500
+        numInsertionWorkers: 10
+        numDownloadWorkers: 4
+        maxDownloadBufferMb: 0
+        downloadChunkMb: 32
+        mongodLocation: /usr/bin/mongo
+        mongodLocationMap:
+          "node01:2017": /usr/bin/mongo

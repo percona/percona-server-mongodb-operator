@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 10
+  generation: 11
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -39,6 +39,18 @@ spec:
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongod
+                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
@@ -50,11 +62,14 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -198,9 +213,7 @@ spec:
             defaultMode: 420
             secretName: internal-some-name-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

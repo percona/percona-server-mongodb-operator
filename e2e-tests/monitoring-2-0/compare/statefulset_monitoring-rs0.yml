@@ -50,11 +50,13 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=requireTLS
             - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:

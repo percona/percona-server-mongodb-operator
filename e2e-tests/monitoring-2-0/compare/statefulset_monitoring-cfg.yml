@@ -62,11 +62,12 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=requireTLS
             - --configsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerIndexPrefixCompression=true
-            - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -136,8 +137,6 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongodb-config
-              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
@@ -305,11 +304,6 @@ spec:
             secretName: monitoring-mongodb-keyfile
         - emptyDir: {}
           name: bin
-        - configMap:
-            defaultMode: 420
-            name: monitoring-cfg-mongod
-            optional: true
-          name: config
         - name: monitoring-mongodb-encryption-key
           secret:
             defaultMode: 288

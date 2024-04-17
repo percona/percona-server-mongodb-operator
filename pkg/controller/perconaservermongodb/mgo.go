@@ -238,7 +238,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
-	unsafePSA := cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+	unsafePSA := false
+
+	if cr.CompareVersion("1.15.0") <= 0 {
+		unsafePSA = cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+	} else {
+		unsafePSA = cr.Spec.Unsafe.ReplsetSize && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+	}
 
 	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
@@ -593,7 +599,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			mongoCmd = "mongo"
 		}
 
-		if !cr.Spec.UnsafeConf {
+		if cr.TLSEnabled() {
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
 
