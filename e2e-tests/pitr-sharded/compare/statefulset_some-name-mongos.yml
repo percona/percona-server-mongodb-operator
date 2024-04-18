@@ -57,6 +57,7 @@ spec:
             - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27017
             - --relaxPermChecks
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
           command:
             - /opt/percona/ps-entry.sh
           env:

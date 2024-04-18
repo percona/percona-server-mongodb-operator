@@ -84,7 +84,7 @@ type PBM interface {
 	Node(ctx context.Context) (string, error)
 }
 
-func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string) (string, error) {
+func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, addrs []string, tlsEnabled bool) (string, error) {
 	usersSecretName := api.UserSecretName(cr)
 	scr, err := getSecret(ctx, k8sclient, cr.Namespace, usersSecretName)
 	if err != nil {
@@ -97,7 +97,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		strings.Join(addrs, ","),
 	)
 
-	if cr.Spec.UnsafeConf {
+	if !tlsEnabled {
 		return murl, nil
 	}
 
@@ -163,7 +163,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
 
-	murl, err := getMongoUri(ctx, c, cluster, addrs)
+	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo uri")
 	}
@@ -228,28 +228,30 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 }
 
 func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) (config.Config, error) {
-	conf := config.Config{}
-
-	priority, err := GetPriorities(ctx, k8sclient, cluster)
-	if err != nil {
-		return conf, errors.Wrap(err, "get priorities")
-	}
-
-	conf = config.Config{
+	conf := config.Config{
 		PITR: config.PITRConf{
 			Enabled:          cluster.Spec.Backup.PITR.Enabled,
 			Compression:      cluster.Spec.Backup.PITR.CompressionType,
 			CompressionLevel: cluster.Spec.Backup.PITR.CompressionLevel,
 		},
-		Backup: config.BackupConf{
-			Priority: priority,
-		},
 	}
 
 	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
-		conf.Backup.OplogSpanMin = cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin
-		conf.Backup.Timeouts = &config.BackupTimeouts{
-			Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
+		conf.Backup = config.BackupConf{
+			OplogSpanMin: cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
+			Timeouts: &config.BackupTimeouts{
+				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
+			},
+		}
+
+		if cluster.Spec.Backup.Configuration.BackupOptions.Priority != nil {
+			conf.Backup.Priority = cluster.Spec.Backup.Configuration.BackupOptions.Priority
+		} else {
+			priority, err := GetPriorities(ctx, k8sclient, cluster)
+			if err != nil {
+				return conf, errors.Wrap(err, "get priorities")
+			}
+			conf.Backup.Priority = priority
 		}
 	}
 

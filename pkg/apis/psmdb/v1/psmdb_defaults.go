@@ -90,6 +90,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 	}
 
+	if cr.Spec.TLS.Mode == "" {
+		cr.Spec.TLS.Mode = TLSModePrefer
+	}
+
+	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
+		return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
+	}
+
 	if len(cr.Spec.Replsets) == 0 {
 		cr.Spec.Replsets = []*ReplsetSpec{
 			{
@@ -134,13 +142,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			return errors.New("mongos should be specified")
 		}
 
-		if !cr.Spec.Pause && cr.DeletionTimestamp == nil {
-			if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
-				log.Info("Safe config set, updating mongos size",
-					"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
-				cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
+		if cr.CompareVersion("1.16.0") < 0 {
+			if !cr.Spec.Pause && cr.DeletionTimestamp == nil {
+				if !cr.Spec.UnsafeConf && cr.Spec.Sharding.Mongos.Size < minSafeMongosSize {
+					log.Info("Safe config set, updating mongos size",
+						"oldSize", cr.Spec.Sharding.Mongos.Size, "newSize", minSafeMongosSize)
+					cr.Spec.Sharding.Mongos.Size = minSafeMongosSize
+				}
 			}
 		}
+
 		if cr.CompareVersion("1.15.0") >= 0 {
 			var fsgroup *int64
 			if platform == version.PlatformKubernetes {
@@ -191,8 +202,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
-				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
+			if cr.TLSEnabled() {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
@@ -236,8 +246,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				},
 			}
 
-			if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
-				cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
+			if cr.TLSEnabled() {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
@@ -271,7 +280,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.ReadinessProbe.FailureThreshold = 3
 		}
 
-		cr.Spec.Sharding.Mongos.reconcileOpts(cr)
+		if err := cr.Spec.Sharding.Mongos.reconcileOpts(cr); err != nil {
+			return errors.Wrap(err, "reconcile mongos options")
+		}
 
 		if err := cr.Spec.Sharding.Mongos.Configuration.SetDefaults(); err != nil {
 			return errors.Wrap(err, "failed to set configuration defaults")
@@ -364,15 +375,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
 
-			if cr.CompareVersion("1.6.0") >= 0 {
-				replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
-				if (cr.CompareVersion("1.7.0") >= 0 && cr.CompareVersion("1.15.0") < 0) ||
-					cr.CompareVersion("1.15.0") >= 0 && !cr.Spec.UnsafeConf {
-					replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
-						"--ssl", "--sslInsecure",
-						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-						"--sslPEMKeyFile", "/tmp/tls.pem")
-				}
+			replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+			if cr.TLSEnabled() {
+				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -568,13 +576,23 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 	}
 
-	rs.MultiAZ.reconcileOpts(cr)
-
-	if rs.Arbiter.Enabled {
-		rs.Arbiter.MultiAZ.reconcileOpts(cr)
+	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s", rs.Name)
 	}
 
-	if !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
+	if rs.Arbiter.Enabled {
+		if err := rs.Arbiter.MultiAZ.reconcileOpts(cr); err != nil {
+			return errors.Wrapf(err, "reconcile multiAZ options for arbiter in replset %s", rs.Name)
+		}
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 && cr.DeletionTimestamp == nil && !cr.Spec.Pause {
+		if err := rs.checkSafeDefaults(cr.Spec.Unsafe); err != nil {
+			return errors.Wrap(err, "check safe defaults")
+		}
+	}
+
+	if cr.CompareVersion("1.16.0") < 0 && !cr.Spec.UnsafeConf && (cr.DeletionTimestamp == nil && !cr.Spec.Pause) {
 		rs.setSafeDefaults(log)
 	}
 
@@ -661,7 +679,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 			Command: []string{"/data/db/mongodb-healthcheck", "k8s", "liveness"},
 		}
 
-		if !cr.Spec.UnsafeConf || cr.CompareVersion("1.15.0") < 0 {
+		if cr.TLSEnabled() {
 			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
 				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
 				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
@@ -762,19 +780,66 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	}
 }
 
-func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) {
+func (rs *ReplsetSpec) checkSafeDefaults(unsafe UnsafeFlags) error {
+	if !unsafe.ReplsetSize {
+		if rs.Arbiter.Enabled {
+			if rs.Arbiter.Size != 1 {
+				return errors.New("arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check")
+			}
+			if rs.Size < minSafeReplicasetSizeWithArbiter {
+				return errors.Errorf("replset size must be at least %d with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check", minSafeReplicasetSizeWithArbiter)
+			}
+			if rs.Size%2 != 0 {
+				return errors.New("arbiter must disabled due to odd replset size. Set spec.unsafeFlags.replsetSize to true to disable this check")
+			}
+		} else {
+			if rs.Size < 2 {
+				return errors.Errorf("replset size must be at least %d. Set spec.unsafeFlags.replsetSize to true to disable this check", defaultMongodSize)
+			}
+			if rs.Size%2 == 0 {
+				return errors.New("replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check")
+			}
+		}
+	}
+
+	mode, err := rs.Configuration.GetTLSMode()
+	if err != nil {
+		return errors.Wrap(err, "get tls mode")
+	}
+
+	if mode != "" {
+		return errors.New("tlsMode must be set using spec.tls.mode")
+	}
+
+	return nil
+}
+
+func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) error {
 	m.reconcileAffinityOpts(cr)
 	m.reconcileTopologySpreadConstraints(cr)
 	if cr.CompareVersion("1.15.0") >= 0 {
-		if m.TerminationGracePeriodSeconds == nil || (!cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30) {
+		if m.TerminationGracePeriodSeconds == nil {
 			m.TerminationGracePeriodSeconds = new(int64)
 			*m.TerminationGracePeriodSeconds = 60
+		}
+	}
+	if cr.CompareVersion("1.15.0") == 0 {
+		if !cr.Spec.UnsafeConf && *m.TerminationGracePeriodSeconds < 30 {
+			m.TerminationGracePeriodSeconds = new(int64)
+			*m.TerminationGracePeriodSeconds = 60
+		}
+	}
+	if cr.CompareVersion("1.16.0") >= 0 {
+		if *m.TerminationGracePeriodSeconds < 30 && !cr.Spec.Unsafe.TerminationGracePeriod {
+			return errors.New("terminationGracePeriodSeconds must be at least 30 seconds for safe configuration. Set spec.unsafeFlags.terminationGracePeriod to true to disable this check")
 		}
 	}
 	if m.PodDisruptionBudget == nil {
 		defaultMaxUnavailable := intstr.FromInt(1)
 		m.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: &defaultMaxUnavailable}
 	}
+
+	return nil
 }
 
 var affinityValidTopologyKeys = map[string]struct{}{

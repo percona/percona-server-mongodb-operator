@@ -174,12 +174,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Args: mongosContainerArgs(
-			cr,
-			cr.Spec.Sharding.Mongos.Resources,
-			useConfigFile,
-			cfgInstances,
-		),
+		Args:            mongosContainerArgs(cr, useConfigFile, cfgInstances),
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          mongosPortName,
@@ -232,7 +227,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	return container, nil
 }
 
-func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.ResourceRequirements, useConfigFile bool, cfgInstances []string) []string {
+func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) []string {
 	msSpec := cr.Spec.Sharding.Mongos
 	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 
@@ -259,16 +254,19 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, resources corev1.Resource
 		)
 	}
 
-	if cr.Spec.UnsafeConf {
+	if cr.TLSEnabled() {
+		args = append(args,
+			"--clusterAuthMode=x509",
+		)
+	} else if (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
 		)
-	} else {
-		if cr.CompareVersion("1.12.0") <= 0 {
-			args = append(args, "--sslMode=preferSSL")
-		}
-		args = append(args, "--clusterAuthMode=x509")
+	}
+
+	if cr.CompareVersion("1.16.0") >= 0 {
+		args = append(args, "--tlsMode="+string(cr.Spec.TLS.Mode))
 	}
 
 	if msSpec.SetParameter != nil {
@@ -306,7 +304,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  api.SSLSecretName(cr),
-					Optional:    &cr.Spec.UnsafeConf,
+					Optional:    &fvar,
 					DefaultMode: &secretFileMode,
 				},
 			},
@@ -371,25 +369,29 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 		})
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
-		volumes = append(volumes, []corev1.Volume{
-			{
-				Name: LDAPTLSVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName:  cr.Spec.Secrets.LDAPSecret,
-						Optional:    &tvar,
-						DefaultMode: &secretFileMode,
+	if cr.CompareVersion("1.16.0") >= 0 {
+		if cr.Spec.Secrets.LDAPSecret != "" {
+			volumes = append(volumes, []corev1.Volume{
+				{
+					Name: LDAPTLSVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName:  cr.Spec.Secrets.LDAPSecret,
+							Optional:    &tvar,
+							DefaultMode: &secretFileMode,
+						},
 					},
 				},
-			},
-			{
-				Name: LDAPConfVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				{
+					Name: LDAPConfVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
-		}...)
+			}...)
+		}
+
+		volumes[1].VolumeSource.Secret.Optional = &cr.Spec.Unsafe.TLS
 	}
 
 	return volumes
