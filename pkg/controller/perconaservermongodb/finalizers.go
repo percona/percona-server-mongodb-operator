@@ -135,6 +135,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		return errors.Wrap(err, "get rs statefulset")
 	}
 
+	if len(pods.Items) == 0 {
+		return nil
+	}
+
 	// `k8sclient.List` returns unsorted list of pods
 	// We should sort pods to be sure that the first pod is the primary
 	sort.Slice(pods.Items, func(i, j int) bool {
