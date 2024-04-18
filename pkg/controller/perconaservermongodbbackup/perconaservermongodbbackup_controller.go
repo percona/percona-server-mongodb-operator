@@ -258,9 +258,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 		return azure.New(azureConf, nil)
 	case cr.Status.S3 != nil:
-		if cr.Status.S3.CredentialsSecret == "" {
-			return nil, errors.New("no s3 credentials specified for the secret name")
-		}
 		s3Conf := s3.Conf{
 			Region:                cr.Status.S3.Region,
 			EndpointURL:           cr.Status.S3.EndpointURL,
@@ -271,9 +268,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			StorageClass:          cr.Status.S3.StorageClass,
 			InsecureSkipTLSVerify: cr.Status.S3.InsecureSkipTLSVerify,
 		}
-		s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting s3 credentials secret name")
+
+		if cr.Status.S3.CredentialsSecret != "" {
+			s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
+			if err != nil {
+				return nil, errors.Wrap(err, "getting s3 credentials secret name")
+			}
+			s3Conf.Credentials = s3.Credentials{
+				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
+			}
 		}
 
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
@@ -319,10 +323,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		s3Conf.Credentials = s3.Credentials{
-			AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
-		}
 		return s3.New(s3Conf, nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
