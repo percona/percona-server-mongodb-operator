@@ -50,6 +50,7 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
             - --shardsvr
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
@@ -174,6 +175,8 @@ spec:
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
               value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
           imagePullPolicy: Always
           name: backup-agent
           resources: {}

@@ -66,12 +66,12 @@ kubectl_bin delete pvc --all
 
 sleep 30
 
-desc 'check scaling on exposed cluster with unsafe config'
-cat_config "$conf_dir/$cluster.yml" \
-	| yq eval '.spec.allowUnsafeConfigurations=true' \
-	| yq eval '.spec.replsets[0].expose.enabled=true' \
-	| yq eval '.spec.replsets[0].expose.exposeType="ClusterIP"' \
-	| kubectl_bin apply -f -
+desc 'check scaling on exposed cluster'
+cat_config "$conf_dir/$cluster.yml" |
+	yq eval '.spec.unsafeFlags.replsetSize=true' |
+	yq eval '.spec.replsets[0].expose.enabled=true' |
+	yq eval '.spec.replsets[0].expose.exposeType="ClusterIP"' |
+	kubectl_bin apply -f -
 wait_for_running $cluster 3
 
 desc 'check data consistency: write data, read from all'
@@ -88,9 +88,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 desc 'scale up from 3 to 1'
 kubectl_bin patch psmdb ${cluster%%-rs0} \
 	--type='json' \
-	-p='[
-		{"op": "replace", "path": "/spec/replsets/0/size", "value": 1}
-		]'
+	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 1}]'
 desc 'check if Pod deleted'
 wait_for_delete pod/$cluster-1
 wait_for_delete pod/$cluster-2

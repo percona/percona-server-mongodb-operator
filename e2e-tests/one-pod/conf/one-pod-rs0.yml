@@ -6,7 +6,8 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    replsetSize: true
   secrets:
     users: some-users
   pmm:

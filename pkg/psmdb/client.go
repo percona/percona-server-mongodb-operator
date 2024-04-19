@@ -50,7 +50,7 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		Password:    c.Password,
 	}
 
-	if !cr.Spec.UnsafeConf {
+	if cr.TLSEnabled() {
 		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
@@ -73,7 +73,7 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 		Password: c.Password,
 	}
 
-	if !cr.Spec.UnsafeConf {
+	if cr.TLSEnabled() {
 		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
@@ -85,7 +85,7 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 	return mongo.Dial(&conf)
 }
 
-func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string) (mongo.Client, error) {
+func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
 	conf := mongo.Config{
 		Hosts:    []string{host},
 		Username: c.Username,
@@ -93,7 +93,7 @@ func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.Perc
 		Direct:   true,
 	}
 
-	if !cr.Spec.UnsafeConf {
+	if tlsEnabled {
 		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")

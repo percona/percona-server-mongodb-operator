@@ -14,7 +14,11 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconsileSSL(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.TLSEnabled() {
+		return nil
+	}
+
 	secretObj := corev1.Secret{}
 	secretInternalObj := corev1.Secret{}
 	errSecret := r.client.Get(ctx,

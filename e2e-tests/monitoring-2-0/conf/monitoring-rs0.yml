@@ -5,6 +5,8 @@ metadata:
 spec:
   #platform: openshift
   image:
+  tls:
+    mode: requireTLS
   replsets:
   - name: rs0
     affinity:
@@ -16,9 +18,6 @@ spec:
             storage: 1Gi
     size: 3
     configuration: |
-      net:
-        tls:
-          mode: requireTLS
       operationProfiling:
         mode: all
         slowOpThresholdMs: 100
@@ -30,10 +29,6 @@ spec:
     enabled: true
     configsvrReplSet:
       size: 3
-      configuration: |
-        net:
-          tls:
-            mode: requireTLS
       volumeSpec:
         persistentVolumeClaim:
           resources:
@@ -42,10 +37,6 @@ spec:
 
     mongos:
       size: 3
-      configuration: |
-        net:
-          tls:
-            mode: requireTLS
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
       podDisruptionBudget:
