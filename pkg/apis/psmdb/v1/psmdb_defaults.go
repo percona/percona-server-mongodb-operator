@@ -84,14 +84,25 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
+	t := true
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &TLSSpec{
-			CertValidityDuration: metav1.Duration{Duration: time.Hour * 24 * 90},
+			Mode:                     TLSModePrefer,
+			AllowInvalidCertificates: &t,
+			CertValidityDuration:     metav1.Duration{Duration: time.Hour * 24 * 90},
 		}
 	}
 
 	if cr.Spec.TLS.Mode == "" {
 		cr.Spec.TLS.Mode = TLSModePrefer
+	}
+
+	if cr.Spec.TLS.CertValidityDuration.Duration == 0 {
+		cr.Spec.TLS.CertValidityDuration = metav1.Duration{Duration: time.Hour * 24 * 90}
+	}
+
+	if cr.Spec.TLS.AllowInvalidCertificates == nil {
+		cr.Spec.TLS.AllowInvalidCertificates = &t
 	}
 
 	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
