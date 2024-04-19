@@ -18,6 +18,7 @@ spec:
 #    mode: preferTLS
 #    # 90 days in hours
 #    certValidityDuration: 2160h
+#    allowInvalidCertificates: true
 #    issuerConf:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer

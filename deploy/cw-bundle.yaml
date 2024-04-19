@@ -17969,6 +17969,8 @@ spec:
                 type: object
               tls:
                 properties:
+                  allowInvalidCertificates:
+                    type: boolean
                   certValidityDuration:
                     type: string
                   issuerConf:
@@ -18298,7 +18300,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:k8spsmdb-755
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

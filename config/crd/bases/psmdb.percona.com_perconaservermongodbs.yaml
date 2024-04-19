@@ -17296,6 +17296,8 @@ spec:
                 type: object
               tls:
                 properties:
+                  allowInvalidCertificates:
+                    type: boolean
                   certValidityDuration:
                     type: string
                   issuerConf:
