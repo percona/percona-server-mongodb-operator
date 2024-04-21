@@ -165,8 +165,10 @@ compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 
 desc 'test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+
+sleep 120
+
 kubectl_bin delete psmdb $main_cluster
-sleep 60
 
 desc 'run disaster recovery script for replset: cfg'
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
