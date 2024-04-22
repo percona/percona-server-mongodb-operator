@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isAllStsHasLatestSSL(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
 	if err := r.client.List(ctx, &sfsList,
 		&client.ListOptions{
@@ -133,7 +133,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			return errors.Wrap(err, "check sfs")
 		}
 		// These sts should also have latest tls secrets
-		hasSSL, err := r.isAllStsHasLatestSSL(ctx, cr)
+		hasSSL, err := r.doAllStsHasLatestTLS(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "has ssl")
 		}
