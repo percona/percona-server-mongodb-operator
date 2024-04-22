@@ -111,9 +111,10 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                 TLSMode                 `json:"mode,omitempty"`
-	CertValidityDuration metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf           *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                 `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
+	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
