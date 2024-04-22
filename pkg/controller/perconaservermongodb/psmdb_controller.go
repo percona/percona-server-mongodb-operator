@@ -1135,7 +1135,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "failed to check running restores")
 	}
 
-	if !uptodate || rstRunning {
+	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "should update mongos first")
+	}
+	if (!uptodate && !mongosFirst) || rstRunning {
 		return nil
 	}
 

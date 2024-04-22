@@ -5,9 +5,11 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -83,6 +85,36 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 	return true, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) isAllStsHasLatestSSL(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/instance": cr.Name,
+			}),
+		},
+	); err != nil {
+		return false, errors.Wrap(err, "failed to get statefulset list")
+	}
+
+	sslAnn, err := r.sslAnnotation(ctx, cr)
+	if err != nil {
+		if err == errTLSNotReady {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "failed to get ssl annotations")
+	}
+	for _, sts := range sfsList.Items {
+		for k, v := range sslAnn {
+			if sts.Spec.Template.Annotations[k] != v {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("createSSLByCertManager")
 
@@ -94,34 +126,39 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 	}
 
 	if applyStatus == util.ApplyStatusUnchanged {
-		secretNames := []string{
-			api.SSLSecretName(cr),
-			api.SSLInternalSecretName(cr),
-		}
-		// We should be sure that old CA is merged.
-		// mergeNewCA will delete old secrets if they are not needed.
-		for _, name := range secretNames {
-			_, err := r.getSecret(ctx, cr, name+"-old")
-			if client.IgnoreNotFound(err) != nil {
-				return errors.Wrap(err, "get secret")
-			}
-			if err != nil {
-				continue
-			}
-			log.Info("Old secret exists, merging ca", "secret", name+"-old")
-			if err := r.mergeNewCA(ctx, cr); err != nil {
-				return errors.Wrap(err, "update secrets with old ones")
-			}
-			return nil
-		}
-
 		// If we have merged the old CA and all sts are ready,
 		// we should recreate the secrets by deleting them.
 		uptodate, err := r.isAllSfsUpToDate(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "check sfs")
 		}
-		if uptodate {
+		// These sts should also have latest tls secrets
+		hasSSL, err := r.isAllStsHasLatestSSL(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "has ssl")
+		}
+		if uptodate && hasSSL {
+			secretNames := []string{
+				api.SSLInternalSecretName(cr),
+				api.SSLSecretName(cr),
+			}
+			// We should be sure that old CA is merged.
+			// mergeNewCA will delete old secrets if they are not needed.
+			for _, name := range secretNames {
+				_, err := r.getSecret(ctx, cr, name+"-old")
+				if client.IgnoreNotFound(err) != nil {
+					return errors.Wrap(err, "get secret")
+				}
+				if err != nil {
+					continue
+				}
+				log.Info("Old secret exists, merging ca", "secret", name+"-old")
+				if err := r.mergeNewCA(ctx, cr); err != nil {
+					return errors.Wrap(err, "update secrets with old ones")
+				}
+				return nil
+			}
+
 			caSecret, err := r.getSecret(ctx, cr, tls.CACertificateSecretName(cr))
 			if err != nil {
 				if k8serr.IsNotFound(err) {
@@ -141,6 +178,14 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 
 				if bytes.Equal(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
 					continue
+				}
+
+				// Mongos pods will only accept the first part of the CA.
+				// After the secret recreation, all mongod pods will have the last part of the CA
+				// and mongos won't be able to connect to them.
+				// So we should update the mongos pods before the mongod pods.
+				if err := r.setUpdateMongosFirst(ctx, cr); err != nil {
+					return errors.Wrap(err, "set update mongos first")
 				}
 
 				log.Info("CA is not up to date. Recreating secret", "secret", secret.Name)
@@ -231,8 +276,8 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	c := tls.NewCertManagerController(r.client, r.scheme, false)
 	// In versions 1.14.0 and below, these secrets contained different ca.crt
 	oldCA, err := c.GetMergedCA(ctx, cr, []string{
-		api.SSLSecretName(cr) + "-old",
 		api.SSLInternalSecretName(cr) + "-old",
+		api.SSLSecretName(cr) + "-old",
 	})
 	if err != nil {
 		return errors.Wrap(err, "get old ca")
@@ -242,8 +287,8 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	}
 
 	secretNames := []string{
-		api.SSLSecretName(cr),
 		api.SSLInternalSecretName(cr),
+		api.SSLSecretName(cr),
 	}
 
 	newCA, err := c.GetMergedCA(ctx, cr, secretNames)
@@ -267,7 +312,7 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 			return errors.Wrap(err, "get ca secret")
 		}
 
-		mergedCA, err := tls.MergePEM(oldSecret.Data["ca.crt"], oldCA, newCA)
+		mergedCA, err := tls.MergePEM(oldCA, newCA)
 		if err != nil {
 			return errors.Wrap(err, "failed to merge ca")
 		}
