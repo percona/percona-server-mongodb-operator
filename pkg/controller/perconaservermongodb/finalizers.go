@@ -87,16 +87,14 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 	replsetsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
-			if err != nil {
-				switch err {
-				case errWaitingTermination, errWaitingFirstPrimary:
-					log.Info(err.Error(), "rs", rs.Name)
-				default:
-					log.Error(err, "failed to delete rs pods", "rs", rs.Name)
-				}
-				replsetsDeleted = false
-				continue
+			switch err {
+			case errWaitingTermination, errWaitingFirstPrimary:
+				log.Info(err.Error(), "rs", rs.Name)
+			default:
+				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
 			}
+			replsetsDeleted = false
+			continue
 		}
 	}
 	if !replsetsDeleted {
