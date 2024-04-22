@@ -199,6 +199,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if !cr.Spec.Sharding.Enabled {
+		return false, nil
+	}
+
 	c := new(api.PerconaServerMongoDB)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 		return false, errors.Wrap(err, "failed to get cr")
@@ -209,6 +213,10 @@ func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Cont
 }
 
 func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
@@ -222,6 +230,9 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
