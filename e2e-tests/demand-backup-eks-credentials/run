@@ -68,6 +68,10 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
+desc 'delete backup and check if it is removed from bucket -- aws-s3'
+kubectl_bin delete psmdb-backup --all
+check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
+
 destroy $namespace
 
 desc 'test passed'
