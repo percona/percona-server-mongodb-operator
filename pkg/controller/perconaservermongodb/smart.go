@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -12,6 +13,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -21,8 +23,8 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
-	replset *api.ReplsetSpec) error {
-
+	replset *api.ReplsetSpec,
+) error {
 	log := logf.FromContext(ctx)
 	if replset.Size == 0 {
 		return nil
@@ -61,6 +63,14 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	}
 
 	if cr.CompareVersion("1.4.0") < 0 {
+		return nil
+	}
+
+	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "should update mongos first")
+	}
+	if mongosFirst {
 		return nil
 	}
 
@@ -167,7 +177,14 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
-			return errors.Wrap(err, "failed to do step down")
+			if strings.Contains(err.Error(), "No electable secondaries caught up") {
+				err = client.StepDown(ctx, 60, true)
+				if err != nil {
+					return errors.Wrap(err, "failed to do forced step down")
+				}
+			} else {
+				return errors.Wrap(err, "failed to do step down")
+			}
 		}
 
 		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -179,6 +196,56 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if !cr.Spec.Sharding.Enabled {
+		return false, nil
+	}
+
+	c := new(api.PerconaServerMongoDB)
+	if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
+		return false, errors.Wrap(err, "failed to get cr")
+	}
+
+	_, ok := c.Annotations[api.AnnotationUpdateMongosFirst]
+	return ok, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		c := new(api.PerconaServerMongoDB)
+		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
+			return err
+		}
+
+		c.Annotations[api.AnnotationUpdateMongosFirst] = "true"
+
+		return r.client.Update(ctx, c)
+	})
+}
+
+func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		c := new(api.PerconaServerMongoDB)
+		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
+			return err
+		}
+		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; !ok {
+			return nil
+		}
+
+		delete(c.Annotations, api.AnnotationUpdateMongosFirst)
+
+		return r.client.Update(ctx, c)
+	})
 }
 
 func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
@@ -347,6 +414,9 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
+	}
+	if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+		return errors.Wrap(err, "unset update mongos first")
 	}
 	log.Info("smart update finished for mongos statefulset")
 

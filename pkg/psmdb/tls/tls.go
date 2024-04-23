@@ -110,10 +110,7 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 
 // Config returns tls.Config to be used in mongo.Config
 func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB) (tls.Config, error) {
-	secretName := cr.Spec.Secrets.SSL
-	if len(secretName) == 0 {
-		secretName = cr.Name + "-ssl"
-	}
+	secretName := api.SSLSecretName(cr)
 	certSecret := &corev1.Secret{}
 	err := k8sclient.Get(ctx, types.NamespacedName{
 		Name:      secretName,

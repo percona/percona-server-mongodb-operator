@@ -105,7 +105,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	// certificates of the cluster, we need to copy them to operator pod.
 	// This is especially important if the user passes custom config to set
 	// net.tls.mode to requireTLS.
-	sslSecret, err := getSecret(ctx, k8sclient, cr.Namespace, cr.Spec.Secrets.SSL)
+	sslSecret, err := getSecret(ctx, k8sclient, cr.Namespace, api.SSLSecretName(cr))
 	if err != nil {
 		return "", errors.Wrap(err, "get ssl secret")
 	}

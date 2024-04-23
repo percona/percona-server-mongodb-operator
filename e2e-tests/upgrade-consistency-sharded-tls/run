@@ -33,8 +33,8 @@ main() {
 	compare_generation "1" "statefulset" "${CLUSTER}-rs0"
 	compare_generation "1" "statefulset" "${CLUSTER}-cfg"
 
-	# TODO: uncomment when 1.14.0 will be removed,
-	#       renewal doesn't work on "1.14.0" version
+	# Renewal doesn't work on "1.14.0" version
+	#
 	#renew_certificate "some-name-ssl"
 	#renew_certificate "some-name-ssl-internal"
 	#wait_cluster
@@ -46,29 +46,16 @@ main() {
 	compare_kubectl statefulset/${CLUSTER}-cfg "-1140"
 
 	desc 'test 1.15.0'
-	# workaround to switch to updated certificate structure
-	# more details: https://github.com/percona/percona-server-mongodb-operator/pull/1287
-	# TODO: remove the workaround when 1.14.0 will be removed
-	stop_cluster $CLUSTER
-
-	compare_generation "4" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
-
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.15.0"}
     }'
 	# Wait for at least one reconciliation
 	sleep 20
+	desc 'check if Pod started'
+	wait_cluster
 
-	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
-
-	kubectl_bin delete certificate "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
-	kubectl_bin delete issuer "$CLUSTER-psmdb-ca"
-	kubectl_bin delete secret "$CLUSTER"-ssl "$CLUSTER"-ssl-internal
-	start_cluster $CLUSTER
-	compare_generation "6" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "3" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
 
 	# Wait for at least one reconciliation
 	sleep 20
@@ -78,14 +65,14 @@ main() {
 	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "6" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "4" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
-	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1150"
@@ -101,20 +88,20 @@ main() {
 	sleep 20
 	desc 'check if Pod started'
 	wait_cluster
-	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "6" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "6" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	compare_generation "10" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
-	compare_generation "11" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "10" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1160"
