@@ -1,6 +1,7 @@
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
+  annotations: {}
   generation: 1
   name: some-name-psmdb-ca-issuer
   ownerReferences:

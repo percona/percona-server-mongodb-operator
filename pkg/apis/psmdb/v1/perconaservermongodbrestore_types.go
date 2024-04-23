@@ -157,4 +157,8 @@ var (
 	PITRestoreTypeLatest PITRestoreType = "latest"
 )
 
-const AnnotationRestoreInProgress = "percona.com/restore-in-progress"
+const (
+	AnnotationRestoreInProgress = "percona.com/restore-in-progress"
+	// AnnotationUpdateMongosFirst is an annotation used to force next smart update to be applied to mongos before mongod.
+	AnnotationUpdateMongosFirst = "percona.com/update-mongos-first"
+)

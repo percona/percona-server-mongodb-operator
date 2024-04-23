@@ -16,6 +16,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
+	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -38,10 +39,11 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDB{
-		client:  cl,
-		scheme:  s,
-		lockers: newLockStore(),
-		newPBM:  fakeBackup.NewPBM,
+		client:                 cl,
+		scheme:                 s,
+		lockers:                newLockStore(),
+		newPBM:                 fakeBackup.NewPBM,
+		newCertManagerCtrlFunc: faketls.NewCertManagerController,
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -42,16 +43,26 @@ import (
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	r, err := newReconciler(mgr)
+	if err != nil {
+		return err
+	}
+	return add(mgr, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
+	cli, err := clientcmd.NewClient(mgr.GetConfig())
+	if err != nil {
+		return nil, errors.Wrap(err, "create clientcmd")
+	}
+
 	return &ReconcilePerconaServerMongoDBBackup{
 		client:     mgr.GetClient(),
 		scheme:     mgr.GetScheme(),
 		newPBMFunc: backup.NewPBM,
-	}
+		clientcmd:  cli,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -86,8 +97,9 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}
 type ReconcilePerconaServerMongoDBBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client    client.Client
+	scheme    *runtime.Scheme
+	clientcmd *clientcmd.Client
 
 	newPBMFunc backup.NewPBMFunc
 }
@@ -155,7 +167,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	if cluster != nil {
 		var svr *version.ServerVersion
-		svr, err = version.Server()
+		svr, err = version.Server(r.clientcmd)
 		if err != nil {
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
