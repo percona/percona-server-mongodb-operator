@@ -118,7 +118,10 @@ sleep 30
 
 desc "create replica PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/${replica_cluster}.yml"
-sleep 300
+
+wait_for_running $replica_cluster-rs0 3 "false"
+wait_for_running $replica_cluster-rs1 3 "false"
+wait_for_running $replica_cluster-cfg 3 "false"
 
 replica_cfg_0_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-0 'cfg')
 replica_cfg_1_endpoint=$(get_service_ip cross-site-sharded-replica-cfg-1 'cfg')
@@ -141,7 +144,22 @@ kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
 			  }
 		}'
 
-sleep 60
+nodes_amount=0
+until [[ ${nodes_amount} == 6 ]]; do
+  nodes_amount=$(run_mongos 'rs.conf().members.length' "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017" \
+   | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
+   | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/')
+
+  echo "$nodes_amount"
+  let retry+=1
+  if [ $retry -ge 15 ]; then
+    echo max retry count $retry reached. something went wrong with mongo cluster
+    exit 1
+  fi
+  echo -n .
+  sleep 10
+done
+
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 
 desc 'check if all 3 Pods started'
@@ -166,23 +184,25 @@ compare_mongos_cmd "find" "myApp:myPass@$main_cluster-mongos.$namespace"
 desc 'test failover'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
-sleep 120
-
 kubectl_bin delete psmdb $main_cluster
 
 desc 'run disaster recovery script for replset: cfg'
+
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_cfg_0_endpoint" "mongodb" ":27017"
 
 desc 'run disaster recovery script for replset: rs0'
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs0_0_endpoint" "mongodb" ":27017"
 
 desc 'run disaster recovery script for replset: rs1'
+
 run_script_mongos "${test_dir}/disaster_recovery.js" "clusterAdmin:clusterAdmin123456@$replica_rs1_0_endpoint" "mongodb" ":27017"
 
 desc 'make replica cluster managed'
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 kubectl_bin patch psmdb ${replica_cluster} --type=merge --patch '{"spec":{"unmanaged": false}}'
-sleep 120
+
+wait_for_running $replica_cluster-rs0 3
+wait_for_running $replica_cluster-cfg 3
 
 desc "check failover status"
 compare_mongos_cmd "find" "myApp:myPass@$replica_cluster-mongos.$replica_namespace"
