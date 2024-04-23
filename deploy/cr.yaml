@@ -142,6 +142,12 @@ spec:
 #      periodSeconds: 3
 #      successThreshold: 1
 #      timeoutSeconds: 2
+#    containerSecurityContext:
+#      privileged: false
+#    podSecurityContext:
+#      runAsUser: 1001
+#      runAsGroup: 1001
+#      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
 #    sidecars:
 #    - image: busybox
@@ -383,6 +389,12 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
+#      containerSecurityContext:
+#        privileged: false
+#      podSecurityContext:
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
@@ -478,6 +490,12 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
+#      containerSecurityContext:
+#        privileged: false
+#      podSecurityContext:
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
@@ -521,6 +539,8 @@ spec:
 #      requests:
 #        cpu: "300m"
 #        memory: "0.5G"
+#    containerSecurityContext:
+#      privileged: false
 #    storages:
 #      s3-us-west:
 #        type: s3
