@@ -109,7 +109,7 @@ function main() {
 	wait_cluster_consistency $cluster
 
 	desc 'enabling arbiter'
-	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/arbiter/enabled","value":true}]'
+	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/arbiter/enabled","value":true},{"op":"replace","path":"/spec/replsets/0/size","value":4}]'
 	wait_cluster_consistency $cluster
 	wait_pod $cluster-rs0-arbiter-0
 
