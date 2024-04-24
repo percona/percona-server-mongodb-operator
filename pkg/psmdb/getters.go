@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"sort"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -164,4 +165,21 @@ func GetExportedServices(ctx context.Context, cl client.Client, cr *api.PerconaS
 	}
 
 	return seList, nil
+}
+
+func GetNodeLabels(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod corev1.Pod) (map[string]string, error) {
+	// Set a timeout for the request, to avoid hanging forever
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	node := &corev1.Node{}
+
+	err := cl.Get(ctx, client.ObjectKey{
+		Name: pod.Spec.NodeName,
+	}, node)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get node %s", pod.Spec.NodeName)
+	}
+
+	return node.Labels, nil
 }
