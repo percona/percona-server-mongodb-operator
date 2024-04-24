@@ -61,8 +61,8 @@ spec:
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --clusterAuthMode=keyFile
-            - --keyFile=/etc/mongodb-secrets/mongodb-key
+            - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
             - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
@@ -88,6 +88,12 @@ spec:
                 - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -174,7 +180,7 @@ spec:
         - name: ssl
           secret:
             defaultMode: 288
-            optional: true
+            optional: false
             secretName: minimal-cluster-ssl
         - name: ssl-internal
           secret:
