@@ -15,7 +15,7 @@ replica_cluster="cross-site-sharded-replica"
 
 wait_for_members() {
   local endpoint="$1"
-  nodes_amount=0
+  local nodes_amount=0
   until [[ ${nodes_amount} == 6 ]]; do
     nodes_amount=$(run_mongos 'rs.conf().members.length' "clusterAdmin:clusterAdmin123456@$endpoint" "mongodb" ":27017" \
      | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
@@ -24,7 +24,7 @@ wait_for_members() {
     echo "$nodes_amount"
     let retry+=1
     if [ $retry -ge 15 ]; then
-      echo "max retry count $retry reached. something went wrong with mongo cluster, config for endpoint $endpoint is not valid"
+      echo "Max retry count $retry reached. something went wrong with mongo cluster. Config for endpoint $endpoint has $nodes_amount but expected 6."
       exit 1
     fi
     echo -n .
