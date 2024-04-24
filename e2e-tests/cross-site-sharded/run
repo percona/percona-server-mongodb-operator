@@ -22,7 +22,7 @@ wait_for_members() {
      | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|bye' \
      | $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/')
 
-    desc "waiting for all members to be configured in ${rsName}"
+    echo "waiting for all members to be configured in ${rsName}"
     let retry+=1
     if [ $retry -ge 15 ]; then
       echo "Max retry count $retry reached. something went wrong with mongo cluster. Config for endpoint $endpoint has $nodes_amount but expected 6."
