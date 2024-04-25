@@ -174,9 +174,7 @@ func GetNodeLabels(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 
 	node := &corev1.Node{}
 
-	err := cl.Get(ctx, client.ObjectKey{
-		Name: pod.Spec.NodeName,
-	}, node)
+	err := cl.Get(ctx, client.ObjectKey{Name: pod.Spec.NodeName}, node)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get node %s", pod.Spec.NodeName)
 	}
