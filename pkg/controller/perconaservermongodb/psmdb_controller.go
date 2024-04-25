@@ -75,8 +75,18 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "failed to get operator pod image")
 	}
 
+	client, err := client.New(mgr.GetConfig(), client.Options{
+		Scheme: mgr.GetScheme(),
+		Cache: &client.CacheOptions{
+			DisableFor: []client.Object{&corev1.Node{}},
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "create client")
+	}
+
 	return &ReconcilePerconaServerMongoDB{
-		client:                 mgr.GetClient(),
+		client:                 client,
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
 		reconcileIn:            time.Second * 5,
