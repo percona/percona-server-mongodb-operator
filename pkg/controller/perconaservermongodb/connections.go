@@ -10,6 +10,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 type MongoClientProvider interface {
@@ -69,5 +70,11 @@ func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Con
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get mongo host")
 	}
-	return r.MongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled())
+
+	tlsEnabled, err := tls.IsEnabledForPod(ctx, r.client, cr, &pod, "mongod")
+	if err != nil {
+		return nil, errors.Wrap(err, "check if tls enabled")
+	}
+
+	return r.MongoClientProvider().Standalone(ctx, cr, role, host, tlsEnabled)
 }

@@ -259,6 +259,7 @@ type PerconaServerMongoDBStatus struct {
 	Host               string                   `json:"host,omitempty"`
 	Size               int32                    `json:"size"`
 	Ready              int32                    `json:"ready"`
+	TLSMode            TLSMode                  `json:"tlsMode,omitempty"`
 }
 
 type ConditionStatus string
@@ -1217,6 +1218,7 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 }
 
 const (
+	AnnotationRestartCluster      = "percona.com/restart-cluster"
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
 )

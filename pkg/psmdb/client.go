@@ -50,7 +50,12 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		Password:    c.Password,
 	}
 
-	if cr.TLSEnabled() {
+	tlsEnabled, err := tls.IsEnabledForReplset(ctx, k8sclient, cr, &rs)
+	if err != nil {
+		return nil, errors.Wrap(err, "check if tls enabled")
+	}
+
+	if tlsEnabled {
 		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
@@ -73,7 +78,12 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 		Password: c.Password,
 	}
 
-	if cr.TLSEnabled() {
+	tlsEnabled, err := tls.IsEnabledForMongos(ctx, k8sclient, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "check if tls enabled")
+	}
+
+	if tlsEnabled {
 		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")

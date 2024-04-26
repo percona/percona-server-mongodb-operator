@@ -35,6 +35,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
@@ -286,6 +287,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		if rec || err != nil {
 			return rr, err
 		}
+	}
+
+	err = r.restartClusterIfNeeded(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "restart cluster")
 	}
 
 	err = r.reconcilePause(ctx, cr)
@@ -1149,6 +1155,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil {
 		return errors.Wrap(err, "should update mongos first")
 	}
+
 	if (!uptodate && !mongosFirst) || rstRunning {
 		return nil
 	}
@@ -1557,4 +1564,22 @@ func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedNam
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) restartClusterIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
+	_, ok := cr.Annotations[api.AnnotationRestartCluster]
+	if ok && cr.Status.State != api.AppStatePaused {
+		log.Info("Restart annotation exists, cluster will be restarted")
+		cr.Spec.Pause = true
+	}
+
+	if ok && cr.Status.State == api.AppStatePaused {
+		if err := k8s.DeannotateObject(ctx, r.client, cr, api.AnnotationRestartCluster); err != nil {
+			return errors.Wrap(err, "deannotate cr")
+		}
+	}
+
+	return nil
 }

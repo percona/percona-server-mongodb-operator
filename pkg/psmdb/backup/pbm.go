@@ -34,6 +34,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/util"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 const (
@@ -149,6 +150,11 @@ type NewPBMFunc func(ctx context.Context, c client.Client, cluster *api.PerconaS
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error) {
 	rs := cluster.Spec.Replsets[0]
 
+	tlsEnabled, err := tls.IsEnabledForReplset(ctx, c, cluster, rs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "check if tls enabled for replset %s", rs.Name)
+	}
+
 	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
@@ -163,7 +169,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
 
-	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
+	murl, err := getMongoUri(ctx, c, cluster, addrs, tlsEnabled)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongo uri")
 	}

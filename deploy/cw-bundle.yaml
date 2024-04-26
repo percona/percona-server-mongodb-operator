@@ -18956,6 +18956,8 @@ spec:
                 type: integer
               state:
                 type: string
+              tlsMode:
+                type: string
             required:
             - ready
             - size

@@ -48,6 +48,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateInit, nil
 	}
 
+	if _, ok := cr.Annotations[api.AnnotationRestartCluster]; ok {
+		return api.AppStateStopping, nil
+	}
+
 	if replsetSize == 0 {
 		return api.AppStateReady, nil
 	}

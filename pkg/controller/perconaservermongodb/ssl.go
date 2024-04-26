@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,11 +16,24 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Status.TLSMode != cr.Spec.TLS.Mode {
+		if cr.Status.TLSMode == api.TLSModeDisabled || cr.Spec.TLS.Mode == api.TLSModeDisabled {
+			err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{
+				api.AnnotationRestartCluster:    metav1.Now().Format(time.RFC3339),
+				api.AnnotationUpdateMongosFirst: "true",
+			})
+			if err != nil {
+				return errors.Wrap(err, "annotate cr")
+			}
+		}
+	}
+
 	if !cr.TLSEnabled() {
 		return nil
 	}

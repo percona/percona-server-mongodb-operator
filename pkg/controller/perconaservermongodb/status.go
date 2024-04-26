@@ -196,6 +196,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		log.Error(err, "get psmdb connection endpoint")
 	}
 	cr.Status.Host = host
+	cr.Status.TLSMode = cr.Spec.TLS.Mode
 
 	state := api.AppStateInit
 
