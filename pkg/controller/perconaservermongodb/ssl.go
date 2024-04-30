@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,22 +20,6 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
-
-	if cr.Spec.Sharding.Enabled && cr.Status.State == api.AppStateReady {
-		tlsModeChanged, err := r.checkIfTLSModeChanged(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check if tls mode changed")
-		}
-
-		if tlsModeChanged {
-			log.Info("TLS mode changed, we need to update Mongos pods first")
-			if err := r.setUpdateMongosFirst(ctx, cr); err != nil {
-				return errors.Wrap(err, "set update mongos first annotation")
-			}
-		}
-	}
-
 	if !cr.TLSEnabled() {
 		return nil
 	}
@@ -492,32 +475,4 @@ func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, sec
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) checkIfTLSModeChanged(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
-	firstMongosPod := &corev1.Pod{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-mongos-0", Namespace: cr.Namespace}, firstMongosPod)
-	if err != nil {
-		return false, errors.Wrap(err, "get first mongos pod")
-	}
-
-	mongos := corev1.Container{}
-	for _, ct := range firstMongosPod.Spec.Containers {
-		if ct.Name == "mongos" {
-			mongos = ct
-		}
-	}
-
-	tlsMode := ""
-	for _, arg := range mongos.Args {
-		if strings.HasPrefix(arg, "--tlsMode") {
-			tlsMode = strings.Split(arg, "=")[1]
-		}
-	}
-
-	if tlsMode == "" {
-		return false, nil
-	}
-
-	return cr.Spec.TLS.Mode != api.TLSMode(tlsMode), nil
 }

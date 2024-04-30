@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,6 +34,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/util"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 const (
@@ -148,32 +148,16 @@ type NewPBMFunc func(ctx context.Context, c client.Client, cluster *api.PerconaS
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
 func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMongoDB) (PBM, error) {
+	log := logf.FromContext(ctx)
+
 	rs := cluster.Spec.Replsets[0]
 
-	tlsEnabled := cluster.TLSEnabled()
-
-	sfs := appsv1.StatefulSet{}
-	err := c.Get(ctx, types.NamespacedName{Name: cluster.Name + "-" + rs.Name, Namespace: cluster.Namespace}, &sfs)
+	tlsEnabled, err := tls.IsEnabledForReplset(ctx, c, cluster, rs)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get statefulset for replset %s", rs.Name)
+		return nil, errors.Wrapf(err, "check if tls enabled for replset %s", rs.Name)
 	}
 
-	for _, ct := range sfs.Spec.Template.Spec.Containers {
-		if ct.Name == "mongod" {
-			for _, arg := range ct.Args {
-				if strings.HasPrefix(arg, "--tlsMode") {
-					tlsMode := strings.Split(arg, "=")[1]
-					switch api.TLSMode(tlsMode) {
-					case api.TLSModeRequire, api.TLSModeAllow, api.TLSModePrefer:
-						tlsEnabled = true
-					case api.TLSModeDisabled:
-						tlsEnabled = false
-					}
-				}
-			}
-			break
-		}
-	}
+	log.V(1).Info("Creating PBM connection", "tlsEnabled", tlsEnabled)
 
 	pods, err := psmdb.GetRSPods(ctx, c, cluster, rs.Name)
 	if err != nil {
