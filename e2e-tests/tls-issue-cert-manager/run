@@ -42,8 +42,6 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	exit 0
-
 	compare_kubectl statefulset/${cluster}-rs0
 	compare_kubectl statefulset/${cluster}-cfg
 	compare_kubectl statefulset/${cluster}-mongos
@@ -89,10 +87,8 @@ main() {
 
 	desc 'disable TLS'
 	disable_tls "$cluster"
-	wait_for_running $cluster-rs0 3
-	wait_for_running $cluster-cfg 3 "false"
-
-	kubectl_bin delete sts $cluster-mongos
+	wait_for_cluster_state "${cluster}" "paused"
+	wait_for_cluster_state "${cluster}" "ready"
 
 	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled"
 	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled"
