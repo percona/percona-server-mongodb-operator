@@ -54,6 +54,9 @@ func TestUpdateStatus(t *testing.T) {
 			CRVersion: "1.12.0",
 			Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
 			Sharding:  api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
+			TLS: &api.TLSSpec{
+				Mode: api.TLSModePrefer,
+			},
 		},
 	}
 
