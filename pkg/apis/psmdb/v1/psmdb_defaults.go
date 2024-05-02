@@ -65,9 +65,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	if cr.Spec.ImagePullPolicy == "" {
 		cr.Spec.ImagePullPolicy = defaultImagePullPolicy
 	}
-	if cr.Spec.UpdateStrategy == "" {
-		cr.Spec.UpdateStrategy = SmartUpdateStatefulSetStrategyType
-	}
 	if cr.Spec.Secrets == nil {
 		cr.Spec.Secrets = &SecretsSpec{}
 	}

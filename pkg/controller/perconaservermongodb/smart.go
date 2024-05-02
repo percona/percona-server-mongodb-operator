@@ -378,17 +378,6 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	if sts.Status.ReadyReplicas == 0 {
-		log.Info("no mongos pods are ready, deleting all mongos pods")
-
-		err := r.client.DeleteAllOf(ctx, &corev1.Pod{}, k8sclient.InNamespace(cr.Namespace), k8sclient.MatchingLabels{"app.kubernetes.io/component": "mongos"})
-		if err != nil {
-			return errors.Wrap(err, "delete all mongos pods")
-		}
-
-		return nil
-	}
-
 	log.Info("StatefulSet is changed, starting smart update", "name", sts.Name)
 
 	if sts.Status.ReadyReplicas < sts.Status.Replicas {
