@@ -25,8 +25,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	if cr.Status.TLSMode != cr.Spec.TLS.Mode {
 		if cr.Status.TLSMode == api.TLSModeDisabled || cr.Spec.TLS.Mode == api.TLSModeDisabled {
 			err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{
-				api.AnnotationRestartCluster:    metav1.Now().Format(time.RFC3339),
-				api.AnnotationUpdateMongosFirst: "true",
+				api.AnnotationRestartCluster: metav1.Now().Format(time.RFC3339),
 			})
 			if err != nil {
 				return errors.Wrap(err, "annotate cr")

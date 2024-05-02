@@ -87,7 +87,7 @@ main() {
 
 	desc 'disable TLS'
 	disable_tls "$cluster"
-	wait_for_cluster_state "${cluster}" "paused"
+	wait_for_cluster_state "${cluster}" "initializing"
 	wait_for_cluster_state "${cluster}" "ready"
 
 	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled"

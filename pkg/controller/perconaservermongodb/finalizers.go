@@ -61,7 +61,36 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
 	log := logf.FromContext(ctx)
 
+	replsetsDeleted := true
+	for _, rs := range cr.Spec.Replsets {
+		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+			switch err {
+			case errWaitingTermination, errWaitingFirstPrimary:
+				log.Info(err.Error(), "rs", rs.Name)
+			default:
+				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
+			}
+			replsetsDeleted = false
+			continue
+		}
+	}
+	if !replsetsDeleted {
+		return errWaitingTermination
+	}
+
 	if cr.Spec.Sharding.Enabled {
+		if cr.Spec.Sharding.ConfigsvrReplSet != nil {
+			rs := cr.Spec.Sharding.ConfigsvrReplSet
+			if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+				switch err {
+				case errWaitingTermination, errWaitingFirstPrimary:
+					log.Info(err.Error(), "rs", "cfg")
+				default:
+					log.Error(err, "failed to delete rs pods", "rs", "cfg")
+				}
+			}
+		}
+
 		cr.Spec.Sharding.Mongos.Size = 0
 
 		sts := new(appsv1.StatefulSet)
@@ -84,32 +113,12 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 
-	replsetsDeleted := true
-	for _, rs := range cr.Spec.Replsets {
-		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
-			switch err {
-			case errWaitingTermination, errWaitingFirstPrimary:
-				log.Info(err.Error(), "rs", rs.Name)
-			default:
-				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
-			}
-			replsetsDeleted = false
-			continue
-		}
-	}
-	if !replsetsDeleted {
-		return errWaitingTermination
-	}
-
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		if err := r.deleteRSPods(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
 	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -172,6 +181,9 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
+
+		log.Info("Checking if pod is primary", "isPrimary", isPrimary, "pod", pods.Items[0].Name, "rs", rs.Name, "size", rs.Size)
+
 		if !isPrimary {
 			if len(pods.Items) != int(*sts.Spec.Replicas) {
 				return errWaitingTermination
@@ -180,6 +192,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 			if err != nil {
 				return errors.Wrap(err, "set primary")
 			}
+			log.Info("Pod is set to be primary", "pod", pods.Items[0].Name, "rs", rs.Name, "size", rs.Size)
 			return errWaitingFirstPrimary
 		}
 

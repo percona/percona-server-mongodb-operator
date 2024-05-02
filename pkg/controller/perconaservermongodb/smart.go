@@ -26,7 +26,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	replset *api.ReplsetSpec,
 ) error {
 	log := logf.FromContext(ctx)
-	if replset.Size == 0 {
+
+	if replset.Size == 0 || cr.Spec.Pause {
 		return nil
 	}
 
@@ -158,11 +159,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
+	log.Info("got primary pod", "pod", primaryPod.Name)
+
 	// If the primary is external, we can't match it with a running pod and
 	// it'll have an empty name
 	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
-		forceStepDown := replset.Size == 1
-		log.Info("doing step down...", "force", forceStepDown)
 		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client: %v", err)
@@ -175,6 +176,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 			}
 		}()
 
+		forceStepDown := replset.Size == 1
+		log.Info("step down primary pod", "pod", primaryPod.Name, "force", forceStepDown)
 		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
 			if strings.Contains(err.Error(), "No electable secondaries caught up") {
@@ -249,6 +252,8 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
+	log := logf.FromContext(ctx).WithName("setPrimary").WithValues("expectedPrimary", expectedPrimary.Name)
+
 	primary, err := r.isPodPrimary(ctx, cr, expectedPrimary, rs)
 	if err != nil {
 		return errors.Wrap(err, "is pod primary")
@@ -273,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		return errors.Wrap(err, "get rs statefulset")
 	}
 
-	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items)
+	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items) * 3
 
 	var primaryPod corev1.Pod
 	for _, pod := range pods.Items {
@@ -284,16 +289,20 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
+		log.Info("Found primary pod", "rs", rs.Name, "pod", pod.Name, "primary", primary)
 		// If we found a primary, we need to call `replSetStepDown` on it after calling `replSetFreeze` on all other pods
 		if primary {
 			primaryPod = pod
 			continue
 		}
+		log.Info("Freezing pod", "rs", rs.Name, "pod", pod.Name, "period", sleepSeconds)
 		err = r.freezePod(ctx, cr, rs, pod, sleepSeconds)
 		if err != nil {
 			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
 		}
 	}
+
+	log.Info("Step down primary pod", "rs", rs.Name, "pod", primaryPod.Name, "period", sleepSeconds)
 
 	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {
 		return errors.Wrap(err, "failed to step down primary pod")
@@ -365,7 +374,7 @@ func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *ap
 func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
 	log := logf.FromContext(ctx)
 
-	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.Pause || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
 		return nil
 	}
 

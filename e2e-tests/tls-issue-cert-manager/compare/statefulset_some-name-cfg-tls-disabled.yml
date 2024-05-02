@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 4
+  generation: 7
   labels:
     app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
@@ -187,9 +187,7 @@ spec:
             defaultMode: 420
             secretName: internal-some-name-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
