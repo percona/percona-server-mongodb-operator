@@ -74,16 +74,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), new(psmdbv1.PerconaServerMongoDBBackup)), new(handler.EnqueueRequestForObject))
+	err = c.Watch(source.Kind(mgr.GetCache(), &psmdbv1.PerconaServerMongoDBBackup{}, &handler.TypedEnqueueRequestForObject[*psmdbv1.PerconaServerMongoDBBackup]{}))
 	if err != nil {
 		return err
 	}
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), new(corev1.Pod)), handler.EnqueueRequestForOwner(
-		mgr.GetScheme(), mgr.GetRESTMapper(), new(psmdbv1.PerconaServerMongoDBBackup), handler.OnlyControllerOwner(),
-	))
+	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
+		mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBBackup{}, handler.OnlyControllerOwner(),
+	)))
 	if err != nil {
 		return err
 	}

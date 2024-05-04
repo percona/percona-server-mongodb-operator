@@ -1492,6 +1492,7 @@ get_latest_restorable_time_from_backup_object() {
 
 	echo "$latestRestorableTime"
 }
+
 compare_latest_restorable_time() {
 	local cluster=$1
 	local backup_name=$2
@@ -1505,4 +1506,47 @@ compare_latest_restorable_time() {
 		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
 		exit 1
 	fi
+}
+
+pause_cluster() {
+	local cluster_name=$1
+
+	echo "Pausing cluster ${cluster_name}"
+
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": true } }'
+}
+
+unpause_cluster() {
+	local cluster_name=$1
+
+	echo "Unpausing cluster ${cluster_name}"
+
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": false } }'
+}
+
+disable_tls() {
+	local cluster_name=$1
+
+	echo "Disabling TLS for cluster ${cluster_name}"
+
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "unsafeFlags": { "tls": true }, "tls": { "mode": "disabled" } } }'
+}
+
+wait_for_cluster_state() {
+	local cluster_name=$1
+	local target_state=$2
+
+	echo -n "Waiting for cluster to reach ${target_state} state"
+	local timeout=0
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 1500 ]]; then
+			echo
+			echo "Waiting timeout has been reached. Exiting..."
+			exit 1
+		fi
+	done
+	echo
 }
