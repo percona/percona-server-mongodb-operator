@@ -42,6 +42,10 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
+	compare_kubectl statefulset/${cluster}-rs0
+	compare_kubectl statefulset/${cluster}-cfg
+	compare_kubectl statefulset/${cluster}-mongos
+
 	desc 'check if certificates issued with certmanager'
 	check_tls_secret "$cluster-ssl"
 
@@ -80,6 +84,19 @@ main() {
 
 	desc 'check if internal certificate issued'
 	compare_kubectl certificate/$cluster-ssl-internal
+
+	desc 'disable TLS'
+	pause_cluster "$cluster"
+	wait_for_cluster_state "${cluster}" "paused"
+
+	disable_tls "$cluster"
+
+	unpause_cluster "$cluster"
+	wait_for_cluster_state "${cluster}" "ready"
+
+	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled"
+	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled"
+	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled"
 
 	destroy "$namespace"
 	desc 'test passed'
