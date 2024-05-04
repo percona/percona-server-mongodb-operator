@@ -255,6 +255,11 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	}
 
 	if cr.TLSEnabled() {
+		if !*cr.Spec.TLS.AllowInvalidCertificates {
+			// remove --sslAllowInvalidCertificates
+			args = append(args[:3], args[3+1:]...)
+		}
+
 		args = append(args,
 			"--clusterAuthMode=x509",
 		)
