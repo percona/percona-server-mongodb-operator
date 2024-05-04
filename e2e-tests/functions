@@ -1513,7 +1513,7 @@ pause_cluster() {
 
 	echo "Pausing cluster ${cluster_name}"
 
-	kubectl patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": true } }'
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": true } }'
 }
 
 unpause_cluster() {
@@ -1521,7 +1521,7 @@ unpause_cluster() {
 
 	echo "Unpausing cluster ${cluster_name}"
 
-	kubectl patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": false } }'
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "pause": false } }'
 }
 
 disable_tls() {
@@ -1529,5 +1529,24 @@ disable_tls() {
 
 	echo "Disabling TLS for cluster ${cluster_name}"
 
-	kubectl patch psmdb ${cluster_name} --type merge -p='{"spec": { "unsafeFlags": { "tls": true }, "tls": { "mode": "disabled" } } }
+	kubectl_bin patch psmdb ${cluster_name} --type merge -p='{"spec": { "unsafeFlags": { "tls": true }, "tls": { "mode": "disabled" } } }'
+}
+
+wait_for_cluster_state() {
+	local cluster_name=$1
+	local target_state=$2
+
+	echo -n "Waiting for cluster to reach ${target_state} state"
+	local timeout=0
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 1500 ]]; then
+			echo
+			echo "Waiting timeout has been reached. Exiting..."
+			exit 1
+		fi
+	done
+	echo
 }
