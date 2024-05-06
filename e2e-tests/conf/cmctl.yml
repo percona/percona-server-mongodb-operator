@@ -21,7 +21,7 @@ spec:
           - /bin/sh
           - -c
           - |
-            curl -fsSL -o /tmp/cmctl.tar.gz https://github.com/cert-manager/cert-manager/releases/latest/download/cmctl-linux-amd64.tar.gz \
-            && tar -C /tmp -xzf /tmp/cmctl.tar.gz \
+            curl -fsSL -o /tmp/cmctl https://github.com/cert-manager/cmctl/releases/download/v2.0.0/cmctl_linux_amd64 \
+            && chmod +x /tmp/cmctl \
             && sleep 100500
       restartPolicy: Always

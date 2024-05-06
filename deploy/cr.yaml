@@ -62,6 +62,7 @@ spec:
   - name: rs0
     size: 3
 #    terminationGracePeriodSeconds: 300
+#    serviceAccountName: default
 #    topologySpreadConstraints:
 #      - labelSelector:
 #          matchLabels:
@@ -333,6 +334,7 @@ spec:
     configsvrReplSet:
       size: 3
 #      terminationGracePeriodSeconds: 300
+#      serviceAccountName: default
 #      topologySpreadConstraints:
 #        - labelSelector:
 #            matchLabels:
@@ -443,6 +445,7 @@ spec:
     mongos:
       size: 3
 #      terminationGracePeriodSeconds: 300
+#      serviceAccountName: default
 #      topologySpreadConstraints:
 #        - labelSelector:
 #            matchLabels:
