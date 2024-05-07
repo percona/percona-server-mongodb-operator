@@ -1198,7 +1198,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
-		if err == errTLSNotReady {
+		if errors.Is(err, errTLSNotReady) {
 			return nil
 		}
 		return errors.Wrap(err, "failed to get ssl annotations")
