@@ -1361,7 +1361,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			if cr.CompareVersion("1.16.0") < 0 {
+			if cr.UnsafeTLSDisabled() {
 				return annotation, nil
 			}
 			return nil, errTLSNotReady
@@ -1373,7 +1373,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			if cr.CompareVersion("1.16.0") < 0 {
+			if cr.UnsafeTLSDisabled() {
 				return annotation, nil
 			}
 			return nil, errTLSNotReady
