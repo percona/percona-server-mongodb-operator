@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -709,6 +710,11 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 
 		removed = append(removed, sts)
 	}
+
+	// Sorting in reverse order to ensure that we first delete non-voting/arbiter before the main RS sts.
+	sort.Slice(removed, func(i, j int) bool {
+		return removed[i].Name > removed[j].Name
+	})
 
 	return removed, nil
 }
