@@ -28,6 +28,7 @@ spec:
   serviceName: ""
   template:
     metadata:
+      annotations: {}
       labels:
         app.kubernetes.io/component: mongos
         app.kubernetes.io/instance: some-name

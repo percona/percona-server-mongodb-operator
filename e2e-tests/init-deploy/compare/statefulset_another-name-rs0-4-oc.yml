@@ -48,6 +48,7 @@ spec:
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
+            - --sslAllowInvalidCertificates
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
             - --tlsMode=disabled
