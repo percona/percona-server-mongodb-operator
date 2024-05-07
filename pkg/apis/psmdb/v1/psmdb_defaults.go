@@ -72,6 +72,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}
 
+	if cr.Spec.UnsafeConf {
+		cr.Spec.Unsafe = UnsafeFlags{
+			TLS:                    true,
+			ReplsetSize:            true,
+			MongosSize:             true,
+			BackupIfUnhealthy:      true,
+			TerminationGracePeriod: true,
+		}
+	}
+
 	if cr.Spec.Secrets.EncryptionKey == "" {
 		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}

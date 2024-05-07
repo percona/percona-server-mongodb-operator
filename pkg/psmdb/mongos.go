@@ -293,6 +293,11 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []corev1.Volume {
 	fvar, tvar := false, true
 
+	sslVolumeOptional := &cr.Spec.UnsafeConf
+	if cr.CompareVersion("1.16.0") >= 0 {
+		sslVolumeOptional = &cr.Spec.Unsafe.TLS
+	}
+
 	volumes := []corev1.Volume{
 		{
 			Name: InternalKey(cr),
@@ -309,7 +314,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  api.SSLSecretName(cr),
-					Optional:    &fvar,
+					Optional:    sslVolumeOptional,
 					DefaultMode: &secretFileMode,
 				},
 			},
@@ -395,8 +400,6 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 				},
 			}...)
 		}
-
-		volumes[1].VolumeSource.Secret.Optional = &cr.Spec.Unsafe.TLS
 	}
 
 	return volumes

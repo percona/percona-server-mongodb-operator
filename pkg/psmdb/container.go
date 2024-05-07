@@ -188,11 +188,11 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args[4] = "--replSet=" + name
 	}
 
-	if cr.TLSEnabled() {
-		if *cr.Spec.TLS.AllowInvalidCertificates {
-			args = append(args, "--sslAllowInvalidCertificates")
-		}
+	if *cr.Spec.TLS.AllowInvalidCertificates || cr.CompareVersion("1.16.0") < 0 {
+		args = append(args, "--sslAllowInvalidCertificates")
+	}
 
+	if cr.TLSEnabled() {
 		if cr.Spec.TLS.Mode == api.TLSModeAllow {
 			args = append(args,
 				"--clusterAuthMode=keyFile",
