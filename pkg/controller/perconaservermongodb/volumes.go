@@ -74,10 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		}
 	}
 
-	log.Info("Actual storage size", "actual", actual)
-
 	if cr.PVCResizeInProgress() {
-		log.Info("PVC resize in progress")
 		resizeStartedAt, err := time.Parse(time.RFC3339, cr.GetAnnotations()[psmdbv1.AnnotationPVCResizeInProgress])
 		if err != nil {
 			return errors.Wrap(err, "parse annotation")
