@@ -50,6 +50,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
+	if _, ok := sfs.Annotations[api.AnnotationPVCResizeInProgress]; ok {
+		log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		return sfs, nil
+	}
+
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
