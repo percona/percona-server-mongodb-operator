@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -710,6 +711,11 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		removed = append(removed, sts)
 	}
 
+	// Sorting in reverse order to ensure that we first delete non-voting/arbiter before the main RS sts.
+	sort.Slice(removed, func(i, j int) bool {
+		return removed[i].Name > removed[j].Name
+	})
+
 	return removed, nil
 }
 
@@ -1196,21 +1202,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
 
-	if cr.TLSEnabled() {
-		sslAnn, err := r.sslAnnotation(ctx, cr)
-		if err != nil {
-			if err == errTLSNotReady {
-				return nil
-			}
-			return errors.Wrap(err, "failed to get ssl annotations")
+	sslAnn, err := r.sslAnnotation(ctx, cr)
+	if err != nil {
+		if errors.Is(err, errTLSNotReady) {
+			return nil
 		}
-		if templateSpec.Annotations == nil {
-			templateSpec.Annotations = make(map[string]string)
-		}
+		return errors.Wrap(err, "failed to get ssl annotations")
+	}
+	if templateSpec.Annotations == nil {
+		templateSpec.Annotations = make(map[string]string)
+	}
 
-		for k, v := range sslAnn {
-			templateSpec.Annotations[k] = v
-		}
+	for k, v := range sslAnn {
+		templateSpec.Annotations[k] = v
 	}
 
 	secret := new(corev1.Secret)
@@ -1351,9 +1355,15 @@ var errTLSNotReady = errors.New("waiting for TLS secret")
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
+	annotation["percona.com/ssl-hash"] = ""
+	annotation["percona.com/ssl-internal-hash"] = ""
+
 	sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			if cr.UnsafeTLSDisabled() {
+				return annotation, nil
+			}
 			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrap(err, "get secret hash error")
@@ -1363,6 +1373,9 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			if cr.UnsafeTLSDisabled() {
+				return annotation, nil
+			}
 			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrap(err, "get secret hash error")

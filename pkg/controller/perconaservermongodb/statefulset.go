@@ -50,6 +50,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
+	if _, ok := sfs.Annotations[api.AnnotationPVCResizeInProgress]; ok {
+		log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		return sfs, nil
+	}
+
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
@@ -113,14 +118,12 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
 
-	if cr.TLSEnabled() {
-		sslAnn, err := r.sslAnnotation(ctx, cr)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get ssl annotations")
-		}
-		for k, v := range sslAnn {
-			sfsSpec.Template.Annotations[k] = v
-		}
+	sslAnn, err := r.sslAnnotation(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get ssl annotations")
+	}
+	for k, v := range sslAnn {
+		sfsSpec.Template.Annotations[k] = v
 	}
 
 	return sfs, nil

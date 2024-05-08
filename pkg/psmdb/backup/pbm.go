@@ -184,6 +184,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 
 // GetPriorities returns priorities to be used in PBM config.
 func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) (map[string]float64, error) {
+	log := logf.FromContext(ctx)
 	priorities := make(map[string]float64)
 
 	usersSecret := corev1.Secret{}
@@ -218,6 +219,11 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 		// including the primary. That's why, we need to get primary nodes and
 		// set them in the config.
 		primary, err := psmdb.GetPrimaryPod(ctx, cli)
+
+		if disconnectErr := cli.Disconnect(ctx); disconnectErr != nil {
+			log.Error(err, "failed to close connection to replicaSet", "rs", rs.Name)
+		}
+
 		if err != nil {
 			return priorities, errors.Wrap(err, "get primary pod")
 		}

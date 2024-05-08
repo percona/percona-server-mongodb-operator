@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
-		if err == errTLSNotReady {
+		if errors.Is(err, errTLSNotReady) {
 			return false, nil
 		}
 		return false, errors.Wrap(err, "failed to get ssl annotations")

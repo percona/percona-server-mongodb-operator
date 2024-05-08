@@ -105,6 +105,17 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.TLS.AllowInvalidCertificates = &t
 	}
 
+	if cr.Spec.UnsafeConf {
+		cr.Spec.Unsafe = UnsafeFlags{
+			TLS:                    true,
+			ReplsetSize:            true,
+			MongosSize:             true,
+			BackupIfUnhealthy:      true,
+			TerminationGracePeriod: true,
+		}
+		cr.Spec.TLS.Mode = TLSModeDisabled
+	}
+
 	if !cr.TLSEnabled() && !cr.Spec.Unsafe.TLS {
 		return errors.New("TLS must be enabled. Set spec.unsafeFlags.tls to true to disable this check")
 	}
