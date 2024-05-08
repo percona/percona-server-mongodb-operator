@@ -30,6 +30,7 @@ spec:
   serviceName: some-name-cfg
   template:
     metadata:
+      annotations: {}
       labels:
         app.kubernetes.io/component: cfg
         app.kubernetes.io/instance: some-name
@@ -59,6 +60,7 @@ spec:
             - --replSet=cfg
             - --storageEngine=wiredTiger
             - --relaxPermChecks
+            - --sslAllowInvalidCertificates
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
             - --tlsMode=disabled

@@ -118,14 +118,12 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
 
-	if cr.TLSEnabled() {
-		sslAnn, err := r.sslAnnotation(ctx, cr)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get ssl annotations")
-		}
-		for k, v := range sslAnn {
-			sfsSpec.Template.Annotations[k] = v
-		}
+	sslAnn, err := r.sslAnnotation(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get ssl annotations")
+	}
+	for k, v := range sslAnn {
+		sfsSpec.Template.Annotations[k] = v
 	}
 
 	return sfs, nil
