@@ -28,7 +28,6 @@ test_mongod_openldap() {
 	apply_cluster "$test_dir/conf/$cluster.yml"
 
 	desc 'check if all 3 Pods started'
-	exit
 	wait_for_running $cluster-rs0 3
 
 	run_mongo \
