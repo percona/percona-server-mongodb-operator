@@ -437,7 +437,6 @@
           "allCollectionStats",
           "appendOplogNote",
           "bypassWriteBlockingMode",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",
           "getDefaultRWConcern",
