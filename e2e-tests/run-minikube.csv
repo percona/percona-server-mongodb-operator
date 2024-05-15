@@ -2,8 +2,6 @@ arbiter
 default-cr
 demand-backup
 demand-backup-physical
-ldap
-ldap-tls
 limits
 liveness
 mongod-major-upgrade
