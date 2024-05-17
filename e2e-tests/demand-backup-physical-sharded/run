@@ -94,6 +94,10 @@ run_mongos \
 sleep 5
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 
+# wait for stable timestamp in wiredtiger
+echo 'waiting 60 seconds for stable timestamp in wiredtiger'
+sleep 60
+
 echo 'running backups'
 backup_name_minio="backup-minio-sharded"
 run_backup minio ${backup_name_minio}
