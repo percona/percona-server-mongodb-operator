@@ -104,7 +104,8 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 				TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
 			},
 		},
-		Selector: map[string]string{"statefulset.kubernetes.io/pod-name": podName},
+		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
+		PublishNotReadyAddresses: true,
 	}
 
 	switch replset.Expose.ExposeType {
