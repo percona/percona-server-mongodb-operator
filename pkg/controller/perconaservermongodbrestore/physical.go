@@ -634,30 +634,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Co
 	return creds, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, eval string) (*bytes.Buffer, *bytes.Buffer, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, cmd []string) (*bytes.Buffer, *bytes.Buffer, error) {
 	log := logf.FromContext(ctx)
 
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
-	}
-
-	comp, err := cluster.CompareMongoDBVersion("6.0")
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
-	}
-
-	mongoClient := "mongo"
-	if comp >= 0 {
-		mongoClient = "mongosh"
-	}
-
-	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
-
-	log.V(1).Info("Running cmd in pod", "eval", eval, "pod", pod.Name)
 	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
 		log.V(1).Info("Cmd failed", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
 		return stdoutBuf, stderrBuf, errors.Wrap(err, "cmd failed")
@@ -665,6 +647,65 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
 
 	return stdoutBuf, stderrBuf, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) runIsMaster(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
+	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
+	if err != nil {
+		return false, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
+	}
+
+	mongo60, err := cluster.CompareMongoDBVersion("6.0")
+	if err != nil {
+		return false, errors.Wrap(err, "compare mongo version")
+	}
+
+	mongoClient := "mongo"
+	if mongo60 >= 0 {
+		mongoClient = "mongosh"
+	}
+
+	c := strings.Join([]string{
+		mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", "'db.isMaster().ismaster'",
+		"|", "tail", "-n", "1",
+		"|", "grep", "-Eo", "'(true|false)'",
+	}, " ")
+	cmd := []string{"bash", "-c", c}
+
+	stdoutBuf, _, err := r.runMongosh(ctx, cluster, pod, cmd)
+	if err != nil {
+		return false, errors.Wrap(err, "run isMaster")
+	}
+
+	return strings.TrimSuffix(stdoutBuf.String(), "\n") == "true", nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) makePrimary(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, targetPod string) error {
+	jsTempl := `cfg = rs.config(); podZero = cfg.members.find(member => member.tags.podName === "%s"); podZero.priority += 1; rs.reconfig(cfg)`
+
+	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
+	if err != nil {
+		return errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
+	}
+
+	mongo60, err := cluster.CompareMongoDBVersion("6.0")
+	if err != nil {
+		return errors.Wrap(err, "compare mongo version")
+	}
+
+	mongoClient := "mongo"
+	if mongo60 >= 0 {
+		mongoClient = "mongosh"
+	}
+
+	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", fmt.Sprintf(jsTempl, targetPod)}
+
+	_, _, err = r.runMongosh(ctx, cluster, pod, cmd)
+	if err != nil {
+		return errors.Wrap(err, "run isMaster")
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
@@ -675,8 +716,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 	}
 
-	jsTempl := "cfg = rs.config(); podZero = cfg.members.find(member => member.tags.podName === '%s'); podZero.priority += 1; rs.reconfig(cfg)"
-
 	for _, rs := range replsets {
 		log.Info("Preparing replset for physical restore", "replset", rs.Name)
 
@@ -686,19 +725,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 		}
 
 		for _, pod := range podList.Items {
-			stdoutBuf, _, err := r.runMongosh(ctx, cluster, &pod, "db.isMaster().ismaster")
+			isMaster, err := r.runIsMaster(ctx, cluster, &pod)
 			if err != nil {
 				continue
 			}
 
-			if strings.TrimSuffix(stdoutBuf.String(), "\n") != "true" {
+			if !isMaster {
 				log.V(1).Info("Skipping secondary pod", "pod", pod.Name)
 				continue
 			}
 
 			podZero := rs.PodName(cluster, 0)
-			_, _, err = r.runMongosh(ctx, cluster, &pod, fmt.Sprintf(jsTempl, podZero))
-			if err != nil {
+			if err = r.makePrimary(ctx, cluster, &pod, podZero); err != nil {
 				return errors.Wrapf(err, "make %s primary", podZero)
 			}
 		}
@@ -725,12 +763,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 			return false, errors.Wrapf(err, "get pod %s", podZero)
 		}
 
-		stdoutBuf, _, err := r.runMongosh(ctx, cluster, &pod, "db.isMaster().ismaster")
+		isMaster, err := r.runIsMaster(ctx, cluster, &pod)
 		if err != nil {
 			return false, errors.Wrap(err, "check if pod zero is primary")
 		}
 
-		if strings.TrimSuffix(stdoutBuf.String(), "\n") != "true" {
+		if !isMaster {
 			return false, nil
 		}
 
