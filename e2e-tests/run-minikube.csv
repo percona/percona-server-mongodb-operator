@@ -2,8 +2,6 @@ arbiter
 default-cr
 demand-backup
 demand-backup-physical
-ldap
-ldap-tls
 limits
 liveness
 mongod-major-upgrade
@@ -16,6 +14,5 @@ security-context
 self-healing-chaos
 smart-update
 upgrade-consistency
-upgrade-consistency-sharded-tls
 users
 version-service

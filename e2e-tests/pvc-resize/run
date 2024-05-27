@@ -21,9 +21,9 @@ function get_default_storageclass() {
 function ensure_default_sc_allows_expansion() {
 	local default_sc=$(get_default_storageclass)
 
-    echo "Checking if default storageclass ${default_sc} allows volume expansion"
+	echo "Checking if default storageclass ${default_sc} allows volume expansion"
 
-    local allowVolumeExpansion=$(kubectl_bin get sc -o jsonpath='{.items[?(@.metadata.name=="'"${default_sc}"'")].allowVolumeExpansion}')
+	local allowVolumeExpansion=$(kubectl_bin get sc -o jsonpath='{.items[?(@.metadata.name=="'"${default_sc}"'")].allowVolumeExpansion}')
 
 	if [[ ${allowVolumeExpansion} != "true" ]]; then
 		echo "Default storageclass ${default_sc} does not allow volume expansion"
@@ -32,15 +32,15 @@ function ensure_default_sc_allows_expansion() {
 }
 
 function apply_resourcequota() {
-    local quota=$1
-    local default_sc=$(get_default_storageclass)
+	local quota=$1
+	local default_sc=$(get_default_storageclass)
 
-    echo "Applying resourcequota for default storageclass ${default_sc} with quota ${quota}"
+	echo "Applying resourcequota for default storageclass ${default_sc} with quota ${quota}"
 
-	cat ${test_dir}/conf/resourcequota.yml \
-		| sed "s/STORAGECLASS/${default_sc}/" \
-		| sed "s/QUOTA/${quota}/" \
-		| kubectl_bin apply -f -
+	cat ${test_dir}/conf/resourcequota.yml |
+		sed "s/STORAGECLASS/${default_sc}/" |
+		sed "s/QUOTA/${quota}/" |
+		kubectl_bin apply -f -
 }
 
 function wait_cluster_status() {
@@ -66,40 +66,58 @@ function wait_cluster_status() {
 
 set_debug
 
-ensure_default_sc_allows_expansion
+if [ "$EKS" == 1 ]; then
+	echo "EKS environment detected, creating storageclass for EBS volumes"
+	kubectl_bin apply -f ${test_dir}/conf/eks-storageclass.yml
+else
+	ensure_default_sc_allows_expansion
+fi
 
 create_infra ${namespace}
 
 desc 'create secrets and psmdb client'
 kubectl_bin apply \
-    -f $conf_dir/secrets.yml \
-    -f $conf_dir/client.yml
+	-f $conf_dir/secrets.yml \
+	-f $conf_dir/client.yml
 
 desc 'create PSMDB cluster'
 cluster="some-name"
-spinup_psmdb "${cluster}-rs0" "$conf_dir/$cluster-rs0.yml"
+spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 
 patch_pvc_request "${cluster}" "2Gi"
 wait_cluster_consistency "$cluster" 3 2
 echo
 
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
-    retry=0
-    echo -n "Waiting for pvc/${pvc} to be resized"
-    until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "2Gi" ]]; do
-        if [[ $retry -ge 60 ]]; then
-            echo
-            echo "pvc/${pvc} was not resized, max retries exceeded"
-            exit 1
-        fi
-        echo -n "."
-        sleep 5
+	retry=0
+	echo -n "Waiting for pvc/${pvc} to be resized"
+	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "2Gi" ]]; do
+		if [[ $retry -ge 60 ]]; then
+			echo
+			echo "pvc/${pvc} was not resized, max retries exceeded"
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
 
-        retry=$((retry + 1))
-    done
-    echo
-    echo "pvc/${pvc} was resized"
+		retry=$((retry + 1))
+	done
+	echo
+	echo "pvc/${pvc} was resized"
 done
+
+if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
+	# AWS rate limits PVC expansion for the same EBS volume (1 expand operation in every 6 hours),
+	# so we need to delete and recreate the cluster
+	echo "Deleting and recreating PSMDB cluster ${cluster}"
+	kubectl_bin delete psmdb ${cluster}
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	if [ "$EKS" == 1 ]; then
+		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+	else
+		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+	fi
+fi
 
 desc 'create resourcequota'
 
@@ -134,21 +152,21 @@ patch_pvc_request "${cluster}" "3Gi"
 wait_cluster_consistency "$cluster" 3 2
 echo
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
-    retry=0
-    echo -n "Waiting for pvc/${pvc} to be resized"
-    until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
-        if [[ $retry -ge 60 ]]; then
-            echo
-            echo "pvc/${pvc} was not resized, max retries exceeded"
-            exit 1
-        fi
-        echo -n "."
-        sleep 5
+	retry=0
+	echo -n "Waiting for pvc/${pvc} to be resized"
+	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
+		if [[ $retry -ge 60 ]]; then
+			echo
+			echo "pvc/${pvc} was not resized, max retries exceeded"
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
 
-        retry=$((retry + 1))
-    done
-    echo
-    echo "pvc/${pvc} was resized"
+		retry=$((retry + 1))
+	done
+	echo
+	echo "pvc/${pvc} was resized"
 done
 
 desc "test downscale"

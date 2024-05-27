@@ -183,7 +183,6 @@
         },
         "actions": [
           "allCollectionStats",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "getDefaultRWConcern",
           "getCmdLineOpts",

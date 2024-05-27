@@ -17,7 +17,7 @@ desc 'create first PSMDB cluster'
 sc=$(kubectl get storageclass -o custom-columns=NAME:.metadata.name --no-headers=true | tail -n1)
 yq eval '(.. | select(has("storageClassName")).storageClassName) = "'$sc'"' $test_dir/conf/$cluster.yml >${tmp_dir}/$cluster.yml
 apply_cluster ${tmp_dir}/$cluster.yml
-wait_cluster_consistency $cluster
+wait_cluster_consistency $cluster 64
 
 desc 'write data, read from all'
 run_mongos \

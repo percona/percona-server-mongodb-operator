@@ -1,0 +1,57 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - delete-psmdb-pods-in-order
+    - delete-psmdb-pvc
+spec:
+  #platform: openshift
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  backup:
+    enabled: false
+    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
+  replsets:
+  - name: rs0
+    # readinessDelaySec: 40
+    # livenessDelaySec: 120
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 0.5G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+      security:
+        enableEncryption: true
+        redactClientLogData: false
+      setParameter:
+        ttlMonitorSleepSecs: 60
+        wiredTigerConcurrentReadTransactions: 128
+        wiredTigerConcurrentWriteTransactions: 128
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          collectionConfig:
+            blockCompressor: snappy
+          engineConfig:
+            directoryForIndexes: false
+            journalCompressor: snappy
+          indexConfig:
+            prefixCompression: true
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  secrets:
+    users: some-users
