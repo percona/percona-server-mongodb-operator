@@ -130,6 +130,15 @@
       },
       {
         "resource": {
+          "db": "",
+          "collection": "system.views"
+        },
+        "actions": [
+          "dropCollection"
+        ]
+      },
+      {
+        "resource": {
           "db": "admin",
           "collection": ""
         },
@@ -437,7 +446,6 @@
           "allCollectionStats",
           "appendOplogNote",
           "bypassWriteBlockingMode",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "forceUUID",
           "getDefaultRWConcern",
