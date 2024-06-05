@@ -1358,19 +1358,27 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	annotation["percona.com/ssl-hash"] = ""
 	annotation["percona.com/ssl-internal-hash"] = ""
 
-	sslHash, err := r.getTLSHash(ctx, cr, api.SSLSecretName(cr))
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			if cr.UnsafeTLSDisabled() {
-				return annotation, nil
-			}
-			return nil, errTLSNotReady
-		}
-		return nil, errors.Wrap(err, "get secret hash error")
+	getHash := func(secret *corev1.Secret) string {
+		secretString := fmt.Sprintln(secret.Data)
+		return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
 	}
-	annotation["percona.com/ssl-hash"] = sslHash
 
-	sslInternalHash, err := r.getTLSHash(ctx, cr, api.SSLInternalSecretName(cr))
+	getSecret := func(name string) (*corev1.Secret, error) {
+		secretObj := corev1.Secret{}
+		err := r.client.Get(ctx,
+			types.NamespacedName{
+				Namespace: cr.Namespace,
+				Name:      name,
+			},
+			&secretObj,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &secretObj, nil
+	}
+
+	sslSecret, err := getSecret(api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			if cr.UnsafeTLSDisabled() {
@@ -1378,9 +1386,19 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			}
 			return nil, errTLSNotReady
 		}
-		return nil, errors.Wrap(err, "get secret hash error")
 	}
-	annotation["percona.com/ssl-internal-hash"] = sslInternalHash
+	annotation["percona.com/ssl-hash"] = getHash(sslSecret)
+
+	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			if cr.UnsafeTLSDisabled() || !metav1.IsControlledBy(sslSecret, cr) {
+				return annotation, nil
+			}
+			return nil, errTLSNotReady
+		}
+	}
+	annotation["percona.com/ssl-internal-hash"] = getHash(sslInternalSecret)
 
 	return annotation, nil
 }
