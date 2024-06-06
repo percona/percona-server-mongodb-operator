@@ -277,7 +277,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					return err
 				} else if err == nil {
 					successCount++
-					if len(secret.OwnerReferences) == 0 {
+					if v, ok := secret.Annotations[cm.CertificateNameKey]; ok && v == secret.Name {
 						if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
 							return errors.Wrap(err, "set controller reference")
 						}

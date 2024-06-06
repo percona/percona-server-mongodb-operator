@@ -6,8 +6,30 @@ test_dir="$(realpath "$(dirname "$0")")"
 . "${test_dir}/../functions"
 set_debug
 
+compare_metadata() {
+	local resource="$1"
+	local postfix="$2"
+	local expected_result_resource=${test_dir}/compare/${resource//\//_}${postfix}.yml
+	local new_result="${tmp_dir}/${resource//\//_}.yml"
+	local expected_result="${tmp_dir}/expected_${resource//\//_}.yml"
+
+	kubectl_bin get -o yaml "${resource}" \
+		| yq '.metadata' \
+		| yq 'del(.annotations."kubectl.kubernetes.io/last-applied-configuration")' \
+		| yq 'del(.namespace)' \
+		| yq 'del(.resourceVersion)' \
+		| yq 'del(.uid)' \
+		| yq 'del(.creationTimestamp)' \
+			>"${new_result}"
+
+	yq "$expected_result_resource" | yq '.metadata' >"$expected_result"
+
+	diff -u "$expected_result" "$new_result"
+}
+
 main() {
 	create_infra "$namespace"
+	destroy_cert_manager || true # We need to be sure that we are getting certificates created by the operator, not by cert-manager
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "$conf_dir/secrets.yml"
@@ -22,18 +44,21 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'save certificate created by operator'
-	kubectl_bin get secret $cluster-ssl -o yaml | yq 'del(.metadata)' | yq ".metadata.name=\"$cluster-ssl\"" >"$tmp_dir/custom_tls_secret.yaml"
+	desc 'save certificates created by operator'
+	kubectl_bin get secret $cluster-ssl -o yaml | yq 'del(.metadata)' | yq ".metadata.name=\"$cluster-ssl\"" | yq '.metadata.annotations.my-custom-annotation="true"' >"$tmp_dir/custom_tls_secret.yaml"
+	kubectl_bin get secret $cluster-ssl-internal -o yaml | yq 'del(.metadata)' | yq ".metadata.name=\"$cluster-ssl-internal\"" | yq '.metadata.annotations.my-custom-annotation="true"' >"$tmp_dir/custom_tls_secret_internal.yaml"
 
 	kubectl_bin delete psmdb $cluster
 
 	desc "Wait for delete cluster $cluster"
 	wait_for_delete psmdb/$cluster 180
 
-	desc "create custom certificate"
+	desc "create custom non-internal certificate"
 	kubectl_bin apply -f "$tmp_dir/custom_tls_secret.yaml"
 
-	desc "recreate PSMDB cluster $cluster with custom certificate"
+	deploy_cert_manager # We need to check that operator does not overwrite secrets when using cert-manager.
+
+	desc "recreate PSMDB cluster $cluster with single non-internal custom certificate"
 	apply_cluster "$test_dir/conf/$cluster.yml"
 
 	wait_for_running $cluster-rs0 3
@@ -43,6 +68,29 @@ main() {
 	compare_kubectl statefulset/${cluster}-rs0
 	compare_kubectl statefulset/${cluster}-cfg
 	compare_kubectl statefulset/${cluster}-mongos
+	compare_metadata secret/${cluster}-ssl
+
+	kubectl_bin delete psmdb $cluster
+
+	desc "Wait for delete cluster $cluster"
+	wait_for_delete psmdb/$cluster 180
+
+	desc "create custom internal certificate"
+	kubectl_bin apply -f "$tmp_dir/custom_tls_secret_internal.yaml"
+
+	desc "recreate PSMDB cluster $cluster with both internal and non-internal ssl secrets"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	compare_kubectl statefulset/${cluster}-rs0
+	compare_kubectl statefulset/${cluster}-cfg
+	compare_kubectl statefulset/${cluster}-mongos
+
+	compare_metadata secret/${cluster}-ssl
+	compare_metadata secret/${cluster}-ssl-internal
 
 	destroy "$namespace"
 

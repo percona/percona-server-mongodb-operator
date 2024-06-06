@@ -33,6 +33,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		},
 		&secretObj,
 	)
+	if client.IgnoreNotFound(errSecret) != nil {
+		return errors.Wrap(errSecret, "get SSL secret")
+	}
 	errInternalSecret := r.client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
@@ -40,13 +43,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		},
 		&secretInternalObj,
 	)
-	if errSecret == nil && k8serr.IsNotFound(errInternalSecret) && !metav1.IsControlledBy(&secretObj, cr) {
-		// don't create secret ssl-internal if secret ssl is not created by operator
-		return nil
-	} else if errSecret != nil && !k8serr.IsNotFound(errSecret) {
-		return errors.Wrap(errSecret, "get SSL secret")
-	} else if errInternalSecret != nil && !k8serr.IsNotFound(errInternalSecret) {
+	if client.IgnoreNotFound(errInternalSecret) != nil {
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
+	}
+
+	if errSecret == nil && tls.IsSecretCreatedByUser(cr, &secretObj) {
+		// We shouldn't do anything if the user has created a custom ssl secret.
+		// We should also allow the use of operator without internal ssl secret, so we only check for non-internal secret here.
+		return nil
 	}
 
 	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)

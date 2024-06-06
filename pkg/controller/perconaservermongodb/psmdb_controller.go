@@ -1392,7 +1392,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			if cr.UnsafeTLSDisabled() || !metav1.IsControlledBy(sslSecret, cr) {
+			if cr.UnsafeTLSDisabled() || tls.IsSecretCreatedByUser(cr, sslSecret) {
 				return annotation, nil
 			}
 			return nil, errTLSNotReady

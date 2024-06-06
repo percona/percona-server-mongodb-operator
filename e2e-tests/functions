@@ -925,7 +925,7 @@ destroy() {
 
 	delete_crd
 
-	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
+	destroy_cert_manager || true
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
 		if [ -n "$OPERATOR_NS" ]; then
@@ -938,6 +938,10 @@ destroy() {
 		fi
 	fi
 	rm -rf ${tmp_dir}
+}
+
+destroy_cert_manager() {
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
 }
 
 desc() {
