@@ -1,6 +1,7 @@
 arbiter
 balancer
 custom-replset-name
+custom-tls
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
