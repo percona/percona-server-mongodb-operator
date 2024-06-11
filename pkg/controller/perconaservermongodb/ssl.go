@@ -53,6 +53,25 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
+	if k8serr.IsNotFound(errSecret) && errInternalSecret == nil && tls.IsSecretCreatedByUser(cr, &secretInternalObj) {
+		// If the user has only created an internal secret, we should create a copy of it as a non-internal secret.
+		newSecret := secretInternalObj.DeepCopy()
+		newSecret.ObjectMeta = metav1.ObjectMeta{
+			Name:                       api.SSLSecretName(cr),
+			Namespace:                  secretInternalObj.Namespace,
+			DeletionGracePeriodSeconds: secretInternalObj.DeletionGracePeriodSeconds,
+			Labels:                     secretInternalObj.Labels,
+			Annotations:                secretInternalObj.Annotations,
+			OwnerReferences:            secretInternalObj.OwnerReferences,
+			Finalizers:                 secretInternalObj.Finalizers,
+			ManagedFields:              secretInternalObj.ManagedFields,
+		}
+		if err := r.client.Create(ctx, newSecret); err != nil {
+			return errors.Wrap(err, "failed to create copy of internal secret")
+		}
+		return nil
+	}
+
 	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "check cert-manager")
