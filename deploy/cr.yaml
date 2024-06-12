@@ -11,7 +11,7 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.16.0
+  crVersion: 1.16.1
   image: percona/percona-server-mongodb:7.0.8-5
   imagePullPolicy: Always
 #  tls:
@@ -25,7 +25,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: percona/percona-server-mongodb-operator:1.16.0
+#  initImage: percona/percona-server-mongodb-operator:1.16.1
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
