@@ -109,6 +109,35 @@ main() {
 	compare_kubectl statefulset/${CLUSTER}-rs0 "-1160"
 	compare_kubectl statefulset/${CLUSTER}-cfg "-1160"
 
+	desc 'test 1.16.1'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.16.1"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 20
+	desc 'check if Pod started'
+	wait_cluster
+	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl"
+	sleep 20
+	wait_cluster
+	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl-internal"
+	sleep 20
+	wait_cluster
+	compare_generation "10" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "10" "statefulset" "${CLUSTER}-cfg"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1161"
+	compare_kubectl service/${CLUSTER}-cfg "-1161"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1161"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1161"
+
 	destroy "$namespace"
 
 	desc 'test passed'
