@@ -13,8 +13,10 @@ import (
 	"math/big"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -22,6 +24,16 @@ import (
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+
+func IsSecretCreatedByUser(cr *api.PerconaServerMongoDB, secret *corev1.Secret) bool {
+	if metav1.IsControlledBy(secret, cr) {
+		return false
+	}
+	if secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true" {
+		return false
+	}
+	return true
+}
 
 // Issue returns CA certificate, TLS certificate and TLS private key
 func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err error) {
