@@ -1,6 +1,7 @@
 arbiter
 balancer
 custom-replset-name
+custom-tls
 data-at-rest-encryption
 data-sharded
 default-cr
