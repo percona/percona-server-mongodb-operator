@@ -10,30 +10,30 @@ spec:
   dnsNames:
     - localhost
     - some-name-rs0
-    - some-name-rs0.tls-issue-cert-manager-3840
-    - some-name-rs0.tls-issue-cert-manager-3840.svc.cluster.local
+    - some-name-rs0.NAME_SPACE
+    - some-name-rs0.NAME_SPACE.svc.cluster.local
     - '*.some-name-rs0'
-    - '*.some-name-rs0.tls-issue-cert-manager-3840'
-    - '*.some-name-rs0.tls-issue-cert-manager-3840.svc.cluster.local'
-    - some-name-rs0.tls-issue-cert-manager-3840.svc.clusterset.local
-    - '*.some-name-rs0.tls-issue-cert-manager-3840.svc.clusterset.local'
-    - '*.tls-issue-cert-manager-3840.svc.clusterset.local'
+    - '*.some-name-rs0.NAME_SPACE'
+    - '*.some-name-rs0.NAME_SPACE.svc.cluster.local'
+    - some-name-rs0.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-rs0.NAME_SPACE.svc.clusterset.local'
+    - '*.NAME_SPACE.svc.clusterset.local'
     - some-name-mongos
-    - some-name-mongos.tls-issue-cert-manager-3840
-    - some-name-mongos.tls-issue-cert-manager-3840.svc.cluster.local
+    - some-name-mongos.NAME_SPACE
+    - some-name-mongos.NAME_SPACE.svc.cluster.local
     - '*.some-name-mongos'
-    - '*.some-name-mongos.tls-issue-cert-manager-3840'
-    - '*.some-name-mongos.tls-issue-cert-manager-3840.svc.cluster.local'
+    - '*.some-name-mongos.NAME_SPACE'
+    - '*.some-name-mongos.NAME_SPACE.svc.cluster.local'
     - some-name-cfg
-    - some-name-cfg.tls-issue-cert-manager-3840
-    - some-name-cfg.tls-issue-cert-manager-3840.svc.cluster.local
+    - some-name-cfg.NAME_SPACE
+    - some-name-cfg.NAME_SPACE.svc.cluster.local
     - '*.some-name-cfg'
-    - '*.some-name-cfg.tls-issue-cert-manager-3840'
-    - '*.some-name-cfg.tls-issue-cert-manager-3840.svc.cluster.local'
-    - some-name-mongos.tls-issue-cert-manager-3840.svc.clusterset.local
-    - '*.some-name-mongos.tls-issue-cert-manager-3840.svc.clusterset.local'
-    - some-name-cfg.tls-issue-cert-manager-3840.svc.clusterset.local
-    - '*.some-name-cfg.tls-issue-cert-manager-3840.svc.clusterset.local'
+    - '*.some-name-cfg.NAME_SPACE'
+    - '*.some-name-cfg.NAME_SPACE.svc.cluster.local'
+    - some-name-mongos.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-mongos.NAME_SPACE.svc.clusterset.local'
+    - some-name-cfg.NAME_SPACE.svc.clusterset.local
+    - '*.some-name-cfg.NAME_SPACE.svc.clusterset.local'
   duration: 2160h0m0s
   issuerRef:
     kind: Issuer
