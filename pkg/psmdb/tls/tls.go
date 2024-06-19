@@ -16,6 +16,7 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,14 +26,39 @@ import (
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
-func IsSecretCreatedByUser(cr *api.PerconaServerMongoDB, secret *corev1.Secret) bool {
+func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *api.PerconaServerMongoDB, secret *corev1.Secret) (bool, error) {
 	if metav1.IsControlledBy(secret, cr) {
-		return false
+		return false, nil
 	}
 	if secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true" {
-		return false
+		return isCertManagerSecretCreatedByUser(ctx, c, cr, secret)
 	}
-	return true
+	return true, nil
+}
+
+func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *api.PerconaServerMongoDB, secret *corev1.Secret) (bool, error) {
+	if metav1.IsControlledBy(secret, cr) {
+		return false, nil
+	}
+
+	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
+	if secret.Annotations[cm.IssuerKindAnnotationKey] != cm.IssuerKind || issuerName == "" {
+		return true, nil
+	}
+	issuer := new(cm.Issuer)
+	if err := c.Get(ctx, types.NamespacedName{
+		Name:      issuerName,
+		Namespace: secret.Namespace,
+	}, issuer); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return true, errors.Wrap(err, "failed to get issuer")
+	}
+	if metav1.IsControlledBy(issuer, cr) {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Issue returns CA certificate, TLS certificate and TLS private key

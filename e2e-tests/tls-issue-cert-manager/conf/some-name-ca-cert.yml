@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  annotations:
+    some-random-annotation: "true"
+  name: some-name-ca-cert
+spec:
+  commonName: some-name-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: some-name-psmdb-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: some-name-ca-cert
