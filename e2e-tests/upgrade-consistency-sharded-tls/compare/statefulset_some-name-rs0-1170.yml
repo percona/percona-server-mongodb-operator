@@ -2,15 +2,15 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 10
   labels:
-    app.kubernetes.io/component: cfg
+    app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: some-name-cfg
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -21,35 +21,35 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
+      app.kubernetes.io/component: mongod
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: some-name-cfg
+      app.kubernetes.io/replset: rs0
+  serviceName: some-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: cfg
+        app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs0
     spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app.kubernetes.io/component: cfg
+                  app.kubernetes.io/component: mongod
                   app.kubernetes.io/instance: some-name
                   app.kubernetes.io/managed-by: percona-server-mongodb-operator
                   app.kubernetes.io/name: percona-server-mongodb
                   app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: cfg
+                  app.kubernetes.io/replset: rs0
               topologyKey: kubernetes.io/hostname
       containers:
         - args:
@@ -57,16 +57,19 @@ spec:
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=cfg
+            - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
-            - --configsvr
+            - --tlsMode=preferTLS
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -75,7 +78,7 @@ spec:
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: cfg
+              value: rs0
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -106,22 +109,28 @@ spec:
               name: mongodb
               protocol: TCP
           readinessProbe:
-            failureThreshold: 3
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongod
+            failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources:
             limits:
-              cpu: 300m
+              cpu: 500m
               memory: 500M
             requests:
-              cpu: 300m
-              memory: 500M
+              cpu: 100m
+              memory: 100M
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -136,6 +145,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
@@ -152,11 +163,11 @@ spec:
           name: mongo-init
           resources:
             limits:
-              cpu: 300m
+              cpu: 500m
               memory: 500M
             requests:
-              cpu: 300m
-              memory: 500M
+              cpu: 100m
+              memory: 100M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -166,10 +177,11 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: some-name-mongodb-keyfile
           secret:
@@ -178,6 +190,11 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - configMap:
+            defaultMode: 420
+            name: some-name-rs0-mongod
+            optional: true
+          name: config
         - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
@@ -207,6 +224,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 3Gi
+            storage: 1Gi
       status:
         phase: Pending
