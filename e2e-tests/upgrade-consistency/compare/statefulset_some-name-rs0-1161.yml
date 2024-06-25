@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 3
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -50,11 +50,13 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -94,12 +96,17 @@ spec:
               name: mongodb
               protocol: TCP
           readinessProbe:
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongod
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
-            tcpSocket:
-              port: 27017
             timeoutSeconds: 2
           resources:
             limits:
@@ -110,6 +117,7 @@ spec:
               memory: 100M
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -156,10 +164,11 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: some-name-mongodb-keyfile
           secret:
