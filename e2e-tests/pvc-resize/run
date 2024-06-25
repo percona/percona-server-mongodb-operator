@@ -106,7 +106,7 @@ for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name);
 	echo "pvc/${pvc} was resized"
 done
 
-if [[ "$EKS" == 1 || -n ${OPENSHIFT} ]]; then
+if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
 	# AWS rate limits PVC expansion for the same EBS volume (1 expand operation in every 6 hours),
 	# so we need to delete and recreate the cluster
 	echo "Deleting and recreating PSMDB cluster ${cluster}"
