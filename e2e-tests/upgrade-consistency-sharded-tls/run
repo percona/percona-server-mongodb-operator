@@ -24,7 +24,7 @@ main() {
 	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
 	deploy_cmctl
 
-	desc "create first PSMDB cluster 1.14.0 $CLUSTER"
+	desc "create first PSMDB cluster 1.15.0 $CLUSTER"
 	apply_cluster "$test_dir/conf/${CLUSTER}.yml"
 
 	desc 'check if Pod started'
@@ -32,30 +32,6 @@ main() {
 
 	compare_generation "1" "statefulset" "${CLUSTER}-rs0"
 	compare_generation "1" "statefulset" "${CLUSTER}-cfg"
-
-	# Renewal doesn't work on "1.14.0" version
-	#
-	#renew_certificate "some-name-ssl"
-	#renew_certificate "some-name-ssl-internal"
-	#wait_cluster
-
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1140"
-	compare_kubectl service/${CLUSTER}-cfg "-1140"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1140"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1140"
-
-	desc 'test 1.15.0'
-	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.15.0"}
-    }'
-	# Wait for at least one reconciliation
-	sleep 20
-	desc 'check if Pod started'
-	wait_cluster
-
-	compare_generation "3" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
 
 	# Wait for at least one reconciliation
 	sleep 20
@@ -65,14 +41,14 @@ main() {
 	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	compare_generation "4" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "2" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "2" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
-	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
+	compare_generation "3" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1150"
@@ -83,6 +59,35 @@ main() {
 	desc 'test 1.16.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
         "spec": {"crVersion":"1.16.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 20
+	desc 'check if Pod started'
+	wait_cluster
+	compare_generation "4" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "4" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl"
+	sleep 20
+	wait_cluster
+	compare_generation "5" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
+
+	renew_certificate "some-name-ssl-internal"
+	sleep 20
+	wait_cluster
+	compare_generation "6" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "6" "statefulset" "${CLUSTER}-cfg"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1160"
+	compare_kubectl service/${CLUSTER}-cfg "-1160"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1160"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1160"
+
+	desc 'test 1.16.1'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.16.1"}
     }'
 	# Wait for at least one reconciliation
 	sleep 20
@@ -104,14 +109,14 @@ main() {
 	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1160"
-	compare_kubectl service/${CLUSTER}-cfg "-1160"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1160"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1160"
+	compare_kubectl service/${CLUSTER}-rs0 "-1161"
+	compare_kubectl service/${CLUSTER}-cfg "-1161"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1161"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1161"
 
-	desc 'test 1.16.1'
+	desc 'test 1.17.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.16.1"}
+        "spec": {"crVersion":"1.17.0"}
     }'
 	# Wait for at least one reconciliation
 	sleep 20
@@ -133,10 +138,10 @@ main() {
 	compare_generation "10" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1161"
-	compare_kubectl service/${CLUSTER}-cfg "-1161"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1161"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1161"
+	compare_kubectl service/${CLUSTER}-rs0 "-1170"
+	compare_kubectl service/${CLUSTER}-cfg "-1170"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1170"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1170"
 
 	destroy "$namespace"
 
