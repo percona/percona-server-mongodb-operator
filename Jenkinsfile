@@ -505,7 +505,7 @@ EOF
 
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\nlogs: `s3://percona-jenkins-artifactory/cloud-psmdb-operator/PR-${env.CHANGE_ID}/${GIT_SHORT_COMMIT}/logs/`"
                     pullRequest.comment(TestsReport)
                 }
             }
