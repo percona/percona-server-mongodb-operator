@@ -30,7 +30,7 @@ jobs:
           export DOCKER_DEFAULT_PLATFORM='linux/arm64'
           ./e2e-tests/build
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.19.0
+        uses: aquasecurity/trivy-action@0.21.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64'
           format: 'table'
@@ -48,7 +48,7 @@ jobs:
           ./e2e-tests/build
 
       - name: Run Trivy vulnerability scanner image (linux/amd64)
-        uses: aquasecurity/trivy-action@0.19.0
+        uses: aquasecurity/trivy-action@0.21.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64'
           format: 'table'

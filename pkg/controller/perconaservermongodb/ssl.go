@@ -33,6 +33,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		},
 		&secretObj,
 	)
+	if client.IgnoreNotFound(errSecret) != nil {
+		return errors.Wrap(errSecret, "get SSL secret")
+	}
+	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretObj)
+	if serr != nil {
+		return errors.Wrap(serr, "failed to check if secret is created by user")
+	}
 	errInternalSecret := r.client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
@@ -40,13 +47,37 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		},
 		&secretInternalObj,
 	)
-	if errSecret == nil && k8serr.IsNotFound(errInternalSecret) && !metav1.IsControlledBy(&secretObj, cr) {
-		// don't create secret ssl-internal if secret ssl is not created by operator
-		return nil
-	} else if errSecret != nil && !k8serr.IsNotFound(errSecret) {
-		return errors.Wrap(errSecret, "get SSL secret")
-	} else if errInternalSecret != nil && !k8serr.IsNotFound(errInternalSecret) {
+	if client.IgnoreNotFound(errInternalSecret) != nil {
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
+	}
+	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretInternalObj)
+	if serr != nil {
+		return errors.Wrap(serr, "failed to check if internal secret is created by user")
+	}
+
+	if errSecret == nil && isCustomSecret {
+		// We shouldn't do anything if the user has created a custom ssl secret.
+		// We should also allow the use of operator without internal ssl secret, so we only check for non-internal secret here.
+		return nil
+	}
+
+	if k8serr.IsNotFound(errSecret) && errInternalSecret == nil && isCustomSecretInternal {
+		// If the user has only created an internal secret, we should create a copy of it as a non-internal secret.
+		newSecret := secretInternalObj.DeepCopy()
+		newSecret.ObjectMeta = metav1.ObjectMeta{
+			Name:                       api.SSLSecretName(cr),
+			Namespace:                  secretInternalObj.Namespace,
+			DeletionGracePeriodSeconds: secretInternalObj.DeletionGracePeriodSeconds,
+			Labels:                     secretInternalObj.Labels,
+			Annotations:                secretInternalObj.Annotations,
+			OwnerReferences:            secretInternalObj.OwnerReferences,
+			Finalizers:                 secretInternalObj.Finalizers,
+			ManagedFields:              secretInternalObj.ManagedFields,
+		}
+		if err := r.client.Create(ctx, newSecret); err != nil {
+			return errors.Wrap(err, "failed to create copy of internal secret")
+		}
+		return nil
 	}
 
 	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)

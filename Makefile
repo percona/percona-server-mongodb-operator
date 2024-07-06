@@ -104,10 +104,10 @@ after-release: manifests
 	sed -i "/Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" version/version.go
 	sed -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod6.0#}" deploy/cr-minimal.yaml
+		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod7.0#}" deploy/cr-minimal.yaml
 	sed -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod6.0#}" \
+		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod7.0#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-backup#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mongodb-operator:main#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml

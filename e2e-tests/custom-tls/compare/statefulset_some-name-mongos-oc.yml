@@ -4,13 +4,12 @@ metadata:
   annotations: {}
   generation: 1
   labels:
-    app.kubernetes.io/component: mongod
+    app.kubernetes.io/component: mongos
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+  name: some-name-mongos
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -21,50 +20,53 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: mongod
+      app.kubernetes.io/component: mongos
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+  serviceName: ""
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: mongod
+        app.kubernetes.io/component: mongos
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: rs0
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongos
+                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+              topologyKey: kubernetes.io/hostname
       containers:
         - args:
+            - mongos
             - --bind_ip_all
-            - --auth
-            - --dbpath=/data/db
             - --port=27017
-            - --replSet=rs0
-            - --storageEngine=wiredTiger
-            - --relaxPermChecks
             - --sslAllowInvalidCertificates
+            - --configdb
+            - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27017
+            - --relaxPermChecks
             - --clusterAuthMode=x509
-            - --enableEncryption
-            - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --wiredTigerCacheSizeGB=0.25
-            - --wiredTigerIndexPrefixCompression=true
-            - --config=/etc/mongodb-config/mongod.conf
+            - --tlsMode=preferTLS
           command:
             - /opt/percona/ps-entry.sh
           env:
-            - name: SERVICE_NAME
-              value: some-name
             - name: MONGODB_PORT
               value: "27017"
-            - name: MONGODB_REPLSET
-              value: rs0
           envFrom:
+            - secretRef:
+                name: some-users
+                optional: false
             - secretRef:
                 name: internal-some-name-users
                 optional: false
@@ -75,6 +77,8 @@ spec:
                 - /opt/percona/mongodb-healthcheck
                 - k8s
                 - liveness
+                - --component
+                - mongos
                 - --ssl
                 - --sslInsecure
                 - --sslCAFile
@@ -82,35 +86,39 @@ spec:
                 - --sslPEMKeyFile
                 - /tmp/tls.pem
                 - --startupDelaySeconds
-                - "7200"
+                - "10"
             failureThreshold: 4
             initialDelaySeconds: 60
             periodSeconds: 30
             successThreshold: 1
             timeoutSeconds: 10
-          name: mongod
+          name: mongos
           ports:
             - containerPort: 27017
-              name: mongodb
+              name: mongos
               protocol: TCP
           readinessProbe:
-            failureThreshold: 8
+            exec:
+              command:
+                - /opt/percona/mongodb-healthcheck
+                - k8s
+                - readiness
+                - --component
+                - mongos
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
+            failureThreshold: 3
             initialDelaySeconds: 10
-            periodSeconds: 3
+            periodSeconds: 1
             successThreshold: 1
-            tcpSocket:
-              port: 27017
-            timeoutSeconds: 2
-          resources:
-            limits:
-              cpu: 500m
-              memory: 500M
-            requests:
-              cpu: 100m
-              memory: 100M
+            timeoutSeconds: 1
+          resources: {}
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -125,15 +133,11 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongodb-config
-              name: config
-            - mountPath: /opt/percona
-              name: bin
-            - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
-              readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+              readOnly: true
+            - mountPath: /opt/percona
+              name: bin
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -141,13 +145,7 @@ spec:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
-          resources:
-            limits:
-              cpu: 500m
-              memory: 500M
-            requests:
-              cpu: 100m
-              memory: 100M
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -157,29 +155,16 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: some-name-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
             secretName: some-name-mongodb-keyfile
-        - emptyDir: {}
-          name: bin
-        - configMap:
-            defaultMode: 420
-            name: some-name-rs0-mongod
-            optional: true
-          name: config
-        - name: some-name-mongodb-encryption-key
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: some-name-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
@@ -190,22 +175,13 @@ spec:
             defaultMode: 288
             optional: true
             secretName: some-name-ssl-internal
+        - emptyDir: {}
+          name: mongod-data
         - name: users-secret-file
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - emptyDir: {}
+          name: bin
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
-  volumeClaimTemplates:
-    - metadata:
-        name: mongod-data
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-      status:
-        phase: Pending
+    type: OnDelete
