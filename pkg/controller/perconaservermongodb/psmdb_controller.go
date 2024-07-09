@@ -36,6 +36,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
@@ -335,7 +336,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	for _, sts := range removed {
-		rsName := sts.Labels["app.kubernetes.io/replset"]
+		rsName := sts.Labels[naming.LabelKubernetesReplset]
 
 		log.Info("Deleting STS component from replst", "sts", sts.Name, "rs", rsName)
 
@@ -344,7 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
+		if sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
 			log.Info("Removing RS from shard", "rs", rsName)
 			err = r.removeRSFromShard(ctx, cr, rsName)
 			if err != nil {
@@ -451,7 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
-		matchLabels := replset.MongodLabels(cr)
+		matchLabels := naming.MongodLabels(cr, replset)
 
 		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 		if err != nil {
@@ -466,7 +467,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		}
 
 		if replset.Arbiter.Enabled {
-			matchLabels = replset.ArbiterLabels(cr)
+			matchLabels = naming.ArbiterLabels(cr, replset)
 			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
@@ -485,7 +486,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		}
 
 		if replset.NonVoting.Enabled {
-			matchLabels = replset.NonVotingLabels(cr)
+			matchLabels = naming.NonVotingLabels(cr, replset)
 			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 			if err != nil {
 				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
@@ -683,7 +684,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
+				naming.LabelKubernetesInstance: cr.Name,
 			}),
 		},
 	); err != nil {
@@ -697,12 +698,12 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 	}
 
 	for _, sts := range stsList.Items {
-		component := sts.Labels["app.kubernetes.io/component"]
+		component := sts.Labels[naming.LabelKubernetesComponent]
 		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
-		rsName := sts.Labels["app.kubernetes.io/replset"]
+		rsName := sts.Labels[naming.LabelKubernetesReplset]
 
 		if _, ok := appliedRSNames[rsName]; ok {
 			continue

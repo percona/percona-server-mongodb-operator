@@ -10,6 +10,8 @@ import (
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,8 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -626,29 +626,6 @@ func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	return cfg.Replication.ReplSetName, nil
 }
 
-func (r *ReplsetSpec) MongodLabels(cr *PerconaServerMongoDB) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/replset":    r.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-		"app.kubernetes.io/component":  "mongod",
-	}
-}
-
-func (r *ReplsetSpec) ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
-	ls := r.MongodLabels(cr)
-	ls["app.kubernetes.io/component"] = "arbiter"
-	return ls
-}
-
-func (r *ReplsetSpec) NonVotingLabels(cr *PerconaServerMongoDB) map[string]string {
-	ls := r.MongodLabels(cr)
-	ls["app.kubernetes.io/component"] = "nonVoting"
-	return ls
-}
-
 type LivenessProbeExtended struct {
 	corev1.Probe        `json:",inline"`
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
@@ -1144,33 +1121,6 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
 
-func ClusterLabels(cr *PerconaServerMongoDB) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-}
-
-func MongodLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongod"
-	return lbls
-}
-
-func ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "arbiter"
-	return lbls
-}
-
-func MongosLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongos"
-	return lbls
-}
-
 const (
 	FinalizerDeletePVC              = "delete-psmdb-pvc"
 	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
@@ -1225,3 +1175,4 @@ func (cr *PerconaServerMongoDB) PVCResizeInProgress() bool {
 	_, ok := cr.Annotations[AnnotationPVCResizeInProgress]
 	return ok
 }
+

@@ -21,6 +21,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
@@ -260,7 +261,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 
 	orig := cr.DeepCopy()
 
-	replset, ok := sts.Labels["app.kubernetes.io/replset"]
+	replset, ok := sts.Labels[naming.LabelKubernetesReplset]
 	if !ok {
 		return errors.New("missing component label")
 	}

@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -102,11 +103,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 			var ls map[string]string
 			switch tt.component {
 			case "mongod":
-				ls = rs.MongodLabels(tt.cr)
+				ls = naming.MongodLabels(tt.cr, rs)
 			case "arbiter":
-				ls = rs.ArbiterLabels(tt.cr)
+				ls = naming.ArbiterLabels(tt.cr, rs)
 			case "nonVoting":
-				ls = rs.NonVotingLabels(tt.cr)
+				ls = naming.NonVotingLabels(tt.cr, rs)
 			default:
 				t.Fatalf("unexpected component: %s", tt.component)
 			}

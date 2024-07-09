@@ -4,16 +4,16 @@ import (
 	"context"
 	"strconv"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/pkg/errors"
 )
 
 func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) ([]corev1.Service, error) {
@@ -45,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *api.PerconaServerMongoDB, svc *corev1.Service) error {
-	ls := api.ClusterLabels(cr)
+	ls := naming.ClusterLabels(cr)
 	if !cr.Spec.MultiCluster.Enabled {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 		return nil
 	}
 
-	ls := api.ClusterLabels(cr)
+	ls := naming.ClusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
 	err := r.client.List(ctx,

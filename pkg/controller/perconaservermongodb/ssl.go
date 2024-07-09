@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
@@ -122,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
+				naming.LabelKubernetesInstance: cr.Name,
 			}),
 		},
 	); err != nil {
