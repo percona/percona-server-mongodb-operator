@@ -81,14 +81,22 @@ func Dial(conf *Config) (Client, error) {
 
 	opts := options.Client().
 		SetHosts(conf.Hosts).
-		SetReplicaSet(conf.ReplSetName).
-		SetAuth(options.Credential{
+		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
+		SetReadPreference(readpref.Primary()).
+		SetTLSConfig(conf.TLSConf).
+		SetDirect(conf.Direct).
+		SetConnectTimeout(10 * time.Second).
+		SetServerSelectionTimeout(10 * time.Second)
+
+	if conf.ReplSetName != "" {
+		opts.SetReplicaSet(conf.ReplSetName)
+	}
+	if conf.Username != "" || conf.Password != "" {
+		opts.SetAuth(options.Credential{
 			Password: conf.Password,
 			Username: conf.Username,
-		}).
-		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
-		SetReadPreference(readpref.Primary()).SetTLSConfig(conf.TLSConf).
-		SetDirect(conf.Direct)
+		})
+	}
 
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {

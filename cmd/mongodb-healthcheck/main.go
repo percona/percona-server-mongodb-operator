@@ -27,7 +27,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/healthcheck"
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/tool"
 )
@@ -75,7 +74,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	cnf, err := db.NewConfig(
+	cnf, err := tool.NewConfig(
 		app,
 		tool.EnvMongoDBClusterMonitorUser,
 		tool.EnvMongoDBClusterMonitorPassword,

@@ -23,8 +23,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var lastSSLErr error
-
 type SSLConfig struct {
 	Enabled    bool
 	PEMKeyFile string
@@ -40,11 +38,6 @@ func (sc *SSLConfig) loadCaCertificate() (*x509.CertPool, error) {
 	certificates := x509.NewCertPool()
 	certificates.AppendCertsFromPEM(caCert)
 	return certificates, nil
-}
-
-// LastSSLError returns the last error related to the DB connection SSL handshake
-func LastSSLError() error {
-	return lastSSLErr
 }
 
 func (cnf *Config) configureTLS() error {

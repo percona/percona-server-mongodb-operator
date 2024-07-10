@@ -16,11 +16,8 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
-	mgo "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -39,44 +36,20 @@ func Dial(ctx context.Context, conf *Config) (mongo.Client, error) {
 	log := logf.FromContext(ctx)
 	log.V(1).Info("Connecting to mongodb", "hosts", conf.Hosts, "ssl", conf.SSL.Enabled, "ssl_insecure", conf.SSL.Insecure)
 
-	opts := options.Client().
-		SetHosts(conf.Hosts).
-		SetReplicaSet(conf.ReplSetName).
-		SetAuth(options.Credential{Password: conf.Password, Username: conf.Username}).
-		SetTLSConfig(conf.TLSConf).
-		SetConnectTimeout(10 * time.Second).
-		SetServerSelectionTimeout(10 * time.Second)
-
 	if conf.Username != "" && conf.Password != "" {
 		log.V(1).Info("Enabling authentication for session", "user", conf.Username)
 	}
 
-	client, err := mgo.Connect(ctx, opts)
+	cl, err := mongo.Dial(&conf.Config)
 	if err != nil {
-		return nil, errors.Wrap(err, "connect to mongo replica set")
-	}
-
-	if err := client.Ping(ctx, nil); err != nil {
-		if err := client.Disconnect(ctx); err != nil {
-			return nil, errors.Wrap(err, "disconnect client")
-		}
-
-		opts := options.Client().
-			SetHosts(conf.Hosts).
-			SetTLSConfig(conf.TLSConf).
-			SetConnectTimeout(10 * time.Second).
-			SetServerSelectionTimeout(10 * time.Second).
-			SetDirect(true)
-
-		client, err = mgo.Connect(ctx, opts)
+		cfg := conf.Config
+		cfg.Direct = true
+		cfg.ReplSetName = ""
+		cl, err = mongo.Dial(&cfg)
 		if err != nil {
-			return nil, errors.Wrap(err, "connect to mongo replica set with direct")
-		}
-
-		if err := client.Ping(ctx, nil); err != nil {
-			return nil, errors.Wrap(err, "ping mongo")
+			return nil, errors.Wrap(err, "filed to dial mongo")
 		}
 	}
 
-	return mongo.ToInterface(client), nil
+	return cl, nil
 }
