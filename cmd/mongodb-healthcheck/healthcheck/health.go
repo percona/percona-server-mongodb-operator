@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -30,6 +31,8 @@ import (
 var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
 
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
+	log := logf.FromContext(ctx).WithName("HealthCheckMongosLiveness")
+
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return errors.Wrap(err, "connection error")
@@ -46,6 +49,7 @@ func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) 
 	}
 
 	if isMasterResp.Msg != "isdbgrid" {
+		log.V(1).Info("Wrong isMaster msg", "msg", isMasterResp.Msg)
 		return errors.New("wrong msg")
 	}
 
@@ -53,6 +57,8 @@ func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) 
 }
 
 func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (_ *mongo.MemberState, err error) {
+	log := logf.FromContext(ctx).WithName("HealthCheckMongodLiveness")
+
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return nil, errors.Wrap(err, "connection error")
@@ -87,6 +93,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		// to die before they added to a replset
 		if res.Err().Error() == ErrNoReplsetConfigStr {
 			state := mongo.MemberStateUnknown
+			log.V(1).Info("replSetGetStatus failed", "err", res.Err().Error(), "state", state)
 			return &state, nil
 		}
 		return nil, errors.Wrap(res.Err(), "get replsetGetStatus response")
@@ -115,6 +122,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 
 	oplogRs := OplogRs{}
 	if !isMasterResp.IsArbiter {
+		log.V(1).Info("Getting \"oplog.rs\" info")
 		res := client.Database("local").RunCommand(ctx, bson.D{
 			{Key: "collStats", Value: "oplog.rs"},
 			{Key: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
@@ -126,7 +134,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 			return nil, errors.Wrap(err, "decode oplog.rs info")
 		}
 		if oplogRs.OK == 0 {
-			return nil, errors.New(oplogRs.Errmsg)
+			return nil, errors.Wrap(errors.New("non-ok response from getting oplog.rs info"), oplogRs.Errmsg)
 		}
 	}
 
@@ -135,6 +143,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		storageSize = oplogRs.StorageSize
 	}
 
+	log.V(1).Info("Checking state", "state", rsStatus.MyState, "storage size", storageSize)
 	if err := CheckState(rsStatus, startupDelaySeconds, storageSize); err != nil {
 		return &rsStatus.MyState, err
 	}
