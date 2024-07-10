@@ -39,43 +39,6 @@ var OkMemberStates = []mongo.MemberState{
 
 var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
 
-// getSelfMemberState returns the replication state of the local MongoDB member
-func getSelfMemberState(rsStatus *mongo.Status) *mongo.MemberState {
-	member := rsStatus.GetSelf()
-	if member == nil || member.Health != mongo.MemberHealthUp {
-		return nil
-	}
-	return &member.State
-}
-
-// isStateOk checks if a replication member state matches one of the acceptable member states in 'OkMemberStates'
-func isStateOk(memberState *mongo.MemberState, okMemberStates []mongo.MemberState) bool {
-	for _, state := range okMemberStates {
-		if *memberState == state {
-			return true
-		}
-	}
-	return false
-}
-
-// HealthCheck checks the replication member state of the local MongoDB member
-func HealthCheck(client mongo.Client, okMemberStates []mongo.MemberState) (State, *mongo.MemberState, error) {
-	rsStatus, err := client.RSStatus(context.TODO())
-	if err != nil {
-		return StateFailed, nil, errors.Wrap(err, "get replica set status")
-	}
-
-	state := getSelfMemberState(&rsStatus)
-	if state == nil {
-		return StateFailed, state, errors.New("found no member state for self in replica set status")
-	}
-	if isStateOk(state, okMemberStates) {
-		return StateOk, state, nil
-	}
-
-	return StateFailed, state, errors.Errorf("member has unhealthy replication state: %d", state)
-}
-
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {

@@ -24,7 +24,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 )
 
-// ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
+// MongodReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
 func MongodReadinessCheck(ctx context.Context, addr string) error {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", addr)
