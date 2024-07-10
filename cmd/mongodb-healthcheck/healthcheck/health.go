@@ -135,7 +135,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		if err := res.Decode(&oplogRs); err != nil {
 			return nil, errors.Wrap(err, "decode oplog.rs info")
 		}
-		if oplogRs.Ok == 0 {
+		if oplogRs.OK == 0 {
 			return nil, errors.New(oplogRs.Errmsg)
 		}
 	}
@@ -152,21 +152,14 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 	return &rsStatus.MyState, nil
 }
 
-type ServerStatus struct {
-	Ok     int    `bson:"ok" json:"ok"`
-	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
-}
-
 type OplogRs struct {
-	StorageSize int64 `bson:"storageSize" json:"storageSize"`
-
-	Ok     int    `bson:"ok" json:"ok"`
-	Errmsg string `bson:"errmsg,omitempty" json:"errmsg,omitempty"`
+	mongo.OKResponse `bson:",inline"`
+	StorageSize      int64 `bson:"storageSize" json:"storageSize"`
 }
 
 type ReplSetStatus struct {
-	mongo.Status      `bson:",inline"`
 	InitialSyncStatus InitialSyncStatus `bson:"initialSyncStatus" json:"initialSyncStatus"`
+	mongo.Status      `bson:",inline"`
 }
 
 type InitialSyncStatus interface{}
