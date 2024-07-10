@@ -27,16 +27,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-// OkMemberStates is a slice of acceptable replication member states
-var OkMemberStates = []mongo.MemberState{
-	mongo.MemberStatePrimary,
-	mongo.MemberStateSecondary,
-	mongo.MemberStateRecovering,
-	mongo.MemberStateArbiter,
-	mongo.MemberStateStartup2,
-	mongo.MemberStateRollback,
-}
-
 var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
 
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {

@@ -55,23 +55,22 @@ func main() {
 	log := zap.New(zap.UseFlagOptions(&opts))
 	logf.SetLogger(log)
 
-	restoreInProgress, err := fileExists("/opt/percona/restore-in-progress")
+	_, err := os.Stat("/opt/percona/restore-in-progress")
 	if err != nil {
-		log.Error(err, "check if restore in progress")
+		if os.IsNotExist(err) {
+			os.Exit(0)
+		}
+		log.Error(err, "check if restore in progress file exists")
 		os.Exit(1)
 	}
 
-	if restoreInProgress {
-		os.Exit(0)
-	}
-
-	sleepForever, err := fileExists("/data/db/sleep-forever")
+	_, err = os.Stat("/data/db/sleep-forever")
 	if err != nil {
+		if os.IsNotExist(err) {
+			os.Exit(0)
+		}
 		log.Error(err, "check if sleep-forever file exists")
 		os.Exit(1)
-	}
-	if sleepForever {
-		os.Exit(0)
 	}
 
 	cnf, err := tool.NewConfig(
@@ -130,17 +129,6 @@ func main() {
 			}
 		}
 	}
-}
-
-func fileExists(name string) (bool, error) {
-	_, err := os.Stat(name)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 func getLogEncoder() zapcore.Encoder {

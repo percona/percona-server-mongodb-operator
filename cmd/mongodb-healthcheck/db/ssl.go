@@ -53,7 +53,7 @@ func (cnf *Config) configureTLS() error {
 
 	// Configure client cert
 	if len(cnf.SSL.PEMKeyFile) != 0 {
-		if err := isFileExists(cnf.SSL.PEMKeyFile); err != nil {
+		if _, err := os.Stat(cnf.SSL.PEMKeyFile); err != nil {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.PEMKeyFile)
 		}
 
@@ -68,7 +68,7 @@ func (cnf *Config) configureTLS() error {
 
 	// Configure CA cert
 	if len(cnf.SSL.CAFile) != 0 {
-		if err := isFileExists(cnf.SSL.CAFile); err != nil {
+		if _, err := os.Stat(cnf.SSL.CAFile); err != nil {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
 		}
 
@@ -83,9 +83,4 @@ func (cnf *Config) configureTLS() error {
 
 	cnf.TLSConf = config
 	return nil
-}
-
-func isFileExists(name string) error {
-	_, err := os.Stat(name)
-	return err
 }
