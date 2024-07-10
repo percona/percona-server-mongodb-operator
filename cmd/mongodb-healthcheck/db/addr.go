@@ -12,9 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package k8s
+package db
 
-const (
-	DefaultNamespace = "psmdb"
-	DefaultInitDelay = "0s"
+import (
+	"strconv"
 )
+
+type Addr struct {
+	Host string
+	Port int
+}
+
+func (a Addr) String() string {
+	return a.Host + ":" + strconv.Itoa(a.Port)
+}

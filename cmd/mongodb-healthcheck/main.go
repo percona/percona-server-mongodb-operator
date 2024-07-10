@@ -27,10 +27,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/percona/percona-server-mongodb-operator/healthcheck"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/tool"
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/healthcheck"
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/tool"
 )
 
 var (
@@ -46,7 +45,7 @@ func main() {
 
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
 	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
-	_ = k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
+	readinessCmd := k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
 	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
@@ -78,10 +77,9 @@ func main() {
 
 	cnf, err := db.NewConfig(
 		app,
-		pkg.EnvMongoDBClusterMonitorUser,
-		pkg.EnvMongoDBClusterMonitorPassword,
+		tool.EnvMongoDBClusterMonitorUser,
+		tool.EnvMongoDBClusterMonitorPassword,
 	)
-
 	if err != nil {
 		log.Error(err, "new cfg")
 		os.Exit(1)
@@ -94,7 +92,7 @@ func main() {
 	}
 
 	switch command {
-	case "k8s liveness":
+	case livenessCmd.FullCommand():
 		log.Info("Running Kubernetes liveness check for", "component", component)
 		switch *component {
 
@@ -115,7 +113,7 @@ func main() {
 			log.Info("Member passed Kubernetes liveness check")
 		}
 
-	case "k8s readiness":
+	case readinessCmd.FullCommand():
 		log.Info("Running Kubernetes readiness check for component", "component", component)
 		switch *component {
 
@@ -154,11 +152,11 @@ func getLogEncoder() zapcore.Encoder {
 		return consoleEnc
 	}
 
-	useJson, err := strconv.ParseBool(s)
+	useJSON, err := strconv.ParseBool(s)
 	if err != nil {
 		return consoleEnc
 	}
-	if !useJson {
+	if !useJSON {
 		return consoleEnc
 	}
 

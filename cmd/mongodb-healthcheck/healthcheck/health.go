@@ -23,7 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 

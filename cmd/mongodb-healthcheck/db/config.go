@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/tool"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 var (
@@ -41,7 +42,7 @@ type Config struct {
 func getDefaultMongoDBAddress() string {
 	hostname := DefaultMongoDBHost
 
-	mongodbPort := os.Getenv(pkg.EnvMongoDBPort)
+	mongodbPort := os.Getenv(tool.EnvMongoDBPort)
 	if mongodbPort != "" {
 		return hostname + ":" + mongodbPort
 	}
@@ -56,8 +57,8 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 	).Default(getDefaultMongoDBAddress()).StringsVar(&conf.Hosts)
 	app.Flag(
 		"replset",
-		"mongodb replica set name, overridden by env var "+pkg.EnvMongoDBReplset,
-	).Envar(pkg.EnvMongoDBReplset).StringVar(&conf.ReplSetName)
+		"mongodb replica set name, overridden by env var "+tool.EnvMongoDBReplset,
+	).Envar(tool.EnvMongoDBReplset).StringVar(&conf.ReplSetName)
 
 	usernameFile := fmt.Sprintf("/etc/users-secret/%s", envUser)
 	if _, err := os.Stat(usernameFile); err == nil {
@@ -96,20 +97,20 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 	ssl := &SSLConfig{}
 	app.Flag(
 		"ssl",
-		"enable SSL secured mongodb connection, overridden by env var "+pkg.EnvMongoDBNetSSLEnabled,
-	).Envar(pkg.EnvMongoDBNetSSLEnabled).BoolVar(&ssl.Enabled)
+		"enable SSL secured mongodb connection, overridden by env var "+tool.EnvMongoDBNetSSLEnabled,
+	).Envar(tool.EnvMongoDBNetSSLEnabled).BoolVar(&ssl.Enabled)
 	app.Flag(
 		"sslPEMKeyFile",
-		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLPEMKeyFile,
-	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
+		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+tool.EnvMongoDBNetSSLPEMKeyFile,
+	).Envar(tool.EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
 	app.Flag(
 		"sslCAFile",
-		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLCAFile,
-	).Envar(pkg.EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
+		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+tool.EnvMongoDBNetSSLCAFile,
+	).Envar(tool.EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
 	app.Flag(
 		"sslInsecure",
-		"skip validation of the SSL certificate and hostname, overridden by env var "+pkg.EnvMongoDBNetSSLInsecure,
-	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
+		"skip validation of the SSL certificate and hostname, overridden by env var "+tool.EnvMongoDBNetSSLInsecure,
+	).Envar(tool.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
 	conf.SSL = ssl
 

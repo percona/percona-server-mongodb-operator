@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/tools/db"
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 )
 
 // ReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
@@ -49,7 +49,8 @@ func MongosReadinessCheck(ctx context.Context, cnf *db.Config) (err error) {
 	cur := client.Database("admin").RunCommand(ctx, bson.D{
 		{Key: "listDatabases", Value: 1},
 		{Key: "filter", Value: bson.D{{Key: "name", Value: "admin"}}},
-		{Key: "nameOnly", Value: true}})
+		{Key: "nameOnly", Value: true},
+	})
 	if cur.Err() != nil {
 		return errors.Wrap(cur.Err(), "run listDatabases")
 	}

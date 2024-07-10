@@ -12,8 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package k8s
+package tool
 
-const (
-	EnvNamespace = "NAMESPACE"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/alecthomas/kingpin"
 )
+
+// Author is the author used by kingpin
+const Author = "Percona LLC."
+
+// New sets up a new kingpin.Application
+func New(help, commit, branch string) *kingpin.Application {
+	app := kingpin.New(filepath.Base(os.Args[0]), help)
+	app.Author(Author)
+	app.Version(fmt.Sprintf(
+		"%s version %s\ngit commit %s, branch %s\ngo version %s",
+		app.Name, Version, commit, branch, runtime.Version(),
+	))
+	return app
+}
