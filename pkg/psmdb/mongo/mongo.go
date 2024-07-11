@@ -79,9 +79,12 @@ func Dial(conf *Config) (Client, error) {
 	ctx, connectcancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer connectcancel()
 
+	journal := true
+	wc := writeconcern.Majority()
+	wc.Journal = &journal
 	opts := options.Client().
 		SetHosts(conf.Hosts).
-		SetWriteConcern(writeconcern.New(writeconcern.WMajority(), writeconcern.J(true))).
+		SetWriteConcern(wc).
 		SetReadPreference(readpref.Primary()).
 		SetTLSConfig(conf.TLSConf).
 		SetDirect(conf.Direct).
