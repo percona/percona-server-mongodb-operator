@@ -1166,6 +1166,7 @@ wait_cluster_consistency() {
 		echo -n .
 		sleep 10
 	done
+	echo
 }
 
 run_backup() {

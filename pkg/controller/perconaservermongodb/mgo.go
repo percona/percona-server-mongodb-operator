@@ -260,6 +260,15 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		return 0, errors.Wrap(err, "get mongo config")
 	}
 
+	existingHorizons := make([]string, 0)
+	for _, member := range cnf.Members {
+		if len(member.Horizons) > 0 {
+			for name := range member.Horizons {
+				existingHorizons = append(existingHorizons, name)
+			}
+		}
+	}
+
 	members := mongo.ConfigMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
@@ -292,6 +301,18 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			BuildIndexes: true,
 			Priority:     mongo.DefaultPriority,
 			Votes:        mongo.DefaultVotes,
+		}
+
+		if len(existingHorizons) > 0 {
+			for _, horizon := range existingHorizons {
+				if _, ok := rs.Horizons[pod.Name][horizon]; !ok {
+					return 0, errors.Errorf("horizon %s is missing for pod %s", horizon, pod.Name)
+				}
+
+				member.Horizons = map[string]string{
+					horizon: rs.Horizons[pod.Name][horizon],
+				}
+			}
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
