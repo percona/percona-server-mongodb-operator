@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -28,4 +29,12 @@ func readDefaultCR(t *testing.T, name, namespace string) *api.PerconaServerMongo
 	cr.Namespace = namespace
 
 	return cr
+}
+
+func updateObj[T client.Object](t *testing.T, obj T, f func(obj T)) T {
+	t.Helper()
+
+	f(obj)
+
+	return obj
 }
