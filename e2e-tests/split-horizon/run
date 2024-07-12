@@ -64,6 +64,8 @@ if [ "${isMaster}" != "true" ]; then
 	exit 1
 fi
 
+desc "scaling up the cluster"
+
 apply_cluster ${test_dir}/conf/${cluster}-5horizons.yml
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}
@@ -80,6 +82,8 @@ run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }
 	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons-5.json
 diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
 
+desc "scaling down the cluster"
+
 kubectl_bin patch psmdb ${cluster} \
 	--type='json' \
 	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
@@ -90,6 +94,8 @@ run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }
 	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
 	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons.json
 diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
+
+desc "remove horizon configuration"
 
 apply_cluster ${test_dir}/conf/${cluster}.yml
 wait_for_running "${cluster}-rs0" 3

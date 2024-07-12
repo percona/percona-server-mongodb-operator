@@ -305,12 +305,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		if len(existingHorizons) > 0 {
 			for _, horizon := range existingHorizons {
-				if _, ok := rs.Horizons[pod.Name][horizon]; !ok {
-					return 0, errors.Errorf("horizon %s is missing for pod %s", horizon, pod.Name)
-				}
-
-				member.Horizons = map[string]string{
-					horizon: rs.Horizons[pod.Name][horizon],
+				if _, ok := rs.Horizons[pod.Name][horizon]; ok {
+					member.Horizons = map[string]string{
+						horizon: rs.Horizons[pod.Name][horizon],
+					}
 				}
 			}
 		}
