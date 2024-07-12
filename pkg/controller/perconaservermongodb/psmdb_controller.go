@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"os"
 	"sort"
 	"strconv"
@@ -797,7 +798,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, c
 func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	for _, f := range cr.GetFinalizers() {
 		switch f {
-		case "delete-psmdb-pvc":
+		case naming.FinalizerDeletePVC, "delete-psmdb-pvc":
 			// remove orphan pvc
 			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
 			if err != nil {

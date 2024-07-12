@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,9 +32,18 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 
 	for i, f := range orderedFinalizers {
 		switch f {
-		case api.FinalizerDeletePVC:
+		case naming.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
-		case api.FinalizerDeletePSMDBPodsInOrder:
+		case naming.FinalizerDeletePSMDBPodsInOrder:
+			err = r.deletePSMDBPods(ctx, cr)
+			if err == nil {
+				shouldReconcile = true
+			}
+		case "delete-psmdb-pvc":
+			log.Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			err = r.deletePvcFinalizer(ctx, cr)
+		case "delete-psmdb-pods-in-order":
+			log.Info("The value delete-psmdb-pods-in-order is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pods-in-order instead")
 			err = r.deletePSMDBPods(ctx, cr)
 			if err == nil {
 				shouldReconcile = true

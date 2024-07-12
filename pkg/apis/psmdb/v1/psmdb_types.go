@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"os"
 	"strconv"
 	"strings"
@@ -1171,13 +1172,13 @@ func MongosLabels(cr *PerconaServerMongoDB) map[string]string {
 	return lbls
 }
 
-const (
-	FinalizerDeletePVC              = "delete-psmdb-pvc"
-	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
-)
-
 func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
-	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
+	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}
+	}
+
 	finalizers := make([]string, len(cr.GetFinalizers()))
 	copy(finalizers, cr.GetFinalizers())
 	orderedFinalizers := make([]string, 0, len(finalizers))

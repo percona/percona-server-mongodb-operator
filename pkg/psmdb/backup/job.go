@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -114,7 +116,7 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 			Kind:       "PerconaServerMongoDBBackup",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Finalizers:   []string{"delete-backup"},
+			Finalizers:   []string{naming.FinalizerDeleteBackup},
 			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
 			Labels: map[string]string{
 				"ancestor": task.Name,
