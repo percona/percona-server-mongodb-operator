@@ -813,10 +813,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.pbmConfigName(cluster),
 			Namespace: cluster.Namespace,
+			Labels:    naming.ClusterLabels(cluster),
 		},
 		Data: map[string][]byte{
 			"pbm_config.yaml": confBytes,
 		},
+	}
+	if cluster.CompareVersion("1.17.0") < 0 {
+		secret.Labels = nil
 	}
 	if err := r.client.Create(ctx, &secret); err != nil {
 		return errors.Wrap(err, "create PBM config secret")

@@ -17,6 +17,7 @@ func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, labels map[string]st
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      labels[naming.LabelKubernetesInstance] + "-" + labels[naming.LabelKubernetesComponent] + "-" + labels[naming.LabelKubernetesReplset],
 			Namespace: namespace,
+			Labels:    labels,
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   spec.MinAvailable,

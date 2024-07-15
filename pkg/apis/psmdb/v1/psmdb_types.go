@@ -1175,4 +1175,3 @@ func (cr *PerconaServerMongoDB) PVCResizeInProgress() bool {
 	_, ok := cr.Annotations[AnnotationPVCResizeInProgress]
 	return ok
 }
-
