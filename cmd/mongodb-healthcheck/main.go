@@ -16,18 +16,21 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/healthcheck"
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/tool"
 )
 
@@ -37,98 +40,28 @@ var (
 )
 
 func main() {
+	opts := zap.Options{
+		Encoder:    getLogEncoder(),
+		Level:      getLogLevel(),
+		DestWriter: getLogWriter(),
+	}
+
+	log := zap.New(zap.UseFlagOptions(&opts))
+	logf.SetLogger(log)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
-	app := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
-
-	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
-	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
-	readinessCmd := k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
-	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
-	component := k8sCmd.Flag("component", "").Default("mongod").String()
-
-	opts := zap.Options{
-		Encoder: getLogEncoder(),
-		Level:   getLogLevel(),
-	}
-	log := zap.New(zap.UseFlagOptions(&opts))
-	logf.SetLogger(log)
 	logf.IntoContext(ctx, log)
 
-	_, err := os.Stat("/opt/percona/restore-in-progress")
-	if err != nil && !os.IsNotExist(err) {
-		log.Error(err, "check if restore in progress file exists")
+	app := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
+	if err := app.Run(ctx); err != nil {
+		msg := strings.TrimSuffix(err.Error(), errors.Unwrap(err).Error())
+		msg = strings.ToTitle(msg)
+		log.Error(errors.Unwrap(err), msg)
+
+		stop()
 		os.Exit(1)
-	}
-	if err == nil {
-		os.Exit(0)
-	}
-
-	_, err = os.Stat("/data/db/sleep-forever")
-	if err != nil && !os.IsNotExist(err) {
-		log.Error(err, "check if sleep-forever file exists")
-		os.Exit(1)
-	}
-	if err == nil {
-		os.Exit(0)
-	}
-
-	cnf, err := tool.NewConfig(
-		app,
-		tool.EnvMongoDBClusterMonitorUser,
-		tool.EnvMongoDBClusterMonitorPassword,
-	)
-	if err != nil {
-		log.Error(err, "new cfg")
-		os.Exit(1)
-	}
-
-	command, err := app.Parse(os.Args[1:])
-	if err != nil {
-		log.Error(err, "Cannot parse command line")
-		os.Exit(1)
-	}
-
-	switch command {
-	case livenessCmd.FullCommand():
-		log.Info("Running Kubernetes liveness check for", "component", component)
-		switch *component {
-
-		case "mongod":
-			memberState, err := healthcheck.HealthCheckMongodLiveness(ctx, cnf, int64(*startupDelaySeconds))
-			if err != nil {
-				log.Error(err, "Member failed Kubernetes liveness check")
-				os.Exit(1)
-			}
-			log.Info("Member passed Kubernetes liveness check with replication state", "state", memberState)
-
-		case "mongos":
-			err := healthcheck.HealthCheckMongosLiveness(ctx, cnf)
-			if err != nil {
-				log.Error(err, "Member failed Kubernetes liveness check")
-				os.Exit(1)
-			}
-			log.Info("Member passed Kubernetes liveness check")
-		}
-
-	case readinessCmd.FullCommand():
-		log.Info("Running Kubernetes readiness check for component", "component", component)
-		switch *component {
-
-		case "mongod":
-			err := healthcheck.MongodReadinessCheck(ctx, cnf.Hosts[0])
-			if err != nil {
-				log.Error(err, "Member failed Kubernetes readiness check")
-				os.Exit(1)
-			}
-		case "mongos":
-			err := healthcheck.MongosReadinessCheck(ctx, cnf)
-			if err != nil {
-				log.Error(err, "Member failed Kubernetes readiness check")
-				os.Exit(1)
-			}
-		}
 	}
 }
 
@@ -167,4 +100,39 @@ func getLogLevel() zapcore.LevelEnabler {
 	default:
 		return zapcore.InfoLevel
 	}
+}
+
+func getLogWriter() io.Writer {
+	var lw io.Writer
+	lw = os.Stderr
+	lf := createLogFile()
+	if lf != nil {
+		lw = io.MultiWriter(lw, lf)
+	}
+	return lw
+}
+
+func createLogFile() *os.File {
+	log := logf.Log
+
+	d, found := os.LookupEnv("LOG_DIR")
+	if !found {
+		return nil
+	}
+
+	if err := os.MkdirAll(d, 0755); err != nil {
+		log.Error(err, "Failed to create $LOG_DIR directory")
+		os.Exit(1)
+	}
+
+	timestamp := strconv.FormatInt(time.Now().UTC().UnixMilli(), 10)
+	fp := filepath.Join(d, "healthcheck-"+timestamp+".log")
+
+	f, err := os.Create(fp)
+	if err != nil {
+		log.Error(err, "Failed to create log file", "file path", fp)
+		os.Exit(1)
+	}
+
+	return f
 }
