@@ -202,10 +202,6 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 			}
 
-			if err := k8s.DeannotateObject(ctx, r.client, sts, psmdbv1.AnnotationPVCResizeInProgress); err != nil {
-				return errors.Wrap(err, "deannotate pxc")
-			}
-
 			log.Info("PVC resize completed")
 
 			return nil
