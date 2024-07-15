@@ -8,7 +8,7 @@ require (
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230216094301-f9489c81b52a
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cert-manager/cert-manager v1.15.1
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/go-openapi/errors v0.22.0
 	github.com/go-openapi/runtime v0.28.0
 	github.com/go-openapi/strfmt v0.23.0
@@ -29,7 +29,7 @@ require (
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/client-go v0.30.2
-	sigs.k8s.io/controller-runtime v0.18.2
+	sigs.k8s.io/controller-runtime v0.18.4
 	sigs.k8s.io/mcs-api v0.1.0
 	sigs.k8s.io/yaml v1.4.0
 )
