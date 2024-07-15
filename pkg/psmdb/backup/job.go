@@ -100,7 +100,7 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 		ObjectMeta: metav1.ObjectMeta{
 			Finalizers:   []string{"delete-backup"},
 			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
-			Labels:       naming.BackupFromTaskLabels(cr, task),
+			Labels:       naming.ScheduledBackupLabels(cr, task),
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			Type:             backupType,

@@ -16,6 +16,12 @@ const (
 	LabelKubernetesReplset   = labelKubernetesPrefix + "replset"
 )
 
+const (
+	LabelBackupAncestor = perconaPrefix + "backup-ancestor"
+	LabelBackupType     = perconaPrefix + "backup-type"
+	LabelCluster        = perconaPrefix + "cluster"
+)
+
 func ClusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	return map[string]string{
 		LabelKubernetesName:      "percona-server-mongodb",
@@ -68,12 +74,13 @@ func RSLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string
 	return ls
 }
 
-func BackupFromTaskLabels(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) map[string]string {
-	return map[string]string{
-		"ancestor": task.Name,
-		"cluster":  cr.Name,
-		"type":     "cron",
-	}
+func ScheduledBackupLabels(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) map[string]string {
+	ls := ClusterLabels(cr)
+	ls[LabelBackupAncestor] = task.Name
+	ls[LabelCluster] = cr.Name
+	ls[LabelBackupType] = "cron"
+
+	return ls
 }
 
 func NewBackupCronJobLabels(cr *api.PerconaServerMongoDB, labels map[string]string) map[string]string {
