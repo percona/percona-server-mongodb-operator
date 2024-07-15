@@ -54,23 +54,24 @@ func main() {
 	}
 	log := zap.New(zap.UseFlagOptions(&opts))
 	logf.SetLogger(log)
+	logf.IntoContext(ctx, log)
 
 	_, err := os.Stat("/opt/percona/restore-in-progress")
-	if err != nil {
-		if os.IsNotExist(err) {
-			os.Exit(0)
-		}
+	if err != nil && !os.IsNotExist(err) {
 		log.Error(err, "check if restore in progress file exists")
 		os.Exit(1)
 	}
+	if err == nil {
+		os.Exit(0)
+	}
 
 	_, err = os.Stat("/data/db/sleep-forever")
-	if err != nil {
-		if os.IsNotExist(err) {
-			os.Exit(0)
-		}
+	if err != nil && !os.IsNotExist(err) {
 		log.Error(err, "check if sleep-forever file exists")
 		os.Exit(1)
+	}
+	if err == nil {
+		os.Exit(0)
 	}
 
 	cnf, err := tool.NewConfig(
