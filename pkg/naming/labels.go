@@ -75,6 +75,13 @@ func RSLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string
 }
 
 func ScheduledBackupLabels(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) map[string]string {
+	if cr.CompareVersion("1.17.0") < 0 {
+		return map[string]string{
+			"ancestor": task.Name,
+			"cluster":  cr.Name,
+			"type":     "cron",
+		}
+	}
 	ls := ClusterLabels(cr)
 	ls[LabelBackupAncestor] = task.Name
 	ls[LabelCluster] = cr.Name
