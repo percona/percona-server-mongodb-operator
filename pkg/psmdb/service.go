@@ -22,13 +22,7 @@ import (
 
 // Service returns a core/v1 API Service
 func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Service {
-	ls := map[string]string{
-		naming.LabelKubernetesName:       "percona-server-mongodb",
-		naming.LabelKubernetesInstance:   cr.Name,
-		naming.LabelKubernetesReplset:    replset.Name,
-		naming.LabelKubernetesManagedBy: "percona-server-mongodb-operator",
-		naming.LabelKubernetesPartOf:    "percona-server-mongodb",
-	}
+	ls := naming.ServiceLabels(cr, replset)
 
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -82,7 +76,7 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		},
 	}
 
-	svc.Labels = naming.ServiceLabels(cr, replset)
+	svc.Labels = naming.ExternalServiceLabels(cr, replset)
 
 	for k, v := range replset.Expose.ServiceLabels {
 		if _, ok := svc.Labels[k]; !ok {

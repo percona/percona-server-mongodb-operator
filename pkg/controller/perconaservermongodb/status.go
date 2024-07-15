@@ -383,14 +383,8 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		err := r.client.List(ctx,
 			&list,
 			&client.ListOptions{
-				Namespace: cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(map[string]string{
-					naming.LabelKubernetesName:      "percona-server-mongodb",
-					naming.LabelKubernetesInstance:  cr.Name,
-					naming.LabelKubernetesReplset:   rs.Name,
-					naming.LabelKubernetesManagedBy: "percona-server-mongodb-operator",
-					naming.LabelKubernetesPartOf:    "percona-server-mongodb",
-				}),
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)),
 			},
 		)
 		if err != nil {

@@ -26,6 +26,10 @@ func ClusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 }
 
 func ServiceLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
+	return RSLabels(cr, replset)
+}
+
+func ExternalServiceLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
 	ls := RSLabels(cr, replset)
 	ls[LabelKubernetesComponent] = "external-service"
 
