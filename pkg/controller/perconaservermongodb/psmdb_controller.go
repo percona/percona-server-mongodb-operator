@@ -450,6 +450,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		return nil
 	}
 
+	// TODO: check if cluster is ready
+
 	log := logf.FromContext(ctx)
 
 	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
