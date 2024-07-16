@@ -421,6 +421,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
+	r.reconcileCustomUsers(ctx, cr)
+
 	err = r.exportServices(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "export services")
@@ -441,6 +443,59 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
+	if err != nil {
+		return errors.Wrap(err, "get mongos client")
+	}
+	defer func() {
+		err := cli.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close mongo connection")
+		}
+	}()
+
+	for _, user := range cr.Spec.Users {
+
+		// TODO: validate user
+		// - collect all invalid users and return
+		// - or return on first invalid user
+
+		sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
+		if err != nil {
+			log.Error(err, "failed to get user secret", "user", user)
+			continue
+		}
+		userInfo, err := cli.GetUserInfo(ctx, user.Name)
+		if err != nil {
+			return errors.Wrap(err, "get user info")
+		}
+		if userInfo == nil {
+
+			roles := make([]map[string]interface{}, 0)
+			for _, role := range user.Roles {
+				roles = append(roles, map[string]interface{}{
+					"role": role.Name,
+					"db":   role.Db,
+				})
+
+				err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
+				if err != nil {
+					return errors.Wrapf(err, "failed to create user %s", user.Name)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (api.AppState, error) {

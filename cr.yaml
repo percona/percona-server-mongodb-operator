@@ -11,28 +11,17 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.17.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  crVersion: 1.15.0
+  image: percona/percona-server-mongodb:6.0.9-7
   imagePullPolicy: Always
 #  tls:
-#    mode: preferTLS
 #    # 90 days in hours
 #    certValidityDuration: 2160h
-#    allowInvalidCertificates: true
-#    issuerConf:
-#      name: special-selfsigned-issuer
-#      kind: ClusterIssuer
-#      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
 #  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
-#  unsafeFlags:
-#    tls: false
-#    replsetSize: false
-#    mongosSize: false
-#    terminationGracePeriod: false
-#    backupIfUnhealthy: false
+  allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
@@ -50,11 +39,9 @@ spec:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    vault: my-cluster-name-vault
-#    ldapSecret: my-ldap-secret
-#    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: percona/pmm-client:2.35.0
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -62,7 +49,6 @@ spec:
   - name: rs0
     size: 3
 #    terminationGracePeriodSeconds: 300
-#    serviceAccountName: default
 #    topologySpreadConstraints:
 #      - labelSelector:
 #          matchLabels:
@@ -79,6 +65,9 @@ spec:
 #    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #    configuration: |
+#      net:
+#        tls:
+#          mode: preferTLS
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:
@@ -143,12 +132,6 @@ spec:
 #      periodSeconds: 3
 #      successThreshold: 1
 #      timeoutSeconds: 2
-#    containerSecurityContext:
-#      privileged: false
-#    podSecurityContext:
-#      runAsUser: 1001
-#      runAsGroup: 1001
-#      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
 #    sidecars:
 #    - image: busybox
@@ -334,7 +317,6 @@ spec:
     configsvrReplSet:
       size: 3
 #      terminationGracePeriodSeconds: 300
-#      serviceAccountName: default
 #      topologySpreadConstraints:
 #        - labelSelector:
 #            matchLabels:
@@ -391,12 +373,6 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
-#      containerSecurityContext:
-#        privileged: false
-#      podSecurityContext:
-#        runAsUser: 1001
-#        runAsGroup: 1001
-#        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
@@ -445,7 +421,6 @@ spec:
     mongos:
       size: 3
 #      terminationGracePeriodSeconds: 300
-#      serviceAccountName: default
 #      topologySpreadConstraints:
 #        - labelSelector:
 #            matchLabels:
@@ -493,12 +468,6 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
-#      containerSecurityContext:
-#        privileged: false
-#      podSecurityContext:
-#        runAsUser: 1001
-#        runAsGroup: 1001
-#        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
 #      sidecars:
 #      - image: busybox
@@ -515,7 +484,7 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIP
+        exposeType: LoadBalancer
 #        servicePerPod: true
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
@@ -523,36 +492,16 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        serviceLabels:
 #          rack: rack-22
-#        nodePort: 32017
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
 #        - "host1"
 #        - "host2"
 
-#  users:
-#  - name: my-user
-#    db: admin
-#    passwordSecretRef: 
-#      name: my-user-password
-#      key: my-user-password-key
-#    roles:
-#      - name: clusterAdmin
-#        db: admin
-#      - name: userAdminAnyDatabase
-#        db: admin
-#  - name: my-usr
-#    db: admin
-#    passwordSecretRef: 
-#      name: my-user-pwd
-#      key: my-user-pwd-key
-#    roles:
-#      - name: dbOwner
-#        db: sometest  
-
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
+    serviceAccountName: percona-server-mongodb-operator
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
@@ -562,8 +511,6 @@ spec:
 #      requests:
 #        cpu: "300m"
 #        memory: "0.5G"
-#    containerSecurityContext:
-#      privileged: false
 #    storages:
 #      s3-us-west:
 #        type: s3
@@ -572,13 +519,9 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-s3
 #          serverSideEncryption:
 #            kmsKeyID: 1234abcd-12ab-34cd-56ef-1234567890ab
-#            sseAlgorithm: aws:kms
+#            sseAlgorithm: AES256
 #            sseCustomerAlgorithm: AES256
 #            sseCustomerKey: Y3VzdG9tZXIta2V5
-#          retryer:
-#            numMaxRetries: 3
-#            minRetryDelay: 30ms
-#            maxRetryDelay: 5m
 #          region: us-west-2
 #          prefix: ""
 #          uploadPartSize: 10485760
@@ -599,7 +542,6 @@ spec:
 #        azure:
 #          container: CONTAINER-NAME
 #          prefix: PREFIX-NAME
-#          endpointUrl: https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
     pitr:
       enabled: false
@@ -607,24 +549,6 @@ spec:
 #      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
-#    configuration:
-#      backupOptions:
-#        priority:
-#          "localhost:28019": 2.5
-#          "localhost:27018": 2.5
-#        timeouts:
-#          startingStatus: 33
-#        oplogSpanMin: 10
-#      restoreOptions:
-#        batchSize: 500
-#        numInsertionWorkers: 10
-#        numDownloadWorkers: 4
-#        maxDownloadBufferMb: 0
-#        downloadChunkMb: 32
-#        mongodLocation: /usr/bin/mongo
-#        mongodLocationMap:
-#          "node01:2017": /usr/bin/mongo
-#          "node03:27017": /usr/bin/mongo
 #    tasks:
 #      - name: daily-s3-us-west
 #        enabled: true

@@ -91,6 +91,19 @@ type PerconaServerMongoDBSpec struct {
 	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+	Users                        []User                               `json:"users,omitempty"`
+}
+
+type User struct {
+	Name              string                   `json:"name"`
+	Db                string                   `json:"db"`
+	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
+	Roles             []Role                   `json:"roles"`
+}
+
+type Role struct {
+	Name string `json:"name"`
+	Db   string `json:"db"`
 }
 
 type UnsafeFlags struct {
