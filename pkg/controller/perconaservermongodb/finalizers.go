@@ -7,7 +7,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -57,6 +56,9 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			case errWaitingTermination:
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
+				if cr.Status.State == api.AppStateError {
+					continue
+				}
 			}
 			finalizers = append(finalizers, orderedFinalizers[i:]...)
 			break
@@ -64,28 +66,19 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	}
 
 	cr.SetFinalizers(finalizers)
-	err = r.client.Update(ctx, cr)
+	if err := r.client.Update(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "update")
+	}
 
-	return shouldReconcile, err
+	return shouldReconcile, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
+func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
 	if cr.Spec.Sharding.Enabled {
 		cr.Spec.Sharding.Mongos.Size = 0
 
-		sts := new(appsv1.StatefulSet)
-		err := r.client.Get(ctx, cr.MongosNamespacedName(), sts)
-		if client.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "failed to get mongos statefulset")
-		}
-		if sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0 {
-			err = r.disableBalancer(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "failed to disable balancer")
-			}
-		}
 		list, err := r.getMongosPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "get mongos pods")
@@ -95,20 +88,21 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 
-	replsetsDeleted := true
+	rsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+			rsDeleted = false
 			switch err {
 			case errWaitingTermination, errWaitingFirstPrimary:
 				log.Info(err.Error(), "rs", rs.Name)
+				continue
 			default:
 				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
+				return err
 			}
-			replsetsDeleted = false
-			continue
 		}
 	}
-	if !replsetsDeleted {
+	if !rsDeleted {
 		return errWaitingTermination
 	}
 

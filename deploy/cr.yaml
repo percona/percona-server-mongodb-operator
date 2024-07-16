@@ -538,10 +538,10 @@ spec:
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1.2G"
 #      requests:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1G"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
