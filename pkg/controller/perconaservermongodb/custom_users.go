@@ -8,9 +8,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
 		return nil
 	}
@@ -24,9 +25,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	// TODO: this could be good for a sharded cluster, for non sharded not so good
 	// - Should we create custom users the same way we create system users?
 	// - - Sys users are created in `reconileCluster` for every replset.
-	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
-	if err != nil {
-		return errors.Wrap(err, "get mongos client")
+
+	var cli mongo.Client
+	if cr.Spec.Sharding.Enabled {
+		c, err := r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
+		if err != nil {
+			return errors.Wrap(err, "get mongos client")
+		}
+		cli = c
+	} else {
+		c, err := r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], api.RoleUserAdmin)
+		if err != nil {
+			return errors.Wrap(err, "get mongos client")
+		}
+		cli = c
 	}
 	defer func() {
 		err := cli.Disconnect(ctx)
@@ -70,7 +82,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 }
 
 func validateUsers(client client.Client, users []api.User) error {
-
 
 	return nil
 }
