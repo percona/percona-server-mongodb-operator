@@ -228,10 +228,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateError, errors.Wrap(err, "failed to update config members")
 	}
 
-	if err := r.addHorizons(ctx, cli, replset); err != nil {
-		return api.AppStateError, errors.Wrap(err, "failed to add horizons")
-	}
-
 	if membersLive == len(pods.Items) {
 		return api.AppStateReady, nil
 	}
@@ -258,15 +254,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "get mongo config")
-	}
-
-	existingHorizons := make([]string, 0)
-	for _, member := range cnf.Members {
-		if len(member.Horizons) > 0 {
-			for name := range member.Horizons {
-				existingHorizons = append(existingHorizons, name)
-			}
-		}
 	}
 
 	members := mongo.ConfigMembers{}
@@ -303,14 +290,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			Votes:        mongo.DefaultVotes,
 		}
 
-		if len(existingHorizons) > 0 {
-			for _, horizon := range existingHorizons {
-				if _, ok := rs.Horizons[pod.Name][horizon]; ok {
-					member.Horizons = map[string]string{
-						horizon: rs.Horizons[pod.Name][horizon],
-					}
+		if len(rs.Horizons) > 0 {
+			horizons := make(map[string]string)
+			for h, domain := range rs.Horizons[pod.Name] {
+				d := domain
+				if !strings.Contains(d, ":") {
+					d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
 				}
+				horizons[h] = d
 			}
+
+			member.Horizons = horizons
 		}
 
 		switch pod.Labels["app.kubernetes.io/component"] {
@@ -372,6 +362,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "fix hosts: write mongo config")
+		}
+	}
+
+	if cnf.Members.HorizonsChanged(members) {
+		cnf.Version++
+
+		log.Info("Updating horizons", "replset", rs.Name)
+
+		err = cli.WriteConfig(ctx, cnf)
+		if err != nil {
+			return 0, errors.Wrap(err, "update horizons: write mongo config")
 		}
 	}
 
@@ -455,54 +456,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 	return membersLive, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) addHorizons(ctx context.Context, cli mongo.Client, rs *api.ReplsetSpec) error {
-	if len(rs.Horizons) == 0 {
-		return nil
-	}
-
-	log := logf.FromContext(ctx)
-
-	cnf, err := cli.ReadConfig(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get mongo config")
-	}
-
-	if len(cnf.Members) != int(rs.Size) {
-		log.V(1).Info("Waiting for all members to be added to config", "members", len(cnf.Members), "expected", rs.Size)
-		return nil
-	}
-
-	members := make([]mongo.ConfigMember, len(cnf.Members))
-	copy(members, cnf.Members)
-
-	for i := 0; i < len(members); i++ {
-		member := []mongo.ConfigMember(members)[i]
-		horizons := make(map[string]string)
-		for h, domain := range rs.Horizons[member.Tags["podName"]] {
-			d := domain
-			if !strings.Contains(d, ":") {
-				d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
-			}
-			horizons[h] = d
-		}
-
-		[]mongo.ConfigMember(members)[i].Horizons = horizons
-	}
-
-	if cnf.Members.HorizonsChanged(members) {
-		cnf.Version++
-
-		log.Info("Updating horizons", "replset", rs.Name)
-
-		err = cli.WriteConfig(ctx, cnf)
-		if err != nil {
-			return errors.Wrap(err, "update horizons: write mongo config")
-		}
-	}
-
-	return nil
 }
 
 func inShard(ctx context.Context, client mongo.Client, rsName string) (bool, error) {
