@@ -26,14 +26,14 @@ wait_for_running "${cluster}-rs0" "3"
 
 current_log_file=$(kubectl_bin exec -it $cluster-rs0-0 -- bash -c 'ls /data/db/mongod-data/logs' | grep -c mongodb-healthcheck.log)
 if [[ $current_log_file != "1" ]]; then
-    echo "mongodb-healthcheck.log doesn't exist"
-    exit 1
+	echo "mongodb-healthcheck.log doesn't exist"
+	exit 1
 fi
 
 rotated_log_files=$(kubectl_bin exec -it $cluster-rs0-0 -- bash -c 'ls /data/db/mongod-data/logs' | grep -c "mongodb-healthcheck-.*\.log\.gz")
 if [[ $rotated_log_files != "1" ]]; then
-    echo "mongodb-healthcheck.log doesn't exist"
-    exit 1
+	echo "mongodb-healthcheck.log doesn't exist"
+	exit 1
 fi
 
 desc 'check liveness logs'
