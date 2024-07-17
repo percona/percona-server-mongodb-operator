@@ -16,22 +16,21 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
-	"time"
 
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/tool"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 var (
@@ -40,27 +39,35 @@ var (
 )
 
 func main() {
-	opts := zap.Options{
-		Encoder:    getLogEncoder(),
-		Level:      getLogLevel(),
-		DestWriter: getLogWriter(),
-	}
-
-	log := zap.New(zap.UseFlagOptions(&opts))
-	logf.SetLogger(log)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
-	logf.IntoContext(ctx, log)
+	logPath := filepath.Join(psmdb.MongodDataVolClaimName, "logs", "mongodb-healthcheck.log")
+	logRotateWriter := lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    100,
+		MaxAge:     1,
+		MaxBackups: 0,
+		Compress:   true,
+	}
+	logOpts := zap.Options{
+		Encoder:    getLogEncoder(),
+		Level:      zapcore.DebugLevel,
+		DestWriter: io.MultiWriter(os.Stderr, &logRotateWriter),
+	}
+
+	log := zap.New(zap.UseFlagOptions(&logOpts))
+	logf.SetLogger(log)
+	ctx = logf.IntoContext(ctx, log)
+
+	log.Info("Running mongodb-healthcheck", "commit", GitCommit, "branch", GitBranch)
 
 	app := tool.New("Performs health and readiness checks for MongoDB", GitCommit, GitBranch)
 	if err := app.Run(ctx); err != nil {
-		msg := strings.TrimSuffix(err.Error(), errors.Unwrap(err).Error())
-		msg = strings.ToTitle(msg)
-		log.Error(errors.Unwrap(err), msg)
-
-		stop()
+		log.Error(err, "Failed to perform check")
+		if err := logRotateWriter.Rotate(); err != nil {
+			log.Error(err, "failed to rotate logs")
+		}
 		os.Exit(1)
 	}
 }
@@ -82,57 +89,4 @@ func getLogEncoder() zapcore.Encoder {
 	}
 
 	return zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
-}
-
-func getLogLevel() zapcore.LevelEnabler {
-	l, found := os.LookupEnv("LOG_LEVEL")
-	if !found {
-		return zapcore.InfoLevel
-	}
-
-	switch strings.ToUpper(l) {
-	case "DEBUG":
-		return zapcore.DebugLevel
-	case "INFO":
-		return zapcore.InfoLevel
-	case "ERROR":
-		return zapcore.ErrorLevel
-	default:
-		return zapcore.InfoLevel
-	}
-}
-
-func getLogWriter() io.Writer {
-	var lw io.Writer
-	lw = os.Stderr
-	lf := createLogFile()
-	if lf != nil {
-		lw = io.MultiWriter(lw, lf)
-	}
-	return lw
-}
-
-func createLogFile() *os.File {
-	log := logf.Log
-
-	d, found := os.LookupEnv("LOG_DIR")
-	if !found {
-		return nil
-	}
-
-	if err := os.MkdirAll(d, 0755); err != nil {
-		log.Error(err, "Failed to create $LOG_DIR directory")
-		os.Exit(1)
-	}
-
-	timestamp := strconv.FormatInt(time.Now().UTC().UnixMilli(), 10)
-	fp := filepath.Join(d, "healthcheck-"+timestamp+".log")
-
-	f, err := os.Create(fp)
-	if err != nil {
-		log.Error(err, "Failed to create log file", "file path", fp)
-		os.Exit(1)
-	}
-
-	return f
 }
