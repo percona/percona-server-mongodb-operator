@@ -48,9 +48,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
+	log.Info(fmt.Sprintf("AAAAAAAAAAAA ureconciling users %d", len(cr.Spec.Users)))
 	for _, user := range cr.Spec.Users {
 
-		log.Info(fmt.Sprintf("AAAAAAAAAAAA ureconciling user %s", user.Name))
 		// TODO: validate user
 		// - collect all invalid users and return
 		// - or return on first invalid user
@@ -77,6 +77,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				if err != nil {
 					return errors.Wrapf(err, "failed to create user %s", user.Name)
 				}
+
+				log.Info(fmt.Sprintf("AAAAAABBBBBB created user %s, %v", user.Name, roles))
 			}
 
 			// if !compareRoles(user.Roles, getRoles(cr, role)) {
