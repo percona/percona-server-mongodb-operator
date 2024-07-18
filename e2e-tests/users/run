@@ -152,6 +152,7 @@ backup_name="backup-minio"
 desc 'custom user defined users'
 
 echo "AAAAAAAA Checking for user-one"
+sleep 30
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "user-one-pass-key")
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
