@@ -82,7 +82,11 @@ kubectl_bin apply \
 
 desc 'create PSMDB cluster'
 cluster="some-name"
-spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+if [ "$EKS" == 1 ]; then
+	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+else
+	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+fi
 
 patch_pvc_request "${cluster}" "2Gi"
 wait_cluster_consistency "$cluster" 3 2
