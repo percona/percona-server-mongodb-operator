@@ -151,39 +151,44 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 desc 'custom user defined users'
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 
+echo "AAAAAAAA Checking for user-one"
+userOne="user-one"
+userOnePass=$(getSecretData "user-one" "user-one-pass-key")
+check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
+echo "AAAAAAAA Patching for userrrrs"
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 		"spec": {"users":[
-			{
-				"name":"user-one",
-				"db":"admin",
-				"passwordSecret": {
-					"name": "user-one",
-					"key": "userOnePass"
-				}
-			},
 			{
 				"name":"user-two",
 				"db":"admin",
 				"passwordSecret": {
 					"name": "user-two",
-					"key": "userTwoPass"
+					"key": "user-two-pass-key"
 				}
 			},
 		]}
 	}'
 sleep 120
 
+echo "AAAAAAAA Checking for user-two"
+userTwo="user-two"
+userTwoPass=$(getSecretData "user-two" "user-two-pass-key")
+check_mongo_auth "$userTwo:$userTwoPass@$cluster-0.$cluster.$namespace"
 
-userOne="user-one"
-userOnePass=$(getSecretData "user-one" "userOnePass")
-# userTwoPass=$(getSecretData "user-two" "userTwoPass")
-
-check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
-# check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 
 desc 'update custom user defined user passwords'
+userOneNewPass="new-user-one-password"
+userTwoNewPass="new-user-two-password"
 
+patch_secret "user-one" "user-one-pass-key" "$userOneNewPass"
+patch_secret "user-two" "user-two-pass-key" "$userTwoNewPass"
+sleep 25
+
+echo "AAAAAAAAAA update passwords now checking them"
+
+check_mongo_auth "$userOne:$userOneNewPass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$userOne:$userTwoNewPass@$cluster-0.$cluster.$namespace"
 
 destroy $namespace
 

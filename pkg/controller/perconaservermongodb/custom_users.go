@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,6 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 	for _, user := range cr.Spec.Users {
 
+		log.Info(fmt.Sprintf("AAAAAAAAAAAA ureconciling user %s", user.Name))
 		// TODO: validate user
 		// - collect all invalid users and return
 		// - or return on first invalid user
@@ -70,11 +72,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 					"db":   role.Db,
 				})
 
+				log.Info(fmt.Sprintf("AAAAAAAAAAAA creating user %s, %v", user.Name, roles))
 				err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 				if err != nil {
 					return errors.Wrapf(err, "failed to create user %s", user.Name)
 				}
 			}
+
+			// if !compareRoles(user.Roles, getRoles(cr, role)) {
+			// 	err = cli.UpdateUserRoles(ctx, creds.Username, getRoles(cr, role))
+			// 	if err != nil {
+			// 		return errors.Wrapf(err, "failed to create user %s", role)
+			// 	}
+			// }
 		}
 	}
 
