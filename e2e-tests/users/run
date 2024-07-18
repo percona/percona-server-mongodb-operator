@@ -158,7 +158,7 @@ userOnePass=$(getSecretData "user-one" "userOnePassKey")
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
 echo "AAAAAAAA Patching for userrrrs"
-kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
 			{
 				"name":"user-two",

@@ -72,13 +72,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 					"db":   role.Db,
 				})
 
-				log.Info(fmt.Sprintf("AAAAAAAAAAAA creating user %s, pass: %s, roles: %v", user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles))
+				log.Info(fmt.Sprintf("CCCCCCCCCCC creating user %s, pass: %s, roles: %v", user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles))
 				err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 				if err != nil {
 					return errors.Wrapf(err, "failed to create user %s", user.Name)
 				}
 
-				log.Info(fmt.Sprintf("AAAAAABBBBBB created user %s, %v", user.Name, roles))
+				log.Info(fmt.Sprintf("DDDDDDDDDDD created user %s, %v", user.Name, roles))
 			}
 
 			// if !compareRoles(user.Roles, getRoles(cr, role)) {
