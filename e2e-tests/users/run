@@ -154,7 +154,7 @@ desc 'custom user defined users'
 echo "AAAAAAAA Checking for user-one"
 sleep 30
 userOne="user-one"
-userOnePass=$(getSecretData "user-one" "user-one-pass-key")
+userOnePass=$(getSecretData "user-one" "userOnePassKey")
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
 echo "AAAAAAAA Patching for userrrrs"
@@ -165,7 +165,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 				"db":"admin",
 				"passwordSecret": {
 					"name": "user-two",
-					"key": "user-two-pass-key"
+					"key": "userTwoPassKey"
 				}
 			},
 		]}
@@ -174,7 +174,7 @@ sleep 120
 
 echo "AAAAAAAA Checking for user-two"
 userTwo="user-two"
-userTwoPass=$(getSecretData "user-two" "user-two-pass-key")
+userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
 check_mongo_auth "$userTwo:$userTwoPass@$cluster-0.$cluster.$namespace"
 
 
@@ -182,8 +182,8 @@ desc 'update custom user defined user passwords'
 userOneNewPass="new-user-one-password"
 userTwoNewPass="new-user-two-password"
 
-patch_secret "user-one" "user-one-pass-key" "$userOneNewPass"
-patch_secret "user-two" "user-two-pass-key" "$userTwoNewPass"
+patch_secret "user-one" "userOnePassKey" "$userOneNewPass"
+patch_secret "user-two" "userTwoPassKey" "$userTwoNewPass"
 sleep 25
 
 echo "AAAAAAAAAA update passwords now checking them"

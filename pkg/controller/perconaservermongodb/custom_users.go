@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
-	log.Info(fmt.Sprintf("AAAAAAAAAAAA ureconciling users %d", len(cr.Spec.Users)))
+	log.Info(fmt.Sprintf("AAAAAAAAAAAA reconciling users %d", len(cr.Spec.Users)))
 	for _, user := range cr.Spec.Users {
 
 		// TODO: validate user
