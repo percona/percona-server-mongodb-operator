@@ -168,7 +168,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		return nil, errors.Wrap(err, "get mongo uri")
 	}
 
-	pbmc, err := connect.Connect(ctx, murl, &connect.ConnectOptions{AppName: "operator-pbm-ctl"})
+	pbmc, err := connect.Connect(ctx, murl, "operator-pbm-ctl")
 	if err != nil {
 		return nil, errors.Wrapf(err, "create PBM connection to %s", strings.Join(addrs, ","))
 	}
@@ -396,7 +396,7 @@ func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	if err := config.SetConfig(ctx, b.Client, conf); err != nil {
+	if err := config.SetConfig(ctx, b.Client, &conf); err != nil {
 		return errors.Wrap(err, "write config")
 	}
 
