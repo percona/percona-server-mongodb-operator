@@ -75,6 +75,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				log.Info(fmt.Sprintf("AAAAAAAAAAAA creating user %s, %v", user.Name, roles))
 				err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 				if err != nil {
+					log.Error(err, "CCCCCCCCCCCCCCC failed to create user", "user", user)	
 					return errors.Wrapf(err, "failed to create user %s", user.Name)
 				}
 
