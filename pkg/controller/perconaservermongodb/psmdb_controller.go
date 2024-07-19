@@ -409,7 +409,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
-	if err := r.upgradeFCVIfNeeded(ctx, cr, *repls[0], cr.Status.MongoVersion); err != nil {
+	if err := r.upgradeFCVIfNeeded(ctx, cr, cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
 
@@ -895,8 +895,11 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, repl api.ReplsetSpec, newFCV string) error {
-	if !cr.Spec.UpgradeOptions.SetFCV {
+func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, newFCV string) error {
+
+	fmt.Printf("AAAAAAAAAAAAAAAA newFCV: %s\n", newFCV)
+
+	if !cr.Spec.UpgradeOptions.SetFCV || newFCV == "" {
 		return nil
 	}
 
