@@ -56,22 +56,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			log.Info("CCCCCCCC NOT OK")
 		}
 
-		// not ok - user doesn't exist
-		// ok but hash is different - user password changed
-
-		// if userInfo == nil {
-		// 	continue
-		// }
-
-		if hash != newHash {
-			log.Info("BBBBBBBB User password changed", "user", user.Name)
-			err := cli.UpdateUserPass(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
-			if err != nil {
-				log.Error(err, "failed to update user pass", "user", user.Name)
-				continue
-			}
-			log.Info("ZZZZZZZZZZZZ User updated", "user", user.Name)
-			continue
+		if sec.Annotations == nil {
+			sec.Annotations = make(map[string]string)
 		}
 
 		userInfo, err := cli.GetUserInfo(ctx, user.Name)
@@ -79,13 +65,28 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			errors.Wrap(err, "get user info")
 			continue
 		}
+
+		if userInfo != nil && hash != newHash {
+			log.Info("BBBBBBBB User password changed", "user", user.Name)
+			err := cli.UpdateUserPass(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
+			if err != nil {
+				log.Error(err, "failed to update user pass", "user", user.Name)
+				continue
+			}
+			sec.Annotations["percona.com/user-hash"] = string(newHash)
+			if err := r.client.Update(ctx, &sec); err != nil {
+				log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
+				continue
+			}
+			log.Info("ZZZZZZZZZZZZ User updated", "user", user.Name)
+			continue
+		}
+
 		if userInfo != nil {
 			continue
 		}
 
-
 		// TODO: check if roles are changed and update them
-
 		roles := make([]map[string]interface{}, 0)
 		for _, role := range user.Roles {
 			roles = append(roles, map[string]interface{}{
@@ -102,9 +103,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		if sec.Annotations == nil {
-			sec.Annotations = make(map[string]string)
-		}
 		sec.Annotations["percona.com/user-hash"] = string(newHash)
 		if err := r.client.Update(ctx, &sec); err != nil {
 			log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
