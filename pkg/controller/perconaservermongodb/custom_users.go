@@ -49,8 +49,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		hash, ok := sec.Annotations["percona.com/user-hash"]
 		if ok && hash == newHash {
-			log.Info("User already exists", "user", user.Name)
 			continue
+		}
+
+		if !ok {
+			log.Info("CCCCCCCCCC NOT OK")
+		}
+
+
+		if hash != newHash {
+			log.Info("AAAAAAAAA User password changed", "user", user.Name)
 		}
 
 		// not ok - user doesn't exist
@@ -75,9 +83,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		}
 
+		log.Info("XXXXXXX creating user", "user", user.Name)
 		err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 		if err != nil {
-			errors.Wrapf(err, "failed to create user %s", user.Name)
+			log.Error(err, "failed to create user %s", user.Name)
 			continue
 		}
 
@@ -86,11 +95,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 		sec.Annotations["percona.com/user-hash"] = string(newHash)
 		if err := r.client.Update(ctx, &sec); err != nil {
-			errors.Wrap(err, "update ca secret")
+			log.Error(err, "update ca secret")
 			continue
 		}
 
-		log.Info("User created", "user", user.Name)
+		log.Info("ZZZZZZZZZZZZ User created", "user", user.Name)
 	}
 
 	return nil
