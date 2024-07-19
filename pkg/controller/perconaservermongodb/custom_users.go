@@ -53,26 +53,38 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 
 		if !ok {
-			log.Info("CCCCCCCCCC NOT OK")
-		}
-
-
-		if hash != newHash {
-			log.Info("AAAAAAAAA User password changed", "user", user.Name)
+			log.Info("CCCCCCCC NOT OK")
 		}
 
 		// not ok - user doesn't exist
 		// ok but hash is different - user password changed
 
-		// userInfo, err := cli.GetUserInfo(ctx, user.Name)
-		// if err != nil {
-		// 	errors.Wrap(err, "get user info")
+		// if userInfo == nil {
 		// 	continue
 		// }
 
-		// if userInfo != nil && hash == newHash {
-		// 	continue
-		// }
+		if hash != newHash {
+			log.Info("BBBBBBBB User password changed", "user", user.Name)
+			err := cli.UpdateUserPass(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
+			if err != nil {
+				log.Error(err, "failed to update user pass", "user", user.Name)
+				continue
+			}
+			log.Info("ZZZZZZZZZZZZ User updated", "user", user.Name)
+			continue
+		}
+
+		userInfo, err := cli.GetUserInfo(ctx, user.Name)
+		if err != nil {
+			errors.Wrap(err, "get user info")
+			continue
+		}
+		if userInfo != nil {
+			continue
+		}
+
+
+		// TODO: check if roles are changed and update them
 
 		roles := make([]map[string]interface{}, 0)
 		for _, role := range user.Roles {
@@ -86,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		log.Info("XXXXXXX creating user", "user", user.Name)
 		err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 		if err != nil {
-			log.Error(err, "failed to create user %s", user.Name)
+			log.Error(err, "failed to create user", "user", user.Name)
 			continue
 		}
 
@@ -95,7 +107,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 		sec.Annotations["percona.com/user-hash"] = string(newHash)
 		if err := r.client.Update(ctx, &sec); err != nil {
-			log.Error(err, "update ca secret")
+			log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
 			continue
 		}
 

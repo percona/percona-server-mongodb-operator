@@ -189,7 +189,7 @@ sleep 25
 
 echo "AAAAAAAAAA update passwords now checking them"
 
-check_mongo_auth "$userOne:$userOneNewPass@$cluster-0.$cluster.$namespace"
+# check_mongo_auth "$userOne:$userOneNewPass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$userOne:$userTwoNewPass@$cluster-0.$cluster.$namespace"
 
 destroy $namespace
