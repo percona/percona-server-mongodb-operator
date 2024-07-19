@@ -31,7 +31,7 @@ backup_name="backup-minio"
 # patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
 # sleep 25
 
-# psmdb="some-name"
+ psmdb="some-name"
 # wait_cluster_consistency $psmdb
 # sleep 15
 
@@ -163,11 +163,12 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 			{
 				"name":"user-two",
 				"db":"admin",
-				"passwordSecret": {
+				"passwordSecretRef": {
 					"name": "user-two",
 					"key": "userTwoPassKey"
-				}
-			},
+				},
+				"roles": [{"db":"admin","name":"userAdminAnyDatabase"}]
+			}
 		]}
 	}'
 sleep 120
@@ -182,8 +183,8 @@ desc 'update custom user defined user passwords'
 userOneNewPass="new-user-one-password"
 userTwoNewPass="new-user-two-password"
 
-patch_secret "user-one" "userOnePassKey" "$userOneNewPass"
-patch_secret "user-two" "userTwoPassKey" "$userTwoNewPass"
+patch_secret "user-one" "userOnePassKey" "$(echo -n "$userOneNewPass" | base64)"
+patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
 sleep 25
 
 echo "AAAAAAAAAA update passwords now checking them"

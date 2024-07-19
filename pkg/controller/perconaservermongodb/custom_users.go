@@ -2,10 +2,8 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -23,23 +21,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 	log := logf.FromContext(ctx)
 
-	// TODO: this could be good for a sharded cluster, for non sharded not so good
-	// - Should we create custom users the same way we create system users?
-	// - - Sys users are created in `reconileCluster` for every replset.
-
+	var err error
 	var cli mongo.Client
 	if cr.Spec.Sharding.Enabled {
-		c, err := r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
-		if err != nil {
-			return errors.Wrap(err, "get mongos client")
-		}
-		cli = c
+		cli, err = r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
 	} else {
-		c, err := r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], api.RoleUserAdmin)
-		if err != nil {
-			return errors.Wrap(err, "get mongos client")
-		}
-		cli = c
+		cli, err = r.mongoClientWithRole(ctx, cr, *cr.Spec.Replsets[0], api.RoleUserAdmin)
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to get mongo client")
 	}
 	defer func() {
 		err := cli.Disconnect(ctx)
@@ -48,52 +38,60 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
-	log.Info(fmt.Sprintf("AAAAAAAAAAAA reconciling users %d", len(cr.Spec.Users)))
 	for _, user := range cr.Spec.Users {
-
-		// TODO: validate user
-		// - collect all invalid users and return
-		// - or return on first invalid user
-
 		sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
 			continue
 		}
-		userInfo, err := cli.GetUserInfo(ctx, user.Name)
+
+		newHash := sha256Hash(sec.Data[user.PasswordSecretRef.Key])
+
+		hash, ok := sec.Annotations["percona.com/user-hash"]
+		if ok && hash == newHash {
+			log.Info("User already exists", "user", user.Name)
+			continue
+		}
+
+		// not ok - user doesn't exist
+		// ok but hash is different - user password changed
+
+		// userInfo, err := cli.GetUserInfo(ctx, user.Name)
+		// if err != nil {
+		// 	errors.Wrap(err, "get user info")
+		// 	continue
+		// }
+
+		// if userInfo != nil && hash == newHash {
+		// 	continue
+		// }
+
+		roles := make([]map[string]interface{}, 0)
+		for _, role := range user.Roles {
+			roles = append(roles, map[string]interface{}{
+				"role": role.Name,
+				"db":   role.Db,
+			})
+
+		}
+
+		err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 		if err != nil {
-			return errors.Wrap(err, "get user info")
+			errors.Wrapf(err, "failed to create user %s", user.Name)
+			continue
 		}
-		if userInfo == nil {
-			roles := make([]map[string]interface{}, 0)
-			for _, role := range user.Roles {
-				roles = append(roles, map[string]interface{}{
-					"role": role.Name,
-					"db":   role.Db,
-				})
 
-				log.Info(fmt.Sprintf("CCCCCCCCCCC creating user %s, pass: %s, roles: %v", user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles))
-				err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
-				if err != nil {
-					return errors.Wrapf(err, "failed to create user %s", user.Name)
-				}
-
-				log.Info(fmt.Sprintf("DDDDDDDDDDD created user %s, %v", user.Name, roles))
-			}
-
-			// if !compareRoles(user.Roles, getRoles(cr, role)) {
-			// 	err = cli.UpdateUserRoles(ctx, creds.Username, getRoles(cr, role))
-			// 	if err != nil {
-			// 		return errors.Wrapf(err, "failed to create user %s", role)
-			// 	}
-			// }
+		if sec.Annotations == nil {
+			sec.Annotations = make(map[string]string)
 		}
+		sec.Annotations["percona.com/user-hash"] = string(newHash)
+		if err := r.client.Update(ctx, &sec); err != nil {
+			errors.Wrap(err, "update ca secret")
+			continue
+		}
+
+		log.Info("User created", "user", user.Name)
 	}
-
-	return nil
-}
-
-func validateUsers(client client.Client, users []api.User) error {
 
 	return nil
 }
