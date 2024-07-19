@@ -421,7 +421,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	r.reconcileCustomUsers(ctx, cr)
+	err = r.reconcileCustomUsers(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile custom users")
 	}
