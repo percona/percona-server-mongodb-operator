@@ -217,7 +217,9 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
 		}
-
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
 		c.Annotations[api.AnnotationUpdateMongosFirst] = "true"
 
 		return r.client.Update(ctx, c)
