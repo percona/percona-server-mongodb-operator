@@ -58,7 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		userInfo, err := cli.GetUserInfo(ctx, user.Name)
 		if err != nil {
-			errors.Wrap(err, "get user info")
+			log.Error(err, "get user info")
 			continue
 		}
 
