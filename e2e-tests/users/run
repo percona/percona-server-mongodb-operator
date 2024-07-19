@@ -30,7 +30,7 @@ desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
 sleep 25
 
- psmdb="some-name"
+psmdb="some-name"
 wait_cluster_consistency $psmdb
 sleep 15
 
