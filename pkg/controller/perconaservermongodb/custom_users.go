@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		if userInfo != nil && hash != newHash {
 			log.Info("User password changed, updating it.", "user", user.Name)
-			err := cli.UpdateUserPass(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
+			err := cli.UpdateUserPass(ctx, user.Db, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
 			if err != nil {
 				log.Error(err, "failed to update user pass", "user", user.Name)
 				continue
@@ -88,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		if userInfo != nil && !reflect.DeepEqual(userInfo.Roles, roles) {
 			log.Info("User roles changed, updating them.", "user", user.Name)
-			err := cli.UpdateUserRoles(ctx, user.Name, roles)
+			err := cli.UpdateUserRoles(ctx, user.Db, user.Name, roles)
 			if err != nil {
 				log.Error(err, "failed to update user roles", "user", user.Name)
 				continue
@@ -102,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 
 		log.Info("Creating user", "user", user.Name)
-		err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
+		err = cli.CreateUser(ctx, user.Db, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 		if err != nil {
 			log.Error(err, "failed to create user", "user", user.Name)
 			continue

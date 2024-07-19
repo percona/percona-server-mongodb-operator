@@ -328,7 +328,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 
 func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	if bytes.Equal(u.currName, u.name) {
-		err := c.UpdateUserPass(ctx, string(u.name), string(u.pass))
+		err := c.UpdateUserPass(ctx, "admin", string(u.name), string(u.pass))
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}
 

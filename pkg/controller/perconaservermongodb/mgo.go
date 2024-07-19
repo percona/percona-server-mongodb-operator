@@ -858,14 +858,14 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			return errors.Wrap(err, "get user info")
 		}
 		if user == nil {
-			err = cli.CreateUser(ctx, creds.Username, creds.Password, getRoles(cr, role)...)
+			err = cli.CreateUser(ctx, "admin", creds.Username, creds.Password, getRoles(cr, role)...)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
 			}
 			continue
 		}
 		if !compareRoles(user.Roles, getRoles(cr, role)) {
-			err = cli.UpdateUserRoles(ctx, creds.Username, getRoles(cr, role))
+			err = cli.UpdateUserRoles(ctx, "admin", creds.Username, getRoles(cr, role))
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
 			}

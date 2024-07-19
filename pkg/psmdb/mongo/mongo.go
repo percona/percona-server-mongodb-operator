@@ -37,7 +37,7 @@ type Client interface {
 	CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error
 	UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error
 	GetRole(ctx context.Context, role string) (*Role, error)
-	CreateUser(ctx context.Context, user, pwd string, roles ...map[string]interface{}) error
+	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
 	WriteConfig(ctx context.Context, cfg RSConfig) error
 	RSStatus(ctx context.Context) (Status, error)
@@ -54,8 +54,8 @@ type Client interface {
 	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
 	GetUserInfo(ctx context.Context, username string) (*User, error)
-	UpdateUserRoles(ctx context.Context, username string, roles []map[string]interface{}) error
-	UpdateUserPass(ctx context.Context, name, pass string) error
+	UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error
+	UpdateUserPass(ctx context.Context, db, name, pass string) error
 	UpdateUser(ctx context.Context, currName, newName, pass string) error
 }
 
@@ -243,10 +243,10 @@ func (client *mongoClient) GetRole(ctx context.Context, role string) (*Role, err
 	return &resp.Roles[0], nil
 }
 
-func (client *mongoClient) CreateUser(ctx context.Context, user, pwd string, roles ...map[string]interface{}) error {
+func (client *mongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error {
 	resp := OKResponse{}
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{
+	res := client.Database(db).RunCommand(ctx, bson.D{
 		{Key: "createUser", Value: user},
 		{Key: "pwd", Value: pwd},
 		{Key: "roles", Value: roles},
@@ -576,13 +576,13 @@ func (client *mongoClient) GetUserInfo(ctx context.Context, username string) (*U
 	return &resp.Users[0], nil
 }
 
-func (client *mongoClient) UpdateUserRoles(ctx context.Context, username string, roles []map[string]interface{}) error {
-	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: username}, {Key: "roles", Value: roles}}).Err()
+func (client *mongoClient) UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error {
+	return client.Database(db).RunCommand(ctx, bson.D{{Key: "updateUser", Value: username}, {Key: "roles", Value: roles}}).Err()
 }
 
 // UpdateUserPass updates user's password
-func (client *mongoClient) UpdateUserPass(ctx context.Context, name, pass string) error {
-	return client.Database("admin").RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
+func (client *mongoClient) UpdateUserPass(ctx context.Context, db, name, pass string) error {
+	return client.Database(db).RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
 }
 
 // UpdateUser recreates user with new name and password
