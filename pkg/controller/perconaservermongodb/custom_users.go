@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/pkg/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -75,11 +76,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				continue
 			}
 			log.Info("User updated", "user", user.Name)
-			continue
-		}
-
-		if userInfo != nil {
-			continue
 		}
 
 		roles := make([]map[string]interface{}, 0)
@@ -88,6 +84,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				"role": role.Name,
 				"db":   role.Db,
 			})
+		}
+
+		if userInfo != nil && !reflect.DeepEqual(userInfo.Roles, roles) {
+			log.Info("User roles changed, updating them.", "user", user.Name)
+			err := cli.UpdateUserRoles(ctx, user.Name, roles)
+			if err != nil {
+				log.Error(err, "failed to update user roles", "user", user.Name)
+				continue
+			}
+
+			continue
+		}
+
+		if userInfo != nil {
+			continue
 		}
 
 		log.Info("Creating user", "user", user.Name)
