@@ -52,10 +52,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		if !ok {
-			log.Info("CCCCCCCC NOT OK")
-		}
-
 		if sec.Annotations == nil {
 			sec.Annotations = make(map[string]string)
 		}
@@ -67,7 +63,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 
 		if userInfo != nil && hash != newHash {
-			log.Info("BBBBBBBB User password changed", "user", user.Name)
+			log.Info("User password changed, updating it.", "user", user.Name)
 			err := cli.UpdateUserPass(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]))
 			if err != nil {
 				log.Error(err, "failed to update user pass", "user", user.Name)
@@ -78,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
 				continue
 			}
-			log.Info("ZZZZZZZZZZZZ User updated", "user", user.Name)
+			log.Info("User updated", "user", user.Name)
 			continue
 		}
 
@@ -86,17 +82,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		// TODO: check if roles are changed and update them
 		roles := make([]map[string]interface{}, 0)
 		for _, role := range user.Roles {
 			roles = append(roles, map[string]interface{}{
 				"role": role.Name,
 				"db":   role.Db,
 			})
-
 		}
 
-		log.Info("XXXXXXX creating user", "user", user.Name)
+		log.Info("Creating user", "user", user.Name)
 		err = cli.CreateUser(ctx, user.Name, string(sec.Data[user.PasswordSecretRef.Key]), roles...)
 		if err != nil {
 			log.Error(err, "failed to create user", "user", user.Name)
@@ -109,7 +103,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		log.Info("ZZZZZZZZZZZZ User created", "user", user.Name)
+		log.Info("User created", "user", user.Name)
 	}
 
 	return nil
