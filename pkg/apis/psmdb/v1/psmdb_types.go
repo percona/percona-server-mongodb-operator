@@ -278,11 +278,12 @@ type ClusterCondition struct {
 }
 
 type PMMSpec struct {
-	Enabled      bool   `json:"enabled,omitempty"`
-	ServerHost   string `json:"serverHost,omitempty"`
-	Image        string `json:"image"`
-	MongodParams string `json:"mongodParams,omitempty"`
-	MongosParams string `json:"mongosParams,omitempty"`
+	Enabled                  bool                    `json:"enabled,omitempty"`
+	ServerHost               string                  `json:"serverHost,omitempty"`
+	Image                    string                  `json:"image"`
+	MongodParams             string                  `json:"mongodParams,omitempty"`
+	MongosParams             string                  `json:"mongosParams,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

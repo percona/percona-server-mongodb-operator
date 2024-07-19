@@ -53,9 +53,10 @@ spec:
 #    ldapSecret: my-ldap-secret
 #    sse: my-cluster-name-sse
   pmm:
-    enabled: false
+    enabled: true
     image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
+    containerSecurityContext: {}
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:

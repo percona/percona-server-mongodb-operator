@@ -517,6 +517,14 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
+		if cr.Spec.PMM.ContainerSecurityContext == nil {
+			tvar := true
+			cr.Spec.Backup.ContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: &tvar,
+				RunAsUser:    fsgroup,
+			}
+		}
+
 		for _, stg := range cr.Spec.Backup.Storages {
 			if stg.Type != BackupStorageS3 {
 				continue
