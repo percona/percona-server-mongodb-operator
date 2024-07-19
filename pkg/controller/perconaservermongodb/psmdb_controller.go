@@ -896,9 +896,6 @@ func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, newFCV string) error {
-
-	fmt.Printf("AAAAAAAAAAAAAAAA newFCV: %s\n", newFCV)
-
 	if !cr.Spec.UpgradeOptions.SetFCV || newFCV == "" {
 		return nil
 	}
