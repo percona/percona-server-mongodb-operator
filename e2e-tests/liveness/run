@@ -24,6 +24,8 @@ patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpassencrypted"
 sleep 20
 wait_for_running "${cluster}-rs0" "3"
 
+desc 'check liveness logs'
+
 current_log_file=$(kubectl_bin exec -it $cluster-rs0-0 -- bash -c 'ls /data/db/mongod-data/logs' | grep -c mongodb-healthcheck.log)
 if [[ $current_log_file != "1" ]]; then
 	echo "mongodb-healthcheck.log doesn't exist"
@@ -35,8 +37,6 @@ if [[ $rotated_log_files != "1" ]]; then
 	echo "mongodb-healthcheck.log doesn't exist"
 	exit 1
 fi
-
-desc 'check liveness logs'
 
 desc 'change liveness config'
 postfix="-changed"
