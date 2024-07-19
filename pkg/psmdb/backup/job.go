@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-
+	
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/pkg/errors"
 )
 

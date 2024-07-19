@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"slices"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
