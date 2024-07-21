@@ -369,7 +369,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr, false)
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}

@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -63,10 +64,11 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 }
 
 func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
-	hosts, err := GetMongosAddrs(ctx, k8sclient, cr)
+	hosts, err := GetMongosAddrs(ctx, k8sclient, cr, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
 	}
+	fmt.Println("BBBBBBBBBBBBB mongos hosts: ", hosts)
 	conf := mongo.Config{
 		Hosts:    hosts,
 		Username: c.Username,
