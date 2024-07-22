@@ -89,7 +89,7 @@ else
 fi
 
 patch_pvc_request "${cluster}" "2Gi"
-wait_cluster_consistency "$cluster" 3 2
+wait_cluster_consistency "$cluster"
 echo
 
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
@@ -109,6 +109,9 @@ for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name);
 	echo
 	echo "pvc/${pvc} was resized"
 done
+
+wait_cluster_consistency "$cluster"
+echo
 
 if [[ "$EKS" == 1 || -n ${OPENSHIFT} ]]; then
 	# AWS rate limits PVC expansion for the same EBS volume (1 expand operation in every 6 hours),
@@ -131,7 +134,7 @@ desc 'create resourcequota'
 
 apply_resourcequota 7Gi
 patch_pvc_request "${cluster}" "3Gi"
-wait_cluster_consistency "$cluster" 3 2
+wait_cluster_consistency "$cluster"
 echo
 
 echo -n "Waiting for pvc/mongod-data-some-name-rs0-0 to be resized"
@@ -153,7 +156,7 @@ echo "pvc/mongod-data-some-name-rs0-0 was resized"
 
 apply_resourcequota 9Gi
 patch_pvc_request "${cluster}" "3Gi"
-wait_cluster_consistency "$cluster" 3 2
+wait_cluster_consistency "$cluster"
 echo
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
 	retry=0
