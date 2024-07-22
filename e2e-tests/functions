@@ -1049,16 +1049,16 @@ EOF
 	retry=0
 
 	until [[ "$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-              		| jq '.rows[].fingerprint')" != "null" ]]; do
-  		let retry+=1
-  		if [ $retry -ge 10 ]; then
-  			echo max retry count $retry reached. "No data for $service_type service type in QAN"
-  			exit 1
-  		fi
-  		echo -n .
-  		sleep 5
-  	done
-  	rm -f payload.json
+		| jq '.rows[].fingerprint')" != "null" ]]; do
+		let retry+=1
+		if [ $retry -ge 10 ]; then
+			echo max retry count $retry reached. "No data for $service_type service type in QAN"
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	rm -f payload.json
 }
 
 cat_config() {
