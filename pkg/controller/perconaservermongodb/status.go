@@ -260,6 +260,16 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
+	sts := &appsv1.StatefulSet{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + rsSpec.Name, Namespace: cr.Namespace}, sts)
+	if err != nil {
+		return api.ReplsetStatus{}, client.IgnoreNotFound(err)
+	}
+
+	if sts.Annotations[api.AnnotationPVCResizeInProgress] != "" {
+		return api.ReplsetStatus{Status: api.AppStateInit}, nil
+	}
+
 	list, err := psmdb.GetRSPods(ctx, r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
