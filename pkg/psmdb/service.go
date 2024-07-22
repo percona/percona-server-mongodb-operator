@@ -134,7 +134,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 		}
 
 	case corev1.ServiceTypeLoadBalancer:
-		host, err := getIngressPoint(ctx, cl, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace})
+		host, err := getServiceIngressAddr(ctx, cl, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace})
 		if err != nil {
 			return nil, errors.Wrap(err, "get ingress endpoint")
 		}
@@ -160,7 +160,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 
 var ErrNoIngressPoints = errors.New("ingress points not found")
 
-func getIngressPoint(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
+func getServiceIngressAddr(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
 	var retries uint64 = 0
 
 	var ip string
@@ -200,6 +200,16 @@ func getIngressPoint(ctx context.Context, cl client.Client, serviceNN types.Name
 	return "", ErrNoIngressPoints
 }
 
+func getServiceClusterIP(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
+	svc := &corev1.Service{}
+	err := cl.Get(ctx, serviceNN, svc)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to fetch service")
+	}
+
+	return svc.Spec.ClusterIP, nil
+}
+
 // GetReplsetAddrs returns a slice of replset host:port addresses
 func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
@@ -216,14 +226,15 @@ func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServe
 }
 
 // GetMongosAddrs returns a slice of mongos addresses
-func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, useInternalAddr bool) ([]string, error) {
 	if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-		host, err := MongosHost(ctx, cl, cr, nil)
+		host, err := MongosHost(ctx, cl, cr, nil, useInternalAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
 		}
 		return []string{host}, nil
 	}
+
 	list, err := GetMongosPods(ctx, cl, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list mongos pods")
@@ -231,7 +242,7 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 	addrs := make([]string, 0, len(list.Items))
 	for _, pod := range list.Items {
-		host, err := MongosHost(ctx, cl, cr, &pod)
+		host, err := MongosHost(ctx, cl, cr, &pod, useInternalAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
 		}
@@ -286,7 +297,7 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 }
 
 // MongosHost returns the mongos host for given pod
-func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod) (string, error) {
+func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod, useInternalAddr bool) (string, error) {
 	svcName := cr.Name + "-mongos"
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		svcName = pod.Name
@@ -309,7 +320,15 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 
 	mongos := cr.Spec.Sharding.Mongos
 	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		host, err := getIngressPoint(ctx, cl, nn)
+		var host string
+		var err error
+
+		if useInternalAddr {
+			host, err = getServiceClusterIP(ctx, cl, nn)
+		} else {
+			host, err = getServiceIngressAddr(ctx, cl, nn)
+		}
+
 		if err != nil {
 			return "", errors.Wrap(err, "get ingress endpoint")
 		}
