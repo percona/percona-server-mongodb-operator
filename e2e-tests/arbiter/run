@@ -25,7 +25,7 @@ check_cr_config() {
 	desc 'wait for convergence'
 	local arbiter_ip=$(get_service_ip $cluster-arbiter-0)
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-arbiter-0)"
-	sleep 240
+	wait_cluster_consistency "${cluster/-rs0/}"
 
 	# check arbiter liveness
 	if [[ $(kubectl_bin get pod \

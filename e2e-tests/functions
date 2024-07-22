@@ -28,6 +28,15 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs)
 
+trap cleanup EXIT HUP INT QUIT TERM
+cleanup() {
+	exit_code=$?
+	if [[ ${exit_code} -ne 0 ]]; then
+		collect_k8s_logs
+	fi
+	exit ${exit_code}
+}
+
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then
 		mkdir "${logs_dir}"
@@ -603,7 +612,7 @@ wait_for_delete() {
 		echo -n .
 		let retry+=1
 		if [ $retry -ge $wait_time ]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+			kubectl logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
@@ -703,10 +712,15 @@ run_mongo() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
-	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+	local replica_set=$(echo "$uri" | grep -oE '\-(rs[0-9]|cfg)(\.|-)' | sed 's/^.//;s/.$//' | head -n1)
 
+	if [[ ${FUNCNAME[1]} == "collect_k8s_logs" ]]; then
+		kubectl exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+	else
+		kubectl_bin exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+	fi
 }
 
 run_mongo_tls() {
@@ -716,10 +730,15 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
-	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+	local replica_set=$(echo "$uri" | grep -oE '\-(rs[0-9]|cfg)(\.|-)' | sed 's/^.//;s/.$//' | head -n1)
 
+	if [[ ${FUNCNAME[1]} == "collect_k8s_logs" ]]; then
+		kubectl exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+	else
+		kubectl_bin exec ${client_container} -- \
+			bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+	fi
 }
 
 run_mongos() {
@@ -887,13 +906,13 @@ deploy_cert_manager() {
 delete_crd() {
 	desc 'get and delete old CRDs and RBAC'
 
-	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
+	kubectl delete -f "${src_dir}/deploy/crd.yaml" --ignore-not-found --wait=false || :
 	for crd_name in $(yq eval '.metadata.name' "${src_dir}/deploy/crd.yaml" | grep -v '\-\-\-'); do
 		kubectl get ${crd_name} --all-namespaces -o wide \
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin wait --for=delete crd ${crd_name} || :
+		kubectl wait --for=delete crd ${crd_name} || :
 	done
 
 	local rbac_yaml='rbac.yaml'
@@ -901,7 +920,7 @@ delete_crd() {
 		rbac_yaml='cw-rbac.yaml'
 	fi
 
-	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
+	kubectl delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
 destroy() {
@@ -910,7 +929,7 @@ destroy() {
 
 	desc 'destroy cluster/operator and all other resources'
 	if [ ${ignore_logs} == "false" ] && [ "${DEBUG_TESTS}" == 1 ]; then
-		kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+		kubectl logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 			| grep -v 'level=info' \
 			| grep -v 'level=debug' \
 			| grep -v 'Getting tasks for pod' \
@@ -933,9 +952,9 @@ destroy() {
 			oc delete --grace-period=0 --force=true project "$OPERATOR_NS" &
 		fi
 	else
-		kubectl_bin delete --grace-period=0 --force=true namespace "$namespace" &
+		kubectl delete --grace-period=0 --force=true namespace "$namespace" &
 		if [ -n "$OPERATOR_NS" ]; then
-			kubectl_bin delete --grace-period=0 --force=true namespace "$OPERATOR_NS" &
+			kubectl delete --grace-period=0 --force=true namespace "$OPERATOR_NS" &
 		fi
 	fi
 	rm -rf ${tmp_dir}
@@ -1232,7 +1251,7 @@ check_crd_for_deletion() {
 	local git_tag="$1"
 
 	for crd_name in $(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '.metadata.name' | $sed 's/---//g' | $sed ':a;N;$!ba;s/\n/ /g'); do
-		if [[ $(kubectl_bin get crd/${crd_name} -o jsonpath='{.status.conditions[-1].type}') == "Terminating" ]]; then
+		if [[ $(kubectl get crd/${crd_name} -o jsonpath='{.status.conditions[-1].type}') == "Terminating" ]]; then
 			kubectl get ${crd_name} --all-namespaces -o wide \
 				| grep -v 'NAMESPACE' \
 				| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
@@ -1297,6 +1316,59 @@ function generate_vs_json() {
 		| jq '.versions[0].matrix.operator += {"'${OPERATOR_VERSION}'": {"image_path":"'${IMAGE}'","status":"recommended"}}')
 
 	echo ${version_service_source} | jq '.' >${target_path}
+}
+
+collect_k8s_logs() {
+	if [[ ${ENABLE_K8S_LOGGING} == "true" ]]; then
+		local check_namespaces="${namespace}${OPERATOR_NS:+ $OPERATOR_NS}"
+		local logs_path="${logs_dir}/${test_name}"
+
+		rm -rf ${logs_path} || :
+		mkdir -p ${logs_path}
+
+		for ns in ${check_namespaces}; do
+			local pods=$(kubectl get pods -n "${ns}" -o name | awk -F "/" '{print $2}')
+			for p in ${pods}; do
+				kubectl -n "${ns}" describe pod ${p} >${logs_path}/pod_${ns}_${p}.dsc || :
+				local containers=$(kubectl -n "${ns}" get pod ${p} -o jsonpath='{.spec.containers[*].name}')
+				for c in ${containers}; do
+					kubectl -n "${ns}" logs ${p} -c ${c} >${logs_path}/container_${p}_${c}.log || :
+					echo "logs saved in: ${logs_path}/${ns}_${p}_${c}.log"
+				done
+			done
+		done
+		for object in psmdb psmdb-backup psmdb-restore pods deployments replicasets services sts configmaps persistentvolumeclaims persistentvolumes secrets roles issuer certificate; do
+			echo "##### START: ${object} NS: ${namespace} #####" >>${logs_path}/_overview_${namespace}.txt
+			kubectl get ${object} -n "${namespace}" >>${logs_path}/_overview_${namespace}.txt || :
+			echo -e "##### END: ${object} NS: ${namespace} #####\n" >>${logs_path}/_overview_${namespace}.txt
+			kubectl get ${object} -n "${namespace}" -oyaml >${logs_path}/${object}_${namespace}.yaml || :
+			kubectl describe ${object} -n "${namespace}" >${logs_path}/${object}_${namespace}.dsc || :
+		done
+		kubectl get events --all-namespaces >${logs_path}/_events.log || :
+		kubectl get nodes >${logs_path}/_nodes.log || :
+		kubectl get clusterroles >${logs_path}/_clusterroles.log || :
+
+		local secret psmdb_secret psmdb_user psmdb_pass
+		for psmdb_name in "$(kubectl get psmdb -n ${namespace} -o custom-columns=NAME:.metadata.name --no-headers=true)"; do
+			psmdb_secret="$(kubectl get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.secrets.users}')"
+			if [[ ${psmdb_secret} ]]; then secret="${psmdb_secret}"; else secret="${psmdb_name}-secrets"; fi
+			psmdb_user="$(kubectl get secrets ${psmdb_secret} -ojsonpath='{.data.MONGODB_BACKUP_USER}' | base64 --decode)"
+			psmdb_pass="$(kubectl get secrets ${psmdb_secret} -ojsonpath='{.data.MONGODB_BACKUP_PASSWORD}' | base64 --decode)"
+			if [[ "$(kubectl get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.sharding.enabled}')" == "true" ]]; then
+				local cfg_replica="cfg"
+				echo "##### sh.status() #####" >${logs_path}/mongos_${psmdb_name}.mongo
+				run_mongos 'sh.status()' "${psmdb_user}:${psmdb_pass}@${psmdb_name}-mongos.${namespace}" >>${logs_path}/mongos_${psmdb_name}.mongo
+			fi
+			for psmdb_replset in $(kubectl get psmdb ${psmdb_name} -n ${namespace} -ojsonpath='{.spec.replsets[*].name}' | awk '{print $0" '${cfg_replica}'"}'); do
+				local command=("rs.status()" "rs.config()" "db.printSlaveReplicationInfo()" "db.serverCmdLineOpts()" "db.getRoles()" "db.getUsers()")
+				for com in "${command[@]}"; do
+					echo "##### START: ${com} #####" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+					run_mongo "${com}" "${psmdb_user}:${psmdb_pass}@${psmdb_name}-${psmdb_replset}.${namespace}" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+					echo -e "##### END: ${com} #####\n" >>${logs_path}/mongodb_${psmdb_name}_${psmdb_replset}.mongo
+				done
+			done
+		done
+	fi
 }
 
 check_passwords_leak() {

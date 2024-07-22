@@ -97,6 +97,26 @@ void pushLogFile(String FILE_NAME) {
     }
 }
 
+void pushK8SLogs(String TEST_NAME) {
+    def LOG_FILE_PATH="e2e-tests/logs"
+    echo "Push k8s logs to S3!"
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            if [ -d "${LOG_FILE_PATH}/${TEST_NAME}" ]; then
+                env GZIP=-9 tar -zcvf ${TEST_NAME}.tar.gz -C ${LOG_FILE_PATH} ${TEST_NAME}
+                rm -rf ${LOG_FILE_PATH}/${TEST_NAME}
+
+                S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)/logs
+                aws s3 ls \$S3_PATH/ || :
+                aws s3 rm \$S3_PATH/${TEST_NAME}.tar.gz || :
+                aws s3 cp --quiet ${TEST_NAME}.tar.gz \$S3_PATH/ || :
+                rm -f ${TEST_NAME}.tar.gz
+            fi
+        """
+    }
+}
+
 void popArtifactFile(String FILE_NAME) {
     echo "Try to get $FILE_NAME file from S3!"
 
@@ -211,6 +231,7 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
+            pushK8SLogs("$testName")
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
                 return true
@@ -243,6 +264,7 @@ pipeline {
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
         ENABLE_LOGGING = "true"
+        ENABLE_K8S_LOGGING = "true"
     }
     agent {
         label 'docker'
@@ -483,7 +505,7 @@ EOF
 
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\nlogs: `s3://percona-jenkins-artifactory/cloud-psmdb-operator/PR-${env.CHANGE_ID}/${GIT_SHORT_COMMIT}/logs/`"
                     pullRequest.comment(TestsReport)
                 }
             }
