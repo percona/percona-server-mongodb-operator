@@ -336,7 +336,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	for _, sts := range removed {
-		rsName := sts.Labels["app.kubernetes.io/replset"]
+		rsName := sts.Labels[naming.LabelKubernetesReplset]
 
 		log.Info("Deleting STS component from replst", "sts", sts.Name, "rs", rsName)
 
@@ -345,7 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
 		}
 
-		if sts.Labels["app.kubernetes.io/component"] == "mongod" {
+		if sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
 			log.Info("Removing RS from shard", "rs", rsName)
 			err = r.removeRSFromShard(ctx, cr, rsName)
 			if err != nil {
@@ -452,7 +452,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
-		matchLabels := replset.MongodLabels(cr)
+		matchLabels := naming.MongodLabels(cr, replset)
 
 		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
 		if err != nil {
@@ -467,7 +467,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		}
 
 		if replset.Arbiter.Enabled {
-			matchLabels = replset.ArbiterLabels(cr)
+			matchLabels = naming.ArbiterLabels(cr, replset)
 			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 			if err != nil {
 				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
@@ -486,7 +486,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		}
 
 		if replset.NonVoting.Enabled {
-			matchLabels = replset.NonVotingLabels(cr)
+			matchLabels = naming.NonVotingLabels(cr, replset)
 			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 			if err != nil {
 				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
@@ -684,7 +684,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
+				naming.LabelKubernetesInstance: cr.Name,
 			}),
 		},
 	); err != nil {
@@ -698,12 +698,12 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 	}
 
 	for _, sts := range stsList.Items {
-		component := sts.Labels["app.kubernetes.io/component"]
+		component := sts.Labels[naming.LabelKubernetesComponent]
 		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
-		rsName := sts.Labels["app.kubernetes.io/replset"]
+		rsName := sts.Labels[naming.LabelKubernetesReplset]
 
 		if _, ok := appliedRSNames[rsName]; ok {
 			continue
@@ -978,7 +978,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 				return errors.Wrap(err, "failed to delete mongod config map")
 			}
 		} else {
-			err := r.createOrUpdateConfigMap(ctx, cr, &corev1.ConfigMap{
+			cm := &corev1.ConfigMap{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "v1",
 					Kind:       "ConfigMap",
@@ -986,11 +986,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: cr.Namespace,
+					Labels:    naming.RSLabels(cr, rs),
 				},
 				Data: map[string]string{
 					"mongod.conf": string(rs.Configuration),
 				},
-			})
+			}
+			if cr.CompareVersion("1.17.0") < 0 {
+				cm.Labels = nil
+			}
+			err := r.createOrUpdateConfigMap(ctx, cr, cm)
 			if err != nil {
 				return errors.Wrap(err, "create or update config map")
 			}
@@ -1008,16 +1013,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 
 			continue
 		}
-
-		err := r.createOrUpdateConfigMap(ctx, cr, &corev1.ConfigMap{
+		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: cr.Namespace,
+				Labels:    naming.RSLabels(cr, rs),
 			},
 			Data: map[string]string{
 				"mongod.conf": string(rs.NonVoting.Configuration),
 			},
-		})
+		}
+		if cr.CompareVersion("1.17.0") < 0 {
+			cm.Labels = nil
+		}
+		err := r.createOrUpdateConfigMap(ctx, cr, cm)
 		if err != nil {
 			return errors.Wrap(err, "create or update nonvoting config map")
 		}
@@ -1038,7 +1047,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 		return nil
 	}
 
-	err := r.createOrUpdateConfigMap(ctx, cr, &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "ConfigMap",
@@ -1046,11 +1055,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: cr.Namespace,
+			Labels:    naming.MongosLabels(cr),
 		},
 		Data: map[string]string{
 			"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
 		},
-	})
+	}
+	if cr.CompareVersion("1.17.0") < 0 {
+		cm.Labels = nil
+	}
+	err := r.createOrUpdateConfigMap(ctx, cr, cm)
 	if err != nil {
 		return err
 	}
@@ -1246,7 +1260,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "update or create mongos %s", sts)
 	}
 
-	err = r.reconcilePDB(ctx, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, sts)
+	err = r.reconcilePDB(ctx, cr, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, sts)
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
 	}
@@ -1429,7 +1443,7 @@ func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.
 	return hash, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *api.PerconaServerMongoDB, spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
 	if spec == nil {
 		return nil
 	}
@@ -1452,6 +1466,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, spec *
 	}
 
 	pdb := psmdb.PodDisruptionBudget(spec, labels, namespace)
+	if cr.CompareVersion("1.17.0") < 0 {
+		pdb.Labels = nil
+	}
 	err := setControllerReference(owner, pdb, r.scheme)
 	if err != nil {
 		return errors.Wrap(err, "set owner reference")

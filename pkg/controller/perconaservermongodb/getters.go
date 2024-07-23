@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -21,7 +22,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *a
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
 		},
 	)
 
@@ -34,7 +35,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongosDeployment(ctx context.Context,
 	err := r.client.Get(ctx, cr.MongosNamespacedName(), &mongos)
 
 	return mongos, err
-
 }
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -43,24 +43,23 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 		&mongosPods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.MongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongosLabels(cr)),
 		},
 	)
 
 	return mongosPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (appsv1.StatefulSet, error) {
 	list := appsv1.StatefulSetList{}
 
-	l := api.ArbiterLabels(cr)
-	l["app.kubernetes.io/replset"] = rs
+	ls := naming.ArbiterLabels(cr, rs)
 
 	err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(l),
+			LabelSelector: labels.SelectorFromSet(ls),
 		},
 	)
 
@@ -86,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(ctx context.Conte
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.ArbiterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.ArbiterLabels(cr, nil)),
 		},
 	)
 
@@ -100,7 +99,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
 		},
 	)
 
@@ -110,9 +109,9 @@ func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Contex
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 
-	selectors := labels.SelectorFromSet(api.ClusterLabels(cr))
+	selectors := labels.SelectorFromSet(naming.ClusterLabels(cr))
 
-	req, err := labels.NewRequirement("app.kubernetes.io/component", selection.NotEquals, []string{"mongos"})
+	req, err := labels.NewRequirement(naming.LabelKubernetesComponent, selection.NotEquals, []string{"mongos"})
 	if err != nil {
 		return list, errors.Wrap(err, "get selector requirement")
 	}
@@ -137,7 +136,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllstatefulsets(ctx context.Context, 
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.ClusterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.ClusterLabels(cr)),
 		},
 	)
 
@@ -163,7 +162,7 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.ClusterLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.ClusterLabels(cr)),
 		},
 	)
 
@@ -177,7 +176,7 @@ func (r *ReconcilePerconaServerMongoDB) getMongodPVCs(ctx context.Context, cr *a
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(api.MongodLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
 		},
 	)
 

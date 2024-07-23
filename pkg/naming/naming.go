@@ -1,11 +1,9 @@
 package naming
 
-const (
-	annotationPrefix = "percona.com/"
-)
+const perconaPrefix = "percona.com/"
 
 const (
-	FinalizerDeleteBackup           = annotationPrefix + "delete-backup"
-	FinalizerDeletePVC              = annotationPrefix + "delete-psmdb-pvc"
-	FinalizerDeletePSMDBPodsInOrder = annotationPrefix + "delete-psmdb-pods-in-order"
+	FinalizerDeleteBackup           = perconaPrefix + "delete-backup"
+	FinalizerDeletePVC              = perconaPrefix + "delete-psmdb-pvc"
+	FinalizerDeletePSMDBPodsInOrder = perconaPrefix + "delete-psmdb-pods-in-order"
 )

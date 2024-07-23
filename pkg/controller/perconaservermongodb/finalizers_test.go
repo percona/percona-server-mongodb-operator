@@ -21,7 +21,7 @@ func TestCheckFinalizers(t *testing.T) {
 	defaultCR := readDefaultCR(t, crName, ns)
 	obj := append(
 		fakePodsForRS(defaultCR, defaultCR.Spec.Replsets[0]),
-		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0].Name, defaultCR.Spec.Replsets[0].Size, ""),
+		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0], defaultCR.Spec.Replsets[0].Size, ""),
 	)
 
 	tests := []struct {
