@@ -23,6 +23,20 @@ jobs:
         with:
           tool_name: gofmt
 
+  goimports-reviser:
+    name: runner / suggester / goimports-reviser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '^1.22'
+      - run: go install -v github.com/incu6us/goimports-reviser/v3@latest
+      - run: $(go env GOPATH)/bin/goimports-reviser -imports-order "std,general,company,project" -company-prefixes "github.com/percona" ./...
+      - uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: goimports-reviser
+
   shfmt:
     name: runner / suggester / shfmt
     runs-on: ubuntu-latest

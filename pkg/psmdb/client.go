@@ -63,7 +63,7 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 }
 
 func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
-	hosts, err := GetMongosAddrs(ctx, k8sclient, cr)
+	hosts, err := GetMongosAddrs(ctx, k8sclient, cr, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
 	}

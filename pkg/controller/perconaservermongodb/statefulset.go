@@ -11,6 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
@@ -21,10 +22,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	volumeSpec := rs.VolumeSpec
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		ls["app.kubernetes.io/component"] = api.ConfigReplSetName
+		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 
-	switch ls["app.kubernetes.io/component"] {
+	switch ls[naming.LabelKubernetesComponent] {
 	case "arbiter":
 		pdbspec = rs.Arbiter.PodDisruptionBudget
 	case "nonVoting":
@@ -61,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
 
-	err = r.reconcilePDB(ctx, pdbspec, ls, cr.Namespace, sfs)
+	err = r.reconcilePDB(ctx, cr, pdbspec, ls, cr.Namespace, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
@@ -78,10 +79,10 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	configName := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		ls["app.kubernetes.io/component"] = api.ConfigReplSetName
+		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 
-	switch ls["app.kubernetes.io/component"] {
+	switch ls[naming.LabelKubernetesComponent] {
 	case "arbiter":
 		sfsName += "-arbiter"
 	case "nonVoting":
