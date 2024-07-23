@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
@@ -379,7 +380,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr, false)
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
@@ -392,14 +393,8 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		err := r.client.List(ctx,
 			&list,
 			&client.ListOptions{
-				Namespace: cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(map[string]string{
-					"app.kubernetes.io/name":       "percona-server-mongodb",
-					"app.kubernetes.io/instance":   cr.Name,
-					"app.kubernetes.io/replset":    rs.Name,
-					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-					"app.kubernetes.io/part-of":    "percona-server-mongodb",
-				}),
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)),
 			},
 		)
 		if err != nil {

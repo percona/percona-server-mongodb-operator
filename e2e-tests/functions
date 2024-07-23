@@ -596,7 +596,7 @@ wait_for_delete() {
 	local wait_time=${2:-60}
 
 	set +o xtrace
-	echo -n "$res - "
+	echo -n "waiting for $res to be deleted"
 	retry=0
 	until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
 		sleep 1
@@ -1173,6 +1173,7 @@ wait_cluster_consistency() {
 		echo -n .
 		sleep 10
 	done
+	echo
 }
 
 run_backup() {
