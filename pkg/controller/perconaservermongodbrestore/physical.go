@@ -22,36 +22,18 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
-func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
+	var err error
 
 	status := cr.Status
-
-	cluster := &psmdbv1.PerconaServerMongoDB{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
-	if err != nil {
-		return status, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
-	}
-
-	if cluster.Spec.Unmanaged {
-		return status, errors.New("cluster is unmanaged")
-	}
-
-	svr, err := version.Server(r.clientcmd)
-	if err != nil {
-		return status, errors.Wrapf(err, "fetch server version")
-	}
-
-	if err := cluster.CheckNSetDefaults(svr.Platform, log); err != nil {
-		return status, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
-	}
 
 	replsets := cluster.Spec.Replsets
 	if cluster.Spec.Sharding.Enabled {
