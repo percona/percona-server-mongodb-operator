@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
@@ -23,9 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/pkg/errors"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
@@ -103,7 +103,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 	log := logf.FromContext(ctx)
 
 	if cr.CompareVersion("1.13.0") < 0 {
-		ls := backup.NewBackupCronJobLabels(cr.Name, cr.Spec.Backup.Labels)
+		ls := naming.NewBackupCronJobLabels(cr, cr.Spec.Backup.Labels)
 		tasksList := &batchv1.CronJobList{}
 		err := r.client.List(ctx,
 			tasksList,

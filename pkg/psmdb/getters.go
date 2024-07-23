@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -13,30 +14,9 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
-	"github.com/pkg/errors"
 )
-
-func clusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-}
-
-func RSLabels(cr *api.PerconaServerMongoDB, rsName string) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/replset"] = rsName
-	return lbls
-}
-
-func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
-	lbls := clusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongos"
-	return lbls
-}
 
 // GetRSPods returns truncated list of replicaset pods to the size of `rs.Size`.
 func GetRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string) (corev1.PodList, error) {
@@ -56,8 +36,8 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
-				"app.kubernetes.io/replset":  rsName,
+				naming.LabelKubernetesInstance: cr.Name,
+				naming.LabelKubernetesReplset:  rsName,
 			}),
 		},
 	); err != nil {
@@ -65,8 +45,10 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	}
 
 	for _, sts := range stsList.Items {
-		lbls := RSLabels(cr, rsName)
-		lbls["app.kubernetes.io/component"] = sts.Labels["app.kubernetes.io/component"]
+		rs := cr.Spec.Replset(rsName)
+
+		lbls := naming.RSLabels(cr, rs)
+		lbls[naming.LabelKubernetesComponent] = sts.Labels[naming.LabelKubernetesComponent]
 		pods := corev1.PodList{}
 		err := k8sclient.List(ctx,
 			&pods,
@@ -79,7 +61,6 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		rs := cr.Spec.Replset(rsName)
 		if trimOutdated && rs != nil {
 			// `k8sclient.List` returns unsorted list of pods
 			// We should sort pods to truncate pods that are going to be deleted during resize
@@ -93,7 +74,7 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			// `replSetReconfig` call in the `updateConfigMembers` function.
 			rsSize := 0
 
-			switch lbls["app.kubernetes.io/component"] {
+			switch lbls[naming.LabelKubernetesComponent] {
 			case "arbiter":
 				rsSize = int(rs.Arbiter.Size)
 			case "nonVoting":
@@ -127,7 +108,7 @@ func GetMongosPods(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 		&pods,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(MongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongosLabels(cr)),
 		},
 	)
 
@@ -140,7 +121,7 @@ func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaSer
 		list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(MongosLabels(cr)),
+			LabelSelector: labels.SelectorFromSet(naming.MongosLabels(cr)),
 		},
 	)
 	if err != nil {
@@ -150,7 +131,7 @@ func GetMongosServices(ctx context.Context, cl client.Client, cr *api.PerconaSer
 }
 
 func GetExportedServices(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*mcsv1alpha1.ServiceExportList, error) {
-	ls := clusterLabels(cr)
+	ls := naming.ClusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
 	err := cl.List(ctx,

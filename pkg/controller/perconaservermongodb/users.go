@@ -17,6 +17,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -62,6 +63,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		internalSysUsersSecret.ObjectMeta = metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		}
+		if cr.CompareVersion("1.17.0") < 0 {
+			internalSysUsersSecret.Labels = nil
 		}
 		err = r.client.Create(ctx, internalSysUsersSecret)
 		if err != nil {
