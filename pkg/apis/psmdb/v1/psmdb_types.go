@@ -1123,33 +1123,6 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
 
-func ClusterLabels(cr *PerconaServerMongoDB) map[string]string {
-	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
-}
-
-func MongodLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongod"
-	return lbls
-}
-
-func ArbiterLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "arbiter"
-	return lbls
-}
-
-func MongosLabels(cr *PerconaServerMongoDB) map[string]string {
-	lbls := ClusterLabels(cr)
-	lbls["app.kubernetes.io/component"] = "mongos"
-	return lbls
-}
-
 func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
 	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
 
@@ -1199,8 +1172,3 @@ const (
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
 )
-
-func (cr *PerconaServerMongoDB) PVCResizeInProgress() bool {
-	_, ok := cr.Annotations[AnnotationPVCResizeInProgress]
-	return ok
-}
