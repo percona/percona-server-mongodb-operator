@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
@@ -122,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
+				naming.LabelKubernetesInstance: cr.Name,
 			}),
 		},
 	); err != nil {
@@ -279,8 +280,12 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secret.Name + "-old",
 				Namespace: secret.Namespace,
+				Labels:    naming.ClusterLabels(cr),
 			},
 			Data: secret.Data,
+		}
+		if cr.CompareVersion("1.17.0") < 0 {
+			newSecret.Labels = nil
 		}
 
 		if err := r.client.Create(ctx, newSecret); err != nil {
@@ -457,9 +462,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 			Name:            api.SSLSecretName(cr),
 			Namespace:       cr.Namespace,
 			OwnerReferences: ownerReferences,
+			Labels:          naming.ClusterLabels(cr),
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
+	}
+	if cr.CompareVersion("1.17.0") < 0 {
+		secretObj.Labels = nil
 	}
 	err = r.createSSLSecret(ctx, &secretObj, certificateDNSNames)
 	if err != nil {
@@ -478,9 +487,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 			Name:            api.SSLInternalSecretName(cr),
 			Namespace:       cr.Namespace,
 			OwnerReferences: ownerReferences,
+			Labels:          naming.ClusterLabels(cr),
 		},
 		Data: data,
 		Type: corev1.SecretTypeTLS,
+	}
+	if cr.CompareVersion("1.17.0") < 0 {
+		secretObjInternal.Labels = nil
 	}
 	err = r.createSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
 	if err != nil {

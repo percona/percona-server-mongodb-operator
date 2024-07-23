@@ -17,6 +17,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -303,7 +304,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			member.Horizons = horizons
 		}
 
-		switch pod.Labels["app.kubernetes.io/component"] {
+		switch pod.Labels[naming.LabelKubernetesComponent] {
 		case "arbiter":
 			member.ArbiterOnly = true
 			member.Priority = 0

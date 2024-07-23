@@ -22,7 +22,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -812,10 +814,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.pbmConfigName(cluster),
 			Namespace: cluster.Namespace,
+			Labels:    naming.ClusterLabels(cluster),
 		},
 		Data: map[string][]byte{
 			"pbm_config.yaml": confBytes,
 		},
+	}
+	if cluster.CompareVersion("1.17.0") < 0 {
+		secret.Labels = nil
 	}
 	if err := r.client.Create(ctx, &secret); err != nil {
 		return errors.Wrap(err, "create PBM config secret")
@@ -827,8 +833,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) createPBMConfigSecret(ctx context
 func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) (corev1.PodList, error) {
 	mongodPods := corev1.PodList{}
 
-	set := psmdbv1.MongodLabels(cluster)
-	set["app.kubernetes.io/replset"] = rs.Name
+	set := naming.MongodLabels(cluster, rs)
+	set[naming.LabelKubernetesReplset] = rs.Name
 
 	err := r.client.List(ctx,
 		&mongodPods,
