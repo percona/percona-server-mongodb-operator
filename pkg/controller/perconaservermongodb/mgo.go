@@ -366,6 +366,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
+	if cnf.Members.HorizonsChanged(members) {
+		cnf.Version++
+
+		log.Info("Updating horizons", "replset", rs.Name)
+
+		err = cli.WriteConfig(ctx, cnf)
+		if err != nil {
+			return 0, errors.Wrap(err, "update horizons: write mongo config")
+		}
+	}
+
 	if cnf.Members.RemoveOld(members) {
 		cnf.Version++
 
@@ -396,17 +407,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		err = cli.WriteConfig(ctx, cnf)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
-		}
-	}
-
-	if cnf.Members.HorizonsChanged(members) {
-		cnf.Version++
-
-		log.Info("Updating horizons", "replset", rs.Name)
-
-		err = cli.WriteConfig(ctx, cnf)
-		if err != nil {
-			return 0, errors.Wrap(err, "update horizons: write mongo config")
 		}
 	}
 
