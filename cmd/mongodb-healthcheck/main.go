@@ -21,6 +21,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
 	uzap "go.uber.org/zap"
@@ -52,7 +53,7 @@ func main() {
 	}
 	logOpts := zap.Options{
 		Encoder:    getLogEncoder(),
-		Level:      zapcore.DebugLevel,
+		Level:      getLogLevel(),
 		DestWriter: io.MultiWriter(os.Stderr, &logRotateWriter),
 	}
 
@@ -89,4 +90,24 @@ func getLogEncoder() zapcore.Encoder {
 	}
 
 	return zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
+}
+
+func getLogLevel() zapcore.LevelEnabler {
+	defaultLogLevel := zapcore.DebugLevel
+
+	l, found := os.LookupEnv("LOG_LEVEL")
+	if !found {
+		return defaultLogLevel
+	}
+
+	switch strings.ToUpper(l) {
+	case "DEBUG":
+		return zapcore.DebugLevel
+	case "INFO":
+		return zapcore.InfoLevel
+	case "ERROR":
+		return zapcore.ErrorLevel
+	default:
+		return defaultLogLevel
+	}
 }
