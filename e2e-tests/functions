@@ -16,7 +16,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.14.5"
+CERT_MANAGER_VER="1.15.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -596,7 +596,7 @@ wait_for_delete() {
 	local wait_time=${2:-60}
 
 	set +o xtrace
-	echo -n "$res - "
+	echo -n "waiting for $res to be deleted"
 	retry=0
 	until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
 		sleep 1
@@ -1166,6 +1166,7 @@ wait_cluster_consistency() {
 		echo -n .
 		sleep 10
 	done
+	echo
 }
 
 run_backup() {

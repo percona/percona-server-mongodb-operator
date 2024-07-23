@@ -12,6 +12,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -47,7 +48,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	readinessProbe := replset.ReadinessProbe
 	configName := MongodCustomConfigName(cr.Name, replset.Name)
 
-	switch ls["app.kubernetes.io/component"] {
+	switch ls[naming.LabelKubernetesComponent] {
 	case "arbiter":
 		containerName += "-arbiter"
 		size = replset.Arbiter.Size
@@ -227,7 +228,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		)
 	}
 
-	if ls["app.kubernetes.io/component"] == "arbiter" {
+	if ls[naming.LabelKubernetesComponent] == "arbiter" {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: MongodDataVolClaimName,
@@ -478,7 +479,7 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	}
 
 	if cr.CompareVersion("1.6.0") < 0 {
-		delete(labelsCopy, "app.kubernetes.io/component")
+		delete(labelsCopy, naming.LabelKubernetesComponent)
 	}
 
 	switch {

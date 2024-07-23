@@ -18,6 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
@@ -34,17 +35,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	matchLabels := map[string]string{
-		"app.kubernetes.io/name":       "percona-server-mongodb",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/replset":    replset.Name,
-		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-		"app.kubernetes.io/part-of":    "percona-server-mongodb",
-	}
+	matchLabels := naming.RSLabels(cr, replset)
 
-	label, ok := sfs.Labels["app.kubernetes.io/component"]
+	label, ok := sfs.Labels[naming.LabelKubernetesComponent]
 	if ok {
-		matchLabels["app.kubernetes.io/component"] = label
+		matchLabels[naming.LabelKubernetesComponent] = label
 	}
 
 	list := corev1.PodList{}
@@ -144,8 +139,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		updateRevision := sfs.Status.UpdateRevision
-		if pod.Labels["app.kubernetes.io/component"] == "arbiter" {
-			arbiterSfs, err := r.getArbiterStatefulset(ctx, cr, pod.Labels["app.kubernetes.io/replset"])
+		if pod.Labels[naming.LabelKubernetesComponent] == "arbiter" {
+			arbiterSfs, err := r.getArbiterStatefulset(ctx, cr, replset)
 			if err != nil {
 				return errors.Wrap(err, "failed to get arbiter statefulset")
 			}
@@ -160,7 +155,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 	// If the primary is external, we can't match it with a running pod and
 	// it'll have an empty name
-	if sfs.Labels["app.kubernetes.io/component"] != "nonVoting" && len(primaryPod.Name) > 0 {
+	if sfs.Labels[naming.LabelKubernetesComponent] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
 		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
@@ -222,7 +217,9 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
 		}
-
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
 		c.Annotations[api.AnnotationUpdateMongosFirst] = "true"
 
 		return r.client.Update(ctx, c)
@@ -447,7 +444,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 		&k8sclient.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app.kubernetes.io/instance": cr.Name,
+				naming.LabelKubernetesInstance: cr.Name,
 			}),
 		},
 	); err != nil {
@@ -510,7 +507,7 @@ func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
 	}
 
 	for _, pod := range podList.Items {
-		if pod.Labels["app.kubernetes.io/component"] != sfs.Labels["app.kubernetes.io/component"] {
+		if pod.Labels[naming.LabelKubernetesComponent] != sfs.Labels[naming.LabelKubernetesComponent] {
 			continue
 		}
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
