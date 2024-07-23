@@ -31,18 +31,15 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 
 	for i, f := range orderedFinalizers {
 		switch f {
-		case naming.FinalizerDeletePVC:
-			err = r.deletePvcFinalizer(ctx, cr)
-		case naming.FinalizerDeletePSMDBPodsInOrder:
-			err = r.deletePSMDBPods(ctx, cr)
-			if err == nil {
-				shouldReconcile = true
-			}
 		case "delete-psmdb-pvc":
 			log.Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			fallthrough
+		case naming.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
 		case "delete-psmdb-pods-in-order":
 			log.Info("The value delete-psmdb-pods-in-order is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pods-in-order instead")
+			fallthrough
+		case naming.FinalizerDeletePSMDBPodsInOrder:
 			err = r.deletePSMDBPods(ctx, cr)
 			if err == nil {
 				shouldReconcile = true

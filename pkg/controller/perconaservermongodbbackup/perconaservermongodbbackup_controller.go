@@ -381,13 +381,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	if cr.Status.State == psmdbv1.BackupStateReady {
 		for _, f := range cr.GetFinalizers() {
 			switch f {
-			case naming.FinalizerDeleteBackup:
-				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
-					log.Error(err, "failed to run finalizer", "finalizer", f)
-					finalizers = append(finalizers, f)
-				}
 			case "delete-backup":
 				log.Info("The value delete-backup is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
+				fallthrough
+			case naming.FinalizerDeleteBackup:
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
