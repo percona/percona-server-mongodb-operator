@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/pkg/errors"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batchv1.CronJob, error) {
@@ -57,7 +59,7 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        task.Name,
 			Namespace:   cr.Namespace,
-			Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
+			Labels:      naming.NewBackupCronJobLabels(cr, backupSpec.Labels),
 			Annotations: backupSpec.Annotations,
 		},
 		Spec: batchv1.CronJobSpec{
@@ -65,13 +67,13 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 			ConcurrencyPolicy: batchv1.ForbidConcurrent,
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
+					Labels:      naming.NewBackupCronJobLabels(cr, backupSpec.Labels),
 					Annotations: backupSpec.Annotations,
 				},
 				Spec: batchv1.JobSpec{
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels:      NewBackupCronJobLabels(cr.Name, backupSpec.Labels),
+							Labels:      naming.NewBackupCronJobLabels(cr, backupSpec.Labels),
 							Annotations: backupSpec.Annotations,
 						},
 						Spec: backupPod,
@@ -80,23 +82,6 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 			},
 		},
 	}, nil
-}
-
-func NewBackupCronJobLabels(crName string, labels map[string]string) map[string]string {
-	base := make(map[string]string)
-
-	for k, v := range labels {
-		base[k] = v
-	}
-
-	base["app.kubernetes.io/name"] = "percona-server-mongodb"
-	base["app.kubernetes.io/instance"] = crName
-	base["app.kubernetes.io/replset"] = "general"
-	base["app.kubernetes.io/managed-by"] = "percona-server-mongodb-operator"
-	base["app.kubernetes.io/component"] = "backup-schedule"
-	base["app.kubernetes.io/part-of"] = "percona-server-mongodb"
-
-	return base
 }
 
 func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*api.PerconaServerMongoDBBackup, error) {
@@ -116,11 +101,7 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 		ObjectMeta: metav1.ObjectMeta{
 			Finalizers:   []string{"delete-backup"},
 			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
-			Labels: map[string]string{
-				"ancestor": task.Name,
-				"cluster":  cr.Name,
-				"type":     "cron",
-			},
+			Labels:       naming.ScheduledBackupLabels(cr, task),
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			Type:             backupType,

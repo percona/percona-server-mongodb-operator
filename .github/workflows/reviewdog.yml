@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v5
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           only-new-issues: true
@@ -22,6 +22,20 @@ jobs:
       - uses: reviewdog/action-suggester@v1
         with:
           tool_name: gofmt
+
+  goimports-reviser:
+    name: runner / suggester / goimports-reviser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '^1.22'
+      - run: go install -v github.com/incu6us/goimports-reviser/v3@latest
+      - run: $(go env GOPATH)/bin/goimports-reviser -imports-order "std,general,company,project" -company-prefixes "github.com/percona" ./...
+      - uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: goimports-reviser
 
   shfmt:
     name: runner / suggester / shfmt
@@ -79,6 +93,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
+      - name: check on release branch
+        if: ${{ contains(github.head_ref, 'release-') || contains(github.base_ref, 'release-') }}
+        run: |
+          make generate manifests VERSION="$(grep "Version" version/version.go|grep -oE "[0-9]+\.[0-9]+\.[0-9]+")" IMAGE_TAG_BASE="percona/percona-server-mongodb-operator"
+          git diff --exit-code
+      - name: check on non release branches
+        if: ${{ ! (contains(github.head_ref, 'release-') || contains(github.base_ref, 'release-')) }}
+        run: |
           make generate manifests VERSION=main
           git diff --exit-code

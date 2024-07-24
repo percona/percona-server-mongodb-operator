@@ -54,7 +54,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: percona/pmm-client:2.41.2
+    image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
@@ -532,16 +532,16 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.4.1
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1.2G"
 #      requests:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1G"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
