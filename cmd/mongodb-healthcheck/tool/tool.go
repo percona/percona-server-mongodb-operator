@@ -22,8 +22,9 @@ import (
 	"runtime"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/percona/percona-backup-mongodb/pbm/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-backup-mongodb/pbm/errors"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/healthcheck"
 )
