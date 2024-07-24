@@ -3,7 +3,6 @@ package v1
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"os"
 	"strconv"
 	"strings"
@@ -1121,32 +1120,6 @@ func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 
 func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
-}
-
-func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
-	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
-
-	if cr.CompareVersion("1.17.0") < 0 {
-		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}
-	}
-
-	finalizers := make([]string, len(cr.GetFinalizers()))
-	copy(finalizers, cr.GetFinalizers())
-	orderedFinalizers := make([]string, 0, len(finalizers))
-
-	for _, v := range order {
-		for i := 0; i < len(finalizers); {
-			if v == finalizers[i] {
-				orderedFinalizers = append(orderedFinalizers, v)
-				finalizers = append(finalizers[:i], finalizers[i+1:]...)
-				continue
-			}
-			i++
-		}
-	}
-
-	orderedFinalizers = append(orderedFinalizers, finalizers...)
-	return orderedFinalizers
 }
 
 func (cr *PerconaServerMongoDB) TLSEnabled() bool {

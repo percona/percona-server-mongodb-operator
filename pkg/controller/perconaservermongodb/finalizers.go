@@ -4,8 +4,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 var (
@@ -26,7 +25,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	log := logf.FromContext(ctx)
 
 	shouldReconcile = false
-	orderedFinalizers := cr.GetOrderedFinalizers()
+	orderedFinalizers := naming.GetOrderedFinalizers(cr)
 	var finalizers []string
 
 	for i, f := range orderedFinalizers {
