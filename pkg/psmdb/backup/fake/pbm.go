@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -100,6 +101,6 @@ func (p *fakePBM) Node(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
 	return nil
 }

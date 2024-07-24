@@ -74,7 +74,7 @@ type PBM interface {
 	SendCmd(ctx context.Context, cmd ctrl.Cmd) error
 	Close(ctx context.Context) error
 	HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error)
-	ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup) error
+	ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error
 
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
@@ -384,12 +384,12 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	return conf, nil
 }
 
-func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
 	backupName := bcp.Status.PBMname
-	s, err := b.GetStorage(ctx, e)
+	s, err := util.StorageFromConfig(cfg.Storage, e)
 	if err != nil {
-		return errors.Wrap(err, "get storage")
+		return errors.Wrap(err, "storage from config")
 	}
 	m, err := restore.GetMetaFromStore(s, backupName)
 	if err != nil {

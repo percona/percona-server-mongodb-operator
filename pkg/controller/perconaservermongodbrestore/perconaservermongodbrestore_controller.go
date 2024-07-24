@@ -27,6 +27,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -179,11 +180,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
-		err = r.validate(ctx, cr, cluster, bcp)
+		err = r.validate(ctx, cr, cluster)
 		if err != nil {
 			if errors.Is(err, errWaitingPBM) || errors.Is(err, errWaitingRestore) {
 				err = nil
-				status.State = psmdbv1.RestoreStateWaiting
 				return rr, nil
 			}
 			return rr, errors.Wrap(err, "failed to validate restore")
@@ -308,4 +308,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 	}
 
 	return errors.Wrap(err, "write status")
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdate(ctx context.Context, obj client.Object) error {
+	_, err := util.Apply(ctx, r.client, obj)
+	return err
 }

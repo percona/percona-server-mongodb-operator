@@ -15,7 +15,7 @@ var (
 	errWaitingRestore = errors.New("waiting for restore to finish")
 )
 
-func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 	if cluster.Spec.Unmanaged {
 		return errors.New("cluster is unmanaged")
@@ -32,6 +32,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errWaitingRestore
 	}
 
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get backup")
+	}
+
 	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
 	if err != nil {
 		return errors.Wrap(err, "get storage")
@@ -44,12 +49,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	}
 	defer pbmc.Close(ctx)
 
-	err = pbmc.SetConfig(ctx, r.client, cluster, storage)
+	cfg, err := backup.GetPBMConfig(ctx, r.client, cluster, storage)
 	if err != nil {
-		return errors.Wrap(err, "set pbm config")
+		return errors.Wrap(err, "get pbm config")
 	}
 
-	if err := pbmc.ValidateBackup(ctx, bcp); err != nil {
+	if err := pbmc.ValidateBackup(ctx, bcp, cfg); err != nil {
 		return errors.Wrap(err, "failed to validate backup")
 	}
 	return nil
