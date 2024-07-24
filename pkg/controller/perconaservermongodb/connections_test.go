@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
@@ -117,8 +118,8 @@ func TestConnectionLeaks(t *testing.T) {
 
 			obj := []client.Object{}
 			obj = append(obj, cr,
-				fakeStatefulset(cr, cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].Size, updatedRevision),
-				fakeStatefulset(cr, "deleted-sts", 0, ""),
+				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, updatedRevision),
+				fakeStatefulset(cr, &api.ReplsetSpec{Name: "deleted-sts"}, 0, ""),
 			)
 
 			rsPods := fakePodsForRS(cr, cr.Spec.Replsets[0])
@@ -135,7 +136,7 @@ func TestConnectionLeaks(t *testing.T) {
 				if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
 					t.Fatal(err)
 				}
-				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet.Name, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision))
+				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision))
 				allPods = append(allPods, fakePodsForRS(cr, cr.Spec.Sharding.ConfigsvrReplSet)...)
 			}
 
@@ -216,7 +217,6 @@ func TestConnectionLeaks(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func updateResource[T any](resource T, update func(T)) T {
@@ -287,11 +287,11 @@ func updatePodsForSmartUpdate(ctx context.Context, cl client.Client, cr *api.Per
 
 func fakePodsForRS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []client.Object {
 	pods := []client.Object{}
-	ls := psmdb.RSLabels(cr, rs.Name)
+	ls := naming.RSLabels(cr, rs)
 
-	ls["app.kubernetes.io/component"] = "mongod"
+	ls[naming.LabelKubernetesComponent] = "mongod"
 	if rs.Name == api.ConfigReplSetName {
-		ls["app.kubernetes.io/component"] = api.ConfigReplSetName
+		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 	for i := 0; i < int(rs.Size); i++ {
 		pods = append(pods, fakePod(fmt.Sprintf("%s-%s-%d", cr.Name, rs.Name, i), cr.Namespace, ls, "mongod"))
@@ -301,7 +301,7 @@ func fakePodsForRS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []client.O
 
 func fakePodsForMongos(cr *api.PerconaServerMongoDB) []client.Object {
 	pods := []client.Object{}
-	ls := psmdb.MongosLabels(cr)
+	ls := naming.MongosLabels(cr)
 	ms := cr.Spec.Sharding.Mongos
 	for i := 0; i < int(ms.Size); i++ {
 		pods = append(pods, fakePod(fmt.Sprintf("%s-%s-%d", cr.Name, "mongos", i), cr.Namespace, ls, "mongos"))
@@ -343,12 +343,12 @@ func fakePod(name, namespace string, ls map[string]string, containerName string)
 	}
 }
 
-func fakeStatefulset(cr *api.PerconaServerMongoDB, rsName string, size int32, updateRevision string) client.Object {
+func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int32, updateRevision string) client.Object {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", cr.Name, rsName),
+			Name:      fmt.Sprintf("%s-%s", cr.Name, rs.Name),
 			Namespace: cr.Namespace,
-			Labels:    psmdb.RSLabels(cr, rsName),
+			Labels:    naming.RSLabels(cr, rs),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
@@ -371,12 +371,14 @@ func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
+
 func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
+
 func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error) {
 	*g.connectionCount++
 
@@ -487,7 +489,6 @@ func (c *fakeMongoClient) RemoveShard(ctx context.Context, shard string) (mongo.
 			OK: 1,
 		},
 	}, nil
-
 }
 
 func (c *fakeMongoClient) IsBalancerRunning(ctx context.Context) (bool, error) {

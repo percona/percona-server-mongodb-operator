@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
@@ -131,6 +132,7 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      issuerName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
@@ -149,6 +151,10 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		}
 	}
 
+	if cr.CompareVersion("1.17.0") < 0 {
+		issuer.Labels = nil
+	}
+
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
@@ -157,12 +163,17 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caIssuerName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
 				SelfSigned: &cm.SelfSignedIssuer{},
 			},
 		},
+	}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		issuer.Labels = nil
 	}
 
 	return c.createOrUpdate(ctx, cr, issuer)
@@ -185,6 +196,7 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      certificateName(cr, internal),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
@@ -201,6 +213,10 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 				Group: issuerGroup,
 			},
 		},
+	}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		certificate.Labels = nil
 	}
 
 	return c.createOrUpdate(ctx, cr, certificate)
@@ -236,6 +252,7 @@ func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CACertificateSecretName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: CACertificateSecretName(cr),
@@ -248,6 +265,9 @@ func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.
 			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 		},
+	}
+	if cr.CompareVersion("1.17.0") < 0 {
+		cert.Labels = nil
 	}
 
 	return c.createOrUpdate(ctx, cr, cert)
