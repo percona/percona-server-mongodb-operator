@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -46,9 +47,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		annotationKey := fmt.Sprintf("percona.com/%s-hash", user.Name)
+
 		newHash := sha256Hash(sec.Data[user.PasswordSecretRef.Key])
 
-		hash, ok := sec.Annotations["percona.com/user-hash"]
+		hash, ok := sec.Annotations[annotationKey]
 		if ok && hash == newHash {
 			continue
 		}
@@ -70,7 +73,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				log.Error(err, "failed to update user pass", "user", user.Name)
 				continue
 			}
-			sec.Annotations["percona.com/user-hash"] = string(newHash)
+			sec.Annotations[annotationKey] = string(newHash)
 			if err := r.client.Update(ctx, &sec); err != nil {
 				log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
 				continue
@@ -108,7 +111,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		sec.Annotations["percona.com/user-hash"] = string(newHash)
+		sec.Annotations[annotationKey] = string(newHash)
 		if err := r.client.Update(ctx, &sec); err != nil {
 			log.Error(err, "update user secret", "user", user.Name, "secret", sec.Name)
 			continue
