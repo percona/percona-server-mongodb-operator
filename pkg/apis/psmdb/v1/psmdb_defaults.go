@@ -519,7 +519,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.PMM.ContainerSecurityContext == nil {
 			tvar := true
-			cr.Spec.Backup.ContainerSecurityContext = &corev1.SecurityContext{
+			cr.Spec.PMM.ContainerSecurityContext = &corev1.SecurityContext{
 				RunAsNonRoot: &tvar,
 				RunAsUser:    fsgroup,
 			}
