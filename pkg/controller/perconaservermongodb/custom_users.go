@@ -6,6 +6,9 @@ import (
 	"reflect"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -40,7 +43,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
+	sysUsersSecret := corev1.Secret{}
+	err = r.client.Get(ctx,
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      api.InternalUserSecretName(cr),
+		},
+		&sysUsersSecret,
+	)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get internal sys users secret")
+	}
+
+	sysUserNames := sysUserNames(sysUsersSecret)
+
 	for _, user := range cr.Spec.Users {
+		if _, ok := sysUserNames[user.Name]; ok {
+			log.Error(nil, "creating user with reserved user name is forbidden", "user", user.Name)
+			continue
+		}
+
 		sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
@@ -96,8 +118,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 				log.Error(err, "failed to update user roles", "user", user.Name)
 				continue
 			}
-
-			continue
 		}
 
 		if userInfo != nil {
@@ -121,4 +141,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	}
 
 	return nil
+}
+
+func sysUserNames(sysUsersSecret corev1.Secret) map[string]struct{} {
+	sysUserNames := make(map[string]struct{}, len(sysUsersSecret.Data))
+
+	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBClusterAdminUser])] = struct{}{}
+	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBDatabaseAdminUser])] = struct{}{}
+	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBUserAdminUser])] = struct{}{}
+	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBBackupUser])] = struct{}{}
+	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBClusterMonitorUser])] = struct{}{}
+
+	return sysUserNames
 }
