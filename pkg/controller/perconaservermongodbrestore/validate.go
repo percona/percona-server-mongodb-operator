@@ -42,7 +42,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get storage")
 	}
 
-	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		return errWaitingPBM
