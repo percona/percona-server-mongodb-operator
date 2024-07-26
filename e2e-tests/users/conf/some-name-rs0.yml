@@ -6,6 +6,17 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  users:
+  - name: user-one
+    db: admin
+    passwordSecretRef: 
+      name: user-one
+      key: userOnePassKey
+    roles:
+      - name: clusterAdmin
+        db: admin
+      - name: userAdminAnyDatabase
+        db: admin
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
