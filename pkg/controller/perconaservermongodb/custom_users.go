@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -143,14 +144,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	return nil
 }
 
+// sysUserNames returns a set of system user names from the sysUsersSecret.
 func sysUserNames(sysUsersSecret corev1.Secret) map[string]struct{} {
 	sysUserNames := make(map[string]struct{}, len(sysUsersSecret.Data))
-
-	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBClusterAdminUser])] = struct{}{}
-	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBDatabaseAdminUser])] = struct{}{}
-	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBUserAdminUser])] = struct{}{}
-	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBBackupUser])] = struct{}{}
-	sysUserNames[string(sysUsersSecret.Data[api.EnvMongoDBClusterMonitorUser])] = struct{}{}
-
+	for k, v := range sysUsersSecret.Data {
+		if strings.Contains(k, "_USER") {
+			sysUserNames[string(v)] = struct{}{}
+		}
+	}
 	return sysUserNames
 }
