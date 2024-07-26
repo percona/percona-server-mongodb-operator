@@ -56,6 +56,7 @@ spec:
     enabled: false
     image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
+#    containerSecurityContext: {}
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:
@@ -529,6 +530,26 @@ spec:
 #        hostnames:
 #        - "host1"
 #        - "host2"
+
+#  users:
+#  - name: my-user
+#    db: admin
+#    passwordSecretRef: 
+#      name: my-user-password
+#      key: my-user-password-key
+#    roles:
+#      - name: clusterAdmin
+#        db: admin
+#      - name: userAdminAnyDatabase
+#        db: admin
+#  - name: my-usr
+#    db: admin
+#    passwordSecretRef: 
+#      name: my-user-pwd
+#      key: my-user-pwd-key
+#    roles:
+#      - name: dbOwner
+#        db: sometest  
 
   backup:
     enabled: true

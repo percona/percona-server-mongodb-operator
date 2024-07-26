@@ -92,6 +92,19 @@ type PerconaServerMongoDBSpec struct {
 	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+	Users                        []User                               `json:"users,omitempty"`
+}
+
+type User struct {
+	Name              string                   `json:"name"`
+	Db                string                   `json:"db"`
+	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
+	Roles             []Role                   `json:"roles"`
+}
+
+type Role struct {
+	Name string `json:"name"`
+	Db   string `json:"db"`
 }
 
 type UnsafeFlags struct {
@@ -279,11 +292,12 @@ type ClusterCondition struct {
 }
 
 type PMMSpec struct {
-	Enabled      bool   `json:"enabled,omitempty"`
-	ServerHost   string `json:"serverHost,omitempty"`
-	Image        string `json:"image"`
-	MongodParams string `json:"mongodParams,omitempty"`
-	MongosParams string `json:"mongosParams,omitempty"`
+	Enabled                  bool                    `json:"enabled,omitempty"`
+	ServerHost               string                  `json:"serverHost,omitempty"`
+	Image                    string                  `json:"image"`
+	MongodParams             string                  `json:"mongodParams,omitempty"`
+	MongosParams             string                  `json:"mongosParams,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
