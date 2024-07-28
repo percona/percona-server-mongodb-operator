@@ -59,6 +59,8 @@ main() {
 
 	desc 'delete cluster'
 	kubectl delete psmdb --all
+	wait_for_delete psmdb/$cluster 180
+
 	kubectl delete pvc --all
 
 	desc 'delete custom cert-manager issuers and certificates'

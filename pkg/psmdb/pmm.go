@@ -403,5 +403,9 @@ func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *
 		}
 	}
 
+	if cr.CompareVersion("1.17.0") >= 0 {
+		pmmC.SecurityContext = cr.Spec.PMM.ContainerSecurityContext
+	}
+
 	return &pmmC
 }
