@@ -407,7 +407,6 @@ func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMon
 			if err != nil {
 				return errors.Wrapf(err, "failed to list backup files at %s", f)
 			}
-			fmt.Println("TEST: ", files)
 			if len(files) == 0 {
 				return errors.Wrap(err, "no physical backup files")
 			}
