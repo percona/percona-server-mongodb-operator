@@ -2,6 +2,8 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -24,6 +26,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+)
+
+const (
+	GiB = int64(1024 * 1024 * 1024)
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
@@ -119,17 +125,21 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
-	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
-
-	if requested.Format == resource.DecimalSI {
-		requested, err = resource.ParseQuantity(requested.String() + "i")
-		if err != nil {
-			return errors.Wrap(err, "parse requested storage size")
-		}
+	gib, err := RoundUpGiB(requested.Value())
+	if err != nil {
+		return errors.Wrap(err, "round GiB value")
 	}
 
+	requestedQuantity := fmt.Sprintf("%dGi", gib)
+	requested, err = resource.ParseQuantity(requestedQuantity)
+	if err != nil {
+		return errors.Wrapf(err, "parse quantity (%s)", requestedQuantity)
+	}
+
+	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
+
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
-		resizeStartedAt, err := time.Parse(time.RFC3339, sts.GetAnnotations()[psmdbv1.AnnotationPVCResizeInProgress])
+		resizeStartedAt, err := time.Parse(time.RFC3339, sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress])
 		if err != nil {
 			return errors.Wrap(err, "parse annotation")
 		}
@@ -348,4 +358,21 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 	}
 
 	return nil
+}
+
+func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {
+	if allocationUnitBytes == 0 {
+		return 0 // Avoid division by zero
+	}
+	return (volumeSizeBytes + allocationUnitBytes - 1) / allocationUnitBytes
+}
+
+// RoundUpGiB rounds up the volume size in bytes upto multiplications of GiB
+// in the unit of GiB
+func RoundUpGiB(volumeSizeBytes int64) (int64, error) {
+	result := roundUpSize(volumeSizeBytes, GiB)
+	if result > int64(math.MaxInt64) {
+		return 0, errors.Errorf("rounded up size exceeds maximum value of int64: %d", result)
+	}
+	return result, nil
 }
