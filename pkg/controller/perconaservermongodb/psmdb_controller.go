@@ -804,6 +804,9 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 	for _, f := range cr.GetFinalizers() {
 		switch f {
 		case "delete-psmdb-pvc":
+			logf.FromContext(ctx).Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			fallthrough
+		case naming.FinalizerDeletePVC:
 			// remove orphan pvc
 			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
 			if err != nil {
