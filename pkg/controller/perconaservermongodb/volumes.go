@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -130,12 +129,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return errors.Wrap(err, "round GiB value")
 	}
 
-	requestedQuantity := fmt.Sprintf("%dGi", gib)
-	requested, err = resource.ParseQuantity(requestedQuantity)
-	if err != nil {
-		return errors.Wrapf(err, "parse quantity (%s)", requestedQuantity)
-	}
-
+	requested = *resource.NewQuantity(gib*GiB, resource.BinarySI)
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
