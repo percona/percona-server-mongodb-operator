@@ -13,6 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 var (
@@ -24,14 +25,20 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	log := logf.FromContext(ctx)
 
 	shouldReconcile = false
-	orderedFinalizers := cr.GetOrderedFinalizers()
+	orderedFinalizers := GetOrderedFinalizers(cr)
 	var finalizers []string
 
 	for i, f := range orderedFinalizers {
 		switch f {
-		case api.FinalizerDeletePVC:
+		case "delete-psmdb-pvc":
+			log.Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			fallthrough
+		case naming.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
-		case api.FinalizerDeletePSMDBPodsInOrder:
+		case "delete-psmdb-pods-in-order":
+			log.Info("The value delete-psmdb-pods-in-order is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pods-in-order instead")
+			fallthrough
+		case naming.FinalizerDeletePSMDBPodsInOrder:
 			err = r.deletePSMDBPods(ctx, cr)
 			if err == nil {
 				shouldReconcile = true
@@ -266,4 +273,30 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 	}
 
 	return nil
+}
+
+func GetOrderedFinalizers(cr *api.PerconaServerMongoDB) []string {
+	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}
+	}
+
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
+
+	for _, v := range order {
+		for i := 0; i < len(finalizers); {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				continue
+			}
+			i++
+		}
+	}
+
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
 }
