@@ -217,7 +217,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
-	if requested.Cmp(configured) == 0 || requested.Cmp(actual) == 0 {
+	if requested.Cmp(actual) == 0 {
 		return nil
 	}
 
@@ -246,7 +246,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			case strings.Contains(err.Error(), "exceeded quota"):
 				log.Error(err, "PVC resize failed", "reason", "ExceededQuota", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, actual); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
 					return err
 				}
 
@@ -254,7 +254,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			case strings.Contains(err.Error(), "the storageclass that provisions the pvc must support resize"):
 				log.Error(err, "PVC resize failed", "reason", "StorageClassNotSupportResize", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, actual); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
 					return err
 				}
 
