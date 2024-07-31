@@ -1136,32 +1136,6 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 	return mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled
 }
 
-const (
-	FinalizerDeletePVC              = "delete-psmdb-pvc"
-	FinalizerDeletePSMDBPodsInOrder = "delete-psmdb-pods-in-order"
-)
-
-func (cr *PerconaServerMongoDB) GetOrderedFinalizers() []string {
-	order := []string{FinalizerDeletePSMDBPodsInOrder, FinalizerDeletePVC}
-	finalizers := make([]string, len(cr.GetFinalizers()))
-	copy(finalizers, cr.GetFinalizers())
-	orderedFinalizers := make([]string, 0, len(finalizers))
-
-	for _, v := range order {
-		for i := 0; i < len(finalizers); {
-			if v == finalizers[i] {
-				orderedFinalizers = append(orderedFinalizers, v)
-				finalizers = append(finalizers[:i], finalizers[i+1:]...)
-				continue
-			}
-			i++
-		}
-	}
-
-	orderedFinalizers = append(orderedFinalizers, finalizers...)
-	return orderedFinalizers
-}
-
 func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 	if cr.CompareVersion("1.16.0") < 0 {
 		return !cr.Spec.UnsafeConf

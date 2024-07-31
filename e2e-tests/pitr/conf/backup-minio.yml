@@ -3,7 +3,7 @@ kind: PerconaServerMongoDBBackup
 metadata:
   name:
   finalizers:
-    - delete-backup
+    - percona.com/delete-backup
 spec:
   clusterName: some-name
   storageName: minio
