@@ -29,8 +29,10 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -381,6 +383,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 		for _, f := range cr.GetFinalizers() {
 			switch f {
 			case "delete-backup":
+				log.Info("The value delete-backup is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
+				fallthrough
+			case naming.FinalizerDeleteBackup:
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)

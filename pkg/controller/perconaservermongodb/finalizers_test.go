@@ -9,6 +9,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -40,7 +41,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "delete-pvc pass",
 			cr: updateObj(t, defaultCR.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
-				cr.Finalizers = []string{api.FinalizerDeletePVC}
+				cr.Finalizers = []string{naming.FinalizerDeletePVC}
 			}),
 			expectedShouldReconcile: false,
 			expectedFinalizers:      nil,
@@ -48,14 +49,14 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "delete pods fails",
 			cr: updateObj(t, defaultCR.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
-				cr.Finalizers = []string{api.FinalizerDeletePSMDBPodsInOrder}
+				cr.Finalizers = []string{naming.FinalizerDeletePSMDBPodsInOrder}
 			}),
-			expectedFinalizers: []string{api.FinalizerDeletePSMDBPodsInOrder},
+			expectedFinalizers: []string{naming.FinalizerDeletePSMDBPodsInOrder},
 		},
 		{
 			name: "cr with error state, delete pods fails with delete-pvc",
 			cr: updateObj(t, defaultCR.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
-				cr.Finalizers = []string{api.FinalizerDeletePSMDBPodsInOrder}
+				cr.Finalizers = []string{naming.FinalizerDeletePSMDBPodsInOrder}
 				cr.Status.State = api.AppStateError
 			}),
 			expectedFinalizers: []string{},
@@ -63,14 +64,14 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "delete pods fails with delete-pvc",
 			cr: updateObj(t, defaultCR.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
-				cr.Finalizers = []string{api.FinalizerDeletePVC, api.FinalizerDeletePSMDBPodsInOrder}
+				cr.Finalizers = []string{naming.FinalizerDeletePVC, naming.FinalizerDeletePSMDBPodsInOrder}
 			}),
-			expectedFinalizers: []string{api.FinalizerDeletePSMDBPodsInOrder, api.FinalizerDeletePVC},
+			expectedFinalizers: []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC},
 		},
 		{
 			name: "cr with error state, delete pods fails with delete-pvc",
 			cr: updateObj(t, defaultCR.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
-				cr.Finalizers = []string{api.FinalizerDeletePVC, api.FinalizerDeletePSMDBPodsInOrder}
+				cr.Finalizers = []string{naming.FinalizerDeletePVC, naming.FinalizerDeletePSMDBPodsInOrder}
 				cr.Status.State = api.AppStateError
 			}),
 			expectedFinalizers: []string{},
