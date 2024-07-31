@@ -6,6 +6,8 @@ import (
 	"github.com/pkg/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
@@ -21,20 +23,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.New("cluster is unmanaged")
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
-	if err != nil {
-		return errors.Wrap(err, "check for concurrent jobs")
-	}
-	if cjobs {
-		if cr.Status.State != psmdbv1.RestoreStateWaiting {
-			log.Info("waiting to finish another backup/restore.")
-		}
-		return errWaitingRestore
-	}
-
 	bcp, err := r.getBackup(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get backup")
+	}
+
+	// TODO: remove this if statement after https://perconadev.atlassian.net/browse/PBM-1360 is fixed
+	if bcp.Status.Type != defs.PhysicalBackup {
+		cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
+		if err != nil {
+			return errors.Wrap(err, "check for concurrent jobs")
+		}
+		if cjobs {
+			if cr.Status.State != psmdbv1.RestoreStateWaiting {
+				log.Info("waiting to finish another backup/restore.")
+			}
+			return errWaitingRestore
+		}
 	}
 
 	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
