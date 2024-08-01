@@ -26,7 +26,7 @@ namespace="${test_name}-${RANDOM}"
 replica_namespace="${test_name}-replica-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
-logs_dir=$(realpath $test_dir/../logs)
+logs_dir=$(realpath $test_dir/../logs || :)
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then

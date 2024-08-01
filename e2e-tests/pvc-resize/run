@@ -37,10 +37,10 @@ function apply_resourcequota() {
 
 	echo "Applying resourcequota for default storageclass ${default_sc} with quota ${quota}"
 
-	cat ${test_dir}/conf/resourcequota.yml |
-		sed "s/STORAGECLASS/${default_sc}/" |
-		sed "s/QUOTA/${quota}/" |
-		kubectl_bin apply -f -
+	cat ${test_dir}/conf/resourcequota.yml \
+		| sed "s/STORAGECLASS/${default_sc}/" \
+		| sed "s/QUOTA/${quota}/" \
+		| kubectl_bin apply -f -
 }
 
 function wait_cluster_status() {
@@ -88,7 +88,7 @@ else
 	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 fi
 
-patch_pvc_request "${cluster}" "2Gi"
+patch_pvc_request "${cluster}" "2G"
 wait_cluster_consistency "$cluster"
 echo
 
@@ -96,7 +96,7 @@ for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name);
 	retry=0
 	echo -n "Waiting for pvc/${pvc} to be resized"
 	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "2Gi" ]]; do
-		if [[ $retry -ge 60 ]]; then
+		if [[ $retry -ge 120 ]]; then
 			echo
 			echo "pvc/${pvc} was not resized, max retries exceeded"
 			exit 1
@@ -133,13 +133,13 @@ desc 'create resourcequota'
 # handle the error and keep the cluster ready
 
 apply_resourcequota 7Gi
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster"
 echo
 
 echo -n "Waiting for pvc/mongod-data-some-name-rs0-0 to be resized"
 until [[ $(kubectl_bin get pvc mongod-data-some-name-rs0-0 -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
-	if [[ $retry -ge 60 ]]; then
+	if [[ $retry -ge 120 ]]; then
 		echo
 		echo "pvc/mongod-data-some-name-rs0-0 was not resized, max retries exceeded"
 		exit 1
@@ -155,14 +155,14 @@ echo "pvc/mongod-data-some-name-rs0-0 was resized"
 # We're setting the quota to 9Gi, so we can resize all PVCs to 3Gi
 
 apply_resourcequota 9Gi
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster"
 echo
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
 	retry=0
 	echo -n "Waiting for pvc/${pvc} to be resized"
 	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
-		if [[ $retry -ge 60 ]]; then
+		if [[ $retry -ge 120 ]]; then
 			echo
 			echo "pvc/${pvc} was not resized, max retries exceeded"
 			exit 1
@@ -179,11 +179,11 @@ done
 desc "test downscale"
 
 # operator shouldn't try to downscale the PVCs and set status to error
-patch_pvc_request "${cluster}" "1Gi"
+patch_pvc_request "${cluster}" "1G"
 wait_cluster_status ${cluster} "error"
 
 # user should be able to restore to the previous size and make the cluster ready
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_status ${cluster} "ready"
 
 destroy "${namespace}"

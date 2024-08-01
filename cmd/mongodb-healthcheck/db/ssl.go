@@ -23,8 +23,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var lastSSLErr error
-
 type SSLConfig struct {
 	Enabled    bool
 	PEMKeyFile string
@@ -42,11 +40,6 @@ func (sc *SSLConfig) loadCaCertificate() (*x509.CertPool, error) {
 	return certificates, nil
 }
 
-// LastSSLError returns the last error related to the DB connection SSL handshake
-func LastSSLError() error {
-	return lastSSLErr
-}
-
 func (cnf *Config) configureTLS() error {
 	log := logf.Log
 
@@ -60,7 +53,7 @@ func (cnf *Config) configureTLS() error {
 
 	// Configure client cert
 	if len(cnf.SSL.PEMKeyFile) != 0 {
-		if err := isFileExists(cnf.SSL.PEMKeyFile); err != nil {
+		if _, err := os.Stat(cnf.SSL.PEMKeyFile); err != nil {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.PEMKeyFile)
 		}
 
@@ -75,7 +68,7 @@ func (cnf *Config) configureTLS() error {
 
 	// Configure CA cert
 	if len(cnf.SSL.CAFile) != 0 {
-		if err := isFileExists(cnf.SSL.CAFile); err != nil {
+		if _, err := os.Stat(cnf.SSL.CAFile); err != nil {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
 		}
 
@@ -90,9 +83,4 @@ func (cnf *Config) configureTLS() error {
 
 	cnf.TLSConf = config
 	return nil
-}
-
-func isFileExists(name string) error {
-	_, err := os.Stat(name)
-	return err
 }
