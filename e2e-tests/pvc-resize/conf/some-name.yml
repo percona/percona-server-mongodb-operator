@@ -51,7 +51,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
+            storage: 1G
     size: 3
   secrets:
     users: some-users
