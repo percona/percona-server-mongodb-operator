@@ -88,7 +88,7 @@ else
 	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 fi
 
-patch_pvc_request "${cluster}" "2Gi"
+patch_pvc_request "${cluster}" "2G"
 wait_cluster_consistency "$cluster"
 echo
 
@@ -133,7 +133,7 @@ desc 'create resourcequota'
 # handle the error and keep the cluster ready
 
 apply_resourcequota 7Gi
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster"
 echo
 
@@ -155,7 +155,7 @@ echo "pvc/mongod-data-some-name-rs0-0 was resized"
 # We're setting the quota to 9Gi, so we can resize all PVCs to 3Gi
 
 apply_resourcequota 9Gi
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster"
 echo
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
@@ -179,11 +179,11 @@ done
 desc "test downscale"
 
 # operator shouldn't try to downscale the PVCs and set status to error
-patch_pvc_request "${cluster}" "1Gi"
+patch_pvc_request "${cluster}" "1G"
 wait_cluster_status ${cluster} "error"
 
 # user should be able to restore to the previous size and make the cluster ready
-patch_pvc_request "${cluster}" "3Gi"
+patch_pvc_request "${cluster}" "3G"
 wait_cluster_status ${cluster} "ready"
 
 destroy "${namespace}"
