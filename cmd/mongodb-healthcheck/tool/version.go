@@ -12,15 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package db
+package tool
 
-import "strconv"
-
-type Addr struct {
-	Host string
-	Port int
-}
-
-func (a Addr) String() string {
-	return a.Host + ":" + strconv.Itoa(a.Port)
-}
+const (
+	Version = "0.5.0"
+)

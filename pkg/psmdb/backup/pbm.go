@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -32,7 +34,9 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
@@ -70,6 +74,7 @@ type PBM interface {
 	SendCmd(ctx context.Context, cmd ctrl.Cmd) error
 	Close(ctx context.Context) error
 	HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error)
+	ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error
 
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
@@ -296,7 +301,6 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			}
 
 			if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
-
 				switch {
 				case len(stg.S3.ServerSideEncryption.SSECustomerKey) != 0:
 					conf.Storage.S3.ServerSideEncryption = &s3.AWSsse{
@@ -305,7 +309,6 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 					}
 				case len(cluster.Spec.Secrets.SSE) != 0:
 					sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
-
 					if err != nil {
 						return conf, errors.Wrap(err, "get sse credentials secret")
 					}
@@ -379,6 +382,38 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	}
 
 	return conf, nil
+}
+
+func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
+	backupName := bcp.Status.PBMname
+	s, err := util.StorageFromConfig(cfg.Storage, e)
+	if err != nil {
+		return errors.Wrap(err, "storage from config")
+	}
+	m, err := restore.GetMetaFromStore(s, backupName)
+	if err != nil {
+		return errors.Wrap(err, "get backup metadata from storage")
+	}
+	switch bcp.Status.Type {
+	case "", defs.LogicalBackup:
+		if err := backup.CheckBackupFiles(ctx, m, s); err != nil {
+			return errors.Wrap(err, "check backup files")
+		}
+	case defs.PhysicalBackup:
+		for _, rs := range m.Replsets {
+			f := path.Join(m.Name, rs.Name)
+			files, err := s.List(f, "")
+			if err != nil {
+				return errors.Wrapf(err, "failed to list backup files at %s", f)
+			}
+			if len(files) == 0 {
+				return errors.Wrap(err, "no physical backup files")
+			}
+		}
+	}
+
+	return nil
 }
 
 func (b *pbmC) Conn() *mongo.Client {

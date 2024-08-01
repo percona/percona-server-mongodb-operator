@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package db
+package tool
 
 import (
 	"fmt"
@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/percona/percona-server-mongodb-operator/healthcheck/pkg"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
+
+	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 )
 
 var (
@@ -33,31 +33,16 @@ var (
 	DefaultMongoDBTimeoutDuration = time.Duration(5) * time.Second
 )
 
-type Config struct {
-	mongo.Config
-	SSL *SSLConfig
-}
-
-func getDefaultMongoDBAddress() string {
-	hostname := DefaultMongoDBHost
-
-	mongodbPort := os.Getenv(pkg.EnvMongoDBPort)
-	if mongodbPort != "" {
-		return hostname + ":" + mongodbPort
-	}
-	return hostname + ":" + DefaultMongoDBPort
-}
-
-func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*Config, error) {
-	conf := &Config{}
+func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*db.Config, error) {
+	conf := &db.Config{}
 	app.Flag(
 		"address",
 		"mongodb server address (hostname:port), defaults to '$TASK_NAME.$FRAMEWORK_HOST:$MONGODB_PORT' if the env vars are available and SSL is used, if not the default is '"+DefaultMongoDBHost+":"+DefaultMongoDBPort+"'",
 	).Default(getDefaultMongoDBAddress()).StringsVar(&conf.Hosts)
 	app.Flag(
 		"replset",
-		"mongodb replica set name, overridden by env var "+pkg.EnvMongoDBReplset,
-	).Envar(pkg.EnvMongoDBReplset).StringVar(&conf.ReplSetName)
+		"mongodb replica set name, overridden by env var "+EnvMongoDBReplset,
+	).Envar(EnvMongoDBReplset).StringVar(&conf.ReplSetName)
 
 	usernameFile := fmt.Sprintf("/etc/users-secret/%s", envUser)
 	if _, err := os.Stat(usernameFile); err == nil {
@@ -93,25 +78,35 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*C
 		return nil, errors.Wrap(err, "failed to get password")
 	}
 
-	ssl := &SSLConfig{}
+	ssl := &db.SSLConfig{}
 	app.Flag(
 		"ssl",
-		"enable SSL secured mongodb connection, overridden by env var "+pkg.EnvMongoDBNetSSLEnabled,
-	).Envar(pkg.EnvMongoDBNetSSLEnabled).BoolVar(&ssl.Enabled)
+		"enable SSL secured mongodb connection, overridden by env var "+EnvMongoDBNetSSLEnabled,
+	).Envar(EnvMongoDBNetSSLEnabled).BoolVar(&ssl.Enabled)
 	app.Flag(
 		"sslPEMKeyFile",
-		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLPEMKeyFile,
-	).Envar(pkg.EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
+		"path to client SSL Certificate file (including key, in PEM format), overridden by env var "+EnvMongoDBNetSSLPEMKeyFile,
+	).Envar(EnvMongoDBNetSSLPEMKeyFile).StringVar(&ssl.PEMKeyFile)
 	app.Flag(
 		"sslCAFile",
-		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+pkg.EnvMongoDBNetSSLCAFile,
-	).Envar(pkg.EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
+		"path to SSL Certificate Authority file (in PEM format), overridden by env var "+EnvMongoDBNetSSLCAFile,
+	).Envar(EnvMongoDBNetSSLCAFile).StringVar(&ssl.CAFile)
 	app.Flag(
 		"sslInsecure",
-		"skip validation of the SSL certificate and hostname, overridden by env var "+pkg.EnvMongoDBNetSSLInsecure,
-	).Envar(pkg.EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
+		"skip validation of the SSL certificate and hostname, overridden by env var "+EnvMongoDBNetSSLInsecure,
+	).Envar(EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
 	conf.SSL = ssl
 
 	return conf, nil
+}
+
+func getDefaultMongoDBAddress() string {
+	hostname := DefaultMongoDBHost
+
+	mongodbPort := os.Getenv(EnvMongoDBPort)
+	if mongodbPort != "" {
+		return hostname + ":" + mongodbPort
+	}
+	return hostname + ":" + DefaultMongoDBPort
 }

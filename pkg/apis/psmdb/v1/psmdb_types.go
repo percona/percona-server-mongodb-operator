@@ -1141,14 +1141,16 @@ func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 		return !cr.Spec.UnsafeConf
 	}
 
-	switch cr.Spec.TLS.Mode {
-	case TLSModeDisabled:
-		return false
-	case TLSModeAllow, TLSModePrefer, TLSModeRequire:
-		return true
-	default:
-		return true
+	if cr.Spec.TLS != nil {
+		switch cr.Spec.TLS.Mode {
+		case TLSModeDisabled:
+			return false
+		case TLSModeAllow, TLSModePrefer, TLSModeRequire:
+			return true
+		}
 	}
+
+	return true
 }
 
 func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
