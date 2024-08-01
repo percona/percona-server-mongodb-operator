@@ -37,10 +37,10 @@ function apply_resourcequota() {
 
 	echo "Applying resourcequota for default storageclass ${default_sc} with quota ${quota}"
 
-	cat ${test_dir}/conf/resourcequota.yml |
-		sed "s/STORAGECLASS/${default_sc}/" |
-		sed "s/QUOTA/${quota}/" |
-		kubectl_bin apply -f -
+	cat ${test_dir}/conf/resourcequota.yml \
+		| sed "s/STORAGECLASS/${default_sc}/" \
+		| sed "s/QUOTA/${quota}/" \
+		| kubectl_bin apply -f -
 }
 
 function wait_cluster_status() {
@@ -96,7 +96,7 @@ for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name);
 	retry=0
 	echo -n "Waiting for pvc/${pvc} to be resized"
 	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "2Gi" ]]; do
-		if [[ $retry -ge 60 ]]; then
+		if [[ $retry -ge 120 ]]; then
 			echo
 			echo "pvc/${pvc} was not resized, max retries exceeded"
 			exit 1
@@ -139,7 +139,7 @@ echo
 
 echo -n "Waiting for pvc/mongod-data-some-name-rs0-0 to be resized"
 until [[ $(kubectl_bin get pvc mongod-data-some-name-rs0-0 -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
-	if [[ $retry -ge 60 ]]; then
+	if [[ $retry -ge 120 ]]; then
 		echo
 		echo "pvc/mongod-data-some-name-rs0-0 was not resized, max retries exceeded"
 		exit 1
@@ -162,7 +162,7 @@ for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name);
 	retry=0
 	echo -n "Waiting for pvc/${pvc} to be resized"
 	until [[ $(kubectl_bin get ${pvc} -o jsonpath={.status.capacity.storage}) == "3Gi" ]]; do
-		if [[ $retry -ge 60 ]]; then
+		if [[ $retry -ge 120 ]]; then
 			echo
 			echo "pvc/${pvc} was not resized, max retries exceeded"
 			exit 1

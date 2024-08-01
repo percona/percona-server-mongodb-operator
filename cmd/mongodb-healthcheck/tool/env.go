@@ -12,9 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package k8s
+package tool
 
 const (
-	DefaultNamespace = "psmdb"
-	DefaultInitDelay = "0s"
+	EnvMongoDBPort    = "MONGODB_PORT"
+	EnvMongoDBReplset = "MONGODB_REPLSET"
+
+	// clusterMonitor user
+	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
+	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
+
+	// mongodb ssl
+	EnvMongoDBNetSSLEnabled    = "MONGODB_NET_SSL_ENABLED"
+	EnvMongoDBNetSSLInsecure   = "MONGODB_NET_SSL_INSECURE"
+	EnvMongoDBNetSSLPEMKeyFile = "MONGODB_NET_SSL_PEM_KEY_FILE"
+	EnvMongoDBNetSSLCAFile     = "MONGODB_NET_SSL_CA_FILE"
 )

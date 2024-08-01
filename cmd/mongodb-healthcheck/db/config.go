@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package k8s
+package db
 
-const (
-	EnvNamespace = "NAMESPACE"
+import (
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
+
+type Config struct {
+	mongo.Config
+	SSL *SSLConfig
+}
