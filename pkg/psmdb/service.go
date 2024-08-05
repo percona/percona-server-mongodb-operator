@@ -58,7 +58,12 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			}
 		}
 	}
-
+	if cr.CompareVersion("1.16.0") >= 0 {
+		appProtocol := "mongo"
+		for _, v := range svc.Spec.Ports {
+			v.AppProtocol = &appProtocol
+		}
+	}
 	return svc
 }
 
@@ -107,7 +112,12 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-
+	if cr.CompareVersion("1.16.0") >= 0 {
+		appProtocol := "mongo"
+		for _, v := range svc.Spec.Ports {
+			v.AppProtocol = &appProtocol
+		}
+	}
 	return svc
 }
 
