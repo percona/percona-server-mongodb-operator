@@ -12,7 +12,7 @@ spec:
 #  pause: true
 #  unmanaged: false
   crVersion: 1.17.0
-  image: perconalab/percona-server-mongodb:7.0.12-7
+  image: percona/percona-server-mongodb:7.0.12-7
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -54,7 +54,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:2.42.0
+    image: percona/pmm-client:2.42.0
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    mongodParams: --environment=ENVIRONMENT
@@ -553,7 +553,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-backup-mongodb:2.5.0
+    image: percona/percona-backup-mongodb:2.5.0
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
