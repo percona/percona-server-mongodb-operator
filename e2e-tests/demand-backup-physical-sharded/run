@@ -80,7 +80,7 @@ wait_cluster_consistency ${cluster}
 kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}'
 
 lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' |
-	jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0].ip')
+	jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0] | if .ip then .ip else .hostname end')
 if [ -z $lbEndpoint ]; then
 	echo "mongos service not exported correctly"
 	exit 1
