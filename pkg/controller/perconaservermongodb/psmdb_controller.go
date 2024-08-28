@@ -279,6 +279,15 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
+		// If the user created a cluster with finalizers and wrong options, it would be impossible to delete a cluster.
+		// We need to run checkFinalizers to delete finalizers
+		if cr.DeletionTimestamp != nil {
+			_, err := r.checkFinalizers(ctx, cr)
+			if err != nil {
+				log.Error(err, "failed to check finalizers")
+			}
+		}
+
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
