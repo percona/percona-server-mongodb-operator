@@ -789,6 +789,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, c
 			return false, errors.Wrap(err, "key generation")
 		}
 
+		key.Labels = naming.ClusterLabels(cr)
+
 		err = r.client.Create(ctx, key)
 		if err != nil {
 			return false, errors.Wrap(err, "create key")
