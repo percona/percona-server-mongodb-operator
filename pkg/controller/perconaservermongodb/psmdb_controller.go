@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -280,11 +281,24 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
 		// If the user created a cluster with finalizers and wrong options, it would be impossible to delete a cluster.
-		// We need to run checkFinalizers to delete finalizers
+		// We need to delete finalizers.
+		//
+		// TODO: Separate CheckNSetDefaults into two different methods "Check" and "SetDefaults".
+		//       Use "SetDefaults" and try to run "checkFinalizers" instead of just deleting finalizers.
+		//       Currently we can't run the "checkFinalizers" method because we will get nil pointer reference panics,
+		//       due to defaults not being set.
 		if cr.DeletionTimestamp != nil {
-			_, err := r.checkFinalizers(ctx, cr)
-			if err != nil {
-				log.Error(err, "failed to check finalizers")
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				c := &api.PerconaServerMongoDB{}
+
+				if err := r.client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+					return err
+				}
+
+				c.SetFinalizers([]string{})
+				return r.client.Update(ctx, c)
+			}); err != nil {
+				log.Error(err, "failed to remove finalizers")
 			}
 		}
 
