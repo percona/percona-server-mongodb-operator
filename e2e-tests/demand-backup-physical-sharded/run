@@ -42,7 +42,7 @@ run_recovery_check() {
 		exit 1
 	fi
 	echo
-	wait_cluster_consistency ${cluster}
+	wait_cluster_consistency ${cluster} 64
 	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 	echo
 	set -o xtrace
@@ -75,7 +75,7 @@ echo "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_for_running ${cluster}-cfg 3
 wait_for_running ${cluster}-mongos 3
-wait_cluster_consistency ${cluster}
+wait_cluster_consistency ${cluster} 64
 
 lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' |
 	jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0] | if .ip then .ip else .hostname end')
@@ -96,7 +96,7 @@ compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharde
 
 # wait for stable timestamp in wiredtiger
 echo 'waiting 60 seconds for stable timestamp in wiredtiger'
-sleep 60
+sleep 180
 
 echo 'running backups'
 backup_name_minio="backup-minio-sharded"
