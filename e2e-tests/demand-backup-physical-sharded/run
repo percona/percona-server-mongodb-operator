@@ -42,7 +42,7 @@ run_recovery_check() {
 		exit 1
 	fi
 	echo
-	wait_cluster_consistency ${cluster}
+	wait_cluster_consistency ${cluster} 42
 	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 	echo
 	set -o xtrace
@@ -96,7 +96,7 @@ compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharde
 
 # wait for stable timestamp in wiredtiger
 echo 'waiting 60 seconds for stable timestamp in wiredtiger'
-sleep 60
+sleep 80
 
 echo 'running backups'
 backup_name_minio="backup-minio-sharded"
