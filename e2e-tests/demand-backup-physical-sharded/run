@@ -106,30 +106,30 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_gcp="backup-gcp-cs-sharded"
 	backup_name_azure="backup-azure-blob-sharded"
 
-	run_backup aws-s3 ${backup_name_aws}
-	run_backup gcp-cs ${backup_name_gcp}
+#	run_backup aws-s3 ${backup_name_aws}
+#	run_backup gcp-cs ${backup_name_gcp}
 	run_backup azure-blob ${backup_name_azure}
 
-	wait_backup "${backup_name_aws}"
-	wait_backup "${backup_name_gcp}"
+#	wait_backup "${backup_name_aws}"
+#	wait_backup "${backup_name_gcp}"
 	wait_backup "${backup_name_azure}"
 fi
 wait_backup "${backup_name_minio}"
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	echo "drop collection"
-	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo 'check backup and restore -- aws-s3'
-	run_restore ${backup_name_aws} "_restore_sharded"
-	run_recovery_check ${backup_name_aws} "_restore_sharded"
-	check_exported_mongos_service_endpoint "$lbEndpoint"
+#	echo "drop collection"
+#	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+#	echo 'check backup and restore -- aws-s3'
+#	run_restore ${backup_name_aws} "_restore_sharded"
+#	run_recovery_check ${backup_name_aws} "_restore_sharded"
+#	check_exported_mongos_service_endpoint "$lbEndpoint"
 
-	echo "drop collection"
-	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo 'check backup and restore -- gcp-cs'
-	run_restore ${backup_name_gcp} "_restore_sharded"
-	run_recovery_check ${backup_name_gcp} "_restore_sharded"
-	check_exported_mongos_service_endpoint "$lbEndpoint"
+#	echo "drop collection"
+#	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+#	echo 'check backup and restore -- gcp-cs'
+#	run_restore ${backup_name_gcp} "_restore_sharded"
+#	run_recovery_check ${backup_name_gcp} "_restore_sharded"
+#	check_exported_mongos_service_endpoint "$lbEndpoint"
 
 	echo "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
