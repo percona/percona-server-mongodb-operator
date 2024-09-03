@@ -25,9 +25,7 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	mongosPods []corev1.Pod,
-) (api.AppState, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.Size
@@ -87,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	cli, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
+	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
@@ -236,6 +234,109 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	return api.AppStateInit, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, id int, pod *corev1.Pod) (mongo.ConfigMember, error) {
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, *pod)
+	if err != nil {
+		return mongo.ConfigMember{}, errors.Wrapf(err, "get host for pod %s", pod.Name)
+	}
+
+	member := mongo.ConfigMember{
+		ID:           id,
+		Host:         host,
+		BuildIndexes: true,
+		Priority:     mongo.DefaultPriority,
+		Votes:        mongo.DefaultVotes,
+	}
+
+	overrides := rs.ReplsetOverrides[pod.Name]
+
+	horizons := make(map[string]string)
+	for h, domain := range rs.Horizons[pod.Name] {
+		d := domain
+		if !strings.Contains(d, ":") {
+			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+		}
+		horizons[h] = d
+	}
+	for h, domain := range overrides.Horizons {
+		d := domain
+		if !strings.Contains(d, ":") {
+			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+		}
+		horizons[h] = d
+	}
+	if len(horizons) > 0 {
+		member.Horizons = horizons
+	}
+
+	tags := util.MapMerge(mongo.ReplsetTags{
+		"nodeName":    pod.Spec.NodeName,
+		"podName":     pod.Name,
+		"serviceName": cr.Name,
+	}, overrides.Tags)
+
+	labels, err := psmdb.GetNodeLabels(ctx, r.client, cr, *pod)
+	if err == nil {
+		tags = util.MapMerge(tags, mongo.ReplsetTags{
+			"region": labels[corev1.LabelTopologyRegion],
+			"zone":   labels[corev1.LabelTopologyZone],
+		})
+	}
+
+	member.Tags = tags
+
+	switch pod.Labels[naming.LabelKubernetesComponent] {
+	case "arbiter":
+		member.Tags = util.MapMerge(mongo.ReplsetTags{
+			"arbiter": "true",
+		}, member.Tags)
+		member.ArbiterOnly = true
+		member.Priority = 0
+	case "nonVoting":
+		member.Tags = util.MapMerge(mongo.ReplsetTags{
+			"nonVoting": "true",
+		}, member.Tags)
+		member.Priority = 0
+		member.Votes = 0
+	}
+
+	return member, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, extNode api.ExternalNode) mongo.ConfigMember {
+	member := mongo.ConfigMember{
+		ID:           id,
+		Votes:        extNode.Votes,
+		Priority:     extNode.Priority,
+		BuildIndexes: true,
+		Tags:         mongo.ReplsetTags{"external": "true"},
+	}
+
+	if strings.Contains(extNode.Host, ":") {
+		member.Host = extNode.Host
+	} else {
+		member.Host = extNode.HostPort()
+	}
+
+	for k, v := range extNode.Tags {
+		member.Tags[k] = v
+	}
+
+	horizons := make(map[string]string)
+	for h, domain := range extNode.Horizons {
+		d := domain
+		if !strings.Contains(d, ":") {
+			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+		}
+		horizons[h] = d
+	}
+	if len(horizons) > 0 {
+		member.Horizons = horizons
+	}
+
+	return member
+}
+
 func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
@@ -264,58 +365,9 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			break
 		}
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
+		member, err := r.getConfigMemberForPod(ctx, cr, rs, key, &pod)
 		if err != nil {
-			return 0, fmt.Errorf("get host for pod %s: %v", pod.Name, err)
-		}
-
-		nodeLabels := mongo.ReplsetTags{
-			"nodeName":    pod.Spec.NodeName,
-			"podName":     pod.Name,
-			"serviceName": cr.Name,
-		}
-
-		labels, err := psmdb.GetNodeLabels(ctx, r.client, cr, pod)
-		if err == nil {
-			nodeLabels = util.MapMerge(nodeLabels, mongo.ReplsetTags{
-				"region": labels[corev1.LabelTopologyRegion],
-				"zone":   labels[corev1.LabelTopologyZone],
-			})
-		}
-
-		member := mongo.ConfigMember{
-			ID:           key,
-			Host:         host,
-			BuildIndexes: true,
-			Priority:     mongo.DefaultPriority,
-			Votes:        mongo.DefaultVotes,
-		}
-
-		if len(rs.Horizons) > 0 {
-			horizons := make(map[string]string)
-			for h, domain := range rs.Horizons[pod.Name] {
-				d := domain
-				if !strings.Contains(d, ":") {
-					d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
-				}
-				horizons[h] = d
-			}
-
-			member.Horizons = horizons
-		}
-
-		switch pod.Labels[naming.LabelKubernetesComponent] {
-		case "arbiter":
-			member.ArbiterOnly = true
-			member.Priority = 0
-		case "mongod", "cfg":
-			member.Tags = nodeLabels
-		case "nonVoting":
-			member.Tags = util.MapMerge(mongo.ReplsetTags{
-				"nonVoting": "true",
-			}, nodeLabels)
-			member.Priority = 0
-			member.Votes = 0
+			return 0, errors.Wrapf(err, "get config member for pod %s", pod.Name)
 		}
 
 		members = append(members, member)
@@ -328,52 +380,31 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
-		if i+memberC >= mongo.MaxMembers {
+		if memberC+i+1 >= mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
 
-		member := mongo.ConfigMember{
-			ID:           i + memberC,
-			Host:         extNode.HostPort(),
-			Votes:        extNode.Votes,
-			Priority:     extNode.Priority,
-			BuildIndexes: true,
-			Tags:         mongo.ReplsetTags{"external": "true"},
-		}
-
-		members = append(members, member)
+		members = append(members, r.getConfigMemberForExternalNode(memberC+i, *extNode))
 	}
 
-	if cnf.Members.FixTags(members) {
+	if cnf.Members.FixMemberConfigs(ctx, members) {
 		cnf.Version++
 
-		log.Info("Fixing member tags", "replset", rs.Name)
+		log.Info("Fixing member configurations", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf); err != nil {
-			return 0, errors.Wrap(err, "fix tags: write mongo config")
-		}
-	}
-
-	if cnf.Members.FixHosts(members) {
-		cnf.Version++
-
-		log.Info("Fixing member hosts", "replset", rs.Name)
-
-		err = cli.WriteConfig(ctx, cnf)
-		if err != nil {
-			return 0, errors.Wrap(err, "fix hosts: write mongo config")
+			return 0, errors.Wrap(err, "fix member configurations: write mongo config")
 		}
 	}
 
 	if cnf.Members.HorizonsChanged(members) {
 		cnf.Version++
 
-		log.Info("Updating horizons", "replset", rs.Name)
+		log.Info("Updating split horizons", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf)
-		if err != nil {
-			return 0, errors.Wrap(err, "update horizons: write mongo config")
+		if err := cli.WriteConfig(ctx, cnf); err != nil {
+			return 0, errors.Wrap(err, "update split horizons: write mongo config")
 		}
 	}
 
@@ -532,7 +563,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, rspod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
@@ -583,7 +614,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset.Name, replset.Expose.Enabled, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, pod)
 		if err != nil {
 			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
 		}
@@ -758,7 +789,7 @@ func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	log := logf.FromContext(ctx)
 
-	cli, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleUserAdmin)
+	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}

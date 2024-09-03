@@ -650,19 +650,31 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
 	return false
 }
 
-func (m *ConfigMembers) FixHosts(compareWith ConfigMembers) (changes bool) {
+func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith ConfigMembers) (changes bool) {
+	log := logf.FromContext(ctx)
+
 	if len(*m) < 1 {
 		return changes
 	}
 
-	cm := make(map[string]string, len(compareWith))
+	type configMember struct {
+		Host     string            `bson:"host" json:"host"`
+		Tags     ReplsetTags       `bson:"tags,omitempty" json:"tags,omitempty"`
+		Horizons map[string]string `bson:"horizons,omitempty" json:"horizons,omitempty"`
+	}
+
+	cm := make(map[string]configMember, len(compareWith))
 
 	for _, member := range compareWith {
 		name, ok := member.Tags["podName"]
 		if !ok {
 			continue
 		}
-		cm[name] = member.Host
+		cm[name] = configMember{
+			Host:     member.Host,
+			Tags:     member.Tags,
+			Horizons: member.Horizons,
+		}
 	}
 
 	for i := 0; i < len(*m); i++ {
@@ -671,37 +683,16 @@ func (m *ConfigMembers) FixHosts(compareWith ConfigMembers) (changes bool) {
 		if !ok {
 			continue
 		}
-		if host, ok := cm[podName]; ok && host != member.Host {
+		c, ok := cm[podName]
+		if c.Host != member.Host {
 			changes = true
-			[]ConfigMember(*m)[i].Host = host
+			[]ConfigMember(*m)[i].Host = c.Host
+			log.Info("Host changed", "pod", podName)
 		}
-	}
-
-	return changes
-}
-
-// FixTags corrects the tags of any member if they changed.
-// Especially the "external" tag can change if cluster is switched from
-// unmanaged to managed.
-func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
-	if len(*m) < 1 {
-		return changes
-	}
-
-	cm := make(map[string]ReplsetTags, len(compareWith))
-
-	for _, member := range compareWith {
-		if member.ArbiterOnly {
-			continue
-		}
-		cm[member.Host] = member.Tags
-	}
-
-	for i := 0; i < len(*m); i++ {
-		member := []ConfigMember(*m)[i]
-		if c, ok := cm[member.Host]; ok && !reflect.DeepEqual(member.Tags, c) {
+		if !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
-			[]ConfigMember(*m)[i].Tags = c
+			[]ConfigMember(*m)[i].Tags = c.Tags
+			log.Info("Tags changed", "pod", podName)
 		}
 	}
 
@@ -737,6 +728,7 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 	cm := make(map[string]struct {
 		votes    int
 		priority int
+		tags     map[string]string
 	}, len(compareWith))
 
 	for _, member := range compareWith {
@@ -747,15 +739,24 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 		cm[member.Host] = struct {
 			votes    int
 			priority int
-		}{votes: member.Votes, priority: member.Priority}
+			tags     map[string]string
+		}{
+			votes:    member.Votes,
+			priority: member.Priority,
+			tags:     member.Tags,
+		}
 	}
 
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
-			if ext.votes != member.Votes || ext.priority != member.Priority {
+			if ext.votes != member.Votes ||
+				ext.priority != member.Priority ||
+				!reflect.DeepEqual(ext.tags, member.Tags) {
+
 				[]ConfigMember(*m)[i].Votes = ext.votes
 				[]ConfigMember(*m)[i].Priority = ext.priority
+				[]ConfigMember(*m)[i].Tags = ext.tags
 
 				return true
 			}

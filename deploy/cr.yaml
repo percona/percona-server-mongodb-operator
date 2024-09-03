@@ -63,6 +63,25 @@ spec:
   replsets:
   - name: rs0
     size: 3
+    replsetOverrides:
+      cluster1-rs0-0:
+        host: rs0-0.egetest.net
+        horizons:
+          external: rs0-0.egetest.com
+        tags:
+          test-key: test-value-0
+      cluster1-rs0-1:
+        host: rs0-1.egetest.net
+        horizons:
+          external: rs0-1.egetest.com
+        tags:
+          test-key: test-value-1
+      cluster1-rs0-2:
+        host: rs0-2.egetest.net
+        horizons:
+          external: rs0-2.egetest.com
+        tags:
+          test-key: test-value-2
 #    terminationGracePeriodSeconds: 300
 #    serviceAccountName: default
 #    topologySpreadConstraints:
