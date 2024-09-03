@@ -752,9 +752,23 @@ run_script_mongos() {
 		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
+get_pmm_service_ip() {
+	local service=$1
+
+	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
+		sleep 1
+	done
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+		sleep 1
+	done
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
+}
+
 get_service_ip() {
 	local service=$1
 	local server_type=${2:-rs0}
+
 	if [ "$(kubectl_bin get psmdb/${service/-$server_type*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
 		echo -n $service.${service/-rs0*/}-rs0
 		return
@@ -1053,7 +1067,7 @@ EOF
 	retry=0
 
 	until [[ "$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-		| jq '.rows[].fingerprint')" != "null" ]]; do
+		| jq '.rows[].sparkline')" != "null" ]]; do
 		let retry+=1
 		if [ $retry -ge 10 ]; then
 			echo max retry count $retry reached. "No data for $service_type service type in QAN"
