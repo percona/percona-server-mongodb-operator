@@ -35,7 +35,9 @@ check_cr_config() {
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$URI" \
 		"mongodb" ":27017"
-	sleep 10
+	sleep 30
+    kubectl get service
+    kubectl get pods
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-0)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
