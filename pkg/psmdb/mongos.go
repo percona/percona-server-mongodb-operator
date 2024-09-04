@@ -122,7 +122,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			MountPath: MongodContainerDataDir,
 		},
 		{
-			Name:      InternalKey(cr),
+			Name:      cr.Spec.Secrets.InternalKey,
 			MountPath: mongodSecretsDir,
 			ReadOnly:  true,
 		},
@@ -301,11 +301,11 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 
 	volumes := []corev1.Volume{
 		{
-			Name: InternalKey(cr),
+			Name: cr.Spec.Secrets.InternalKey,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &secretFileMode,
-					SecretName:  InternalKey(cr),
+					SecretName:  cr.Spec.Secrets.InternalKey,
 					Optional:    &fvar,
 				},
 			},

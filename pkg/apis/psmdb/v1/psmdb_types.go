@@ -685,6 +685,7 @@ type SecretsSpec struct {
 	Users         string `json:"users,omitempty"`
 	SSL           string `json:"ssl,omitempty"`
 	SSLInternal   string `json:"sslInternal,omitempty"`
+	InternalKey   string `json:"keyFile,omitempty"`
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`

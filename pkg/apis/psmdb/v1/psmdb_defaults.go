@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
@@ -25,6 +26,7 @@ const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
 
 const (
 	MongodRESTencryptDir = "/etc/mongodb-encryption"
+	InternalKeyName      = "mongodb-key"
 	EncryptionKeyName    = "encryption-key"
 )
 
@@ -70,6 +72,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	}
 	if cr.Spec.Secrets.Users == "" {
 		cr.Spec.Secrets.Users = defaultUsersSecretName
+	}
+
+	if cr.Spec.Secrets.InternalKey == "" {
+		cr.Spec.Secrets.InternalKey = cr.Name + "-mongodb-keyfile"
 	}
 
 	if cr.Spec.Secrets.EncryptionKey == "" {
@@ -889,7 +895,6 @@ const AffinityOff = "none"
 // - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
 func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
-
 	if cr.CompareVersion("1.16.0") < 0 {
 		affinityValidTopologyKeys = map[string]struct{}{
 			AffinityOff:                                {},

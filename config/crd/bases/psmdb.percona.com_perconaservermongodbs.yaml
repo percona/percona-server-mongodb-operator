@@ -8187,6 +8187,8 @@ spec:
                 properties:
                   encryptionKey:
                     type: string
+                  keyFile:
+                    type: string
                   ldapSecret:
                     type: string
                   sse:

@@ -82,11 +82,11 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumes := []corev1.Volume{
 		{
-			Name: InternalKey(cr),
+			Name: cr.Spec.Secrets.InternalKey,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &secretFileMode,
-					SecretName:  InternalKey(cr),
+					SecretName:  cr.Spec.Secrets.InternalKey,
 					Optional:    &fvar,
 				},
 			},
@@ -143,7 +143,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	c, err := container(ctx, cr, replset, containerName, resources, InternalKey(cr), customConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.InternalKey, customConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
