@@ -70,7 +70,7 @@ function main() {
 		| kubectl_bin apply -f -
 
 	desc 'check if all 3 Pods started'
-	wait_cluster_consistency $cluster 42
+	wait_cluster_consistency $cluster 70
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
