@@ -290,12 +290,31 @@ func (in *Expose) DeepCopyInto(out *Expose) {
 			(*out)[key] = val
 		}
 	}
+	if in.DeprecatedServiceAnnotations != nil {
+		in, out := &in.DeprecatedServiceAnnotations, &out.DeprecatedServiceAnnotations
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.ServiceLabels != nil {
 		in, out := &in.ServiceLabels, &out.ServiceLabels
 		*out = make(map[string]string, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.DeprecatedServiceLabels != nil {
+		in, out := &in.DeprecatedServiceLabels, &out.DeprecatedServiceLabels
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
+	if in.InternalTrafficPolicy != nil {
+		in, out := &in.InternalTrafficPolicy, &out.InternalTrafficPolicy
+		*out = new(corev1.ServiceInternalTrafficPolicy)
+		**out = **in
 	}
 }
 

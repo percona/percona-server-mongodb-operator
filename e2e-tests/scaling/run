@@ -70,7 +70,7 @@ desc 'check scaling on exposed cluster'
 cat_config "$conf_dir/$cluster.yml" |
 	yq eval '.spec.unsafeFlags.replsetSize=true' |
 	yq eval '.spec.replsets[0].expose.enabled=true' |
-	yq eval '.spec.replsets[0].expose.exposeType="ClusterIP"' |
+	yq eval '.spec.replsets[0].expose.type="ClusterIP"' |
 	kubectl_bin apply -f -
 wait_for_running $cluster 3
 
