@@ -112,6 +112,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			})
 		}
 
+		fmt.Printf("AAAAAAAAAA roles: %v\n", roles)
+		fmt.Printf("AAAAAAAAAA userInfo.rolas: %v\n", userInfo.Roles)
+
 		if userInfo != nil && !reflect.DeepEqual(userInfo.Roles, roles) {
 			log.Info("User roles changed, updating them.", "user", user.Name)
 			err := cli.UpdateUserRoles(ctx, user.Db, user.Name, roles)
