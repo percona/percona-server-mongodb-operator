@@ -76,7 +76,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		hash, ok := sec.Annotations[annotationKey]
 		if ok && hash == newHash {
-			continue
+			println("AAAAAAHAAAAAAAAAAAAAAA ")
+			// continue
 		}
 
 		if sec.Annotations == nil {
