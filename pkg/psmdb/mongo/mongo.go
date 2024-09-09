@@ -39,7 +39,7 @@ type Client interface {
 	GetRole(ctx context.Context, role string) (*Role, error)
 	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
-	WriteConfig(ctx context.Context, cfg RSConfig) error
+	WriteConfig(ctx context.Context, cfg RSConfig, force bool) error
 	RSStatus(ctx context.Context) (Status, error)
 	StartBalancer(ctx context.Context) error
 	StopBalancer(ctx context.Context) error
@@ -297,13 +297,16 @@ func (client *mongoClient) AddShard(ctx context.Context, rsName, host string) er
 	return nil
 }
 
-func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig) error {
+func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig, force bool) error {
 	log := logf.FromContext(ctx)
 	resp := OKResponse{}
 
 	log.V(1).Info("Running replSetReconfig config", "cfg", cfg)
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}})
+	res := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "replSetReconfig", Value: cfg},
+		{Key: "force", Value: force},
+	})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
 	}

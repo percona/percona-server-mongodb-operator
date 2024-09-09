@@ -302,7 +302,7 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod, false)
 	if err != nil {
 		return errors.Wrap(err, "failed to create standalone client")
 	}
@@ -321,7 +321,7 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api
 func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod, false)
 	if err != nil {
 		return errors.Wrap(err, "failed to create standalone client")
 	}
@@ -340,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.P
 func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod, false)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create standalone client")
 	}

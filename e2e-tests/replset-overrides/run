@@ -22,7 +22,6 @@ run_recovery_check() {
 	wait_restore "${backup}" "${cluster}"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@${host}"
 
-	kubectl_bin delete -f "${test_dir}/conf/${backup}.yml"
 	wait_cluster_consistency "${cluster}"
 }
 
@@ -43,8 +42,8 @@ test_override_after_deploy() {
 		"databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
 
-	run_backup "minio" "backup-minio" 
-	wait_backup "backup-minio"
+	run_backup "minio" "backup-minio-logical"
+	wait_backup "backup-minio-logical"
 
 	echo "creating external services"
 	kubectl_bin apply -f ${test_dir}/conf/external-services.yml
@@ -57,7 +56,7 @@ test_override_after_deploy() {
 	echo "checking if we can read existing data"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 
-	run_recovery_check "${cluster}" "backup-minio" "external-rs0-0.${namespace}"
+	run_recovery_check "${cluster}" "backup-minio-logical" "external-rs0-0.${namespace}"
 
 	echo "deleting cluster"
 	kubectl_bin delete psmdb ${cluster}
@@ -84,9 +83,9 @@ test_deploy_with_overrides() {
 		"databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 
-	run_backup "minio" "backup-minio" "physical"
-	wait_backup "backup-minio"
-	run_recovery_check "${cluster}" "backup-minio" "external-rs0-0.${namespace}"
+	run_backup "minio" "backup-minio-physical" "physical"
+	wait_backup "backup-minio-physical"
+	run_recovery_check "${cluster}" "backup-minio-physical" "external-rs0-0.${namespace}"
 
 	echo "deleting cluster"
 	kubectl_bin delete psmdb ${cluster}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -88,6 +89,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
+		if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
+			log.Error(err, "FULL CLUSTER CRASH")
+
+			err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)
+			if err != nil {
+				return api.AppStateError, errors.Wrap(err, "handle ReplicaSetNoPrimary")
+			}
+
+			return api.AppStateError, nil
+		}
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
@@ -394,7 +405,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Fixing member configurations", "replset", rs.Name)
 
-		if err := cli.WriteConfig(ctx, cnf); err != nil {
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return 0, errors.Wrap(err, "fix member configurations: write mongo config")
 		}
 	}
@@ -404,7 +415,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating split horizons", "replset", rs.Name)
 
-		if err := cli.WriteConfig(ctx, cnf); err != nil {
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return 0, errors.Wrap(err, "update split horizons: write mongo config")
 		}
 	}
@@ -414,7 +425,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Removing old nodes", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf)
+		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "delete: write mongo config")
 		}
@@ -425,7 +436,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf)
+		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "add new: write mongo config")
 		}
@@ -436,7 +447,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Updating external nodes", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf)
+		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "update external nodes: write mongo config")
 		}
@@ -449,7 +460,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
-		err := cli.WriteConfig(ctx, cnf)
+		err := cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
 			return 0, errors.Wrap(err, "set votes: write mongo config")
 		}
@@ -683,6 +694,35 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 		log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+
+		return nil
+	}
+
+	return errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
+
+	for _, pod := range pods {
+		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
+			continue
+		}
+
+		log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
+		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod, true)
+		if err != nil {
+			return errors.Wrap(err, "get standalone mongo client")
+		}
+
+		cfg, err := cli.ReadConfig(ctx)
+		if err != nil {
+			return errors.Wrap(err, "read replset config")
+		}
+
+		if err := cli.WriteConfig(ctx, cfg, true); err != nil {
+			return errors.Wrap(err, "reconfigure replset")
+		}
 
 		return nil
 	}
