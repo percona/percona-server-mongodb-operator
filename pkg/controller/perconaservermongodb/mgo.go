@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -614,9 +615,14 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
-		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, pod)
+		member, err := r.getConfigMemberForPod(ctx, cr, replset, 0, &pod)
 		if err != nil {
-			return fmt.Errorf("get host for the pod %s: %v", pod.Name, err)
+			return errors.Wrapf(err, "get config member for pod %s", pod.Name)
+		}
+
+		memberBytes, err := json.Marshal(member)
+		if err != nil {
+			return errors.Wrap(err, "marshall member to json")
 		}
 
 		var errb, outb bytes.Buffer
@@ -645,12 +651,12 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 						_id: '%s',
 						version: 1,
 						members: [
-							{ _id: 0, host: "%s" },
+							%s,
 						]
 					}
 				)
 				EOF
-			`, mongoCmd, replsetName, host),
+			`, mongoCmd, replsetName, memberBytes),
 		}
 
 		errb.Reset()
@@ -660,8 +666,10 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
+		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
 		time.Sleep(time.Second * 5)
 
+		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
 		if err != nil {
 			return errors.Wrap(err, "failed to get userAdmin credentials")
@@ -674,8 +682,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		if err != nil {
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
-
-		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
+		log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 
 		return nil
 	}

@@ -259,7 +259,11 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, replset *api.ReplsetSpec, rsExposed bool, pod corev1.Pod) (string, error) {
 	overrides := replset.ReplsetOverrides[pod.Name]
 	if len(overrides.Host) > 0 {
-		return overrides.Host, nil
+		if strings.Contains(overrides.Host, ":") {
+			return overrides.Host, nil
+		}
+
+		return fmt.Sprintf("%s:%d", overrides.Host, api.DefaultMongodPort), nil
 	}
 
 	switch dnsMode {

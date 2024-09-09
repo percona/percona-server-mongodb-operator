@@ -687,12 +687,12 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 		if c.Host != member.Host {
 			changes = true
 			[]ConfigMember(*m)[i].Host = c.Host
-			log.Info("Host changed", "pod", podName)
+			log.Info("Host changed", "pod", podName, "old", member.Host, "new", c.Host)
 		}
 		if !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
-			log.Info("Tags changed", "pod", podName)
+			log.Info("Tags changed", "pod", podName, "old", member.Tags, "new", c.Tags)
 		}
 	}
 
