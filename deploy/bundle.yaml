@@ -19357,7 +19357,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:K8SPSMDB-1146-user-mgmt-improvements-2
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
