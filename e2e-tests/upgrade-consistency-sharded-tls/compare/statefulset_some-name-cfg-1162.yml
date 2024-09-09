@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 5
   labels:
     app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
@@ -62,11 +62,13 @@ spec:
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
+            - --tlsMode=preferTLS
             - --configsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
@@ -127,6 +129,7 @@ spec:
               memory: 500M
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -171,7 +174,8 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
