@@ -21,6 +21,12 @@ kubectl_bin apply \
 apply_cluster "$test_dir/conf/main.yml"
 wait_for_running "$cluster-rs0" 1
 
+secrets_count=$(kubectl_bin get secret -o yaml | yq '.items | length')
+if [[ $secrets_count != 6 ]]; then
+	echo "It's expected to have 6 secrets. Currently have $secrets_count"
+	exit 1
+fi
+
 desc "Start External Cluster in unmanaged mode"
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$replica_namespace"
 create_namespace $replica_namespace 0
@@ -33,6 +39,12 @@ apply_cluster "$test_dir/conf/external.yml"
 
 wait_pod ${cluster}-rs0-0
 wait_pod ${cluster}-rs0-1
+
+secrets_count=$(kubectl_bin get secret -o yaml | yq '.items | length')
+if [[ $secrets_count != 6 ]]; then
+	echo "It's expected to have 6 secrets. Currently have $secrets_count"
+	exit 1
+fi
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
