@@ -71,13 +71,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		userInfo, err := cli.GetUserInfo(ctx, user.Name, user.Db)
+		userInfo, err := cli.GetUserInfo(ctx, user.Name, user.DB)
 		if err != nil {
 			log.Error(err, "get user info")
 			continue
 		}
-
-		log.Info("AAAAAAAAA User info", "user", user.Name, "info", userInfo)
 
 		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec)
 		if err != nil {
@@ -138,9 +136,9 @@ func updatePass(
 		secret.Annotations = make(map[string]string)
 	}
 
-	log.Info("User password changed, updating it.", "user", user.Name)
+	log.Info("User password changed, updating it.", "user", user.UserID())
 
-	err := mongoCli.UpdateUserPass(ctx, user.Db, user.Name, string(secret.Data[user.PasswordSecretRef.Key]))
+	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]))
 	if err != nil {
 		return err
 	}
@@ -150,7 +148,7 @@ func updatePass(
 		return err
 	}
 
-	log.Info("User updated", "user", user.Name)
+	log.Info("User updated", "user", user.UserID())
 
 	return nil
 }
@@ -178,8 +176,8 @@ func updateRoles(
 		return nil
 	}
 
-	log.Info("User roles changed, updating them.", "user", user.Name)
-	err := mongoCli.UpdateUserRoles(ctx, user.Db, user.Name, roles)
+	log.Info("User roles changed, updating them.", "user", user.UserID())
+	err := mongoCli.UpdateUserRoles(ctx, user.DB, user.Name, roles)
 	if err != nil {
 		return err
 	}
@@ -210,8 +208,8 @@ func createUser(
 		})
 	}
 
-	log.Info("Creating user", "user", user.Name)
-	err := mongoCli.CreateUser(ctx, user.Db, user.Name, string(secret.Data[user.PasswordSecretRef.Key]), roles...)
+	log.Info("Creating user", "user", user.UserID())
+	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]), roles...)
 	if err != nil {
 		return err
 	}
@@ -221,6 +219,6 @@ func createUser(
 		return err
 	}
 
-	log.Info("User created", "user", user.Name)
+	log.Info("User created", "user", user.UserID())
 	return nil
 }

@@ -97,9 +97,13 @@ type PerconaServerMongoDBSpec struct {
 
 type User struct {
 	Name              string                   `json:"name"`
-	Db                string                   `json:"db"`
+	DB                string                   `json:"db"`
 	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
 	Roles             []Role                   `json:"roles"`
+}
+
+func (u *User) UserID() string {
+	return u.DB + "." + u.Name
 }
 
 type Role struct {
