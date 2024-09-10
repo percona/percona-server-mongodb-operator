@@ -408,6 +408,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	if member, changed := cnf.Members.FixMemberHostnames(ctx, members, rsStatus); changed {
 		if member.State == mongo.MemberStatePrimary {
+			log.Info("Stepping down the primary", "member", member.Name)
 			if err := cli.StepDown(ctx, 60, false); err != nil {
 				return 0, errors.Wrap(err, "step down primary")
 			}
@@ -415,7 +416,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		cnf.Version++
 
-		log.Info("Fixing member hostnames", "replset", rs.Name)
+		log.Info("Fixing hostname of member", "replset", rs.Name, "id", member.Id, "member", member.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return 0, errors.Wrap(err, "fix member hostnames: write mongo config")
