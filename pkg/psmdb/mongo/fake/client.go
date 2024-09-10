@@ -134,7 +134,7 @@ func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, er
 	return nil, nil
 }
 
-func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string) (*mongo.User, error) {
+func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string, db string) (*mongo.User, error) {
 	return nil, nil
 }
 

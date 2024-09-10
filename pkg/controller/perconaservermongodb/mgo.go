@@ -854,7 +854,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			log.Error(err, "failed to get credentials", "role", role)
 			continue
 		}
-		user, err := cli.GetUserInfo(ctx, creds.Username)
+		user, err := cli.GetUserInfo(ctx, creds.Username, "admin")
 		if err != nil {
 			return errors.Wrap(err, "get user info")
 		}

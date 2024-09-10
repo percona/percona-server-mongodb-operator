@@ -53,7 +53,7 @@ type Client interface {
 	StepDown(ctx context.Context, seconds int, force bool) error
 	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
-	GetUserInfo(ctx context.Context, username string) (*User, error)
+	GetUserInfo(ctx context.Context, username, db string) (*User, error)
 	UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error
 	UpdateUserPass(ctx context.Context, db, name, pass string) error
 	UpdateUser(ctx context.Context, currName, newName, pass string) error
@@ -567,9 +567,9 @@ func (client *mongoClient) IsMaster(ctx context.Context) (*IsMasterResp, error) 
 	return &resp, nil
 }
 
-func (client *mongoClient) GetUserInfo(ctx context.Context, username string) (*User, error) {
+func (client *mongoClient) GetUserInfo(ctx context.Context, username, db string) (*User, error) {
 	resp := UsersInfo{}
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: username}})
+	res := client.Database(db).RunCommand(ctx, bson.D{{Key: "usersInfo", Value: username}})
 	if res.Err() != nil {
 		return nil, errors.Wrap(res.Err(), "run command")
 	}

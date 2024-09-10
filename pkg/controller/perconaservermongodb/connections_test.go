@@ -409,7 +409,7 @@ func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role
 	}, nil
 }
 
-func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string) (*mongo.User, error) {
+func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username, db string) (*mongo.User, error) {
 	return &mongo.User{
 		Roles: []map[string]interface{}{},
 	}, nil
