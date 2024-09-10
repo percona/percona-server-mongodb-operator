@@ -156,7 +156,7 @@ echo "pvc/mongod-data-some-name-rs0-0 was resized"
 
 apply_resourcequota 9Gi
 patch_pvc_request "${cluster}" "3G"
-wait_cluster_consistency "$cluster"
+wait_cluster_consistency "$cluster" 42
 echo
 for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
 	retry=0
