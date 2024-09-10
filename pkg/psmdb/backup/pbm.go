@@ -70,7 +70,7 @@ type PBM interface {
 
 	Logger() pbmLog.Logger
 	GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error)
-	ResyncStorage(ctx context.Context, e pbmLog.LogEvent) error
+	ResyncStorage(ctx context.Context, stg *config.StorageConf) error
 	SendCmd(ctx context.Context, cmd ctrl.Cmd) error
 	Close(ctx context.Context) error
 	HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error)
@@ -81,10 +81,12 @@ type PBM interface {
 
 	DeleteBackup(ctx context.Context, name string) error
 
-	SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
+	GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
+	SetConfig(ctx context.Context, cfg *config.Config) error
 	SetConfigVar(ctx context.Context, key, val string) error
+
+	GetConfig(ctx context.Context) (*config.Config, error)
 	GetConfigVar(ctx context.Context, key string) (any, error)
-	DeleteConfigVar(ctx context.Context, key string) error
 
 	Node(ctx context.Context) (string, error)
 }
@@ -240,7 +242,7 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 
 func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) (config.Config, error) {
 	conf := config.Config{
-		PITR: config.PITRConf{
+		PITR: &config.PITRConf{
 			Enabled:          cluster.Spec.Backup.PITR.Enabled,
 			Compression:      cluster.Spec.Backup.PITR.CompressionType,
 			CompressionLevel: cluster.Spec.Backup.PITR.CompressionLevel,
@@ -248,7 +250,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	}
 
 	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
-		conf.Backup = config.BackupConf{
+		conf.Backup = &config.BackupConf{
 			OplogSpanMin: cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
 			Timeouts: &config.BackupTimeouts{
 				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
@@ -267,7 +269,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	}
 
 	if cluster.Spec.Backup.Configuration.RestoreOptions != nil {
-		conf.Restore = config.RestoreConf{
+		conf.Restore = &config.RestoreConf{
 			BatchSize:           cluster.Spec.Backup.Configuration.RestoreOptions.BatchSize,
 			NumInsertionWorkers: cluster.Spec.Backup.Configuration.RestoreOptions.NumInsertionWorkers,
 			NumDownloadWorkers:  cluster.Spec.Backup.Configuration.RestoreOptions.NumDownloadWorkers,
@@ -282,7 +284,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	case api.BackupStorageS3:
 		conf.Storage = config.StorageConf{
 			Type: storage.S3,
-			S3: s3.Conf{
+			S3: &s3.Config{
 				Region:                stg.S3.Region,
 				EndpointURL:           stg.S3.EndpointURL,
 				Bucket:                stg.S3.Bucket,
@@ -365,7 +367,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		}
 		conf.Storage = config.StorageConf{
 			Type: storage.Azure,
-			Azure: azure.Conf{
+			Azure: &azure.Config{
 				Account:     string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
 				Container:   stg.Azure.Container,
 				EndpointURL: stg.Azure.EndpointURL,
@@ -387,7 +389,7 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
 	backupName := bcp.Status.PBMname
-	s, err := util.StorageFromConfig(cfg.Storage, e)
+	s, err := util.StorageFromConfig(&cfg.Storage, e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
@@ -420,9 +422,9 @@ func (b *pbmC) Conn() *mongo.Client {
 	return b.Client.MongoClient()
 }
 
-// SetConfig sets the pbm config with storage defined in the cluster CR
+// GetNSetConfig sets the PBM config with storage defined in the cluster CR
 // by given storageName
-func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (b *pbmC) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	log := logf.FromContext(ctx)
 	log.Info("Setting PBM config", "backup", cluster.Name)
 
@@ -437,6 +439,11 @@ func (b *pbmC) SetConfig(ctx context.Context, k8sclient client.Client, cluster *
 
 	time.Sleep(11 * time.Second) // give time to init new storage
 	return nil
+}
+
+func (b *pbmC) SetConfig(ctx context.Context, cfg *config.Config) error {
+	err := config.SetConfig(ctx, b.Client, cfg)
+	return errors.Wrap(err, "set config")
 }
 
 // Close close the PBM connection
@@ -642,16 +649,16 @@ func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Stora
 	return util.GetStorage(ctx, b.Client, e)
 }
 
+func (b *pbmC) GetConfig(ctx context.Context) (*config.Config, error) {
+	return config.GetConfig(ctx, b.Client)
+}
+
 func (b *pbmC) GetConfigVar(ctx context.Context, key string) (any, error) {
 	return config.GetConfigVar(ctx, b.Client, key)
 }
 
 func (b *pbmC) SetConfigVar(ctx context.Context, key, val string) error {
 	return config.SetConfigVar(ctx, b.Client, key, val)
-}
-
-func (b *pbmC) DeleteConfigVar(ctx context.Context, key string) error {
-	return config.DeleteConfigVar(ctx, b.Client, key)
 }
 
 func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
@@ -666,8 +673,8 @@ func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.Restor
 	return restore.GetRestoreMeta(ctx, b.Client, name)
 }
 
-func (b *pbmC) ResyncStorage(ctx context.Context, e pbmLog.LogEvent) error {
-	return resync.ResyncStorage(ctx, b.Client, e)
+func (b *pbmC) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
+	return resync.Resync(ctx, b.Client, stg)
 }
 
 func (b *pbmC) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {

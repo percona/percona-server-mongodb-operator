@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
@@ -61,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 
 		// Disable PITR before restore
 		cluster.Spec.Backup.PITR.Enabled = false
-		err = pbmc.SetConfig(ctx, r.client, cluster, storage)
+		err = pbmc.GetNSetConfig(ctx, r.client, cluster, storage)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
 		}
@@ -132,10 +133,18 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 	log := logf.FromContext(ctx)
 	log.Info("Starting logical restore", "backup", backup)
 
-	e := pbmc.Logger().NewEvent(string(ctrl.CmdResync), "", "", primitive.Timestamp{})
-	err := pbmc.ResyncStorage(ctx, e)
+	stg, err := pbmc.GetConfigVar(ctx, "storage")
 	if err != nil {
-		return "", errors.Wrap(err, "set resync backup list from the store")
+		return "", errors.Wrap(err, "get storage config")
+	}
+
+	s, ok := stg.(config.StorageConf)
+	if !ok {
+		return "", errors.New("get storage config")
+	}
+
+	if err := pbmc.ResyncStorage(ctx, &s); err != nil {
+		return "", errors.Wrap(err, "resync storage")
 	}
 
 	var (
