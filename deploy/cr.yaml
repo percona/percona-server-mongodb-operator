@@ -531,27 +531,17 @@ spec:
 #        - "host1"
 #        - "host2"
 
-  users:
-  - name: my-user
-    db: admin
-    passwordSecretRef: 
-      name: my-user-password
-      key: my-user-password-key
-    roles:
-      - name: clusterAdmin
-        db: admin
-      - name: userAdminAnyDatabase
-        db: admin
-      - name: readAnyDatabase
-        db: admin
-  - name: bejbe
-    db: inel
-    passwordSecretRef: 
-      name: my-user-password
-      key: my-user-password-key
-    roles:
-      - name: userAdminAnyDatabase
-        db: admin
+#  users:
+#  - name: my-user
+#    db: admin
+#    passwordSecretRef: 
+#      name: my-user-password
+#      key: my-user-password-key
+#    roles:
+#      - name: clusterAdmin
+#        db: admin
+#      - name: userAdminAnyDatabase
+#        db: admin
 #  - name: my-usr
 #    db: admin
 #    passwordSecretRef: 
