@@ -89,20 +89,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
-		if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
-			log.Error(err, "FULL CLUSTER CRASH")
-
-			err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)
-			if err != nil {
-				return api.AppStateError, errors.Wrap(err, "handle ReplicaSetNoPrimary")
-			}
-
-			return api.AppStateError, nil
-		}
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil
 		}
 		if cr.Status.Replsets[replset.Name].Initialized {
+			if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
+				log.Error(err, "FULL CLUSTER CRASH")
+
+				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)
+				if err != nil {
+					return api.AppStateError, errors.Wrap(err, "handle ReplicaSetNoPrimary")
+				}
+
+				return api.AppStateError, nil
+			}
+
 			return api.AppStateError, errors.Wrap(err, "dial")
 		}
 
@@ -367,7 +368,12 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
-		return 0, errors.Wrap(err, "get mongo config")
+		return 0, errors.Wrap(err, "get replset config")
+	}
+
+	rsStatus, err := cli.RSStatus(ctx)
+	if err != nil {
+		return 0, errors.Wrap(err, "get replset status")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -398,6 +404,22 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 
 		members = append(members, r.getConfigMemberForExternalNode(memberC+i, *extNode))
+	}
+
+	if member, changed := cnf.Members.FixMemberHostnames(ctx, members, rsStatus); changed {
+		if member.State == mongo.MemberStatePrimary {
+			if err := cli.StepDown(ctx, 60, false); err != nil {
+				return 0, errors.Wrap(err, "step down primary")
+			}
+		}
+
+		cnf.Version++
+
+		log.Info("Fixing member hostnames", "replset", rs.Name)
+
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
+			return 0, errors.Wrap(err, "fix member hostnames: write mongo config")
+		}
 	}
 
 	if cnf.Members.FixMemberConfigs(ctx, members) {
@@ -466,7 +488,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	rsStatus, err := cli.RSStatus(ctx)
+	rsStatus, err = cli.RSStatus(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "unable to get replset members")
 	}
@@ -710,7 +732,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 		}
 
 		log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
-		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod, true)
+		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod)
 		if err != nil {
 			return errors.Wrap(err, "get standalone mongo client")
 		}

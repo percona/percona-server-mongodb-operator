@@ -653,6 +653,90 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
 	return false
 }
 
+func (m *ConfigMembers) FixMemberHostnames(ctx context.Context, compareWith ConfigMembers, rsStatus Status) (member *Member, changes bool) {
+	log := logf.FromContext(ctx)
+
+	if len(*m) < 1 {
+		return member, changes
+	}
+
+	type configMember struct {
+		Host string `bson:"host" json:"host"`
+	}
+
+	cm := make(map[string]configMember, len(compareWith))
+
+	for _, mem := range compareWith {
+		name, ok := mem.Tags["podName"]
+		if !ok {
+			continue
+		}
+		cm[name] = configMember{Host: mem.Host}
+	}
+
+	// Update secondaries first
+	for _, sMem := range rsStatus.Members {
+		if sMem.State == MemberStatePrimary {
+			continue
+		}
+
+		for i := 0; i < len(*m); i++ {
+			mem := []ConfigMember(*m)[i]
+			if sMem.Id != mem.ID {
+				continue
+			}
+			podName, ok := mem.Tags["podName"]
+			if !ok {
+				continue
+			}
+			c, ok := cm[podName]
+			if c.Host != mem.Host {
+				log.Info(
+					"Host changed",
+					"pod", podName,
+					"state", MemberStateStrings[sMem.State],
+					"old", mem.Host,
+					"new", c.Host,
+				)
+				[]ConfigMember(*m)[i].Host = c.Host
+				return sMem, true
+			}
+		}
+	}
+
+	// Update primary last
+	for _, sMem := range rsStatus.Members {
+		if sMem.State == MemberStateSecondary {
+			continue
+		}
+
+		for i := 0; i < len(*m); i++ {
+			mem := []ConfigMember(*m)[i]
+			if sMem.Id != mem.ID {
+				continue
+			}
+			podName, ok := mem.Tags["podName"]
+			if !ok {
+				continue
+			}
+			c, ok := cm[podName]
+			if c.Host != mem.Host {
+				log.Info(
+					"Host changed",
+					"pod", podName,
+					"state", MemberStateStrings[sMem.State],
+					"old", mem.Host,
+					"new", c.Host,
+				)
+				[]ConfigMember(*m)[i].Host = c.Host
+				return sMem, true
+			}
+		}
+	}
+
+	return member, false
+}
+
 func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith ConfigMembers) (changes bool) {
 	log := logf.FromContext(ctx)
 
@@ -661,7 +745,6 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 	}
 
 	type configMember struct {
-		Host     string            `bson:"host" json:"host"`
 		Tags     ReplsetTags       `bson:"tags,omitempty" json:"tags,omitempty"`
 		Horizons map[string]string `bson:"horizons,omitempty" json:"horizons,omitempty"`
 	}
@@ -674,7 +757,6 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 			continue
 		}
 		cm[name] = configMember{
-			Host:     member.Host,
 			Tags:     member.Tags,
 			Horizons: member.Horizons,
 		}
@@ -687,11 +769,6 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 			continue
 		}
 		c, ok := cm[podName]
-		if c.Host != member.Host {
-			changes = true
-			[]ConfigMember(*m)[i].Host = c.Host
-			log.Info("Host changed", "pod", podName, "old", member.Host, "new", c.Host)
-		}
 		if !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
