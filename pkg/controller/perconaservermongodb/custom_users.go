@@ -77,6 +77,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		log.Info("AAAAAAAAA User info", "user", user.Name, "info", userInfo)
+
 		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)

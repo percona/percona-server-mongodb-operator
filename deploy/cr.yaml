@@ -544,6 +544,14 @@ spec:
         db: admin
       - name: readAnyDatabase
         db: admin
+  - name: bejbe
+    db: inel
+    passwordSecretRef: 
+      name: my-user-password
+      key: my-user-password-key
+    roles:
+      - name: userAdminAnyDatabase
+        db: admin
 #  - name: my-usr
 #    db: admin
 #    passwordSecretRef: 
