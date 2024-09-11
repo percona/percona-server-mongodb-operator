@@ -5,6 +5,10 @@ metadata:
 spec:
   clusterName: my-cluster-name
   backupName: backup1
+#  selective:
+#    with-users-and-roles: true
+#    namespaces:
+#    - "db.collection"
 #  pitr:
 #    type: date
 #    date: YYYY-MM-DD HH:MM:SS
