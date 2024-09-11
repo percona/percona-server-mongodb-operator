@@ -18,6 +18,26 @@ type PerconaServerMongoDBRestoreSpec struct {
 	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
 	StorageName  string                            `json:"storageName,omitempty"`
 	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
+	Selective    *SelectiveRestoreOpts             `json:"selective,omitempty"`
+}
+
+type SelectiveRestoreOpts struct {
+	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
+	Namespaces        []string `json:"namespaces,omitempty"`
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaces() []string {
+	if s == nil {
+		return nil
+	}
+	return s.Namespaces
+}
+
+func (s *SelectiveRestoreOpts) GetWithUsersAndRoles() bool {
+	if s == nil {
+		return false
+	}
+	return s.WithUsersAndRoles
 }
 
 // RestoreState is for restore status states
@@ -117,6 +137,7 @@ type PITRestoreDate struct {
 }
 
 func (PITRestoreDate) OpenAPISchemaType() []string { return []string{"string"} }
+
 func (PITRestoreDate) OpenAPISchemaFormat() string { return "" }
 
 func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {

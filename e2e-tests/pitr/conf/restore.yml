@@ -6,6 +6,10 @@ spec:
   clusterName: some-name
   backupName:
   storageName: minio
+  selective:
+    namespaces:
+    - myApp.test
+    withUsersAndRoles: true
   pitr:
     type:
     date:

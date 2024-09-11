@@ -55,6 +55,7 @@ check_recovery() {
 	local cmp_postfix=$4
 	local backupSource=$5
 	local cluster_name=$6
+	local selective_collection=$7
 
 	desc "write more data before restore by $restore_type"
 	sleep 60
@@ -62,6 +63,11 @@ check_recovery() {
 		"use myApp\n db.test.insert({ x: 100501 })" \
 		"myApp:myPass@$cluster.$namespace"
 
+	if [ -n "$selective_collection" ]; then
+		run_mongo \
+			"use myApp\n db.$selective_collection.drop()" \
+			"myApp:myPass@$cluster.$namespace"
+	fi
 	desc 'waiting for chunks to be uploaded'
 	sleep 120
 
@@ -72,6 +78,7 @@ check_recovery() {
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
 			| $sed -e "s/type:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
+			| if [ -n "$selective_collection" ]; then yq ".spec.selective.namespaces[0]=\"myApp.$collection\""; fi \
 			| $sed -e "/backupSource/,+2d" \
 			| kubectl_bin apply -f -
 	else
@@ -81,6 +88,7 @@ check_recovery() {
 			| $sed -e "/backupName/d" \
 			| $sed -e "s/type:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
+			| if [ -n "$selective_collection" ]; then yq ".spec.selective.namespaces[0]=\"myApp.$collection\""; fi \
 			| $sed -e "s|BACKUP-NAME|$backup_dest|" \
 			| kubectl_bin apply -f -
 	fi
@@ -88,6 +96,12 @@ check_recovery() {
 	echo
 	set -o xtrace
 
+	if [ -n "$selective_collection" ]; then
+		if [[ $(collection_exists "$selective_collection") == "false" ]]; then
+			echo "Collection $selective_collection doesn't exist"
+			exit 1
+		fi
+	fi
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "$cmp_postfix"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "$cmp_postfix"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "$cmp_postfix"
@@ -121,6 +135,10 @@ main() {
 
 	backup_name_minio="backup-minio"
 
+	run_mongo \
+		'use myApp\n db.test2.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster.$namespace"
+
 	run_backup $backup_name_minio 0
 
 	write_document "-2nd"
@@ -128,7 +146,7 @@ main() {
 
 	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
 
-	check_recovery $backup_name_minio-0 date "$time_now" "-2nd" "" "${cluster/-rs0/}"
+	check_recovery $backup_name_minio-0 date "$time_now" "-2nd" "" "${cluster/-rs0/}" "test2"
 
 	run_backup $backup_name_minio 1
 
