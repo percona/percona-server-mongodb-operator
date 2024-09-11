@@ -634,7 +634,9 @@ func (client *mongoClient) UpdateUser(ctx context.Context, currName, newName, pa
 // It always should leave at least one element. The config won't be valid for mongo otherwise.
 // Better, if the last element has the smallest ID in order not to produce defragmentation
 // when the next element will be added (ID = maxID + 1). Mongo replica set member ID must be between 0 and 255, so it matters.
-func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
+func (m *ConfigMembers) RemoveOld(ctx context.Context, compareWith ConfigMembers) bool {
+	log := logf.FromContext(ctx)
+
 	cm := make(map[string]struct{}, len(compareWith))
 
 	for _, member := range compareWith {
@@ -646,6 +648,7 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
 		member := []ConfigMember(*m)[i]
 		if _, ok := cm[member.Host]; !ok {
 			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
+			log.Info("Removing old member from replset", "_id", member.ID, "host", member.Host)
 			return true
 		}
 	}
@@ -848,7 +851,9 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 
 // AddNew adds a new member from given list to the config.
 // It adds only one at a time. Returns true if it adds any member.
-func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
+func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
+	log := logf.FromContext(ctx)
+
 	cm := make(map[string]struct{}, len(*m))
 	lastID := 0
 
@@ -864,6 +869,7 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
 			lastID++
 			member.ID = lastID
 			*m = append(*m, member)
+			log.Info("Adding new member to replset", "_id", member.ID, "host", member.Host)
 			return true
 		}
 	}

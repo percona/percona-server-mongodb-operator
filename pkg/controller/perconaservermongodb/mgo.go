@@ -421,6 +421,8 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return 0, errors.Wrap(err, "fix member hostnames: write mongo config")
 		}
+
+		return 0, nil
 	}
 
 	if cnf.Members.FixMemberConfigs(ctx, members) {
@@ -443,7 +445,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	if cnf.Members.RemoveOld(members) {
+	if cnf.Members.RemoveOld(ctx, members) {
 		cnf.Version++
 
 		log.Info("Removing old nodes", "replset", rs.Name)
@@ -454,7 +456,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	if cnf.Members.AddNew(members) {
+	if cnf.Members.AddNew(ctx, members) {
 		cnf.Version++
 
 		log.Info("Adding new nodes", "replset", rs.Name)
