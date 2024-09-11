@@ -65,6 +65,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		if user.DB == "" {
+			user.DB = "admin"
+		}
+
+		if user.PasswordSecretRef.Key == "" {
+			user.PasswordSecretRef.Key = "password"
+		}
+
 		sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
