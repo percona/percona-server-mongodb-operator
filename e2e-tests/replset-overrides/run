@@ -61,6 +61,7 @@ test_override_after_deploy() {
 	echo "deleting cluster"
 	kubectl_bin delete psmdb ${cluster}
 	wait_for_delete psmdb/${cluster}
+	wait_for_delete pod/${cluster}-rs0-0
 	kubectl delete secrets --all
 }
 
@@ -90,6 +91,7 @@ test_deploy_with_overrides() {
 	echo "deleting cluster"
 	kubectl_bin delete psmdb ${cluster}
 	wait_for_delete psmdb/${cluster}
+	wait_for_delete pod/${cluster}-rs0-0
 	kubectl_bin delete secret --all
 }
 
