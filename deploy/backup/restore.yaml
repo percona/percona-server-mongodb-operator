@@ -6,7 +6,7 @@ spec:
   clusterName: my-cluster-name
   backupName: backup1
 #  selective:
-#    with-users-and-roles: true
+#    withUsersAndRoles: true
 #    namespaces:
 #    - "db.collection"
 #  pitr:
