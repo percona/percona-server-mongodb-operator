@@ -78,7 +78,7 @@ check_recovery() {
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
 			| $sed -e "s/type:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-			| if [ -n "$selective_collection" ]; then yq ".spec.selective.namespaces[0]=\"myApp.$collection\""; fi \
+			| if [ -n "$selective_collection" ]; then yq '.spec.selective.namespaces[0]="myApp.test"'; fi \
 			| $sed -e "/backupSource/,+2d" \
 			| kubectl_bin apply -f -
 	else
@@ -88,7 +88,7 @@ check_recovery() {
 			| $sed -e "/backupName/d" \
 			| $sed -e "s/type:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-			| if [ -n "$selective_collection" ]; then yq ".spec.selective.namespaces[0]=\"myApp.$collection\""; fi \
+			| if [ -n "$selective_collection" ]; then yq '.spec.selective.namespaces[0]="myApp.test"'; fi \
 			| $sed -e "s|BACKUP-NAME|$backup_dest|" \
 			| kubectl_bin apply -f -
 	fi
@@ -97,8 +97,8 @@ check_recovery() {
 	set -o xtrace
 
 	if [ -n "$selective_collection" ]; then
-		if [[ $(collection_exists "$selective_collection") == "false" ]]; then
-			echo "Collection $selective_collection doesn't exist"
+		if [[ $(collection_exists "$selective_collection") == "true" ]]; then
+			echo "Collection $selective_collection exists"
 			exit 1
 		fi
 	fi

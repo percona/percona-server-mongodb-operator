@@ -80,14 +80,14 @@ run_recovery_check_selective() {
 	yq "$test_dir/conf/restore.yml" \
 		| yq ".metadata.name=\"$restore_name\"" \
 		| yq ".spec.backupName=\"$backup\"" \
-		| yq ".spec.selective.namespaces[0]=\"$database.$collection\"" \
+		| yq ".spec.selective.namespaces[0]=\"$database.test\"" \
 		| yq ".spec.selective.withUsersAndRoles=$with_users_and_roles" \
 		| kubectl_bin apply -f -
 
 	wait_restore "$backup-selective" "${cluster/-rs0/}"
 
-	if [[ $(collection_exists "$collection") == "false" ]]; then
-		echo "Collection $collection doesn't exist"
+	if [[ $(collection_exists "$collection") == "true" ]]; then
+		echo "Collection $collection exists"
 		exit 1
 	fi
 
@@ -232,6 +232,11 @@ run_mongo \
 desc 'selective restore -- minio'
 run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "false" "$custom_user_name" "$custom_role_name"
 kubectl_bin delete psmdb-restore "restore-$backup_name_minio-selective"
+
+run_mongo \
+	'use myApp\n db.test2.insert({ x: 100501 })' \
+	"myApp:myPass@$cluster.$namespace"
+
 desc 'selective restore with users and roles -- minio'
 run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "true" "$custom_user_name" "$custom_role_name"
 
