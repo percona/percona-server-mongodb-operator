@@ -148,10 +148,6 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
-desc 'custom user defined users'
-kubectl_bin apply -f "${test_dir}/conf/custom-user-secrets.yml"
-sleep 25
-
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
