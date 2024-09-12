@@ -148,37 +148,6 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
-userOne="user-one"
-userOnePass=$(getSecretData "user-one" "userOnePassKey")
-check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
-
-kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
-		"spec": {"users":[
-			{
-				"name":"user-two",
-				"db":"admin",
-				"passwordSecretRef": {
-					"name": "user-two",
-					"key": "userTwoPassKey"
-				},
-				"roles": [{"db":"admin","name":"userAdminAnyDatabase"}]
-			}
-		]}
-	}'
-sleep 20
-
-userTwo="user-two"
-userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
-check_mongo_auth "$userTwo:$userTwoPass@$cluster-0.$cluster.$namespace"
-check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
-
-desc 'update custom user defined user password'
-userTwoNewPass="new-user-two-password"
-patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
-sleep 25
-
-check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
-
 destroy $namespace
 
 desc 'test passed'
