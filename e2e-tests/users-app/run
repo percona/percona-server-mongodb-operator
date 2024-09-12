@@ -42,7 +42,7 @@ wait_for_running $cluster 3
 
 desc 'check user created on cluster creation'
 kubectl_bin apply -f "${test_dir}/conf/app-user-secrets.yml"
-sleep 25
+sleep 15
 
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
@@ -76,27 +76,22 @@ check_mongo_auth "$userTwo:$userTwoPass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
 
-# desc 'check password change'
-# userTwoNewPass="new-user-two-password"
-# patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
-# sleep 25
+desc 'check password change'
+userTwoNewPass="new-user-two-password"
+patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
+sleep 25
 
-# check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
 
 
 desc 'check role update from CR'
 
-compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "roles"
+compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two"
 
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
 			{
 				"name":"user-two",
-				"db":"admin",
-				"passwordSecretRef": {
-					"name": "user-two",
-					"key": "userTwoPassKey"
-				},
 				"roles": [
 					{"db":"admin","name":"clusterAdmin"}
 				]
@@ -105,7 +100,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}'
 wait_for_running $cluster 3
 
-compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "updated-roles"
+compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two-update-roles"
 
 
 desc 'update user role via DB'
@@ -114,21 +109,54 @@ run_mongo \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "updated-roles"
+compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two-update-roles"
 
 
-desc 'delete user from DB'
-# user is recreated from CR
+desc 'check user recreated after deleted from DB'
+run_mongo \
+	'use admin\n db.dropUser("user-two")' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 15
+compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two-update-roles"
 
 
-desc 'update user name via CR'
-# new user is created in DB with the new name
+desc 'check new user created after updated user name via CR'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"new-user",
+				"db":"admin",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"userAdminAnyDatabase"}, 
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster 3
+compare 'admin' 'db.getUser("new-user")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-admin-db"
+
+# new-user and user-two should be in the DB
+check_mongo_auth "new-user:$userOnePass@$cluster-0.$cluster.$namespace"
+check_mongo_auth "$userTwo:$userTwoPass@$cluster-0.$cluster.$namespace"
 
 
-desc 'update user DB via CR'
-# new user is created with the new DB
-
-
+desc 'check new user created after updated user db via CR'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"new-user",
+				"db":"newDb",
+			}
+		]}
+	}'
+wait_for_running $cluster 3
+compare 'newDb' 'db.getUser("new-user")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-newDb-db"
+compare 'admin' 'db.getUser("new-user")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two-update-roles"
 
 
 
