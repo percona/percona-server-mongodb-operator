@@ -43,7 +43,7 @@ type RSConfig struct {
 	Configsvr                          bool          `bson:"configsvr,omitempty" json:"configsvr,omitempty"`
 	ProtocolVersion                    int           `bson:"protocolVersion,omitempty" json:"protocolVersion,omitempty"`
 	Settings                           Settings      `bson:"settings,omitempty" json:"settings,omitempty"`
-	WriteConcernMajorityJournalDefault bool          `bson:"writeConcernMajorityJournalDefault,omitempty" json:"writeConcernMajorityJournalDefault,omitempty"`
+	WriteConcernMajorityJournalDefault bool          `bson:"writeConcernMajorityJournalDefault" json:"writeConcernMajorityJournalDefault"`
 }
 
 // Settings document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
