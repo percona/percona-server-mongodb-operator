@@ -8207,16 +8207,14 @@ spec:
                               type: string
                             type: array
                           resource:
-                            items:
-                              properties:
-                                cluster:
-                                  type: boolean
-                                collection:
-                                  type: string
-                                db:
-                                  type: string
-                              type: object
-                            type: array
+                            properties:
+                              cluster:
+                                type: boolean
+                              collection:
+                                type: string
+                              db:
+                                type: string
+                            type: object
                         required:
                         - actions
                         type: object
