@@ -652,7 +652,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 	return errNoRunningMongodContainers
 }
 
-func getRoles(cr *api.PerconaServerMongoDB, role api.UserRole) []map[string]interface{} {
+func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
 	case api.RoleDatabaseAdmin:
@@ -843,7 +843,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []api.UserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
+	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
 	if cr.CompareVersion("1.13.0") >= 0 {
 		users = append(users, api.RoleDatabaseAdmin)
 	}

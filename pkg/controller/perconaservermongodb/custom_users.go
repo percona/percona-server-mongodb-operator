@@ -45,7 +45,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
-	err = handleRoles(ctx, r, cr, cli)
+	err = handleRoles(ctx, cr, cli)
 	if err != nil {
 		return errors.Wrap(err, "handle roles")
 	}
@@ -111,24 +111,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	return nil
 }
 
-func handleRoles(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
+func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
 	// log := logf.FromContext(ctx)
 
 	if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
 		return nil
 	}
 
-	for _, role := range cr.Spec.Roles {
-		if role.DB == "" {
-			role.DB = "admin"
-		}
+	// for _, role := range cr.Spec.Roles {
 
-		// err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
-		// if err != nil {
-		// 	log.Error(err, "create role", "role", role.Name)
-		// 	continue
-		// }
-	}
+	// 	// err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
+	// 	// if err != nil {
+	// 	// 	log.Error(err, "create role", "role", role.Name)
+	// 	// 	continue
+	// 	// }
+	// }
 
 	return nil
 }
@@ -201,7 +198,7 @@ func updateRoles(
 	roles := make([]map[string]interface{}, 0)
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
-			"role": role.Name,
+			"role": role.Role,
 			"db":   role.DB,
 		})
 	}
@@ -237,7 +234,7 @@ func createUser(
 	roles := make([]map[string]interface{}, 0)
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
-			"role": role.Name,
+			"role": role.Role,
 			"db":   role.DB,
 		})
 	}
