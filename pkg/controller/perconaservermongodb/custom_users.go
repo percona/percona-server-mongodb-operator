@@ -160,18 +160,13 @@ func toMongoRoleModel(role api.Role) mongo.Role {
 	}
 
 	for _, p := range role.Privileges {
-		resources := make([]mongo.RoleResource, 0)
-		for _, r := range p.Resource {
-			resources = append(resources, mongo.RoleResource{
-				Collection: r.Collection,
-				DB:         r.DB,
-				Cluster:    r.Cluster,
-			})
-		}
-
 		mr.Privileges = append(mr.Privileges, mongo.RolePrivilege{
-			Actions:  p.Actions,
-			Resource: resources,
+			Actions: p.Actions,
+			Resource: map[string]interface{}{
+				"db":         p.Resource.DB,
+				"collection": p.Resource.Collection,
+				"cluster":    p.Resource.Cluster,
+			},
 		})
 	}
 
