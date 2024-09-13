@@ -172,6 +172,24 @@ compare 'newDb' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$
 compare 'admin' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-admin-db"
 
 
+desc 'check user role on cluster initialization'
+
+
+desc 'check role recreated after deleted from DB'
+
+
+desc 'check role updated from DB'
+
+
+desc 'check new role created after updated role name via CR'
+
+
+desc 'check new role created after updated role DB via CR'
+
+
+desc 'check user with user created role'
+
+
 destroy $namespace
 
 desc 'test passed'

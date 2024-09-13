@@ -106,9 +106,33 @@ func (u *User) UserID() string {
 	return u.DB + "." + u.Name
 }
 
+type RoleAuthenticationRestriction struct {
+	ClientSource  []string `bson:"clientSource" json:"clientSource"`
+	ServerAddress []string `bson:"serverAddress" json:"serverAddress"`
+}
+
+type RoleResource struct {
+	Collection string `bson:"collection" json:"collection"`
+	DB         string `bson:"db" json:"db"`
+	Cluster    bool   `bson:"cluster" json:"cluster"`
+}
+
+type RolePrivilege struct {
+	Resource []RoleResource `bson:"resource" json:"resource"`
+	Actions  []string       `bson:"actions" json:"actions"`
+}
+
+type InheritenceRole struct {
+	Role string `bson:"role" json:"role"`
+	DB   string `bson:"db" json:"db"`
+}
+
 type Role struct {
-	Name string `json:"name"`
-	Db   string `json:"db"`
+	Name                       string                          `json:"name"`
+	DB                         string                          `json:"db"`
+	Roles                      []InheritenceRole               `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                 `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions []RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
 }
 
 type UnsafeFlags struct {

@@ -34,8 +34,8 @@ type Client interface {
 
 	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error
 	ReadConfig(ctx context.Context) (RSConfig, error)
-	CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error
-	UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error
+	CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error
+	UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error
 	GetRole(ctx context.Context, role string) (*Role, error)
 	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
@@ -158,7 +158,7 @@ func (client *mongoClient) ReadConfig(ctx context.Context) (RSConfig, error) {
 	return *resp.Config, nil
 }
 
-func (client *mongoClient) CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error {
+func (client *mongoClient) CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error {
 	resp := OKResponse{}
 
 	privilegesArr := bson.A{}
@@ -171,10 +171,17 @@ func (client *mongoClient) CreateRole(ctx context.Context, role string, privileg
 		rolesArr = append(rolesArr, r)
 	}
 
+	authRestrictionsArr := bson.A{}
+	for _, r := range authRestrictions {
+		authRestrictionsArr = append(authRestrictionsArr, r)
+	}
+
+
 	m := bson.D{
 		{Key: "createRole", Value: role},
 		{Key: "privileges", Value: privilegesArr},
 		{Key: "roles", Value: rolesArr},
+		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
 	}
 
 	res := client.Database("admin").RunCommand(ctx, m)
@@ -194,7 +201,7 @@ func (client *mongoClient) CreateRole(ctx context.Context, role string, privileg
 	return nil
 }
 
-func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}) error {
+func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error {
 	resp := OKResponse{}
 
 	privilegesArr := bson.A{}
@@ -207,10 +214,16 @@ func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileg
 		rolesArr = append(rolesArr, r)
 	}
 
+	authRestrictionsArr := bson.A{}
+	for _, r := range authRestrictions {
+		authRestrictionsArr = append(authRestrictionsArr, r)
+	}
+
 	m := bson.D{
 		{Key: "updateRole", Value: role},
 		{Key: "privileges", Value: privilegesArr},
 		{Key: "roles", Value: rolesArr},
+		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
 	}
 
 	res := client.Database("admin").RunCommand(ctx, m)

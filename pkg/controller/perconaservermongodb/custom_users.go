@@ -45,6 +45,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
+	err = handleRoles(ctx, r, cr, cli)
+	if err != nil {
+		return errors.Wrap(err, "handle roles")
+	}
+
 	sysUsersSecret := corev1.Secret{}
 	err = r.client.Get(ctx,
 		types.NamespacedName{
@@ -99,10 +104,31 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 		err = createUser(ctx, r.client, cli, &user, userInfo, &sec)
 		if err != nil {
-			log.Error(err, "create user", "user", user.Name)
-			return err
+			return errors.Wrapf(err, "create user %s", user.Name)
 		}
 	}
+
+	return nil
+}
+
+func handleRoles(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
+	// log := logf.FromContext(ctx)
+
+	// if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
+	// 	return nil
+	// }
+
+	// for _, role := range cr.Spec.Roles {
+	// 	if role.DB == "" {
+	// 		role.DB = "admin"
+	// 	}
+
+	// 	err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
+	// 	if err != nil {
+	// 		log.Error(err, "create role", "role", role.Name)
+	// 		continue
+	// 	}
+	// }
 
 	return nil
 }
@@ -148,12 +174,12 @@ func updatePass(
 
 	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]))
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "update user %s password", user.Name)
 	}
 
 	secret.Annotations[annotationKey] = string(newHash)
 	if err := cli.Update(ctx, secret); err != nil {
-		return err
+		return errors.Wrapf(err, "update secret %s", secret.Name)
 	}
 
 	log.Info("User updated", "user", user.UserID())
@@ -176,7 +202,7 @@ func updateRoles(
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
 			"role": role.Name,
-			"db":   role.Db,
+			"db":   role.DB,
 		})
 	}
 
@@ -212,7 +238,7 @@ func createUser(
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
 			"role": role.Name,
-			"db":   role.Db,
+			"db":   role.DB,
 		})
 	}
 

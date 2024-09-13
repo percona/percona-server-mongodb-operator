@@ -19065,13 +19065,71 @@ spec:
                     roles:
                       items:
                         properties:
+                          authenticationRestrictions:
+                            items:
+                              properties:
+                                clientSource:
+                                  items:
+                                    type: string
+                                  type: array
+                                serverAddress:
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - clientSource
+                              - serverAddress
+                              type: object
+                            type: array
                           db:
                             type: string
                           name:
                             type: string
+                          privileges:
+                            items:
+                              properties:
+                                actions:
+                                  items:
+                                    type: string
+                                  type: array
+                                resource:
+                                  items:
+                                    properties:
+                                      cluster:
+                                        type: boolean
+                                      collection:
+                                        type: string
+                                      db:
+                                        type: string
+                                    required:
+                                    - cluster
+                                    - collection
+                                    - db
+                                    type: object
+                                  type: array
+                              required:
+                              - actions
+                              - resource
+                              type: object
+                            type: array
+                          roles:
+                            items:
+                              properties:
+                                db:
+                                  type: string
+                                role:
+                                  type: string
+                              required:
+                              - db
+                              - role
+                              type: object
+                            type: array
                         required:
+                        - authenticationRestrictions
                         - db
                         - name
+                        - privileges
+                        - roles
                         type: object
                       type: array
                   required:
