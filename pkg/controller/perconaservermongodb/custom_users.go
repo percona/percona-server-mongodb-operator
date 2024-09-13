@@ -114,21 +114,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 func handleRoles(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
 	// log := logf.FromContext(ctx)
 
-	// if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
-	// 	return nil
-	// }
+	if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
+		return nil
+	}
 
-	// for _, role := range cr.Spec.Roles {
-	// 	if role.DB == "" {
-	// 		role.DB = "admin"
-	// 	}
+	for _, role := range cr.Spec.Roles {
+		if role.DB == "" {
+			role.DB = "admin"
+		}
 
-	// 	err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
-	// 	if err != nil {
-	// 		log.Error(err, "create role", "role", role.Name)
-	// 		continue
-	// 	}
-	// }
+		// err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
+		// if err != nil {
+		// 	log.Error(err, "create role", "role", role.Name)
+		// 	continue
+		// }
+	}
 
 	return nil
 }

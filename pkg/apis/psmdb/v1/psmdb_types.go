@@ -93,6 +93,7 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
+	Roles                        []Role                               `json:"roles,omitempty"`
 }
 
 type User struct {
