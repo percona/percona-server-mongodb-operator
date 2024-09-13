@@ -118,14 +118,9 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		return nil
 	}
 
-	// for _, role := range cr.Spec.Roles {
+	for _, role := range cr.Spec.Roles {
 
-	// 	// err := cli.CreateRole(ctx, role.Name, role.DB, role.Privileges)
-	// 	// if err != nil {
-	// 	// 	log.Error(err, "create role", "role", role.Name)
-	// 	// 	continue
-	// 	// }
-	// }
+	}
 
 	return nil
 }

@@ -732,11 +732,11 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Co
 		return errors.Wrap(err, "mongo get role")
 	}
 	if roleInfo == nil {
-		err = cli.CreateRole(ctx, role, privileges, []interface{}{}, []interface{}{})
+		err = cli.CreateRole(ctx, role, privileges, []interface{}{}, []mongo.RoleAuthenticationRestriction{})
 		return errors.Wrapf(err, "create role %s", role)
 	}
 	if !comparePrivileges(privileges, roleInfo.Privileges) {
-		err = cli.UpdateRole(ctx, role, privileges, []interface{}{}, []interface{}{})
+		err = cli.UpdateRole(ctx, role, privileges, []interface{}{}, []mongo.RoleAuthenticationRestriction{})
 		return errors.Wrapf(err, "update role")
 	}
 	return nil

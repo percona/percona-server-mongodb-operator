@@ -8879,11 +8879,11 @@ spec:
                             items:
                               type: string
                             type: array
-                          cluster:
-                            type: boolean
                           resource:
                             items:
                               properties:
+                                cluster:
+                                  type: boolean
                                 collection:
                                   type: string
                                 db:

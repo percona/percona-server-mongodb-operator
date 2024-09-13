@@ -34,8 +34,8 @@ type Client interface {
 
 	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error
 	ReadConfig(ctx context.Context) (RSConfig, error)
-	CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error
-	UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error
+	CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error
+	UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error
 	GetRole(ctx context.Context, role string) (*Role, error)
 	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
@@ -158,7 +158,7 @@ func (client *mongoClient) ReadConfig(ctx context.Context) (RSConfig, error) {
 	return *resp.Config, nil
 }
 
-func (client *mongoClient) CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error {
+func (client *mongoClient) CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error {
 	resp := OKResponse{}
 
 	privilegesArr := bson.A{}
@@ -201,7 +201,7 @@ func (client *mongoClient) CreateRole(ctx context.Context, role string, privileg
 	return nil
 }
 
-func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []interface{}) error {
+func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error {
 	resp := OKResponse{}
 
 	privilegesArr := bson.A{}
