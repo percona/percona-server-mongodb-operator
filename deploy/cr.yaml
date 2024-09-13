@@ -12,7 +12,7 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.17.0
+  crVersion: 1.18.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
 #  tls:
@@ -554,7 +554,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:2.5.0
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
