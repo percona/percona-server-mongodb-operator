@@ -19127,11 +19127,11 @@ spec:
                         properties:
                           db:
                             type: string
-                          role:
+                          name:
                             type: string
                         required:
                         - db
-                        - role
+                        - name
                         type: object
                       type: array
                   required:

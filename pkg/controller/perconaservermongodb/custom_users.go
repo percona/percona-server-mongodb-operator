@@ -198,7 +198,7 @@ func updateRoles(
 	roles := make([]map[string]interface{}, 0)
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
-			"role": role.Role,
+			"role": role.Name,
 			"db":   role.DB,
 		})
 	}
@@ -234,7 +234,7 @@ func createUser(
 	roles := make([]map[string]interface{}, 0)
 	for _, role := range user.Roles {
 		roles = append(roles, map[string]interface{}{
-			"role": role.Role,
+			"role": role.Name,
 			"db":   role.DB,
 		})
 	}

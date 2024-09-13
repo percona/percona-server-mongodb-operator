@@ -97,7 +97,7 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type UserRole struct {
-	Role string `json:"role"`
+	Name string `json:"name"`
 	DB   string `json:"db"`
 }
 
