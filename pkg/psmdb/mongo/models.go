@@ -240,15 +240,26 @@ type RoleAuthenticationRestriction struct {
 	ServerAddress []string `bson:"serverAddress" json:"serverAddress"`
 }
 
+type RoleResource struct {
+	Collection string `bson:"collection" json:"collection"`
+	DB         string `bson:"db" json:"db"`
+	Cluster    bool   `bson:"cluster" json:"cluster"`
+}
+
 type RolePrivilege struct {
-	Resource map[string]interface{} `bson:"resource" json:"resource"`
-	Actions  []string               `bson:"actions" json:"actions"`
+	Resource []RoleResource `bson:"resource" json:"resource"`
+	Actions  []string       `bson:"actions" json:"actions"`
+}
+
+type InheritenceRole struct {
+	Role string `bson:"role" json:"role"`
+	DB   string `bson:"db" json:"db"`
 }
 
 type Role struct {
 	Role                       string                          `bson:"role" json:"role"`
 	DB                         string                          `bson:"db" json:"db"`
-	Roles                      []map[string]interface{}        `bson:"roles" json:"roles"`
+	Roles                      []InheritenceRole               `bson:"roles" json:"roles"`
 	Privileges                 []RolePrivilege                 `bson:"privileges" json:"privileges"`
 	AuthenticationRestrictions []RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
 }

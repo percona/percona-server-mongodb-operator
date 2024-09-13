@@ -112,17 +112,77 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 }
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
-	// log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
 		return nil
 	}
 
 	for _, role := range cr.Spec.Roles {
+		roleInfo, err := cli.GetRole(ctx, role.Role)
+		if err != nil {
+			return errors.Wrap(err, "mongo get role")
+		}
 
+		mr := toMongoRoleModel(role)
+		log.Info("AAAAAAAAAAAAAAAA role", "role", role)
+		log.Info("AAAAAAAAAAAAAAA mongo role", "mongoRole", mr)
+
+		if roleInfo == nil {
+			println("CREAAYEEEE")
+			err = cli.CreateRole(ctx, role.DB, mr)
+			return errors.Wrapf(err, "create role %s", role)
+		}
+
+		println("UPDAAAYEEEE")
+		err = cli.UpdateRole(ctx, role.DB, mr)
+		return errors.Wrapf(err, "update role %s", role)
+		// if !comparePrivileges(mr.Privileges, roleInfo.Privileges) {
+		// 	err = cli.UpdateRole(ctx, role.DB, mr)
+		// 	return errors.Wrapf(err, "update role %s", role)
+		// }
 	}
 
 	return nil
+}
+
+func toMongoRoleModel(role api.Role) mongo.Role {
+	mr := mongo.Role{
+		Role: role.Role,
+		DB:   role.DB,
+	}
+
+	for _, r := range role.Roles {
+		mr.Roles = append(mr.Roles, mongo.InheritenceRole{
+			Role: r.Role,
+			DB:   r.DB,
+		})
+	}
+
+	for _, p := range role.Privileges {
+		resources := make([]mongo.RoleResource, 0)
+		for _, r := range p.Resource {
+			resources = append(resources, mongo.RoleResource{
+				Collection: r.Collection,
+				DB:         r.DB,
+				Cluster:    r.Cluster,
+			})
+		}
+
+		mr.Privileges = append(mr.Privileges, mongo.RolePrivilege{
+			Actions:  p.Actions,
+			Resource: resources,
+		})
+	}
+
+	for _, ar := range role.AuthenticationRestrictions {
+		mr.AuthenticationRestrictions = append(mr.AuthenticationRestrictions, mongo.RoleAuthenticationRestriction{
+			ClientSource:  ar.ClientSource,
+			ServerAddress: ar.ServerAddress,
+		})
+	}
+
+	return mr
 }
 
 // sysUserNames returns a set of system user names from the sysUsersSecret.

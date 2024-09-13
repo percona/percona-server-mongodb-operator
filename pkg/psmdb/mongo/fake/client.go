@@ -58,11 +58,11 @@ func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error
 	return mongo.RSConfig{}, nil
 }
 
-func (c *fakeMongoClient) CreateRole(ctx context.Context, role string, privileges []mongo.RolePrivilege, roles []interface{}, authRestrictions []mongo.RoleAuthenticationRestriction) error {
+func (c *fakeMongoClient) CreateRole(ctx context.Context, db string, role mongo.Role) error {
 	return nil
 }
 
-func (c *fakeMongoClient) UpdateRole(ctx context.Context, role string, privileges []mongo.RolePrivilege, roles []interface{}, authRestrictions []mongo.RoleAuthenticationRestriction) error {
+func (c *fakeMongoClient) UpdateRole(ctx context.Context, db string, role mongo.Role) error {
 	return nil
 }
 
