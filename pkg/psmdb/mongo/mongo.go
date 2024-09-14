@@ -354,6 +354,7 @@ func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role,
 
 	r := &Role{
 		Role:       role,
+		DB:         resp.Roles[0].DB,
 		Roles:      resp.Roles[0].Roles,
 		Privileges: resp.Roles[0].Privileges,
 	}
