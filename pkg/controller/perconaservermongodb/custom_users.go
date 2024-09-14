@@ -141,7 +141,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		// return errors.Wrapf(err, "update role %s", role.Role)
 		if !reflect.DeepEqual(mr, roleInfo) {
 			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
-			logf.FromContext(ctx).Info("AAAAAA Updating role", "role", role.Role)
+			logf.FromContext(ctx).Info("AAAAAA Updating role", "role", role)
 			logf.FromContext(ctx).Info("AAAAAA RoleInfo", "roleInfo", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "update role %s", role)
