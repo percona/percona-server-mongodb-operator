@@ -336,6 +336,7 @@ func (client *mongoClient) GetRole(ctx context.Context, role string) (*Role, err
 	res := client.Database("admin").RunCommand(ctx, bson.D{
 		{Key: "rolesInfo", Value: role},
 		{Key: "showPrivileges", Value: true},
+		{Key: "showAuthenticationRestrictions", Value: true},
 	})
 	if res.Err() != nil {
 		return nil, errors.Wrap(res.Err(), "run command")
