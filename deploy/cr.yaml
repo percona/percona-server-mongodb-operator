@@ -533,6 +533,7 @@ spec:
 
 #  roles:
 #    - role: myClusterwideAdmin
+#      db: admin
 #      privileges:
 #        - resource:
 #            cluster: true
@@ -550,6 +551,7 @@ spec:
 #        - role: read
 #          db: admin
 #    - role: my-role
+#      db: myDb
 #      privileges:
 #        - resource:
 #            db: ''

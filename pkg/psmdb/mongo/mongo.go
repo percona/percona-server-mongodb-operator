@@ -179,7 +179,7 @@ func (client *mongoClient) CreateRole(ctx context.Context, db string, role Role)
 	}
 
 	m := bson.D{
-		{Key: "createRole", Value: role},
+		{Key: "createRole", Value: role.Role},
 		{Key: "privileges", Value: privilegesArr},
 		{Key: "roles", Value: rolesArr},
 		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
@@ -264,7 +264,7 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	}
 
 	m := bson.D{
-		{Key: "updateRole", Value: role},
+		{Key: "updateRole", Value: role.Role},
 		{Key: "privileges", Value: privilegesArr},
 		{Key: "roles", Value: rolesArr},
 		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
