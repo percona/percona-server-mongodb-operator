@@ -120,7 +120,7 @@ type RoleAuthenticationRestriction struct {
 type RoleResource struct {
 	Collection string `json:"collection,omitempty"`
 	DB         string `json:"db,omitempty"`
-	Cluster    bool   `json:"cluster,omitempty"`
+	Cluster    *bool  `json:"cluster,omitempty"`
 }
 
 type RolePrivilege struct {

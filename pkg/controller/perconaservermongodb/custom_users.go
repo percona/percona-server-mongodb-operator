@@ -18,11 +18,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
-		return nil
-	}
-
-	if cr.Status.State != api.AppStateReady {
+	if cr.Spec.Users == nil && len(cr.Spec.Users) == 0 && cr.Spec.Roles == nil && len(cr.Spec.Roles) == 0 {
 		return nil
 	}
 
@@ -48,6 +44,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	err = handleRoles(ctx, cr, cli)
 	if err != nil {
 		return errors.Wrap(err, "handle roles")
+	}
+
+	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
+		return nil
+	}
+
+	if cr.Status.State != api.AppStateReady {
+		return nil
 	}
 
 	sysUsersSecret := corev1.Secret{}
@@ -113,7 +117,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
 	log := logf.FromContext(ctx)
-	
+
 	println("EEVOOO GAAA")
 
 	if len(cr.Spec.Roles) == 0 {
@@ -126,7 +130,10 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			return errors.Wrap(err, "mongo get role")
 		}
 
-		mr := toMongoRoleModel(role)
+		mr, err := toMongoRoleModel(role)
+		if err != nil {
+			return err
+		}
 		log.Info("AAAAAAAAAAAAAAAA role", "role", role)
 		log.Info("AAAAAAAAAAAAAAA mongo role", "mongoRole", mr)
 
@@ -148,7 +155,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 	return nil
 }
 
-func toMongoRoleModel(role api.Role) mongo.Role {
+func toMongoRoleModel(role api.Role) (mongo.Role, error) {
 	mr := mongo.Role{
 		Role: role.Role,
 		DB:   role.DB,
@@ -162,14 +169,23 @@ func toMongoRoleModel(role api.Role) mongo.Role {
 	}
 
 	for _, p := range role.Privileges {
-		mr.Privileges = append(mr.Privileges, mongo.RolePrivilege{
-			Actions: p.Actions,
-			Resource: map[string]interface{}{
-				"db":         p.Resource.DB,
-				"collection": p.Resource.Collection,
-				"cluster":    p.Resource.Cluster,
-			},
-		})
+		if p.Resource.Cluster != nil && (p.Resource.DB != "" || p.Resource.Collection != "") {
+			return mongo.Role{}, errors.New("field role.privilege.resource must have exactly db and collection set, or have only cluster set")
+		}
+
+		rp := mongo.RolePrivilege{
+			Actions:  p.Actions,
+			Resource: make(map[string]interface{}, 3),
+		}
+
+		if p.Resource.Cluster != nil {
+			rp.Resource["cluster"] = p.Resource.Cluster
+		} else {
+			rp.Resource["db"] = p.Resource.DB
+			rp.Resource["collection"] = p.Resource.Collection
+		}
+
+		mr.Privileges = append(mr.Privileges, rp)
 	}
 
 	for _, ar := range role.AuthenticationRestrictions {
@@ -179,7 +195,7 @@ func toMongoRoleModel(role api.Role) mongo.Role {
 		})
 	}
 
-	return mr
+	return mr, nil
 }
 
 // sysUserNames returns a set of system user names from the sysUsersSecret.
