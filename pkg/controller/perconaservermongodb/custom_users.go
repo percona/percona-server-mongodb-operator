@@ -116,10 +116,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 }
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
-	log := logf.FromContext(ctx)
-
-	println("EEVOOO GAAA")
-
 	if len(cr.Spec.Roles) == 0 {
 		return nil
 	}
@@ -129,28 +125,25 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		if err != nil {
 			return errors.Wrap(err, "mongo get role")
 		}
-		log.Info("AAAAAAAAAAAAAAAA roleINFOOO", "role", roleInfo)
 
 		mr, err := toMongoRoleModel(role)
 		if err != nil {
 			return err
 		}
-		log.Info("AAAAAAAAAAAAAAAA role", "role", role)
-		log.Info("AAAAAAAAAAAAAAA mongo role", "mongoRole", mr)
 
 		if roleInfo == nil {
-			println("CREAAYEEEE")
+			println("AAAAAAAAAAAAAAAAAAA CREAAYEEEE")
 			err = cli.CreateRole(ctx, role.DB, mr)
 			return errors.Wrapf(err, "create role %s", role.Role)
 		}
 
-		println("UPDAAAYEEEE")
-		err = cli.UpdateRole(ctx, role.DB, mr)
-		return errors.Wrapf(err, "update role %s", role.Role)
-		// if !comparePrivileges(mr.Privileges, roleInfo.Privileges) {
-		// 	err = cli.UpdateRole(ctx, role.DB, mr)
-		// 	return errors.Wrapf(err, "update role %s", role)
-		// }
+		// err = cli.UpdateRole(ctx, role.DB, mr)
+		// return errors.Wrapf(err, "update role %s", role.Role)
+		if reflect.DeepEqual(mr, roleInfo) {
+			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
+			err = cli.UpdateRole(ctx, role.DB, mr)
+			return errors.Wrapf(err, "update role %s", role)
+		}
 	}
 
 	return nil
