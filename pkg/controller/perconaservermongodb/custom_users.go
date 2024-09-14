@@ -129,6 +129,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		if err != nil {
 			return errors.Wrap(err, "mongo get role")
 		}
+		log.Info("AAAAAAAAAAAAAAAA roleINFOOO", "role", roleInfo)
 
 		mr, err := toMongoRoleModel(role)
 		if err != nil {
