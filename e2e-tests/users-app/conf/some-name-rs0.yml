@@ -6,6 +6,26 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+
+  roles:
+    - role: role-one
+      db: admin
+      privileges:
+        - resource:
+            cluster: true
+          actions:
+            - addShard
+        - resource:
+            db: config
+            collection: ''
+          actions:
+            - find
+            - update
+            - insert
+            - remove
+      roles:
+        - role: read
+          db: admin
   users:
   - name: user-one
     db: admin
