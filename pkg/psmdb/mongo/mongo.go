@@ -332,7 +332,7 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
 	resp := RoleInfo{}
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{
+	res := client.Database(db).RunCommand(ctx, bson.D{
 		{Key: "rolesInfo", Value: role},
 		{Key: "showPrivileges", Value: true},
 		{Key: "showAuthenticationRestrictions", Value: true},
@@ -353,10 +353,12 @@ func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role,
 	}
 
 	r := &Role{
-		Role:                       role,
-		Roles:                      resp.Roles[0].Roles,
-		Privileges:                 resp.Roles[0].Privileges,
-		AuthenticationRestrictions: resp.Roles[0].AuthenticationRestrictions[0],
+		Role:       role,
+		Roles:      resp.Roles[0].Roles,
+		Privileges: resp.Roles[0].Privileges,
+	}
+	if resp.Roles[0].AuthenticationRestrictions != nil && len(resp.Roles[0].AuthenticationRestrictions) > 0 {
+		r.AuthenticationRestrictions = resp.Roles[0].AuthenticationRestrictions[0]
 	}
 
 	return r, nil
