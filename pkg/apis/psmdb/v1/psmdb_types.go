@@ -124,7 +124,7 @@ type RoleResource struct {
 }
 
 type RolePrivilege struct {
-	Actions  []string       `json:"actions"`
+	Actions  []string     `json:"actions"`
 	Resource RoleResource `json:"resource,omitempty"`
 }
 

@@ -114,7 +114,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
 	log := logf.FromContext(ctx)
 
-	if cr.Spec.Roles == nil || len(cr.Spec.Roles) == 0 {
+	if len(cr.Spec.Roles) == 0 {
 		return nil
 	}
 
@@ -131,12 +131,12 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		if roleInfo == nil {
 			println("CREAAYEEEE")
 			err = cli.CreateRole(ctx, role.DB, mr)
-			return errors.Wrapf(err, "create role %s", role)
+			return errors.Wrapf(err, "create role %s", role.Role)
 		}
 
 		println("UPDAAAYEEEE")
 		err = cli.UpdateRole(ctx, role.DB, mr)
-		return errors.Wrapf(err, "update role %s", role)
+		return errors.Wrapf(err, "update role %s", role.Role)
 		// if !comparePrivileges(mr.Privileges, roleInfo.Privileges) {
 		// 	err = cli.UpdateRole(ctx, role.DB, mr)
 		// 	return errors.Wrapf(err, "update role %s", role)
