@@ -173,6 +173,8 @@ compare 'admin' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$
 
 
 desc 'check user role on cluster initialization'
+compare 'admin' 'db.getRole("user-three", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "test-one"
+
 
 
 desc 'check role recreated after deleted from DB'
