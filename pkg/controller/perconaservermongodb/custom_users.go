@@ -113,6 +113,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
 	log := logf.FromContext(ctx)
+	
+	println("EEVOOO GAAA")
 
 	if len(cr.Spec.Roles) == 0 {
 		return nil
