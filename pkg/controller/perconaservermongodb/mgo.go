@@ -727,7 +727,7 @@ func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Context, cli mongo.Client, role string, privileges []mongo.RolePrivilege) error {
-	roleInfo, err := cli.GetRole(ctx, role)
+	roleInfo, err := cli.GetRole(ctx, "admin", role)
 	if err != nil {
 		return errors.Wrap(err, "mongo get role")
 	}

@@ -26,6 +26,12 @@ spec:
       roles:
         - role: read
           db: admin
+      authenticationRestrictions:
+        - clientSource:
+            - 127.0.0.1
+          serverAddress:
+            - 127.0.0.1
+
   users:
   - name: user-one
     db: admin

@@ -22,6 +22,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		return nil
 	}
 
+	if cr.Status.State != api.AppStateReady {
+		return nil
+	}
+
 	log := logf.FromContext(ctx)
 
 	var err error
@@ -47,10 +51,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	}
 
 	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
-		return nil
-	}
-
-	if cr.Status.State != api.AppStateReady {
 		return nil
 	}
 
@@ -125,7 +125,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 	}
 
 	for _, role := range cr.Spec.Roles {
-		roleInfo, err := cli.GetRole(ctx, role.Role)
+		roleInfo, err := cli.GetRole(ctx, role.DB, role.Role)
 		if err != nil {
 			return errors.Wrap(err, "mongo get role")
 		}

@@ -66,7 +66,7 @@ func (c *fakeMongoClient) UpdateRole(ctx context.Context, db string, role mongo.
 	return nil
 }
 
-func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
+func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.Role, error) {
 	return nil, nil
 }
 

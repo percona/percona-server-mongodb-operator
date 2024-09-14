@@ -38,7 +38,7 @@ type Client interface {
 	// UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error
 	CreateRole(ctx context.Context, db string, role Role) error
 	UpdateRole(ctx context.Context, db string, role Role) error
-	GetRole(ctx context.Context, role string) (*Role, error)
+	GetRole(ctx context.Context, db, role string) (*Role, error)
 	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
 	WriteConfig(ctx context.Context, cfg RSConfig) error
@@ -220,7 +220,6 @@ func (client *mongoClient) CreateRole(ctx context.Context, db string, role Role)
 // 		authRestrictionsArr = append(authRestrictionsArr, r)
 // 	}
 
-
 // 	m := bson.D{
 // 		{Key: "createRole", Value: role},
 // 		{Key: "privileges", Value: privilegesArr},
@@ -330,7 +329,7 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 // 	return nil
 // }
 
-func (client *mongoClient) GetRole(ctx context.Context, role string) (*Role, error) {
+func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
 	resp := RoleInfo{}
 
 	res := client.Database("admin").RunCommand(ctx, bson.D{
@@ -352,7 +351,15 @@ func (client *mongoClient) GetRole(ctx context.Context, role string) (*Role, err
 	if len(resp.Roles) == 0 {
 		return nil, nil
 	}
-	return &resp.Roles[0], nil
+
+	r := &Role{
+		Role:                       role,
+		Roles:                      resp.Roles[0].Roles,
+		Privileges:                 resp.Roles[0].Privileges,
+		AuthenticationRestrictions: resp.Roles[0].AuthenticationRestrictions[0],
+	}
+
+	return r, nil
 }
 
 func (client *mongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error {

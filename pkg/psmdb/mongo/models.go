@@ -258,8 +258,16 @@ type Role struct {
 	AuthenticationRestrictions []RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
 }
 
+type GetRoleResult struct {
+	Role                       string                            `bson:"role" json:"role"`
+	DB                         string                            `bson:"db" json:"db"`
+	Roles                      []InheritenceRole                 `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                   `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions [][]RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
+}
+
 type RoleInfo struct {
-	Roles      []Role `bson:"roles" json:"roles"`
+	Roles      []GetRoleResult `bson:"roles" json:"roles"`
 	OKResponse `bson:",inline"`
 }
 
