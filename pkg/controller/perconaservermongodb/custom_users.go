@@ -133,7 +133,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 		if roleInfo == nil {
 			println("AAAAAAAAAAAAAAAAAAA CREAAYEEEE")
-			err = cli.CreateRole(ctx, role.DB, mr)
+			err = cli.CreateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "create role %s", role.Role)
 		}
 
@@ -141,7 +141,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		// return errors.Wrapf(err, "update role %s", role.Role)
 		if !reflect.DeepEqual(mr, roleInfo) {
 			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
-			err = cli.UpdateRole(ctx, role.DB, mr)
+			err = cli.UpdateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "update role %s", role)
 		}
 	}
@@ -149,8 +149,8 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 	return nil
 }
 
-func toMongoRoleModel(role api.Role) (mongo.Role, error) {
-	mr := mongo.Role{
+func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
+	mr := &mongo.Role{
 		Role: role.Role,
 		DB:   role.DB,
 	}
@@ -164,7 +164,7 @@ func toMongoRoleModel(role api.Role) (mongo.Role, error) {
 
 	for _, p := range role.Privileges {
 		if p.Resource.Cluster != nil && (p.Resource.DB != "" || p.Resource.Collection != "") {
-			return mongo.Role{}, errors.New("field role.privilege.resource must have exactly db and collection set, or have only cluster set")
+			return nil, errors.New("field role.privilege.resource must have exactly db and collection set, or have only cluster set")
 		}
 
 		rp := mongo.RolePrivilege{
