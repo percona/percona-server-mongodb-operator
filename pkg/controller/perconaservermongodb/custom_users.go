@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/log"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -139,6 +140,8 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 		if !compareRole(mr, roleInfo) {
 			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
+			logf.FromContext(ctx).Info("AAAA ROLEE", "role", mr)
+			logf.FromContext(ctx).Info("AAAA ROLEEINFOOO", "role", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "update role %s", role.Role)
 		}
@@ -149,7 +152,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 func compareRole(r1, r2 *mongo.Role) bool {
 	if !comparePrivileges(r1.Privileges, r2.Privileges) {
-		println("CCCCCC privileges: ", r1.Privileges, r2.Privileges)
+		println(fmt.Sprintf("ZZZZZZZZZ priv: %v %v", r1.Privileges, r2.Privileges))
 		return false
 	}
 
@@ -157,7 +160,7 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
-		println("CCCCCC auth rest: ", r1.AuthenticationRestrictions, r2.AuthenticationRestrictions)
+		println(fmt.Sprintf("ZZZZZZZZZ auth: %v %v", r1.AuthenticationRestrictions, r2.AuthenticationRestrictions))
 		return false
 	}
 
@@ -165,7 +168,7 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
-		println("CCCCCC Role: ", r1.Roles, r2.Roles)
+		println(fmt.Sprintf("ZZZZZZZZZZZ roles: %v %v", r1.Roles, r2.Roles))
 		return false
 	}
 
