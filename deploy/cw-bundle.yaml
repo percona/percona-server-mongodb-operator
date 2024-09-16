@@ -19129,7 +19129,6 @@ spec:
                         type: object
                       type: array
                   required:
-                  - db
                   - name
                   - passwordSecretRef
                   - roles
