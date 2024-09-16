@@ -101,10 +101,15 @@ type UserRole struct {
 	DB   string `json:"db"`
 }
 
+type SecretKeySelector struct {
+	Name string `json:"name"`
+	Key  string `json:"key,omitempty"`
+}
+
 type User struct {
 	Name              string                   `json:"name"`
 	DB                string                   `json:"db"`
-	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
+	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
 	Roles             []UserRole               `json:"roles"`
 }
 
