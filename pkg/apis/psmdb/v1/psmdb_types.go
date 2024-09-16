@@ -110,7 +110,7 @@ type User struct {
 	Name              string                   `json:"name"`
 	DB                string                   `json:"db"`
 	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []UserRole               `json:"roles"`
+	Roles             []UserRole        `json:"roles"`
 }
 
 func (u *User) UserID() string {
