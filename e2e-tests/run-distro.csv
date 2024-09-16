@@ -2,6 +2,7 @@ arbiter
 balancer
 custom-replset-name
 custom-tls
+custom-users-roles
 data-at-rest-encryption
 data-sharded
 default-cr
@@ -28,4 +29,3 @@ tls-issue-cert-manager
 upgrade
 upgrade-sharded
 users
-users-app

@@ -273,6 +273,42 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-three"
 
+desc 'check creating role and the user in a single CR apply'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+				"role": "role-three",
+				"db": "role-four",
+				"privileges": [
+					{
+						"resource": {
+							"db": "admin",
+							"collection": ""
+						},
+						"actions": [
+							"find"
+						]
+					}
+				]
+			}
+		],
+		"users":[
+			{
+				"name":"user-five",
+				"db":"admin",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"role-four"}
+				]
+			}
+		]
+	}}'
+compare 'admin' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-four"
+compare 'admin' 'db.getUser("user-four")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two"
+
 destroy $namespace
 
 desc 'test passed'

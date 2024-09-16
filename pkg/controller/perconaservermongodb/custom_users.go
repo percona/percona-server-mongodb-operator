@@ -50,7 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		return errors.Wrap(err, "handle roles")
 	}
 
-	if cr.Spec.Users == nil || len(cr.Spec.Users) == 0 {
+	if len(cr.Spec.Users) == 0 {
 		return nil
 	}
 

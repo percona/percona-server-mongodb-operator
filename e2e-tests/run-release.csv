@@ -2,6 +2,7 @@ arbiter
 balancer
 custom-replset-name
 custom-tls
+custom-users-roles
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
@@ -47,5 +48,4 @@ upgrade-consistency
 upgrade-consistency-sharded-tls
 upgrade-sharded
 users
-users-app
 version-service
