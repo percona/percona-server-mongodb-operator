@@ -14,7 +14,7 @@ compare() {
 		| sed '/"userId"/d' \
 			>$tmp_dir/${target}
 
-    diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
+	diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
 }
 
 test_dir=$(realpath $(dirname $0))
