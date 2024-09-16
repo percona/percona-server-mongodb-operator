@@ -137,18 +137,36 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			return errors.Wrapf(err, "create role %s", role.Role)
 		}
 
-		// err = cli.UpdateRole(ctx, role.DB, mr)
-		// return errors.Wrapf(err, "update role %s", role.Role)
-		if !reflect.DeepEqual(mr, roleInfo) {
+		if !compareRole(mr, roleInfo) {
 			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
-			logf.FromContext(ctx).Info("AAAAAA Updating role", "role", role)
-			logf.FromContext(ctx).Info("AAAAAA RoleInfo", "roleInfo", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "update role %s", role.Role)
 		}
 	}
 
 	return nil
+}
+
+func compareRole(r1, r2 *mongo.Role) bool {
+	if !comparePrivileges(r1.Privileges, r2.Privileges) {
+		return false
+	}
+
+	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
+		return false
+	}
+	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
+		return false
+	}
+
+	if len(r1.Roles) != len(r2.Roles) {
+		return false
+	}
+	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
+		return false
+	}
+
+	return true
 }
 
 func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
@@ -184,8 +202,6 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		mr.Privileges = append(mr.Privileges, rp)
 	}
 
-	println("AAAAAAAAAAAA to mongo rolee: ", mr.AuthenticationRestrictions)
-	println("AAAAAAAAAAAA to mongo rolee: ", role.AuthenticationRestrictions)
 	if role.AuthenticationRestrictions != nil {
 		for _, ar := range role.AuthenticationRestrictions {
 			mr.AuthenticationRestrictions = append(mr.AuthenticationRestrictions, mongo.RoleAuthenticationRestriction{

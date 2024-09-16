@@ -82,7 +82,7 @@ sleep 20
 
 check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
 
-desc 'check role update from CR'
+desc 'check user roles update from CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
 			{
@@ -101,7 +101,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 wait_for_running $cluster 3
 compare 'admin' 'db.getUser("user-two")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-two-update-roles"
 
-desc 'update user role via DB'
+desc 'check user roles update from DB'
 
 run_mongo \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
@@ -161,8 +161,10 @@ wait_for_running $cluster 3
 compare 'newDb' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-newDb-db"
 compare 'admin' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-admin-db"
 
+# ======================== Roles ========================
+
 desc 'check user role on cluster initialization'
-# compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 
 desc 'check role recreated after deleted from DB'
 run_mongo \
@@ -171,7 +173,7 @@ run_mongo \
 
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 
-desc 'check role updated from DB'
+desc 'check user role updated from DB'
 
 desc 'delete initial user from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -203,6 +205,10 @@ wait_for_running $cluster 3
 
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two"
+
+desc 'check role update from CR'
+
+desc 'check role update from DB'
 
 desc 'check new role created after updated role name via CR'
 
