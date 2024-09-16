@@ -144,7 +144,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			logf.FromContext(ctx).Info("AAAAAA Updating role", "role", role)
 			logf.FromContext(ctx).Info("AAAAAA RoleInfo", "roleInfo", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
-			return errors.Wrapf(err, "update role %s", role)
+			return errors.Wrapf(err, "update role %s", role.Role)
 		}
 	}
 

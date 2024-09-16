@@ -403,7 +403,7 @@ func (c *fakeMongoClient) GetFCV(ctx context.Context) (string, error) {
 	return "4.0", nil
 }
 
-func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
+func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.Role, error) {
 	return &mongo.Role{
 		Role: string(api.RoleClusterAdmin),
 	}, nil
