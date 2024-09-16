@@ -202,48 +202,6 @@ func (client *mongoClient) CreateRole(ctx context.Context, db string, role Role)
 	return nil
 }
 
-// func (client *mongoClient) CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error {
-// 	resp := OKResponse{}
-
-// 	privilegesArr := bson.A{}
-// 	for _, p := range privileges {
-// 		privilegesArr = append(privilegesArr, p)
-// 	}
-
-// 	rolesArr := bson.A{}
-// 	for _, r := range roles {
-// 		rolesArr = append(rolesArr, r)
-// 	}
-
-// 	authRestrictionsArr := bson.A{}
-// 	for _, r := range authRestrictions {
-// 		authRestrictionsArr = append(authRestrictionsArr, r)
-// 	}
-
-// 	m := bson.D{
-// 		{Key: "createRole", Value: role},
-// 		{Key: "privileges", Value: privilegesArr},
-// 		{Key: "roles", Value: rolesArr},
-// 		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
-// 	}
-
-// 	res := client.Database("admin").RunCommand(ctx, m)
-// 	if res.Err() != nil {
-// 		return errors.Wrap(res.Err(), "failed to create role")
-// 	}
-
-// 	err := res.Decode(&resp)
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to decode response")
-// 	}
-
-// 	if resp.OK != 1 {
-// 		return errors.Errorf("mongo says: %s", resp.Errmsg)
-// 	}
-
-// 	return nil
-// }
-
 func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role) error {
 	resp := OKResponse{}
 
@@ -286,48 +244,6 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	return nil
 
 }
-
-// func (client *mongoClient) UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error {
-// 	resp := OKResponse{}
-
-// 	privilegesArr := bson.A{}
-// 	for _, p := range privileges {
-// 		privilegesArr = append(privilegesArr, p)
-// 	}
-
-// 	rolesArr := bson.A{}
-// 	for _, r := range roles {
-// 		rolesArr = append(rolesArr, r)
-// 	}
-
-// 	authRestrictionsArr := bson.A{}
-// 	for _, r := range authRestrictions {
-// 		authRestrictionsArr = append(authRestrictionsArr, r)
-// 	}
-
-// 	m := bson.D{
-// 		{Key: "updateRole", Value: role},
-// 		{Key: "privileges", Value: privilegesArr},
-// 		{Key: "roles", Value: rolesArr},
-// 		{Key: "authenticationRestrictions", Value: authRestrictionsArr},
-// 	}
-
-// 	res := client.Database("admin").RunCommand(ctx, m)
-// 	if res.Err() != nil {
-// 		return errors.Wrap(res.Err(), "failed to create role")
-// 	}
-
-// 	err := res.Decode(&resp)
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to decode response")
-// 	}
-
-// 	if resp.OK != 1 {
-// 		return errors.Errorf("mongo says: %s", resp.Errmsg)
-// 	}
-
-// 	return nil
-// }
 
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
 	resp := RoleInfo{}
