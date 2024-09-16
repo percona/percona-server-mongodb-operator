@@ -250,7 +250,6 @@ run_mongo \
 sleep 15
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two-updated"
 
-
 desc 'check new role created after updated role name via CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"roles":[
