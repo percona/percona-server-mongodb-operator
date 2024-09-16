@@ -165,44 +165,44 @@ desc 'check user role on cluster initialization'
 # compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 
 desc 'check role recreated after deleted from DB'
-# run_mongo \
-# 	'use admin\n db.dropRole("role-one")' \
-# 	"userAdmin:userAdmin123456@$cluster.$namespace"
+run_mongo \
+	'use admin\n db.dropRole("role-one")' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
 
-# compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 
 desc 'check role updated from DB'
 
-# desc 'delete initial user from CR and create a new one'
-# kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
-# 		"spec": {"roles":[
-# 			{
-# 			"role": "role-one",
-# 			"db": "admin",
-# 			"privileges": [
-# 				{
-# 					"resource": {
-# 						"db": "config",
-# 						"collection": ""
-# 					},
-# 					"actions": [
-# 						"find",
-# 					]
-# 				}
-# 			],
-# 			"roles": [
-# 				{
-# 					"role": "read",
-# 					"db": "admin"
-# 				}
-# 			]
-# 			}
-# 		]}
-# 	}'
-# wait_for_running $cluster 3
+desc 'delete initial user from CR and create a new one'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+			"role": "role-one",
+			"db": "admin",
+			"privileges": [
+				{
+					"resource": {
+						"db": "config",
+						"collection": ""
+					},
+					"actions": [
+						"find",
+					]
+				}
+			],
+			"roles": [
+				{
+					"role": "read",
+					"db": "admin"
+				}
+			]
+			}
+		]}
+	}'
+wait_for_running $cluster 3
 
-# compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
-# compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two"
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
+compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two"
 
 desc 'check new role created after updated role name via CR'
 

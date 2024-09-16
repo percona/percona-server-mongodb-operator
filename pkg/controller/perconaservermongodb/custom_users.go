@@ -184,6 +184,8 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		mr.Privileges = append(mr.Privileges, rp)
 	}
 
+	println("AAAAAAAAAAAA to mongo rolee: ", mr.AuthenticationRestrictions)
+	println("AAAAAAAAAAAA to mongo rolee: ", role.AuthenticationRestrictions)
 	if role.AuthenticationRestrictions != nil {
 		for _, ar := range role.AuthenticationRestrictions {
 			mr.AuthenticationRestrictions = append(mr.AuthenticationRestrictions, mongo.RoleAuthenticationRestriction{
@@ -191,6 +193,8 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 				ServerAddress: ar.ServerAddress,
 			})
 		}
+	} else {
+		mr.AuthenticationRestrictions = nil
 	}
 
 	return mr, nil
