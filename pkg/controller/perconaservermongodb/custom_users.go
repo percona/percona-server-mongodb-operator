@@ -149,6 +149,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 func compareRole(r1, r2 *mongo.Role) bool {
 	if !comparePrivileges(r1.Privileges, r2.Privileges) {
+		println("CCCCCC privileges: ", r1.Privileges, r2.Privileges)
 		return false
 	}
 
@@ -156,6 +157,7 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
+		println("CCCCCC auth rest: ", r1.AuthenticationRestrictions, r2.AuthenticationRestrictions)
 		return false
 	}
 
@@ -163,6 +165,7 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
+		println("CCCCCC Role: ", r1.Roles, r2.Roles)
 		return false
 	}
 
