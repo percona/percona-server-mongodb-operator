@@ -184,11 +184,13 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		mr.Privileges = append(mr.Privileges, rp)
 	}
 
-	for _, ar := range role.AuthenticationRestrictions {
-		mr.AuthenticationRestrictions = append(mr.AuthenticationRestrictions, mongo.RoleAuthenticationRestriction{
-			ClientSource:  ar.ClientSource,
-			ServerAddress: ar.ServerAddress,
-		})
+	if role.AuthenticationRestrictions != nil {
+		for _, ar := range role.AuthenticationRestrictions {
+			mr.AuthenticationRestrictions = append(mr.AuthenticationRestrictions, mongo.RoleAuthenticationRestriction{
+				ClientSource:  ar.ClientSource,
+				ServerAddress: ar.ServerAddress,
+			})
+		}
 	}
 
 	return mr, nil
