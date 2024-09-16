@@ -8,7 +8,7 @@ compare() {
 	local uri="$3"
 	local target="$4"
 
-	run_mongo "use ${database}\n ${command}" "$uri" "mongodb" \
+	run_mongos "use ${database}\n ${command}" "$uri" "mongodb" \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxxesvc/' \
 		| sed '/"userId"/d' \
@@ -31,7 +31,7 @@ kubectl_bin apply -f "${conf_dir}/client.yml" \
 	-f "${conf_dir}/secrets.yml" \
 	-f "${test_dir}/conf/app-user-secrets.yml"
 
-mongoUri="userAdmin:userAdmin123456@$cluster.$namespace"
+mongosUri="userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 
 desc "create first PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster.yml
@@ -43,7 +43,7 @@ desc 'check user created on cluster creation'
 
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
-compare 'admin' 'db.getUser("user-one")' "$mongoUri" "user-one"
+compare 'admin' 'db.getUser("user-one")' "$mongosUri" "user-one"
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
 desc 'delete initial user from CR and create a new one'
@@ -65,7 +65,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}'
 wait_for_running $cluster 3
 
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two"
 
 userTwo="user-two"
 userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
@@ -98,22 +98,22 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
 
 desc 'check user roles update from DB'
 
 run_mongo \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
-	"$mongoUri"
+	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
 
 desc 'check user recreated after deleted from DB'
 run_mongo \
 	'use admin\n db.dropUser("user-two")' \
-	"$mongoUri"
+	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
 
 desc 'check new user created after updated user name via CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -133,8 +133,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}'
 wait_for_running $cluster 3
 
-compare 'admin' 'db.getUser("user-three")' "$mongoUri" "user-three-admin-db"
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
 
 # user-three and user-two should be in the DB
 check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
@@ -157,8 +157,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'newDb' 'db.getUser("user-three")' "$mongoUri" "user-three-newDb-db"
-compare 'admin' 'db.getUser("user-three")' "$mongoUri" "user-three-admin-db"
+compare 'newDb' 'db.getUser("user-three")' "$mongosUri" "user-three-newDb-db"
+compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
 
 desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -175,21 +175,21 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getUser("user-four")' "$mongoUri" "user-four"
+compare 'admin' 'db.getUser("user-four")' "$mongosUri" "user-four"
 
 # ======================== Roles ========================
 
 desc 'check user role on cluster initialization'
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
+	"$mongosUri" "role-one"
 
 desc 'check role recreated after deleted from DB'
 run_mongo \
 	'use admin\n db.dropRole("role-one")' \
-	"$mongoUri"
+	"$mongosUri"
 sleep 15
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
+	"$mongosUri" "role-one"
 
 desc 'delete initial role from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -219,9 +219,9 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}}'
 wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
+	"$mongosUri" "role-one"
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two"
+	"$mongosUri" "role-two"
 
 desc 'check role update from CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -245,15 +245,15 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}}'
 wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two-updated"
+	"$mongosUri" "role-two-updated"
 
 desc 'check role update from DB'
 run_mongo \
 	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
-	"$mongoUri"
+	"$mongosUri"
 sleep 15
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two-updated"
+	"$mongosUri" "role-two-updated"
 
 desc 'check new role created after updated role name via CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -277,14 +277,14 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}}'
 wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-three"
+	"$mongosUri" "role-three"
 
 desc 'check creating role and the user in a single CR apply'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"roles":[
 			{
-				"role": "role-four",
-				"db": "admin",
+				"role": "role-three",
+				"db": "role-four",
 				"privileges": [
 					{
 						"resource": {
@@ -313,8 +313,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]
 	}}'
 compare 'admin' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-four"
-compare 'admin' 'db.getUser("user-five")' "$mongoUri" "user-five"
+	"$mongosUri" "role-four"
+compare 'admin' 'db.getUser("user-five")' "$mongosUri" "user-five"
 
 destroy $namespace
 

@@ -1,12 +1,12 @@
 switched to db admin
 {
-	"_id" : "admin.role-four",
-	"role" : "role-four",
+	"_id" : "admin.role-three",
+	"role" : "role-three",
 	"db" : "admin",
 	"privileges" : [
 		{
 			"resource" : {
-				"db" : "admin",
+				"db" : "config",
 				"collection" : ""
 			},
 			"actions" : [
@@ -20,7 +20,7 @@ switched to db admin
 	"inheritedPrivileges" : [
 		{
 			"resource" : {
-				"db" : "admin",
+				"db" : "config",
 				"collection" : ""
 			},
 			"actions" : [

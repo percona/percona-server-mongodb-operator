@@ -137,8 +137,6 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		}
 
 		if !compareRole(mr, roleInfo) {
-			logf.FromContext(ctx).Info("AAAA ROLEE", "role", mr)
-			logf.FromContext(ctx).Info("AAAA ROLEEINFOOO", "role", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "update role %s", role.Role)
 		}

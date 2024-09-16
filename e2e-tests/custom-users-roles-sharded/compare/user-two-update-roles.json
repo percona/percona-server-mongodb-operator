@@ -1,11 +1,11 @@
 switched to db admin
 {
-	"_id" : "admin.user-five",
-	"user" : "user-five",
+	"_id" : "admin.user-two",
+	"user" : "user-two",
 	"db" : "admin",
 	"roles" : [
 		{
-			"role" : "role-four",
+			"role" : "clusterAdmin",
 			"db" : "admin"
 		}
 	],

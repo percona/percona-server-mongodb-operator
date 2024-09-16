@@ -6,7 +6,7 @@ switched to db admin
 	"privileges" : [
 		{
 			"resource" : {
-				"db" : "admin",
+				"db" : "config",
 				"collection" : ""
 			},
 			"actions" : [
@@ -20,7 +20,7 @@ switched to db admin
 	"inheritedPrivileges" : [
 		{
 			"resource" : {
-				"db" : "admin",
+				"db" : "config",
 				"collection" : ""
 			},
 			"actions" : [
