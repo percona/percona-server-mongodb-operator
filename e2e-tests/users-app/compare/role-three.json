@@ -1,7 +1,7 @@
 switched to db admin
 {
-	"_id" : "admin.role-two",
-	"role" : "role-two",
+	"_id" : "admin.role-three",
+	"role" : "role-three",
 	"db" : "admin",
 	"privileges" : [
 		{

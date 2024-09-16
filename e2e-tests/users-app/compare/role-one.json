@@ -1,21 +1,124 @@
 switched to db admin
 {
-	"_id" : "admin.user-one",
-	"user" : "user-one",
+	"_id" : "admin.role-one",
+	"role" : "role-one",
 	"db" : "admin",
-	"roles" : [
+	"privileges" : [
 		{
-			"role" : "clusterAdmin",
-			"db" : "admin"
+			"resource" : {
+				"cluster" : true
+			},
+			"actions" : [
+				"addShard"
+			]
 		},
 		{
-			"role" : "userAdminAnyDatabase",
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"insert",
+				"remove",
+				"update"
+			]
+		}
+	],
+	"roles" : [
+		{
+			"role" : "read",
 			"db" : "admin"
 		}
 	],
-	"mechanisms" : [
-		"SCRAM-SHA-1",
-		"SCRAM-SHA-256"
-	]
+	"authenticationRestrictions" : [
+		[
+			{
+				"clientSource" : [
+					"127.0.0.1"
+				],
+				"serverAddress" : [
+					"127.0.0.1"
+				]
+			}
+		]
+	],
+	"inheritedRoles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"inheritedPrivileges" : [
+		{
+			"resource" : {
+				"cluster" : true
+			},
+			"actions" : [
+				"addShard"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"insert",
+				"remove",
+				"update"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : ""
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : "system.js"
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		}
+	],
+	"inheritedAuthenticationRestrictions" : [
+		[
+			{
+				"clientSource" : [
+					"127.0.0.1"
+				],
+				"serverAddress" : [
+					"127.0.0.1"
+				]
+			}
+		]
+	],
+	"isBuiltin" : false
 }
 bye

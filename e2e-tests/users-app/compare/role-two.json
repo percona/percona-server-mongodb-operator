@@ -1,21 +1,80 @@
 switched to db admin
 {
-	"_id" : "admin.user-one",
-	"user" : "user-one",
+	"_id" : "admin.role-two",
+	"role" : "role-two",
 	"db" : "admin",
+	"privileges" : [
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find"
+			]
+		}
+	],
 	"roles" : [
 		{
-			"role" : "clusterAdmin",
-			"db" : "admin"
-		},
-		{
-			"role" : "userAdminAnyDatabase",
+			"role" : "read",
 			"db" : "admin"
 		}
 	],
-	"mechanisms" : [
-		"SCRAM-SHA-1",
-		"SCRAM-SHA-256"
-	]
+	"authenticationRestrictions" : [ ],
+	"inheritedRoles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"inheritedPrivileges" : [
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : ""
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : "system.js"
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		}
+	],
+	"inheritedAuthenticationRestrictions" : [ ],
+	"isBuiltin" : false
 }
 bye

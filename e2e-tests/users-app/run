@@ -14,7 +14,7 @@ compare() {
 		| sed '/"userId"/d' \
 			>$tmp_dir/${target}
 
-	diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
+    diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
 }
 
 test_dir=$(realpath $(dirname $0))
@@ -29,7 +29,7 @@ create_infra $namespace
 desc 'create secrets and start client'
 kubectl_bin apply -f "${conf_dir}/client.yml" \
 	-f "${conf_dir}/secrets.yml" \
-	-f "${conf_dir}/minio-secret.yml"
+	-f "${test_dir}/conf/app-user-secrets.yml"
 
 
 desc "create first PSMDB cluster $cluster"
@@ -161,6 +161,23 @@ wait_for_running $cluster 3
 compare 'newDb' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-newDb-db"
 compare 'admin' 'db.getUser("user-three")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-three-admin-db"
 
+desc 'check new user created with default db and secret password key'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-four",
+				"passwordSecretRef": {
+					"name": "user-two",
+				},
+				"roles": [
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster 3
+compare 'admin' 'db.getUser("user-four")' "userAdmin:userAdmin123456@$cluster.$namespace" "user-four"
+
 # ======================== Roles ========================
 
 desc 'check user role on cluster initialization'
@@ -170,11 +187,10 @@ desc 'check role recreated after deleted from DB'
 run_mongo \
 	'use admin\n db.dropRole("role-one")' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 15
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 
-desc 'check user role updated from DB'
-
-desc 'delete initial user from CR and create a new one'
+desc 'delete initial role from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"roles":[
 			{
@@ -187,7 +203,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 							"collection": ""
 						},
 						"actions": [
-							"find",
+							"find"
 						]
 					}
 				],
@@ -198,10 +214,9 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 					}
 				]
 			}
-		]}
-	}'
+		]
+	}}'
 wait_for_running $cluster 3
-
 compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-one"
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two"
 
@@ -218,25 +233,46 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 							"collection": ""
 						},
 						"actions": [
-							"find",
+							"find"
 						]
 					}
 				]
 			}
-		]}
-	}'
+		]
+	}}'
+wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two-updated"
 
 desc 'check role update from DB'
 run_mongo \
-	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
+	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
 	"userAdmin:userAdmin123456@$cluster.$namespace"
+sleep 15
+compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-two-updated"
+
 
 desc 'check new role created after updated role name via CR'
-
-desc 'check new role created after updated role DB via CR'
-
-desc 'check user with user created role'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+				"role": "role-three",
+				"db": "admin",
+				"privileges": [
+					{
+						"resource": {
+							"db": "config",
+							"collection": ""
+						},
+						"actions": [
+							"find"
+						]
+					}
+				]
+			}
+		]
+	}}'
+wait_for_running $cluster 3
+compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' "userAdmin:userAdmin123456@$cluster.$namespace" "role-three"
 
 destroy $namespace
 
