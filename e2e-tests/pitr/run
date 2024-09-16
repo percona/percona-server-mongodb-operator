@@ -76,9 +76,9 @@ check_recovery() {
 		cat $test_dir/conf/restore.yml \
 			| $sed -e "s/name:/name: restore-$backup_name/" \
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
-			| $sed -e "s/type:/type: $restore_type/" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-			| if [ -n "$selective_collection" ]; then yq '.spec.selective.namespaces[0]="myApp.test"'; fi \
+			| if [ -n "$selective_collection" ]; then yq eval '.spec.selective = {"namespaces": ["myApp.test"], "withUsersAndRoles": true}'; else yq; fi \
 			| $sed -e "/backupSource/,+2d" \
 			| kubectl_bin apply -f -
 	else
@@ -86,9 +86,9 @@ check_recovery() {
 		cat $test_dir/conf/restore.yml \
 			| $sed -e "s/name:/name: restore-$backup_name/" \
 			| $sed -e "/backupName/d" \
-			| $sed -e "s/type:/type: $restore_type/" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
-			| if [ -n "$selective_collection" ]; then yq '.spec.selective.namespaces[0]="myApp.test"'; fi \
+			| if [ -n "$selective_collection" ]; then yq eval '.spec.selective = {"namespaces": ["myApp.test"], "withUsersAndRoles": true}'; else yq; fi \
 			| $sed -e "s|BACKUP-NAME|$backup_dest|" \
 			| kubectl_bin apply -f -
 	fi

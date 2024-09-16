@@ -6,12 +6,9 @@ spec:
   clusterName: some-name
   backupName:
   storageName: minio
-  selective:
-    namespaces:
-    - myApp.test
-    withUsersAndRoles: true
   pitr:
-    type:
+    pitrType:
     date:
   backupSource:
+    type: logical
     destination: s3://BACKUP-NAME
