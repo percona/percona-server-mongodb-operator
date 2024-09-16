@@ -107,8 +107,8 @@ type SecretKeySelector struct {
 }
 
 type User struct {
-	Name              string                   `json:"name"`
-	DB                string                   `json:"db"`
+	Name              string            `json:"name"`
+	DB                string            `json:"db"`
 	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
 	Roles             []UserRole        `json:"roles"`
 }
