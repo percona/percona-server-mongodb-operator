@@ -4,6 +4,7 @@ custom-replset-name
 custom-tls
 custom-users-roles
 cross-site-sharded
+cross-site-sharded-sharded
 data-at-rest-encryption
 data-sharded
 default-cr

@@ -3,6 +3,7 @@ balancer
 custom-replset-name
 custom-tls
 custom-users-roles
+custom-users-roles-sharded
 data-at-rest-encryption
 data-sharded
 default-cr
