@@ -359,9 +359,7 @@ func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role,
 		Privileges: resp.Roles[0].Privileges,
 	}
 
-	println("BBBB auth rest: ", resp.Roles[0].AuthenticationRestrictions)
 	if len(resp.Roles[0].AuthenticationRestrictions) > 0 {
-		println("BBBB auth rest: ", resp.Roles[0].AuthenticationRestrictions)
 		r.AuthenticationRestrictions = resp.Roles[0].AuthenticationRestrictions[0]
 	}
 

@@ -133,13 +133,11 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		}
 
 		if roleInfo == nil {
-			println("AAAAAAAAAAAAAAAAAAA CREAAYEEEE")
 			err = cli.CreateRole(ctx, role.DB, *mr)
 			return errors.Wrapf(err, "create role %s", role.Role)
 		}
 
 		if !compareRole(mr, roleInfo) {
-			println("AAAAAAAAAAAAAAAAAAAAAA UPDAAAYEEEE")
 			logf.FromContext(ctx).Info("AAAA ROLEE", "role", mr)
 			logf.FromContext(ctx).Info("AAAA ROLEEINFOOO", "role", roleInfo)
 			err = cli.UpdateRole(ctx, role.DB, *mr)
@@ -152,7 +150,6 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 func compareRole(r1, r2 *mongo.Role) bool {
 	if !comparePrivileges(r1.Privileges, r2.Privileges) {
-		println(fmt.Sprintf("ZZZZZZZZZ priv: %v %v", r1.Privileges, r2.Privileges))
 		return false
 	}
 
@@ -160,7 +157,6 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
-		println(fmt.Sprintf("ZZZZZZZZZ auth: %v %v", r1.AuthenticationRestrictions, r2.AuthenticationRestrictions))
 		return false
 	}
 
@@ -168,7 +164,6 @@ func compareRole(r1, r2 *mongo.Role) bool {
 		return false
 	}
 	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
-		println(fmt.Sprintf("ZZZZZZZZZZZ roles: %v %v", r1.Roles, r2.Roles))
 		return false
 	}
 
