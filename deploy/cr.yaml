@@ -5,6 +5,7 @@ metadata:
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 #    - percona.com/delete-psmdb-pvc
+#    - percona.com/delete-pitr-chunks
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
