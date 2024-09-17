@@ -772,38 +772,19 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 			continue
 		}
 		c, ok := cm[podName]
-		if !reflect.DeepEqual(c.Tags, member.Tags) {
+		if ok && !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
 			log.Info("Tags changed", "pod", podName, "old", member.Tags, "new", c.Tags)
 		}
-	}
-
-	return changes
-}
-
-func (m *ConfigMembers) HorizonsChanged(compareWith ConfigMembers) bool {
-	cm := make(map[string]struct {
-		horizons map[string]string
-	}, len(compareWith))
-
-	for _, member := range compareWith {
-		cm[member.Host] = struct{ horizons map[string]string }{horizons: member.Horizons}
-	}
-
-	changed := false
-
-	for i := 0; i < len(*m); i++ {
-		member := []ConfigMember(*m)[i]
-		if mem, ok := cm[member.Host]; ok {
-			if !reflect.DeepEqual(mem.horizons, member.Horizons) {
-				[]ConfigMember(*m)[i].Horizons = mem.horizons
-				changed = true
-			}
+		if ok && !reflect.DeepEqual(c.Horizons, member.Horizons) {
+			changes = true
+			[]ConfigMember(*m)[i].Horizons = c.Horizons
+			log.Info("Horizons changed", "pod", podName, "old", member.Horizons, "new", c.Horizons)
 		}
 	}
 
-	return changed
+	return changes
 }
 
 // ExternalNodesChanged checks if votes or priority fields changed for external nodes

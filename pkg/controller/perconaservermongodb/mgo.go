@@ -432,16 +432,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	if cnf.Members.HorizonsChanged(members) {
-		cnf.Version++
-
-		log.Info("Updating split horizons", "replset", rs.Name)
-
-		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return 0, errors.Wrap(err, "update split horizons: write mongo config")
-		}
-	}
-
 	if cnf.Members.RemoveOld(ctx, members) {
 		cnf.Version++
 
