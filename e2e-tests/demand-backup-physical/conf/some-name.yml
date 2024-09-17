@@ -68,7 +68,7 @@ spec:
             storage: 3Gi
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     size: 3
     configuration: |
       operationProfiling:
