@@ -296,19 +296,16 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		})
 	}
 
-	member.Tags = tags
-
 	switch pod.Labels[naming.LabelKubernetesComponent] {
 	case "arbiter":
-		member.Tags = util.MapMerge(mongo.ReplsetTags{
-			"arbiter": "true",
-		}, member.Tags)
 		member.ArbiterOnly = true
 		member.Priority = 0
+	case "mongod", "cfg":
+		member.Tags = tags
 	case "nonVoting":
 		member.Tags = util.MapMerge(mongo.ReplsetTags{
 			"nonVoting": "true",
-		}, member.Tags)
+		}, tags)
 		member.Priority = 0
 		member.Votes = 0
 	}
