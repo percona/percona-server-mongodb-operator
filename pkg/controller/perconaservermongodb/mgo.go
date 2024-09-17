@@ -416,7 +416,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		log.Info("Fixing hostname of member", "replset", rs.Name, "id", member.Id, "member", member.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return 0, errors.Wrap(err, "fix member hostnames: write mongo config")
+			return 0, errors.Wrap(err, "fix member hostname: write mongo config")
 		}
 
 		return 0, nil

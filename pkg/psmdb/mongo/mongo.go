@@ -693,7 +693,7 @@ func (m *ConfigMembers) FixMemberHostnames(ctx context.Context, compareWith Conf
 				continue
 			}
 			c, ok := cm[podName]
-			if c.Host != mem.Host {
+			if ok && c.Host != mem.Host {
 				log.Info(
 					"Host changed",
 					"pod", podName,
@@ -723,7 +723,7 @@ func (m *ConfigMembers) FixMemberHostnames(ctx context.Context, compareWith Conf
 				continue
 			}
 			c, ok := cm[podName]
-			if c.Host != mem.Host {
+			if ok && c.Host != mem.Host {
 				log.Info(
 					"Host changed",
 					"pod", podName,
