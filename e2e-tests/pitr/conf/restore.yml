@@ -10,5 +10,4 @@ spec:
     pitrType:
     date:
   backupSource:
-    type: logical
     destination: s3://BACKUP-NAME
