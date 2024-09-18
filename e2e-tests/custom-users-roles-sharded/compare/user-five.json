@@ -5,7 +5,7 @@ switched to db admin
 	"db" : "admin",
 	"roles" : [
 		{
-			"role" : "clusterAdmin",
+			"role" : "role-four",
 			"db" : "admin"
 		}
 	],

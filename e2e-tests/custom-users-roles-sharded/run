@@ -315,7 +315,7 @@ compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticat
 	"$mongosUri" "role-three"
 
 desc 'check creating role and the user in a single CR apply'
-kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 		"spec": {"roles":[
 			{
 				"role": "role-four",
