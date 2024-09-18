@@ -8,6 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 )
 
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
@@ -88,6 +90,15 @@ type PerconaServerMongoDBRestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBRestore `json:"items"`
+}
+
+func (r *PerconaServerMongoDBRestore) SetDefaults() error {
+	if bs := r.Spec.BackupSource; bs != nil {
+		if bs.Type == "" {
+			bs.Type = defs.LogicalBackup
+		}
+	}
+	return nil
 }
 
 func (r *PerconaServerMongoDBRestore) CheckFields() error {
