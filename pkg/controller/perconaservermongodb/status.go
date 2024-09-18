@@ -216,6 +216,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
+	if state != api.AppStateReady {
+		log.V(1).Info("Cluster is not ready",
+			"upgradeInProgress", inProgress,
+			"replsetsReady", replsetsReady,
+			"clusterState", clusterState,
+		)
+	}
+
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
 	}

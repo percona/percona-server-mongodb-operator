@@ -755,11 +755,7 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 	cm := make(map[string]configMember, len(compareWith))
 
 	for _, member := range compareWith {
-		name, ok := member.Tags["podName"]
-		if !ok {
-			continue
-		}
-		cm[name] = configMember{
+		cm[member.Host] = configMember{
 			Tags:     member.Tags,
 			Horizons: member.Horizons,
 		}
@@ -767,20 +763,16 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
-		podName, ok := member.Tags["podName"]
-		if !ok {
-			continue
-		}
-		c, ok := cm[podName]
+		c, ok := cm[member.Host]
 		if ok && !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
-			log.Info("Tags changed", "pod", podName, "old", member.Tags, "new", c.Tags)
+			log.Info("Tags changed", "host", member.Host, "old", member.Tags, "new", c.Tags)
 		}
 		if ok && !reflect.DeepEqual(c.Horizons, member.Horizons) {
 			changes = true
 			[]ConfigMember(*m)[i].Horizons = c.Horizons
-			log.Info("Horizons changed", "pod", podName, "old", member.Horizons, "new", c.Horizons)
+			log.Info("Horizons changed", "host", member.Host, "old", member.Horizons, "new", c.Horizons)
 		}
 	}
 
@@ -792,7 +784,7 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 	cm := make(map[string]struct {
 		votes    int
 		priority int
-		tags     map[string]string
+		tags     ReplsetTags
 	}, len(compareWith))
 
 	for _, member := range compareWith {
@@ -803,7 +795,7 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 		cm[member.Host] = struct {
 			votes    int
 			priority int
-			tags     map[string]string
+			tags     ReplsetTags
 		}{
 			votes:    member.Votes,
 			priority: member.Priority,

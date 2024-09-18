@@ -244,6 +244,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateReady, nil
 	}
 
+	log.V(1).Info("Replset is not ready", "liveMembers", membersLive, "pods", len(pods.Items))
+
 	return api.AppStateInit, nil
 }
 
