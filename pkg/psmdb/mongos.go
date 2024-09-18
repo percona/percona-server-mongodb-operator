@@ -447,7 +447,9 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
 			},
 		},
-		Selector: ls,
+		Selector:              ls,
+		InternalTrafficPolicy: cr.Spec.Sharding.Mongos.Expose.InternalTrafficPolicy,
+		ExternalTrafficPolicy: cr.Spec.Sharding.Mongos.Expose.ExternalTrafficPolicy,
 	}
 
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
@@ -464,6 +466,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
 		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
+		spec.LoadBalancerIP = cr.Spec.Sharding.Mongos.Expose.LoadBalancerIP
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}

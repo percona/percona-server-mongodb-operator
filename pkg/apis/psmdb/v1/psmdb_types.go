@@ -999,11 +999,22 @@ type ExposeTogglable struct {
 }
 
 type Expose struct {
-	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
-	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
-	NodePort                 int32              `json:"nodePort,omitempty"`
+	ExposeType           corev1.ServiceType `json:"type,omitempty"`
+	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+
+	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
+	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
+	DeprecatedServiceAnnotations map[string]string `json:"serviceAnnotations,omitempty"`
+
+	ServiceLabels           map[string]string `json:"labels,omitempty"`
+	DeprecatedServiceLabels map[string]string `json:"serviceLabels,omitempty"`
+
+	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
+	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
+
+	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {

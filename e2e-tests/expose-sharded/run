@@ -67,14 +67,14 @@ function expose_cluster() {
               "path": "/spec/replsets/0/expose",
         "value": {
           "enabled": '$expose_status',
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           },
         {
               "op": "replace",
               "path": "/spec/sharding/mongos/expose",
         "value": {
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           },
           {
@@ -82,7 +82,7 @@ function expose_cluster() {
               "path": "/spec/sharding/configsvrReplSet/expose",
         "value": {
           "enabled": '${expose_status}',
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           }]'
 
