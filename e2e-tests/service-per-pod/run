@@ -46,14 +46,14 @@ check_cr_config() {
 		kubectl_bin patch psmdb node-port --type=json --patch '[
 		{
 			"op": "add",
-			"path": "/spec/replsets/0/expose/serviceAnnotations",
+			"path": "/spec/replsets/0/expose/annotations",
 			"value": {
 				"test": "service-per-pod",
 			}
 		},
 		{
 			"op": "add",
-			"path": "/spec/replsets/0/expose/serviceLabels",
+			"path": "/spec/replsets/0/expose/labels",
 			"value": {
 				"test": "service-per-pod",
 			}

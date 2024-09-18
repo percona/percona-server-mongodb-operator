@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,9 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
-	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
@@ -446,56 +442,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	if err != nil {
 		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
-	e := b.pbm.Logger().NewEvent(string(ctrl.CmdDeleteBackup), "", "", primitive.Timestamp{})
 	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
 	// as it's not possible to delete backup if it is a base for the PITR timeline
-	err = r.deletePITR(ctx, b, meta.LastWriteTS, e)
+	err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete PITR")
 	}
 	err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete backup")
-	}
-	return nil
-}
-
-// deletePITR deletes PITR oplog chunks whose StartTS is less or equal to the `until` timestamp. Deletes all chunks if `until` is 0.
-func (r *ReconcilePerconaServerMongoDBBackup) deletePITR(ctx context.Context, b *Backup, until primitive.Timestamp, e pbmLog.LogEvent) error {
-	log := logf.FromContext(ctx)
-
-	stg, err := b.pbm.GetStorage(ctx, e)
-	if err != nil {
-		return errors.Wrap(err, "get storage")
-	}
-
-	chunks, err := b.pbm.PITRGetChunksSlice(ctx, "", primitive.Timestamp{}, until)
-	if err != nil {
-		return errors.Wrap(err, "get pitr chunks")
-	}
-	if len(chunks) == 0 {
-		log.Info("nothing to delete")
-	}
-
-	for _, chnk := range chunks {
-		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
-			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
-		}
-
-		_, err = b.pbm.PITRChunksCollection().DeleteOne(
-			ctx,
-			bson.D{
-				{Key: "rs", Value: chnk.RS},
-				{Key: "start_ts", Value: chnk.StartTS},
-				{Key: "end_ts", Value: chnk.EndTS},
-			},
-		)
-		if err != nil {
-			return errors.Wrap(err, "delete pitr chunk metadata")
-		}
-
-		log.Info("deleted " + chnk.FName)
 	}
 	return nil
 }

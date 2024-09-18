@@ -27,7 +27,7 @@ spec:
             storage: 1Gi
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     size: 3
   sharding:
     enabled: true

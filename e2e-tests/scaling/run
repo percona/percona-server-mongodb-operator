@@ -67,11 +67,11 @@ kubectl_bin delete pvc --all
 sleep 30
 
 desc 'check scaling on exposed cluster'
-cat_config "$conf_dir/$cluster.yml" |
-	yq eval '.spec.unsafeFlags.replsetSize=true' |
-	yq eval '.spec.replsets[0].expose.enabled=true' |
-	yq eval '.spec.replsets[0].expose.exposeType="ClusterIP"' |
-	kubectl_bin apply -f -
+cat_config "$conf_dir/$cluster.yml" \
+	| yq eval '.spec.unsafeFlags.replsetSize=true' \
+	| yq eval '.spec.replsets[0].expose.enabled=true' \
+	| yq eval '.spec.replsets[0].expose.type="ClusterIP"' \
+	| kubectl_bin apply -f -
 wait_for_running $cluster 3
 
 desc 'check data consistency: write data, read from all'
