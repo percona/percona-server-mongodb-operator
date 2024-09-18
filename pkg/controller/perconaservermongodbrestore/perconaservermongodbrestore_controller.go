@@ -2,7 +2,6 @@ package perconaservermongodbrestore
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
