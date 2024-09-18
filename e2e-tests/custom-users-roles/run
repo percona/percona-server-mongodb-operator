@@ -312,6 +312,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 			}
 		]
 	}}'
+wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
 	"$mongoUri" "role-four"
 compare 'admin' 'db.getUser("user-five")' "$mongoUri" "user-five"

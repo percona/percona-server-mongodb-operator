@@ -34,8 +34,6 @@ type Client interface {
 
 	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error
 	ReadConfig(ctx context.Context) (RSConfig, error)
-	// CreateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error
-	// UpdateRole(ctx context.Context, role string, privileges []RolePrivilege, roles []interface{}, authRestrictions []RoleAuthenticationRestriction) error
 	CreateRole(ctx context.Context, db string, role Role) error
 	UpdateRole(ctx context.Context, db string, role Role) error
 	GetRole(ctx context.Context, db, role string) (*Role, error)

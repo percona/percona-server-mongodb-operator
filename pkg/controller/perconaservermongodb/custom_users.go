@@ -94,7 +94,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec)
+		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec, cr.Name)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
 			continue
@@ -231,14 +231,15 @@ func updatePass(
 	mongoCli mongo.Client,
 	user *api.User,
 	userInfo *mongo.User,
-	secret *corev1.Secret) error {
+	secret *corev1.Secret,
+	cluster string) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil {
 		return nil
 	}
 
-	annotationKey := fmt.Sprintf("percona.com/%s-hash", user.Name)
+	annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cluster, user.Name)
 
 	newHash := sha256Hash(secret.Data[user.PasswordSecretRef.Key])
 
