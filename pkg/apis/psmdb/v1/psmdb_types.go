@@ -672,6 +672,12 @@ type VolumeSpec struct {
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
 	PersistentVolumeClaim PVCSpec `json:"persistentVolumeClaim,omitempty"`
+
+	Resize ResizeSpec `json:"resize,omitempty"`
+}
+
+type ResizeSpec struct {
+	ExpansionEnabled bool `json:"expansionEnabled,omitempty"`
 }
 
 type PVCSpec struct {
