@@ -4028,9 +4028,23 @@ spec:
                       type: object
                     expose:
                       properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          type: object
                         enabled:
                           type: boolean
                         exposeType:
+                          type: string
+                        externalTrafficPolicy:
+                          type: string
+                        internalTrafficPolicy:
+                          type: string
+                        labels:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        loadBalancerIP:
                           type: string
                         loadBalancerSourceRanges:
                           items:
@@ -4047,6 +4061,8 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        type:
+                          type: string
                       required:
                       - enabled
                       type: object
@@ -11614,9 +11630,23 @@ spec:
                         type: object
                       expose:
                         properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
                           enabled:
                             type: boolean
                           exposeType:
+                            type: string
+                          externalTrafficPolicy:
+                            type: string
+                          internalTrafficPolicy:
+                            type: string
+                          labels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          loadBalancerIP:
                             type: string
                           loadBalancerSourceRanges:
                             items:
@@ -11633,6 +11663,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          type:
+                            type: string
                         required:
                         - enabled
                         type: object
@@ -16976,7 +17008,21 @@ spec:
                         type: object
                       expose:
                         properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
                           exposeType:
+                            type: string
+                          externalTrafficPolicy:
+                            type: string
+                          internalTrafficPolicy:
+                            type: string
+                          labels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          loadBalancerIP:
                             type: string
                           loadBalancerSourceRanges:
                             items:
@@ -16995,6 +17041,8 @@ spec:
                             type: object
                           servicePerPod:
                             type: boolean
+                          type:
+                            type: string
                         type: object
                       hostAliases:
                         items:

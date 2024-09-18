@@ -17,18 +17,18 @@ spec:
               storage: 3Gi
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
     mongos:
       size: 3
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
   replsets:
   - name: rs0
     affinity:
       antiAffinityTopologyKey: none
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     resources:
       limits:
         cpu: 500m
@@ -47,7 +47,7 @@ spec:
       antiAffinityTopologyKey: none
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     resources:
       limits:
         cpu: 500m

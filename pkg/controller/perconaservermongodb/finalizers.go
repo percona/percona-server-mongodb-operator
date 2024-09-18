@@ -3,8 +3,10 @@ package perconaservermongodb
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -43,6 +45,8 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			if err == nil {
 				shouldReconcile = true
 			}
+		case naming.FinalizerDeletePITR:
+			err = r.deleteAllPITRChunks(ctx, cr)
 		default:
 			finalizers = append(finalizers, f)
 			continue
@@ -67,6 +71,21 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	}
 
 	return shouldReconcile, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	pbmc, err := r.newPBM(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "new pbm")
+	}
+	defer pbmc.Close(ctx)
+
+	if err := pbmc.DeletePITRChunks(ctx, primitive.Timestamp{
+		T: uint32(time.Now().Unix()),
+	}); err != nil {
+		return errors.Wrap(err, "delete pitr chunks")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -276,7 +295,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 }
 
 func GetOrderedFinalizers(cr *api.PerconaServerMongoDB) []string {
-	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
+	order := []string{naming.FinalizerDeletePITR, naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
 
 	if cr.CompareVersion("1.17.0") < 0 {
 		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}

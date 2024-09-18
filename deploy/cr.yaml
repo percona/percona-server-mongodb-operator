@@ -5,6 +5,7 @@ metadata:
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 #    - percona.com/delete-psmdb-pvc
+#    - percona.com/delete-pitr-chunks
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
@@ -197,13 +198,16 @@ spec:
 #        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
+#      loadBalancerIP: 10.0.0.0/8
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
-#      serviceAnnotations:
+#      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#      serviceLabels:
+#      labels:
 #        rack: rack-22
+#      internalTrafficPolicy: Local
+#      externalTrafficPolicy: Local
     resources:
       limits:
         cpu: "300m"
@@ -408,13 +412,17 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
+#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
+#        nodePort: 32017
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
       resources:
         limits:
           cpu: "300m"
@@ -516,15 +524,18 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
 #        servicePerPod: true
+#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
 #        nodePort: 32017
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
