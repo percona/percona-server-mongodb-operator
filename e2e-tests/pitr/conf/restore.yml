@@ -7,7 +7,7 @@ spec:
   backupName:
   storageName: minio
   pitr:
-    type:
+    pitrType:
     date:
   backupSource:
     destination: s3://BACKUP-NAME
