@@ -1067,7 +1067,7 @@ spec:
                 type: string
               crVersion:
                 type: string
-              expansionEnabled:
+              enableVolumeExpansion:
                 type: boolean
               ignoreAnnotations:
                 items:

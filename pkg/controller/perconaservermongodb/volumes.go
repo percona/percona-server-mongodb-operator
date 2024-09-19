@@ -223,7 +223,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return nil
 	}
 
-	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.ExpansionEnabled {
+	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.VolumeExpansionEnabled {
 		// If expansion is disabled we should keep the old value
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil

@@ -93,7 +93,7 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
-	ExpansionEnabled             bool                                 `json:"expansionEnabled,omitempty"`
+	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
 }
 
 type User struct {
