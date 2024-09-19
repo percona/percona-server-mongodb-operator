@@ -7,6 +7,8 @@ spec:
     replsetSize: true
     mongosSize: true
   clusterServiceDNSMode: "Internal"
+  tls:
+    mode: requireTLS
   image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
   secrets:
