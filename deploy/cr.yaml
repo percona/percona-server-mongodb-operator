@@ -216,6 +216,8 @@ spec:
         cpu: "300m"
         memory: "0.5G"
     volumeSpec:
+#      resize:
+#        expansionEnabled: true
 #      emptyDir: {}
 #      hostPath:
 #        path: /data
@@ -277,6 +279,8 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       volumeSpec:
+#        resize:
+#          expansionEnabled: true
 #        emptyDir: {}
 #        hostPath:
 #          path: /data
@@ -431,6 +435,8 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       volumeSpec:
+#       resize:
+#         expansionEnabled: true
 #       emptyDir: {}
 #       hostPath:
 #         path: /data
