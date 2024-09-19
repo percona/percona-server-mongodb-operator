@@ -1067,6 +1067,8 @@ spec:
                 type: string
               crVersion:
                 type: string
+              expansionEnabled:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
@@ -6802,11 +6804,6 @@ spec:
                                 volumeName:
                                   type: string
                               type: object
-                            resize:
-                              properties:
-                                expansionEnabled:
-                                  type: boolean
-                              type: object
                           type: object
                       required:
                       - enabled
@@ -8869,11 +8866,6 @@ spec:
                               type: string
                             volumeName:
                               type: string
-                          type: object
-                        resize:
-                          properties:
-                            expansionEnabled:
-                              type: boolean
                           type: object
                       type: object
                   required:
@@ -14414,11 +14406,6 @@ spec:
                                   volumeName:
                                     type: string
                                 type: object
-                              resize:
-                                properties:
-                                  expansionEnabled:
-                                    type: boolean
-                                type: object
                             type: object
                         required:
                         - enabled
@@ -16481,11 +16468,6 @@ spec:
                                 type: string
                               volumeName:
                                 type: string
-                            type: object
-                          resize:
-                            properties:
-                              expansionEnabled:
-                                type: boolean
                             type: object
                         type: object
                     required:

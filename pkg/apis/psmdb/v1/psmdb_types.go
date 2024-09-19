@@ -93,6 +93,7 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
+	ExpansionEnabled             bool                                 `json:"expansionEnabled,omitempty"`
 }
 
 type User struct {
@@ -672,12 +673,6 @@ type VolumeSpec struct {
 	// It has the highest level of precedence, followed by HostPath and
 	// EmptyDir. And represents the PVC specification.
 	PersistentVolumeClaim PVCSpec `json:"persistentVolumeClaim,omitempty"`
-
-	Resize ResizeSpec `json:"resize,omitempty"`
-}
-
-type ResizeSpec struct {
-	ExpansionEnabled bool `json:"expansionEnabled,omitempty"`
 }
 
 type PVCSpec struct {

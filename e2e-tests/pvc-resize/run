@@ -138,7 +138,7 @@ if wait_all_pvc_resize "2Gi" 120 1; then
 fi
 
 echo "Enabling PVC resize"
-kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/replsets/0/volumeSpec/resize", "value":{"expansionEnabled":true} }]'
+kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/expansionEnabled", "value":true }]'
 sleep 10
 
 wait_cluster_consistency "$cluster"
