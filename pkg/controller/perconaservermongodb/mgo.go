@@ -291,6 +291,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			Votes:        mongo.DefaultVotes,
 		}
 
+		if compareTags(nodeLabels, rs.PrimaryPreferTagSelector) {
+			member.Priority = mongo.DefaultPriority + 1
+		}
+
 		if len(rs.Horizons) > 0 {
 			horizons := make(map[string]string)
 			for h, domain := range rs.Horizons[pod.Name] {
@@ -411,7 +415,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(unsafePSA)
+	cnf.Members.SetVotes(members, unsafePSA)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
@@ -722,6 +726,19 @@ func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
 			return false
 		}
+	}
+	return true
+}
+
+func compareTags(tags mongo.ReplsetTags, selector api.PrimaryPreferTagSelectorSpec) bool {
+	if len(selector) == 0 {
+		return false
+	}
+	for tag, v := range selector {
+		if val, ok := tags[tag]; ok && val == v {
+			continue
+		}
+		return false
 	}
 	return true
 }
