@@ -6963,6 +6963,10 @@ spec:
                               type: string
                           type: object
                       type: object
+                    primaryPreferTagSelector:
+                      additionalProperties:
+                        type: string
+                      type: object
                     priorityClassName:
                       type: string
                     readinessProbe:
@@ -14638,6 +14642,10 @@ spec:
                               runAsUserName:
                                 type: string
                             type: object
+                        type: object
+                      primaryPreferTagSelector:
+                        additionalProperties:
+                          type: string
                         type: object
                       priorityClassName:
                         type: string
