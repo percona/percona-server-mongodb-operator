@@ -44,7 +44,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     resources:
       limits:
         cpu: "500m"
@@ -68,7 +68,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: true
-        exposeType: ClusterIP
+        type: ClusterIP
       resources:
         limits:
           cpu: "300m"
@@ -96,7 +96,7 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
         servicePerPod: true
 
   backup:

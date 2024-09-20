@@ -151,6 +151,15 @@ spec:
                 type: object
               replset:
                 type: string
+              selective:
+                properties:
+                  namespaces:
+                    items:
+                      type: string
+                    type: array
+                  withUsersAndRoles:
+                    type: boolean
+                type: object
               storageName:
                 type: string
             type: object

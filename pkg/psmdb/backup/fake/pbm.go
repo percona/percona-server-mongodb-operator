@@ -104,3 +104,7 @@ func (p *fakePBM) Node(ctx context.Context) (string, error) {
 func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
 	return nil
 }
+
+func (p *fakePBM) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
+	return nil
+}

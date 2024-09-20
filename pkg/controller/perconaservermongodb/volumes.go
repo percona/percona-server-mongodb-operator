@@ -31,12 +31,12 @@ const (
 	GiB = int64(1024 * 1024 * 1024)
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, ls, pvcSpec); err != nil {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
+	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, pvcSpec); err != nil {
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
@@ -47,8 +47,10 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 	return strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-"+sts.Name)
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
+
+	pvcSpec := volumeSpec.PersistentVolumeClaim
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
@@ -218,6 +220,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	if requested.Cmp(actual) == 0 {
+		return nil
+	}
+
+	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.VolumeExpansionEnabled {
+		// If expansion is disabled we should keep the old value
+		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil
 	}
 
