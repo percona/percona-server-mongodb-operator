@@ -394,6 +394,8 @@ spec:
                 type: string
               crVersion:
                 type: string
+              enableVolumeExpansion:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
