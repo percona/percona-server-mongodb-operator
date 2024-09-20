@@ -298,6 +298,10 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		})
 	}
 
+	if compareTags(tags, rs.PrimaryPreferTagSelector) {
+		member.Priority = mongo.DefaultPriority + 1
+	}
+
 	switch pod.Labels[naming.LabelKubernetesComponent] {
 	case "arbiter":
 		member.ArbiterOnly = true
@@ -468,7 +472,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(unsafePSA)
+	cnf.Members.SetVotes(members, unsafePSA)
 	if !reflect.DeepEqual(currMembers, cnf.Members) {
 		cnf.Version++
 
@@ -814,6 +818,19 @@ func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
 			return false
 		}
+	}
+	return true
+}
+
+func compareTags(tags mongo.ReplsetTags, selector api.PrimaryPreferTagSelectorSpec) bool {
+	if len(selector) == 0 {
+		return false
+	}
+	for tag, v := range selector {
+		if val, ok := tags[tag]; ok && val == v {
+			continue
+		}
+		return false
 	}
 	return true
 }

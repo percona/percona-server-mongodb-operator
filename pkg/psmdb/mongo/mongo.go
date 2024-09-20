@@ -851,9 +851,20 @@ func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
 }
 
 // SetVotes sets voting parameters for members list
-func (m *ConfigMembers) SetVotes(unsafePSA bool) {
+func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 	votes := 0
 	lastVoteIdx := -1
+
+	cm := make(map[string]int, len(compareWith))
+
+	for _, member := range compareWith {
+		if member.ArbiterOnly {
+			continue
+		}
+
+		cm[member.Host] = member.Priority
+	}
+
 	for i, member := range *m {
 		if member.Hidden {
 			continue
@@ -894,7 +905,12 @@ func (m *ConfigMembers) SetVotes(unsafePSA bool) {
 					// In unsafe PSA (Primary with a Secondary and an Arbiter),
 					// we are unable to set the votes and the priority simultaneously.
 					// Therefore, setting only the votes.
-					[]ConfigMember(*m)[i].Priority = DefaultPriority
+					priority := DefaultPriority
+					if c, ok := cm[member.Host]; ok && c > 0 {
+						priority = c
+					}
+
+					[]ConfigMember(*m)[i].Priority = priority
 				}
 			}
 		} else if member.ArbiterOnly {
