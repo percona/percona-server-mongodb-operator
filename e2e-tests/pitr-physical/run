@@ -83,7 +83,7 @@ check_recovery() {
 		desc "Restoring to latest"
 		local current_ts=$(get_latest_oplog_chunk_ts $cluster_name)
 		retries=0
-		until [[ $(( ${current_ts}-${latest_ts} )) -gt 120 ]]; do
+		until [[ ${latest_ts} -gt ${current_ts} ]]; do
 			if [[ $retries -gt 30 ]]; then
 				echo "Timeout while waiting for last oplog chunk ($(format_date ${latest_ts}))"
 				exit 1
