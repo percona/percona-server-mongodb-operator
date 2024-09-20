@@ -72,6 +72,19 @@ spec:
 #        maxSkew: 1
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
+#    replsetOverrides:
+#      my-cluster-name-rs0-0:
+#        host: my-cluster-name-rs0-0.example.net:27017
+#        tags:
+#          key: value-0
+#      my-cluster-name-rs0-1:
+#        host: my-cluster-name-rs0-1.example.net:27017
+#        tags:
+#          key: value-1
+#      my-cluster-name-rs0-2:
+#        host: my-cluster-name-rs0-2.example.net:27017
+#        tags:
+#          key: value-2
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
