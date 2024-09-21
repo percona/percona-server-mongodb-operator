@@ -12,7 +12,7 @@ require (
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/go-openapi/swag v0.23.0
 	github.com/go-openapi/validate v0.24.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.21.0
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20240516121609-883ad721e7cb
 	github.com/pkg/errors v0.9.1
