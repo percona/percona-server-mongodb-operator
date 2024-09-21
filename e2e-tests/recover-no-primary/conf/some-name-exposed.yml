@@ -35,7 +35,7 @@ spec:
             prefixCompression: true
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     affinity:
       antiAffinityTopologyKey: none
     resources:

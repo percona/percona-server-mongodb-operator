@@ -53,8 +53,8 @@ spec:
             directoryForIndexes: true
     expose:
       enabled: true
-      exposeType: ClusterIP
-      serviceAnnotations:
+      type: ClusterIP
+      annotations:
         networking.gke.io/load-balancer-type: Internal
     name: shard1
     podDisruptionBudget:
@@ -81,8 +81,8 @@ spec:
             directoryForIndexes: true
     expose:
       enabled: true
-      exposeType: ClusterIP
-      serviceAnnotations:
+      type: ClusterIP
+      annotations:
         networking.gke.io/load-balancer-type: Internal
     name: shard3
     podDisruptionBudget:
@@ -109,8 +109,8 @@ spec:
             directoryForIndexes: true
     expose:
       enabled: true
-      exposeType: ClusterIP
-      serviceAnnotations:
+      type: ClusterIP
+      annotations:
         networking.gke.io/load-balancer-type: Internal
     name: shard5
     podDisruptionBudget:
@@ -137,8 +137,8 @@ spec:
             directoryForIndexes: true
     expose:
       enabled: true
-      exposeType: ClusterIP
-      serviceAnnotations:
+      type: ClusterIP
+      annotations:
         networking.gke.io/load-balancer-type: Internal
     name: shard7
     podDisruptionBudget:
@@ -166,8 +166,8 @@ spec:
               directoryForIndexes: true
       expose:
         enabled: true
-        exposeType: ClusterIP
-        serviceAnnotations:
+        type: ClusterIP
+        annotations:
           networking.gke.io/load-balancer-type: Internal
       podDisruptionBudget:
         maxUnavailable: 1
@@ -183,8 +183,8 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
       expose:
-        exposeType: LoadBalancer
-        serviceAnnotations:
+        type: LoadBalancer
+        annotations:
           networking.gke.io/load-balancer-type: Internal
       podDisruptionBudget:
         maxUnavailable: 1

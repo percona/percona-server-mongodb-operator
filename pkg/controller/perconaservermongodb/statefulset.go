@@ -48,7 +48,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec.PersistentVolumeClaim); err != nil {
+	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
