@@ -279,43 +279,127 @@ wait_for_running $cluster 3
 compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' \
 	"$mongoUri" "role-three"
 
-desc 'check creating role and the user in a single CR apply'
+desc 'check creating multiple roles and the users in a single CR apply'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
-		"spec": {"roles":[
-			{
+		"spec": {
+			"roles": [
+				{
 				"role": "role-four",
-				"db": "admin",
+				"db": "testAdmin1",
 				"privileges": [
 					{
-						"resource": {
-							"db": "admin",
-							"collection": ""
-						},
-						"actions": [
-							"find"
-						]
+					"resource": {
+						"db": "testAdmin1",
+						"collection": ""
+					},
+					"actions": [
+						"find",
+						"listIndexes",
+						"listCollections"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin1",
+						"collection": "system.profile"
+					},
+					"actions": [
+						"dbStats",
+						"collStats",
+						"indexStats"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin1",
+						"collection": "system.version"
+					},
+					"actions": [
+						"find"
+					]
 					}
 				]
-			}
-		],
-		"users":[
-			{
-				"name":"user-five",
-				"db":"admin",
+				},
+				{
+				"role": "role-five",
+				"db": "testAdmin2",
+				"privileges": [
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": ""
+					},
+					"actions": [
+						"find",
+						"listIndexes",
+						"listCollections"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": "system.profile"
+					},
+					"actions": [
+						"dbStats",
+						"collStats",
+						"indexStats"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": "system.version"
+					},
+					"actions": [
+						"find"
+					]
+					}
+				]
+				}
+			],
+			"users": [
+				{
+				"name": "user-five",
+				"db": "testAdmin",
 				"passwordSecretRef": {
-					"name": "user-two",
-					"key": "userTwoPassKey"
+					"name": "user-one",
+					"key": "userOnePassKey"
 				},
 				"roles": [
-					{"db":"admin","name":"role-four"}
+					{
+						"name": "role-four",
+						"db": "testAdmin1"
+					},
+					{
+						"name": "role-five",
+						"db": "testAdmin2"
+					}
 				]
-			}
-		]
+				},
+				{
+				"name": "user-six",
+				"db": "testAdmin",
+				"passwordSecretRef": {
+					"name": "user-one",
+					"key": "userOnePassKey"
+				},
+				"roles": [
+					{
+					"name": "role-five",
+					"db": "testAdmin2"
+					}
+				]
+				}
+			]
 	}}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+compare 'testAdmin1' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
 	"$mongoUri" "role-four"
-compare 'admin' 'db.getUser("user-five")' "$mongoUri" "user-five"
+compare 'testAdmin2' 'db.getRole("role-five", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongoUri" "role-five"
+compare 'testAdmin' 'db.getUser("user-five")' "$mongoUri" "user-five"
+compare 'testAdmin' 'db.getUser("user-six")' "$mongoUri" "user-six"
 
 destroy $namespace
 

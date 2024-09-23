@@ -1,13 +1,9 @@
 switched to db testAdmin
 {
-	"_id" : "testAdmin.user-five",
-	"user" : "user-five",
+	"_id" : "testAdmin.user-six",
+	"user" : "user-six",
 	"db" : "testAdmin",
 	"roles" : [
-		{
-			"role" : "role-four",
-			"db" : "testAdmin1"
-		},
 		{
 			"role" : "role-five",
 			"db" : "testAdmin2"

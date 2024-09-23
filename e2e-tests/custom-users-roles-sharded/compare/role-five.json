@@ -1,12 +1,12 @@
-switched to db testAdmin1
+switched to db testAdmin2
 {
-	"_id" : "testAdmin1.role-four",
-	"role" : "role-four",
-	"db" : "testAdmin1",
+	"_id" : "testAdmin2.role-five",
+	"role" : "role-five",
+	"db" : "testAdmin2",
 	"privileges" : [
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : ""
 			},
 			"actions" : [
@@ -17,7 +17,7 @@ switched to db testAdmin1
 		},
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : "system.profile"
 			},
 			"actions" : [
@@ -28,7 +28,7 @@ switched to db testAdmin1
 		},
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : "system.version"
 			},
 			"actions" : [
@@ -42,7 +42,7 @@ switched to db testAdmin1
 	"inheritedPrivileges" : [
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : ""
 			},
 			"actions" : [
@@ -53,7 +53,7 @@ switched to db testAdmin1
 		},
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : "system.profile"
 			},
 			"actions" : [
@@ -64,7 +64,7 @@ switched to db testAdmin1
 		},
 		{
 			"resource" : {
-				"db" : "testAdmin1",
+				"db" : "testAdmin2",
 				"collection" : "system.version"
 			},
 			"actions" : [

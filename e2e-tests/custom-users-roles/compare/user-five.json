@@ -1,12 +1,16 @@
-switched to db admin
+switched to db testAdmin
 {
-	"_id" : "admin.user-five",
+	"_id" : "testAdmin.user-five",
 	"user" : "user-five",
-	"db" : "admin",
+	"db" : "testAdmin",
 	"roles" : [
 		{
 			"role" : "role-four",
-			"db" : "admin"
+			"db" : "testAdmin1"
+		},
+		{
+			"role" : "role-five",
+			"db" : "testAdmin2"
 		}
 	],
 	"mechanisms" : [

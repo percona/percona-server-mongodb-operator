@@ -99,7 +99,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
 			}
-
 			continue
 		}
 
@@ -114,11 +113,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			log.Error(err, "update user roles", "user", user.Name)
 			continue
 		}
-
-		// err = createUser(ctx, r.client, cli, &user, userInfo, &sec)
-		// if err != nil {
-		// 	return errors.Wrapf(err, "create user %s", user.Name)
-		// }
 	}
 
 	return nil
@@ -142,24 +136,17 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 		if roleInfo == nil {
 			err := cli.CreateRole(ctx, role.DB, *mr)
-			// return errors.Wrapf(err, "create role %s", role.Role)
 			if err != nil {
 				return errors.Wrapf(err, "create role %s", role.Role)
 			}
-
-			println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA create role, ", role.Role)
 			continue
 		}
 
 		if !compareRole(mr, roleInfo) {
 			err := cli.UpdateRole(ctx, role.DB, *mr)
-			// return errors.Wrapf(err, "update role %s", role.Role)
 			if err != nil {
 				return errors.Wrapf(err, "update role %s", role.Role)
 			}
-
-			println("BBBBBBBBBBBBBBBBBBBBBBBBBBBBB update role, ", role.Role)
-			continue
 		}
 	}
 
