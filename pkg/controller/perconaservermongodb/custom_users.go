@@ -137,7 +137,9 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			if err != nil {
 				return errors.Wrapf(err, "create role %s", role.Role)
 			}
+
 			println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA create role, ", role.Role)
+			continue
 		}
 
 		if !compareRole(mr, roleInfo) {
@@ -146,7 +148,9 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			if err != nil {
 				return errors.Wrapf(err, "update role %s", role.Role)
 			}
+
 			println("BBBBBBBBBBBBBBBBBBBBBBBBBBBBB update role, ", role.Role)
+			continue
 		}
 	}
 
