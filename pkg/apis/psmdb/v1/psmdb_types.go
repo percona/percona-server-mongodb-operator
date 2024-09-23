@@ -104,7 +104,7 @@ type UserRole struct {
 
 type SecretKeySelector struct {
 	Name string `json:"name"`
-	Key  string `json:"key,omitempty"`gg
+	Key  string `json:"key,omitempty"`
 }
 
 type User struct {
