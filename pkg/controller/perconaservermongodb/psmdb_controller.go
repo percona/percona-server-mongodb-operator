@@ -395,13 +395,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.InternalKey, api.InternalKeyName, 768, true)
+	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
 	if err != nil {
-		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.InternalKey)
+		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
 		return reconcile.Result{}, err
 	}
 	if ikCreated {
-		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.InternalKey)
+		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
 	}
 
 	created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)

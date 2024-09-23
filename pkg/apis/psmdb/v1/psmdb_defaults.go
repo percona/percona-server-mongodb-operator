@@ -75,10 +75,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Secrets.Users = defaultUsersSecretName
 	}
 
-	if cr.Spec.Secrets.InternalKey == "" {
-		cr.Spec.Secrets.InternalKey = cr.Name + "-mongodb-keyfile"
-	}
-
 	if cr.Spec.Secrets.EncryptionKey == "" {
 		cr.Spec.Secrets.EncryptionKey = cr.Name + "-mongodb-encryption-key"
 	}
