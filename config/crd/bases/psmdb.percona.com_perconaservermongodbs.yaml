@@ -394,6 +394,8 @@ spec:
                 type: string
               crVersion:
                 type: string
+              enableVolumeExpansion:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
@@ -6221,6 +6223,10 @@ spec:
                             runAsUserName:
                               type: string
                           type: object
+                      type: object
+                    primaryPreferTagSelector:
+                      additionalProperties:
+                        type: string
                       type: object
                     priorityClassName:
                       type: string
@@ -13881,6 +13887,10 @@ spec:
                               runAsUserName:
                                 type: string
                             type: object
+                        type: object
+                      primaryPreferTagSelector:
+                        additionalProperties:
+                          type: string
                         type: object
                       priorityClassName:
                         type: string

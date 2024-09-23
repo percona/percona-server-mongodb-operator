@@ -12,6 +12,7 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
+#  enableVolumeExpansion: true
   crVersion: 1.18.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
@@ -112,6 +113,9 @@ spec:
 #      operator: "Exists"
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
+#    primaryPreferTagSelector:
+#      region: us-west-2
+#      zone: us-west-2c
 #    priorityClassName: high-priority
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
@@ -578,7 +582,7 @@ spec:
 #  users:
 #  - name: my-user
 #    db: admin
-#    passwordSecretRef: 
+#    passwordSecretRef:
 #      name: my-user-password
 #      key: my-user-password-key
 #    roles:
@@ -588,12 +592,12 @@ spec:
 #        db: admin
 #  - name: my-usr
 #    db: admin
-#    passwordSecretRef: 
+#    passwordSecretRef:
 #      name: my-user-pwd
 #      key: my-user-pwd-key
 #    roles:
 #      - name: dbOwner
-#        db: sometest  
+#        db: sometest
 
   backup:
     enabled: true
