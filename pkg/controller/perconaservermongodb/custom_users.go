@@ -132,13 +132,17 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		}
 
 		if roleInfo == nil {
-			err = cli.CreateRole(ctx, role.DB, *mr)
-			return errors.Wrapf(err, "create role %s", role.Role)
+			err := cli.CreateRole(ctx, role.DB, *mr)
+			if err != nil {
+				return errors.Wrapf(err, "create role %s", role.Role)
+			}
 		}
 
 		if !compareRole(mr, roleInfo) {
-			err = cli.UpdateRole(ctx, role.DB, *mr)
-			return errors.Wrapf(err, "update role %s", role.Role)
+			err := cli.UpdateRole(ctx, role.DB, *mr)
+			if err != nil {
+				return errors.Wrapf(err, "update role %s", role.Role)
+			}
 		}
 	}
 
