@@ -94,6 +94,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		if userInfo == nil {
+			err = createUser(ctx, r.client, cli, &user, &sec)
+			if err != nil {
+				return errors.Wrapf(err, "create user %s", user.Name)
+			}
+
+			continue
+		}
+
 		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec, cr.Name)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
@@ -106,10 +115,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		err = createUser(ctx, r.client, cli, &user, userInfo, &sec)
-		if err != nil {
-			return errors.Wrapf(err, "create user %s", user.Name)
-		}
+		// err = createUser(ctx, r.client, cli, &user, userInfo, &sec)
+		// if err != nil {
+		// 	return errors.Wrapf(err, "create user %s", user.Name)
+		// }
 	}
 
 	return nil
@@ -318,13 +327,8 @@ func createUser(
 	cli client.Client,
 	mongoCli mongo.Client,
 	user *api.User,
-	userInfo *mongo.User,
 	secret *corev1.Secret) error {
 	log := logf.FromContext(ctx)
-
-	if userInfo != nil {
-		return nil
-	}
 
 	annotationKey := fmt.Sprintf("percona.com/%s-hash", user.Name)
 
