@@ -94,7 +94,7 @@ type PerconaServerMongoDBSpec struct {
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
 	Roles                        []Role                               `json:"roles,omitempty"`
-  VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
+	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
 }
 
 type UserRole struct {
