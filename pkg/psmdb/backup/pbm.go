@@ -167,7 +167,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
@@ -218,7 +218,7 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 			priorities[extNode.HostPort()] = 0.5
 		}
 
-		cli, err := psmdb.MongoClient(ctx, k8sclient, cluster, *rs, c)
+		cli, err := psmdb.MongoClient(ctx, k8sclient, cluster, rs, c)
 		if err != nil {
 			return priorities, errors.Wrap(err, "get mongo client")
 		}

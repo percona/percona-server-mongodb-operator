@@ -4071,12 +4071,20 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          horizons:
+                            additionalProperties:
+                              type: string
+                            type: object
                           host:
                             type: string
                           port:
                             type: integer
                           priority:
                             type: integer
+                          tags:
+                            additionalProperties:
+                              type: string
+                            type: object
                           votes:
                             type: integer
                         required:
@@ -6991,6 +6999,21 @@ spec:
                         timeoutSeconds:
                           format: int32
                           type: integer
+                      type: object
+                    replsetOverrides:
+                      additionalProperties:
+                        properties:
+                          horizons:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          host:
+                            type: string
+                          tags:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
                       type: object
                     resources:
                       properties:
@@ -11677,12 +11700,20 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            horizons:
+                              additionalProperties:
+                                type: string
+                              type: object
                             host:
                               type: string
                             port:
                               type: integer
                             priority:
                               type: integer
+                            tags:
+                              additionalProperties:
+                                type: string
+                              type: object
                             votes:
                               type: integer
                           required:
@@ -14597,6 +14628,21 @@ spec:
                           timeoutSeconds:
                             format: int32
                             type: integer
+                        type: object
+                      replsetOverrides:
+                        additionalProperties:
+                          properties:
+                            horizons:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            host:
+                              type: string
+                            tags:
+                              additionalProperties:
+                                type: string
+                              type: object
+                          type: object
                         type: object
                       resources:
                         properties:

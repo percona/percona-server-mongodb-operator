@@ -21,6 +21,7 @@ pitr
 pitr-sharded
 pitr-physical
 recover-no-primary
+replset-overrides
 rs-shard-migration
 scaling
 split-horizon

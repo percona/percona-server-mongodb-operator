@@ -78,7 +78,7 @@ func (c *fakeMongoClient) AddShard(ctx context.Context, rsName, host string) err
 	return nil
 }
 
-func (c *fakeMongoClient) WriteConfig(ctx context.Context, cfg mongo.RSConfig) error {
+func (c *fakeMongoClient) WriteConfig(ctx context.Context, cfg mongo.RSConfig, force bool) error {
 	return nil
 }
 
