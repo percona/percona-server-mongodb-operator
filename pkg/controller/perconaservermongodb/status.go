@@ -216,6 +216,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
+	if state != api.AppStateReady {
+		log.V(1).Info("Cluster is not ready",
+			"upgradeInProgress", inProgress,
+			"replsetsReady", replsetsReady,
+			"clusterState", clusterState,
+		)
+	}
+
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
 	}
@@ -404,7 +412,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 			dnsMode = api.DNSModeExternal
 		}
-		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, dnsMode, rs.Name, rs.Expose.Enabled, list.Items)
+		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, dnsMode, rs, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			switch errors.Cause(err) {
 			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:

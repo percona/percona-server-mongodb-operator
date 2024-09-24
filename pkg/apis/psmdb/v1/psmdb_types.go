@@ -417,6 +417,8 @@ type ExternalNode struct {
 	Port     int    `json:"port,omitempty"`
 	Priority int    `json:"priority"`
 	Votes    int    `json:"votes"`
+
+	ReplsetOverride `json:",inline"`
 }
 
 func (e *ExternalNode) HostPort() string {
@@ -580,6 +582,14 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type ReplsetOverrides map[string]ReplsetOverride
+
+type ReplsetOverride struct {
+	Host     string            `json:"host,omitempty"`
+	Horizons map[string]string `json:"horizons,omitempty"`
+	Tags     map[string]string `json:"tags,omitempty"`
+}
+
 type HorizonsSpec map[string]map[string]string
 
 type PrimaryPreferTagSelectorSpec map[string]string
@@ -603,6 +613,7 @@ type ReplsetSpec struct {
 	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
 	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
+	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 }
 
