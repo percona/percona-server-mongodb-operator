@@ -13,7 +13,7 @@ import (
 )
 
 type MongoClientProvider interface {
-	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error)
+	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole) (mongo.Client, error)
 	Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error)
 	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error)
 }
@@ -29,7 +29,7 @@ type mongoClientProvider struct {
 	k8sclient client.Client
 }
 
-func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
+func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
 	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
@@ -56,7 +56,7 @@ func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaSer
 	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host, tlsEnabled)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
 	return r.MongoClientProvider().Mongo(ctx, cr, rs, role)
 }
 
@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole, pod corev1.Pod) (mongo.Client, error) {
-	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs.Name, rs.Expose.Enabled, pod)
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get mongo host")
 	}

@@ -430,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 		return nil
 	}
 
-	session, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
+	session, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
