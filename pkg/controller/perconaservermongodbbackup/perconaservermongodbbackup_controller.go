@@ -257,7 +257,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrap(err, "getting azure credentials secret name")
 		}
-		azureConf := azure.Conf{
+		azureConf := &azure.Config{
 			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
 			Container:   cr.Status.Azure.Container,
 			EndpointURL: cr.Status.Azure.EndpointURL,
@@ -268,7 +268,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 		return azure.New(azureConf, nil)
 	case cr.Status.S3 != nil:
-		s3Conf := s3.Conf{
+		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
 			EndpointURL:           cr.Status.S3.EndpointURL,
 			Bucket:                cr.Status.S3.Bucket,
@@ -438,7 +438,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		storage.Azure = *cr.Status.Azure
 	}
 
-	err = b.pbm.SetConfig(ctx, r.client, cluster, storage)
+	err = b.pbm.GetNSetConfig(ctx, r.client, cluster, storage)
 	if err != nil {
 		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
