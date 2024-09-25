@@ -581,7 +581,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.5.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
