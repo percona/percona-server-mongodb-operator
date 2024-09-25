@@ -5,12 +5,14 @@ metadata:
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 #    - percona.com/delete-psmdb-pvc
+#    - percona.com/delete-pitr-chunks
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
+#  enableVolumeExpansion: true
   crVersion: 1.18.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
@@ -71,6 +73,19 @@ spec:
 #        maxSkew: 1
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
+#    replsetOverrides:
+#      my-cluster-name-rs0-0:
+#        host: my-cluster-name-rs0-0.example.net:27017
+#        tags:
+#          key: value-0
+#      my-cluster-name-rs0-1:
+#        host: my-cluster-name-rs0-1.example.net:27017
+#        tags:
+#          key: value-1
+#      my-cluster-name-rs0-2:
+#        host: my-cluster-name-rs0-2.example.net:27017
+#        tags:
+#          key: value-2
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -111,6 +126,9 @@ spec:
 #      operator: "Exists"
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
+#    primaryPreferTagSelector:
+#      region: us-west-2
+#      zone: us-west-2c
 #    priorityClassName: high-priority
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
@@ -197,13 +215,16 @@ spec:
 #        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
+#      loadBalancerIP: 10.0.0.0/8
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
-#      serviceAnnotations:
+#      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#      serviceLabels:
+#      labels:
 #        rack: rack-22
+#      internalTrafficPolicy: Local
+#      externalTrafficPolicy: Local
     resources:
       limits:
         cpu: "300m"
@@ -408,13 +429,17 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
+#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
+#        nodePort: 32017
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
       resources:
         limits:
           cpu: "300m"
@@ -516,15 +541,18 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
 #        servicePerPod: true
+#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
 #        nodePort: 32017
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
@@ -534,7 +562,7 @@ spec:
 #  users:
 #  - name: my-user
 #    db: admin
-#    passwordSecretRef: 
+#    passwordSecretRef:
 #      name: my-user-password
 #      key: my-user-password-key
 #    roles:
@@ -544,12 +572,12 @@ spec:
 #        db: admin
 #  - name: my-usr
 #    db: admin
-#    passwordSecretRef: 
+#    passwordSecretRef:
 #      name: my-user-pwd
 #      key: my-user-pwd-key
 #    roles:
 #      - name: dbOwner
-#        db: sometest  
+#        db: sometest
 
   backup:
     enabled: true

@@ -1,0 +1,81 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  finalizers:
+  - percona.com/delete-psmdb-pvc
+  name: some-name
+spec:
+  crVersion: 1.17.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  imagePullPolicy: Always
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+  replsets:
+  - name: rs0
+    size: 3
+    expose:
+      enabled: false
+      exposeType: ClusterIP
+    resources:
+      limits:
+        cpu: 300m
+        memory: 0.5G
+      requests:
+        cpu: 300m
+        memory: 0.5G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+  secrets:
+    users: some-users
+  sharding:
+    configsvrReplSet:
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        enabled: false
+        exposeType: ClusterIP
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 300m
+          memory: 0.5G
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    enabled: false
+    mongos:
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        exposeType: ClusterIP
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 300m
+          memory: 0.5G
+      size: 3
+  updateStrategy: SmartUpdate

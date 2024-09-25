@@ -365,7 +365,7 @@ type fakeMongoClientProvider struct {
 	connectionCount *int
 }
 
-func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()

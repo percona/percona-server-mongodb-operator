@@ -78,7 +78,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		}
 
 		log.Info("Starting restore", "backup", backupName)
-		status.PBMname, err = runRestore(ctx, backupName, pbmc, cr.Spec.PITR)
+		status.PBMname, err = runRestore(ctx, backupName, pbmc, cr.Spec.PITR, cr.Spec.Selective)
 		status.State = psmdbv1.RestoreStateRequested
 		return status, err
 	}
@@ -128,7 +128,7 @@ func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec
 	return
 }
 
-func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec) (string, error) {
+func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec, selective *psmdbv1.SelectiveRestoreOpts) (string, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Starting logical restore", "backup", backup)
 
@@ -148,8 +148,10 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		cmd = ctrl.Cmd{
 			Cmd: ctrl.CmdRestore,
 			Restore: &ctrl.RestoreCmd{
-				Name:       rName,
-				BackupName: backup,
+				Name:          rName,
+				BackupName:    backup,
+				Namespaces:    selective.GetNamespaces(),
+				UsersAndRoles: selective.GetWithUsersAndRoles(),
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeDate:
@@ -162,9 +164,11 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		cmd = ctrl.Cmd{
 			Cmd: ctrl.CmdRestore,
 			Restore: &ctrl.RestoreCmd{
-				Name:       rName,
-				BackupName: backup,
-				OplogTS:    primitive.Timestamp{T: uint32(ts)},
+				Name:          rName,
+				BackupName:    backup,
+				OplogTS:       primitive.Timestamp{T: uint32(ts)},
+				Namespaces:    selective.GetNamespaces(),
+				UsersAndRoles: selective.GetWithUsersAndRoles(),
 			},
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
@@ -176,9 +180,11 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		cmd = ctrl.Cmd{
 			Cmd: ctrl.CmdRestore,
 			Restore: &ctrl.RestoreCmd{
-				Name:       rName,
-				BackupName: backup,
-				OplogTS:    primitive.Timestamp{T: tl.End},
+				Name:          rName,
+				BackupName:    backup,
+				OplogTS:       primitive.Timestamp{T: tl.End},
+				Namespaces:    selective.GetNamespaces(),
+				UsersAndRoles: selective.GetWithUsersAndRoles(),
 			},
 		}
 	}

@@ -39,7 +39,7 @@ type Client interface {
 	GetRole(ctx context.Context, role string) (*Role, error)
 	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
 	AddShard(ctx context.Context, rsName, host string) error
-	WriteConfig(ctx context.Context, cfg RSConfig) error
+	WriteConfig(ctx context.Context, cfg RSConfig, force bool) error
 	RSStatus(ctx context.Context) (Status, error)
 	StartBalancer(ctx context.Context) error
 	StopBalancer(ctx context.Context) error
@@ -297,13 +297,16 @@ func (client *mongoClient) AddShard(ctx context.Context, rsName, host string) er
 	return nil
 }
 
-func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig) error {
+func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig, force bool) error {
 	log := logf.FromContext(ctx)
 	resp := OKResponse{}
 
 	log.V(1).Info("Running replSetReconfig config", "cfg", cfg)
 
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetReconfig", Value: cfg}})
+	res := client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "replSetReconfig", Value: cfg},
+		{Key: "force", Value: force},
+	})
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "replSetReconfig")
 	}
@@ -631,7 +634,9 @@ func (client *mongoClient) UpdateUser(ctx context.Context, currName, newName, pa
 // It always should leave at least one element. The config won't be valid for mongo otherwise.
 // Better, if the last element has the smallest ID in order not to produce defragmentation
 // when the next element will be added (ID = maxID + 1). Mongo replica set member ID must be between 0 and 255, so it matters.
-func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
+func (m *ConfigMembers) RemoveOld(ctx context.Context, compareWith ConfigMembers) bool {
+	log := logf.FromContext(ctx)
+
 	cm := make(map[string]struct{}, len(compareWith))
 
 	for _, member := range compareWith {
@@ -643,6 +648,7 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
 		member := []ConfigMember(*m)[i]
 		if _, ok := cm[member.Host]; !ok {
 			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
+			log.Info("Removing old member from replset", "_id", member.ID, "host", member.Host)
 			return true
 		}
 	}
@@ -650,86 +656,127 @@ func (m *ConfigMembers) RemoveOld(compareWith ConfigMembers) bool {
 	return false
 }
 
-func (m *ConfigMembers) FixHosts(compareWith ConfigMembers) (changes bool) {
+func (m *ConfigMembers) FixMemberHostnames(ctx context.Context, compareWith ConfigMembers, rsStatus Status) (member *Member, changes bool) {
+	log := logf.FromContext(ctx)
+
 	if len(*m) < 1 {
-		return changes
+		return member, changes
 	}
 
-	cm := make(map[string]string, len(compareWith))
+	type configMember struct {
+		Host string `bson:"host" json:"host"`
+	}
 
-	for _, member := range compareWith {
-		name, ok := member.Tags["podName"]
+	cm := make(map[string]configMember, len(compareWith))
+
+	for _, mem := range compareWith {
+		name, ok := mem.Tags["podName"]
 		if !ok {
 			continue
 		}
-		cm[name] = member.Host
+		cm[name] = configMember{Host: mem.Host}
 	}
 
-	for i := 0; i < len(*m); i++ {
-		member := []ConfigMember(*m)[i]
-		podName, ok := member.Tags["podName"]
-		if !ok {
+	// Update secondaries first
+	for _, sMem := range rsStatus.Members {
+		if sMem.State == MemberStatePrimary {
 			continue
 		}
-		if host, ok := cm[podName]; ok && host != member.Host {
-			changes = true
-			[]ConfigMember(*m)[i].Host = host
-		}
-	}
 
-	return changes
-}
-
-// FixTags corrects the tags of any member if they changed.
-// Especially the "external" tag can change if cluster is switched from
-// unmanaged to managed.
-func (m *ConfigMembers) FixTags(compareWith ConfigMembers) (changes bool) {
-	if len(*m) < 1 {
-		return changes
-	}
-
-	cm := make(map[string]ReplsetTags, len(compareWith))
-
-	for _, member := range compareWith {
-		if member.ArbiterOnly {
-			continue
-		}
-		cm[member.Host] = member.Tags
-	}
-
-	for i := 0; i < len(*m); i++ {
-		member := []ConfigMember(*m)[i]
-		if c, ok := cm[member.Host]; ok && !reflect.DeepEqual(member.Tags, c) {
-			changes = true
-			[]ConfigMember(*m)[i].Tags = c
-		}
-	}
-
-	return changes
-}
-
-func (m *ConfigMembers) HorizonsChanged(compareWith ConfigMembers) bool {
-	cm := make(map[string]struct {
-		horizons map[string]string
-	}, len(compareWith))
-
-	for _, member := range compareWith {
-		cm[member.Host] = struct{ horizons map[string]string }{horizons: member.Horizons}
-	}
-
-	changed := false
-
-	for i := 0; i < len(*m); i++ {
-		member := []ConfigMember(*m)[i]
-		if mem, ok := cm[member.Host]; ok {
-			if !reflect.DeepEqual(mem.horizons, member.Horizons) {
-				[]ConfigMember(*m)[i].Horizons = mem.horizons
-				changed = true
+		for i := 0; i < len(*m); i++ {
+			mem := []ConfigMember(*m)[i]
+			if sMem.Id != mem.ID {
+				continue
+			}
+			podName, ok := mem.Tags["podName"]
+			if !ok {
+				continue
+			}
+			c, ok := cm[podName]
+			if ok && c.Host != mem.Host {
+				log.Info(
+					"Host changed",
+					"pod", podName,
+					"state", MemberStateStrings[sMem.State],
+					"old", mem.Host,
+					"new", c.Host,
+				)
+				[]ConfigMember(*m)[i].Host = c.Host
+				return sMem, true
 			}
 		}
 	}
 
-	return changed
+	// Update primary last
+	for _, sMem := range rsStatus.Members {
+		if sMem.State == MemberStateSecondary {
+			continue
+		}
+
+		for i := 0; i < len(*m); i++ {
+			mem := []ConfigMember(*m)[i]
+			if sMem.Id != mem.ID {
+				continue
+			}
+			podName, ok := mem.Tags["podName"]
+			if !ok {
+				continue
+			}
+			c, ok := cm[podName]
+			if ok && c.Host != mem.Host {
+				log.Info(
+					"Host changed",
+					"pod", podName,
+					"state", MemberStateStrings[sMem.State],
+					"old", mem.Host,
+					"new", c.Host,
+				)
+				[]ConfigMember(*m)[i].Host = c.Host
+				return sMem, true
+			}
+		}
+	}
+
+	return member, false
+}
+
+func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith ConfigMembers) (changes bool) {
+	log := logf.FromContext(ctx)
+
+	if len(*m) < 1 {
+		return changes
+	}
+
+	type configMember struct {
+		Tags     ReplsetTags       `bson:"tags,omitempty" json:"tags,omitempty"`
+		Horizons map[string]string `bson:"horizons,omitempty" json:"horizons,omitempty"`
+	}
+
+	cm := make(map[string]configMember, len(compareWith))
+
+	for _, member := range compareWith {
+		cm[member.Host] = configMember{
+			Tags:     member.Tags,
+			Horizons: member.Horizons,
+		}
+	}
+
+	for i := 0; i < len(*m); i++ {
+		member := []ConfigMember(*m)[i]
+		c, ok := cm[member.Host]
+		if ok && !reflect.DeepEqual(c.Tags, member.Tags) {
+			changes = true
+			[]ConfigMember(*m)[i].Tags = c.Tags
+			log.Info("Tags changed", "host", member.Host, "old", member.Tags, "new", c.Tags)
+		}
+		if ok && !reflect.DeepEqual(c.Horizons, member.Horizons) {
+			changes = true
+			[]ConfigMember(*m)[i].Horizons = c.Horizons
+			log.Info("Horizons changed", "host", member.Host, "old", member.Horizons, "new", c.Horizons)
+		}
+	}
+
+	return changes
 }
 
 // ExternalNodesChanged checks if votes or priority fields changed for external nodes
@@ -737,6 +784,7 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 	cm := make(map[string]struct {
 		votes    int
 		priority int
+		tags     ReplsetTags
 	}, len(compareWith))
 
 	for _, member := range compareWith {
@@ -747,15 +795,24 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 		cm[member.Host] = struct {
 			votes    int
 			priority int
-		}{votes: member.Votes, priority: member.Priority}
+			tags     ReplsetTags
+		}{
+			votes:    member.Votes,
+			priority: member.Priority,
+			tags:     member.Tags,
+		}
 	}
 
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		if ext, ok := cm[member.Host]; ok {
-			if ext.votes != member.Votes || ext.priority != member.Priority {
+			if ext.votes != member.Votes ||
+				ext.priority != member.Priority ||
+				!reflect.DeepEqual(ext.tags, member.Tags) {
+
 				[]ConfigMember(*m)[i].Votes = ext.votes
 				[]ConfigMember(*m)[i].Priority = ext.priority
+				[]ConfigMember(*m)[i].Tags = ext.tags
 
 				return true
 			}
@@ -767,7 +824,9 @@ func (m *ConfigMembers) ExternalNodesChanged(compareWith ConfigMembers) bool {
 
 // AddNew adds a new member from given list to the config.
 // It adds only one at a time. Returns true if it adds any member.
-func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
+func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
+	log := logf.FromContext(ctx)
+
 	cm := make(map[string]struct{}, len(*m))
 	lastID := 0
 
@@ -783,6 +842,7 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
 			lastID++
 			member.ID = lastID
 			*m = append(*m, member)
+			log.Info("Adding new member to replset", "_id", member.ID, "host", member.Host)
 			return true
 		}
 	}
@@ -791,9 +851,20 @@ func (m *ConfigMembers) AddNew(from ConfigMembers) bool {
 }
 
 // SetVotes sets voting parameters for members list
-func (m *ConfigMembers) SetVotes(unsafePSA bool) {
+func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 	votes := 0
 	lastVoteIdx := -1
+
+	cm := make(map[string]int, len(compareWith))
+
+	for _, member := range compareWith {
+		if member.ArbiterOnly {
+			continue
+		}
+
+		cm[member.Host] = member.Priority
+	}
+
 	for i, member := range *m {
 		if member.Hidden {
 			continue
@@ -834,7 +905,12 @@ func (m *ConfigMembers) SetVotes(unsafePSA bool) {
 					// In unsafe PSA (Primary with a Secondary and an Arbiter),
 					// we are unable to set the votes and the priority simultaneously.
 					// Therefore, setting only the votes.
-					[]ConfigMember(*m)[i].Priority = DefaultPriority
+					priority := DefaultPriority
+					if c, ok := cm[member.Host]; ok && c > 0 {
+						priority = c
+					}
+
+					[]ConfigMember(*m)[i].Priority = priority
 				}
 			}
 		} else if member.ArbiterOnly {

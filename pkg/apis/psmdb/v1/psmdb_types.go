@@ -93,6 +93,7 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
+	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
 }
 
 type User struct {
@@ -416,6 +417,8 @@ type ExternalNode struct {
 	Port     int    `json:"port,omitempty"`
 	Priority int    `json:"priority"`
 	Votes    int    `json:"votes"`
+
+	ReplsetOverride `json:",inline"`
 }
 
 func (e *ExternalNode) HostPort() string {
@@ -579,27 +582,39 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type ReplsetOverrides map[string]ReplsetOverride
+
+type ReplsetOverride struct {
+	Host     string            `json:"host,omitempty"`
+	Horizons map[string]string `json:"horizons,omitempty"`
+	Tags     map[string]string `json:"tags,omitempty"`
+}
+
 type HorizonsSpec map[string]map[string]string
+
+type PrimaryPreferTagSelectorSpec map[string]string
 
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name                     string                     `json:"name,omitempty"`
-	Size                     int32                      `json:"size"`
-	ClusterRole              ClusterRole                `json:"clusterRole,omitempty"`
-	Arbiter                  Arbiter                    `json:"arbiter,omitempty"`
-	Expose                   ExposeTogglable            `json:"expose,omitempty"`
-	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
-	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
-	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Storage                  *MongodSpecStorage         `json:"storage,omitempty"`
-	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
-	ExternalNodes            []*ExternalNode            `json:"externalNodes,omitempty"`
-	NonVoting                NonVotingSpec              `json:"nonvoting,omitempty"`
-	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
-	Horizons                 HorizonsSpec               `json:"splitHorizons,omitempty"`
+	Name                     string                       `json:"name,omitempty"`
+	Size                     int32                        `json:"size"`
+	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
+	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
+	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	Storage                  *MongodSpecStorage           `json:"storage,omitempty"`
+	Configuration            MongoConfiguration           `json:"configuration,omitempty"`
+	ExternalNodes            []*ExternalNode              `json:"externalNodes,omitempty"`
+	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
+	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
+	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
+	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
+	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -960,11 +975,22 @@ type ExposeTogglable struct {
 }
 
 type Expose struct {
-	ExposeType               corev1.ServiceType `json:"exposeType,omitempty"`
-	LoadBalancerSourceRanges []string           `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations       map[string]string  `json:"serviceAnnotations,omitempty"`
-	ServiceLabels            map[string]string  `json:"serviceLabels,omitempty"`
-	NodePort                 int32              `json:"nodePort,omitempty"`
+	ExposeType           corev1.ServiceType `json:"type,omitempty"`
+	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
+
+	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
+	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
+	DeprecatedServiceAnnotations map[string]string `json:"serviceAnnotations,omitempty"`
+
+	ServiceLabels           map[string]string `json:"labels,omitempty"`
+	DeprecatedServiceLabels map[string]string `json:"serviceLabels,omitempty"`
+
+	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
+	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
+
+	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {

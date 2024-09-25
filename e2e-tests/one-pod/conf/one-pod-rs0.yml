@@ -47,10 +47,10 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: false
-      exposeType: LoadBalancer
-      serviceLabels:
+      type: LoadBalancer
+      labels:
         test: one-pod
-      serviceAnnotations:
+      annotations:
         test: one-pod
     arbiter:
       enabled: false

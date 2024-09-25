@@ -85,6 +85,7 @@ type PBM interface {
 	SetConfigVar(ctx context.Context, key, val string) error
 	GetConfigVar(ctx context.Context, key string) (any, error)
 	DeleteConfigVar(ctx context.Context, key string) error
+	DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error
 
 	Node(ctx context.Context) (string, error)
 }
@@ -163,7 +164,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 		cluster.Spec.ClusterServiceDNSSuffix = api.DefaultDNSSuffix
 	}
 
-	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs.Name, false, pods.Items)
+	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
 	}
@@ -214,7 +215,7 @@ func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *api.Pe
 			priorities[extNode.HostPort()] = 0.5
 		}
 
-		cli, err := psmdb.MongoClient(ctx, k8sclient, cluster, *rs, c)
+		cli, err := psmdb.MongoClient(ctx, k8sclient, cluster, rs, c)
 		if err != nil {
 			return priorities, errors.Wrap(err, "get mongo client")
 		}
@@ -678,4 +679,41 @@ func (b *pbmC) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {
 
 func (b *pbmC) PITRChunksCollection() *mongo.Collection {
 	return b.Client.PITRChunksCollection()
+}
+
+func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
+	e := b.Logger().NewEvent(string(ctrl.CmdDeletePITR), "", "", primitive.Timestamp{})
+
+	stg, err := b.GetStorage(ctx, e)
+	if err != nil {
+		return errors.Wrap(err, "get storage")
+	}
+
+	chunks, err := b.PITRGetChunksSlice(ctx, "", primitive.Timestamp{}, until)
+	if err != nil {
+		return errors.Wrap(err, "get pitr chunks")
+	}
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	for _, chnk := range chunks {
+		err = stg.Delete(chnk.FName)
+		if err != nil && err != storage.ErrNotExist {
+			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
+		}
+
+		_, err = b.PITRChunksCollection().DeleteOne(
+			ctx,
+			bson.D{
+				{Key: "rs", Value: chnk.RS},
+				{Key: "start_ts", Value: chnk.StartTS},
+				{Key: "end_ts", Value: chnk.EndTS},
+			},
+		)
+		if err != nil {
+			return errors.Wrap(err, "delete pitr chunk metadata")
+		}
+	}
+	return nil
 }

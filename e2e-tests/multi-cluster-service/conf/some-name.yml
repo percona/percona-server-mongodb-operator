@@ -26,7 +26,7 @@ spec:
               storage: 3Gi
       expose:
         enabled: true
-        exposeType: ClusterIP
+        type: ClusterIP
       sidecars:
         - image: busybox
           command: ["/bin/sh"]
@@ -40,7 +40,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
       sidecars:
         - image: busybox
           command: ["/bin/sh"]
@@ -53,7 +53,7 @@ spec:
         antiAffinityTopologyKey: none
       expose:
         enabled: true
-        exposeType: ClusterIP
+        type: ClusterIP
       resources:
         limits:
           cpu: 500m

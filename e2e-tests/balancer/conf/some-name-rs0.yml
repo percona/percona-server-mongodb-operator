@@ -27,7 +27,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
       runtimeClassName: container-rc
 
   replsets:

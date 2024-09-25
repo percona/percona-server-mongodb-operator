@@ -2,7 +2,6 @@ package perconaservermongodbrestore
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -141,7 +140,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	err = cr.CheckFields()
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("fields check: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "fields check")
+	}
+
+	err = cr.SetDefaults()
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "set defaults")
 	}
 
 	switch cr.Status.State {
