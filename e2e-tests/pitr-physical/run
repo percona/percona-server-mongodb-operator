@@ -85,12 +85,12 @@ check_recovery() {
 		retries=0
 		until [[ ${latest_ts} -gt ${current_ts} ]]; do
 			if [[ $retries -gt 30 ]]; then
-				echo "Last oplog chunk ($(format_date ${latest_ts})) is not greater than starting chunk ($(format_date ${current_ts}))"
+				echo "Timeout while waiting for last oplog chunk ($(format_date ${latest_ts}))"
 				exit 1
 			fi
 			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
 			retries=$((retries + 1))
-			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be greater than starting chunk ($(format_date ${current_ts}))"
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be 120 seconds older than starting chunk ($(format_date ${current_ts}))"
 			sleep 10
 		done
 	fi
@@ -147,13 +147,17 @@ main() {
 	wait_backup_agent $cluster-rs2-1
 	wait_backup_agent $cluster-rs2-2
 
-	# PBM doesn't start PiTR routine if there's no logical backup in storage
-	backup_name_minio="backup-minio"
-
 	# The sleep is needed to workaround a bug in PBM, check PBM-1265 for more info
+	echo "Sleeping for 360 seconds"
 	sleep 360
 
+	backup_name_minio="backup-minio"
 	run_backup $backup_name_minio 1 physical
+
+	# 2nd backup is required for to workaround PBM-1391
+	# in case of the 1st, pbmPITR collection is created after the backup
+	# and it causes crashes after physical restore
+	run_backup $backup_name_minio 2 physical
 
 	write_document "-2nd"
 
@@ -172,7 +176,7 @@ main() {
 		sleep 10
 	done
 
-	check_recovery $backup_name_minio-1 date "${last_chunk}" "-2nd" "$cluster"
+	check_recovery $backup_name_minio-2 date "${last_chunk}" "-2nd" "$cluster"
 
 	run_backup $backup_name_minio 3 physical
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-3"

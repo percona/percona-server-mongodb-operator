@@ -61,7 +61,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 
 		// Disable PITR before restore
 		cluster.Spec.Backup.PITR.Enabled = false
-		err = pbmc.SetConfig(ctx, r.client, cluster, storage)
+		err = pbmc.GetNSetConfig(ctx, r.client, cluster, storage)
 		if err != nil {
 			return status, errors.Wrap(err, "set pbm config")
 		}
@@ -132,10 +132,12 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 	log := logf.FromContext(ctx)
 	log.Info("Starting logical restore", "backup", backup)
 
-	e := pbmc.Logger().NewEvent(string(ctrl.CmdResync), "", "", primitive.Timestamp{})
-	err := pbmc.ResyncStorage(ctx, e)
+	cfg, err := pbmc.GetConfig(ctx)
 	if err != nil {
-		return "", errors.Wrap(err, "set resync backup list from the store")
+	}
+
+	if err := pbmc.ResyncStorage(ctx, &cfg.Storage); err != nil {
+		return "", errors.Wrap(err, "resync storage")
 	}
 
 	var (
