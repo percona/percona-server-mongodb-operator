@@ -185,7 +185,7 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        image: percona/percona-backup-mongodb:2.5.0
+        image: perconalab/percona-server-mongodb-operator:main-backup
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
