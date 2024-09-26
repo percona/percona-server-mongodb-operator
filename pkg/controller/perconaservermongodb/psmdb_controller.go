@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -279,6 +280,28 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	err = cr.CheckNSetDefaults(r.serverVersion.Platform, log)
 	if err != nil {
+		// If the user created a cluster with finalizers and wrong options, it would be impossible to delete a cluster.
+		// We need to delete finalizers.
+		//
+		// TODO: Separate CheckNSetDefaults into two different methods "Check" and "SetDefaults".
+		//       Use "SetDefaults" and try to run "checkFinalizers" instead of just deleting finalizers.
+		//       Currently we can't run the "checkFinalizers" method because we will get nil pointer reference panics,
+		//       due to defaults not being set.
+		if cr.DeletionTimestamp != nil {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				c := &api.PerconaServerMongoDB{}
+
+				if err := r.client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+					return err
+				}
+
+				c.SetFinalizers([]string{})
+				return r.client.Update(ctx, c)
+			}); err != nil {
+				log.Error(err, "failed to remove finalizers")
+			}
+		}
+
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
 	}
@@ -734,7 +757,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
+	client, err := r.mongoClientWithRole(ctx, cr, &api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -789,6 +812,8 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, c
 			return false, errors.Wrap(err, "key generation")
 		}
 
+		key.Labels = naming.ClusterLabels(cr)
+
 		err = r.client.Create(ctx, key)
 		if err != nil {
 			return false, errors.Wrap(err, "create key")
@@ -804,6 +829,9 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 	for _, f := range cr.GetFinalizers() {
 		switch f {
 		case "delete-psmdb-pvc":
+			logf.FromContext(ctx).Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			fallthrough
+		case naming.FinalizerDeletePVC:
 			// remove orphan pvc
 			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
 			if err != nil {
@@ -1204,9 +1232,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return nil
 	}
 
+	cfgRs := cr.Spec.Sharding.ConfigsvrReplSet
 	cfgInstances := make([]string, 0, len(cfgPods.Items)+len(cr.Spec.Sharding.ConfigsvrReplSet.ExternalNodes))
 	for _, pod := range cfgPods.Items {
-		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, api.ConfigReplSetName, false, pod)
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, cfgRs, false, pod)
 		if err != nil {
 			return errors.Wrapf(err, "get host for pod '%s'", pod.Name)
 		}

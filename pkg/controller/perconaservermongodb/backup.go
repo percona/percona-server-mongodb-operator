@@ -278,8 +278,7 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr
 	}
 
 	for _, rst := range restores.Items {
-		if rst.Status.State != api.RestoreStateReady &&
-			rst.Status.State != api.RestoreStateError &&
+		if rst.Status.State != api.RestoreStateReady && rst.Status.State != api.RestoreStateNew && rst.Status.State != api.RestoreStateError &&
 			rst.Spec.ClusterName == cr.Name {
 			return true, nil
 		}
@@ -426,7 +425,7 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 				}
 			}
 
-			err = pbm.SetConfig(ctx, r.client, cr, storage)
+			err = pbm.GetNSetConfig(ctx, r.client, cr, storage)
 			if err != nil {
 				return errors.Wrap(err, "set PBM config")
 			}
@@ -482,11 +481,16 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	val, err = pbm.GetConfigVar(ctx, "pitr.oplogSpanMin")
 	if err != nil {
-		if !errors.Is(err, mongo.ErrNoDocuments) {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil
+		}
+		// PBM-1387
+		// PBM has a bug to return config fields if they use default value
+		if errors.Is(err, bsoncore.ErrElementNotFound) {
+			val = 0.0
+		} else {
 			return errors.Wrap(err, "get pitr.oplogSpanMin")
 		}
-
-		return nil
 	}
 
 	oplogSpanMin, ok := val.(float64)
@@ -518,7 +522,13 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if compression != string(cr.Spec.Backup.PITR.CompressionType) {
 		if string(cr.Spec.Backup.PITR.CompressionType) == "" {
-			if err := pbm.DeleteConfigVar(ctx, "pitr.compression"); err != nil {
+			cfg, err := pbm.GetConfig(ctx)
+			if err != nil {
+				return errors.Wrap(err, "get pbm config")
+			}
+
+			cfg.PITR.Compression = ""
+			if err := pbm.SetConfig(ctx, cfg); err != nil {
 				return errors.Wrap(err, "delete pitr.compression")
 			}
 		} else if err := pbm.SetConfigVar(ctx, "pitr.compression", string(cr.Spec.Backup.PITR.CompressionType)); err != nil {
@@ -557,7 +567,13 @@ func (r *ReconcilePerconaServerMongoDB) updatePITR(ctx context.Context, cr *api.
 
 	if !reflect.DeepEqual(compressionLevel, cr.Spec.Backup.PITR.CompressionLevel) {
 		if cr.Spec.Backup.PITR.CompressionLevel == nil {
-			if err := pbm.DeleteConfigVar(ctx, "pitr.compressionLevel"); err != nil {
+			cfg, err := pbm.GetConfig(ctx)
+			if err != nil {
+				return errors.Wrap(err, "get pbm config")
+			}
+
+			cfg.PITR.CompressionLevel = nil
+			if err := pbm.SetConfig(ctx, cfg); err != nil {
 				return errors.Wrap(err, "delete pitr.compressionLevel")
 			}
 		} else if err := pbm.SetConfigVar(ctx, "pitr.compressionLevel", strconv.FormatInt(int64(*cr.Spec.Backup.PITR.CompressionLevel), 10)); err != nil {

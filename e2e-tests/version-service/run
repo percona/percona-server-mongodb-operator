@@ -89,7 +89,7 @@ function check_telemetry_transfer() {
 	fi
 
 	kubectl_bin delete pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
-	kubectl_bin patch psmdb minimal-cluster --type=merge -p '{"metadata":{"finalizers":["delete-psmdb-pvc"]}}'
+	kubectl_bin patch psmdb minimal-cluster --type=merge -p '{"metadata":{"finalizers":["percona.com/delete-psmdb-pvc"]}}'
 	kubectl_bin delete psmdb --all
 	kubectl_bin delete deploy psmdb-client
 	sleep 30

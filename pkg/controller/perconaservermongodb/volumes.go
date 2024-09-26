@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -26,12 +27,16 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec api.PVCSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, ls, pvcSpec); err != nil {
+const (
+	GiB = int64(1024 * 1024 * 1024)
+)
+
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
+	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, pvcSpec); err != nil {
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
@@ -42,8 +47,10 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 	return strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-"+sts.Name)
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
+
+	pvcSpec := volumeSpec.PersistentVolumeClaim
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
@@ -119,17 +126,16 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
-	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
-
-	if requested.Format == resource.DecimalSI {
-		requested, err = resource.ParseQuantity(requested.String() + "i")
-		if err != nil {
-			return errors.Wrap(err, "parse requested storage size")
-		}
+	gib, err := RoundUpGiB(requested.Value())
+	if err != nil {
+		return errors.Wrap(err, "round GiB value")
 	}
 
+	requested = *resource.NewQuantity(gib*GiB, resource.BinarySI)
+	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
+
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
-		resizeStartedAt, err := time.Parse(time.RFC3339, sts.GetAnnotations()[psmdbv1.AnnotationPVCResizeInProgress])
+		resizeStartedAt, err := time.Parse(time.RFC3339, sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress])
 		if err != nil {
 			return errors.Wrap(err, "parse annotation")
 		}
@@ -213,7 +219,13 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
-	if requested.Cmp(configured) == 0 || requested.Cmp(actual) == 0 {
+	if requested.Cmp(actual) == 0 {
+		return nil
+	}
+
+	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.VolumeExpansionEnabled {
+		// If expansion is disabled we should keep the old value
+		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil
 	}
 
@@ -242,7 +254,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			case strings.Contains(err.Error(), "exceeded quota"):
 				log.Error(err, "PVC resize failed", "reason", "ExceededQuota", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, actual); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
 					return err
 				}
 
@@ -250,7 +262,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			case strings.Contains(err.Error(), "the storageclass that provisions the pvc must support resize"):
 				log.Error(err, "PVC resize failed", "reason", "StorageClassNotSupportResize", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, actual); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
 					return err
 				}
 
@@ -348,4 +360,21 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 	}
 
 	return nil
+}
+
+func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {
+	if allocationUnitBytes == 0 {
+		return 0 // Avoid division by zero
+	}
+	return (volumeSizeBytes + allocationUnitBytes - 1) / allocationUnitBytes
+}
+
+// RoundUpGiB rounds up the volume size in bytes upto multiplications of GiB
+// in the unit of GiB
+func RoundUpGiB(volumeSizeBytes int64) (int64, error) {
+	result := roundUpSize(volumeSizeBytes, GiB)
+	if result > int64(math.MaxInt64) {
+		return 0, errors.Errorf("rounded up size exceeds maximum value of int64: %d", result)
+	}
+	return result, nil
 }

@@ -30,6 +30,88 @@ run_recovery_check_bkp_source() {
 	simple_data_check "$cluster" 3 0
 }
 
+user_exists() {
+	local username=$1
+	run_mongo \
+		"use myApp\n JSON.stringify(db.getUsers())" \
+		"userAdmin:userAdmin123456@$cluster.$namespace" "" "" "--quiet" \
+		| grep -v "switched to" \
+		| jq "any(.[]; ._id=="myApp.$username")"
+}
+
+role_exists() {
+	local role=$1
+	run_mongo \
+		"use myApp\n JSON.stringify(db.getRoles())" \
+		"userAdmin:userAdmin123456@$cluster.$namespace" "" "" "--quiet" \
+		| grep -v "switched to" \
+		| jq "any(.[]; ._id=="myApp.$role")"
+}
+
+collection_exists() {
+	local collection=$1
+	run_mongo \
+		"use myApp\n JSON.stringify(db.getCollectionNames())" \
+		"myApp:myPass@$cluster.$namespace" "" "" "--quiet" \
+		| grep -v "switched to" \
+		| jq "index(\"$collection\") != null"
+}
+
+run_recovery_check_selective() {
+	local backup=$1
+	local cluster=$2
+	local database=$3
+	local collection=$4
+	local with_users_and_roles=$5
+	local username=$6
+	local role=$7
+
+	restore_name="restore-$backup-selective"
+
+	run_mongo \
+		"use myApp\n db.$collection.drop()" \
+		"myApp:myPass@$cluster.$namespace"
+
+	if [[ $(collection_exists "$collection") == "true" ]]; then
+		echo "Collection $collection exists"
+		exit 1
+	fi
+
+	yq "$test_dir/conf/restore.yml" \
+		| yq ".metadata.name=\"$restore_name\"" \
+		| yq ".spec.backupName=\"$backup\"" \
+		| yq ".spec.selective.namespaces[0]=\"$database.test\"" \
+		| yq ".spec.selective.withUsersAndRoles=$with_users_and_roles" \
+		| kubectl_bin apply -f -
+
+	wait_restore "$backup-selective" "${cluster/-rs0/}"
+
+	if [[ $(collection_exists "$collection") == "true" ]]; then
+		echo "Collection $collection exists"
+		exit 1
+	fi
+
+	if [[ $with_users_and_roles == "true" ]]; then
+		if [[ $(user_exists "$username") == "false" ]]; then
+			echo "User $username doesn't exist"
+			exit 1
+		fi
+		if [[ $(role_exists "$role") == "false" ]]; then
+			echo "Role $role doesn't exist"
+			exit 1
+		fi
+	elif [[ $with_users_and_roles == "false" ]]; then
+		if [[ $(user_exists "$username") == "true" ]]; then
+			echo "User $username exists"
+			exit 1
+		fi
+		if [[ $(role_exists "$role") == "true" ]]; then
+			echo "Role $role exists"
+			exit 1
+		fi
+	fi
+}
+
 create_infra $namespace
 
 deploy_minio
@@ -61,6 +143,25 @@ desc 'write data, read from all'
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100500 })' \
 	"myApp:myPass@$cluster.$namespace"
+
+run_mongo \
+	'use myApp\n db.test2.insert({ x: 100501 })' \
+	"myApp:myPass@$cluster.$namespace"
+
+run_mongo \
+	'use myApp\n db.test3.insert({ x: 100502 })' \
+	"myApp:myPass@$cluster.$namespace"
+
+custom_user_name="test1user"
+custom_role_name="test1role"
+
+run_mongo \
+	'use myApp\n db.createUser({user: "'"$custom_user_name"'",pwd:"test1pass",roles:[]})' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
+
+run_mongo \
+	'use myApp\n db.createRole({"role":"'"$custom_role_name"'", privileges:[],roles:[]})' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
 
 minikube_sleep
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
@@ -119,6 +220,25 @@ kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
 	| grep myApp.test.gz
 run_recovery_check "$backup_name_minio" "$cluster"
+
+run_mongo \
+	'use myApp\n db.dropUser("'"$custom_user_name"'")' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
+
+run_mongo \
+	'use myApp\n db.dropRole("'"$custom_role_name"'")' \
+	"userAdmin:userAdmin123456@$cluster.$namespace"
+
+desc 'selective restore -- minio'
+run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "false" "$custom_user_name" "$custom_role_name"
+kubectl_bin delete psmdb-restore "restore-$backup_name_minio-selective"
+
+run_mongo \
+	'use myApp\n db.test2.insert({ x: 100501 })' \
+	"myApp:myPass@$cluster.$namespace"
+
+desc 'selective restore with users and roles -- minio'
+run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "true" "$custom_user_name" "$custom_role_name"
 
 desc 'restore from backup source, with storageName -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")

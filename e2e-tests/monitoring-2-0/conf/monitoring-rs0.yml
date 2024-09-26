@@ -49,10 +49,10 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIP
-        serviceLabels:
+        type: ClusterIP
+        labels:
           test: monitoring
-        serviceAnnotations:
+        annotations:
           test: monitoring
 
   pmm:

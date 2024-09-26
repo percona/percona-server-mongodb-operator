@@ -2,7 +2,6 @@ package perconaservermongodbrestore
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -23,9 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -138,7 +140,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	err = cr.CheckFields()
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("fields check: %v", err)
+		return reconcile.Result{}, errors.Wrap(err, "fields check")
+	}
+
+	err = cr.SetDefaults()
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "set defaults")
 	}
 
 	switch cr.Status.State {
@@ -151,6 +158,22 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrap(err, "get backup")
 	}
 
+	cluster := new(psmdbv1.PerconaServerMongoDB)
+	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	var svr *version.ServerVersion
+	svr, err = version.Server(r.clientcmd)
+	if err != nil {
+		return rr, errors.Wrapf(err, "fetch server version")
+	}
+
+	if err = cluster.CheckNSetDefaults(svr.Platform, log); err != nil {
+		return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+	}
+
 	switch bcp.Status.State {
 	case psmdbv1.BackupStateError:
 		err = errors.New("backup is in error state")
@@ -160,14 +183,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
+	if cr.Status.State == psmdbv1.RestoreStateNew {
+		err = r.validate(ctx, cr, cluster)
+		if err != nil {
+			if errors.Is(err, errWaitingPBM) || errors.Is(err, errWaitingRestore) {
+				err = nil
+				return rr, nil
+			}
+			return rr, errors.Wrap(err, "failed to validate restore")
+		}
+	}
+
 	switch bcp.Status.Type {
 	case "", defs.LogicalBackup:
-		status, err = r.reconcileLogicalRestore(ctx, cr, bcp)
+		status, err = r.reconcileLogicalRestore(ctx, cr, bcp, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")
 		}
 	case defs.PhysicalBackup:
-		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp)
+		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
 		}
@@ -278,4 +312,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 	}
 
 	return errors.Wrap(err, "write status")
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdate(ctx context.Context, obj client.Object) error {
+	_, err := util.Apply(ctx, r.client, obj)
+	return err
 }

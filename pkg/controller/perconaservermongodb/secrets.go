@@ -24,11 +24,11 @@ func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerM
 	return secrets, errors.Wrap(err, "get user secrets")
 }
 
-func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.UserRole) (psmdb.Credentials, error) {
+func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (psmdb.Credentials, error) {
 	return getCredentials(ctx, cl, cr, api.UserSecretName(cr), role)
 }
 
-func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.UserRole) (psmdb.Credentials, error) {
+func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.SystemUserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
 	usersSecret, err := getUserSecret(ctx, cl, cr, name)
 	if err != nil {

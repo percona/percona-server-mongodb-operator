@@ -138,9 +138,9 @@ main() {
 	unpause_cluster "$cluster"
 	wait_for_cluster_state "${cluster}" "ready"
 
-	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled"
-	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled"
-	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled"
+	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled" "skip_generation_check"
+	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled" "skip_generation_check"
+	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled" "skip_generation_check"
 
 	destroy "$namespace"
 	desc 'test passed'

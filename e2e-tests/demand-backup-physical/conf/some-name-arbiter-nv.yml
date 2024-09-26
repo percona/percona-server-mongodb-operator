@@ -2,7 +2,7 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   finalizers:
-  - delete-psmdb-pvc
+  - percona.com/delete-psmdb-pvc
   name: some-name
 spec:
   #platform: openshift
@@ -68,7 +68,7 @@ spec:
             storage: 3Gi
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     size: 4
     configuration: |
       operationProfiling:
