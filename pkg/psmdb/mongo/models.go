@@ -235,23 +235,44 @@ func (s *Status) Primary() *Member {
 	return nil
 }
 
+type RoleAuthenticationRestriction struct {
+	ClientSource  []string `bson:"clientSource" json:"clientSource"`
+	ServerAddress []string `bson:"serverAddress" json:"serverAddress"`
+}
+
 type RolePrivilege struct {
 	Resource map[string]interface{} `bson:"resource" json:"resource"`
 	Actions  []string               `bson:"actions" json:"actions"`
 }
 
+type InheritenceRole struct {
+	Role string `bson:"role" json:"role"`
+	DB   string `bson:"db" json:"db"`
+}
+
 type Role struct {
-	Role       string                   `bson:"role" json:"role"`
-	Roles      []map[string]interface{} `bson:"roles" json:"roles"`
-	Privileges []RolePrivilege          `bson:"privileges" json:"privileges"`
+	Role                       string                          `bson:"role" json:"role"`
+	DB                         string                          `bson:"db" json:"db"`
+	Roles                      []InheritenceRole               `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                 `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions []RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
+}
+
+type GetRoleResult struct {
+	Role                       string                            `bson:"role" json:"role"`
+	DB                         string                            `bson:"db" json:"db"`
+	Roles                      []InheritenceRole                 `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                   `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions [][]RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
 }
 
 type RoleInfo struct {
-	Roles      []Role `bson:"roles" json:"roles"`
+	Roles      []GetRoleResult `bson:"roles" json:"roles"`
 	OKResponse `bson:",inline"`
 }
 
 type User struct {
+	DB    string                   `bson:"db" json:"db"`
 	Roles []map[string]interface{} `bson:"roles" json:"roles"`
 }
 

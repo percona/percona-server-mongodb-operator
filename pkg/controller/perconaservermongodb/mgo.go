@@ -748,7 +748,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 	return errNoRunningMongodContainers
 }
 
-func getRoles(cr *api.PerconaServerMongoDB, role api.UserRole) []map[string]interface{} {
+func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []map[string]interface{} {
 	roles := make([]map[string]interface{}, 0)
 	switch role {
 	case api.RoleDatabaseAdmin:
@@ -836,16 +836,23 @@ func compareTags(tags mongo.ReplsetTags, selector api.PrimaryPreferTagSelectorSp
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Context, cli mongo.Client, role string, privileges []mongo.RolePrivilege) error {
-	roleInfo, err := cli.GetRole(ctx, role)
+	roleInfo, err := cli.GetRole(ctx, "admin", role)
 	if err != nil {
 		return errors.Wrap(err, "mongo get role")
 	}
+
+	mo := mongo.Role{
+		Role:       role,
+		Privileges: privileges,
+		Roles:      []mongo.InheritenceRole{},
+	}
+
 	if roleInfo == nil {
-		err = cli.CreateRole(ctx, role, privileges, []interface{}{})
+		err = cli.CreateRole(ctx, "admin", mo)
 		return errors.Wrapf(err, "create role %s", role)
 	}
 	if !comparePrivileges(privileges, roleInfo.Privileges) {
-		err = cli.UpdateRole(ctx, role, privileges, []interface{}{})
+		err = cli.UpdateRole(ctx, "admin", mo)
 		return errors.Wrapf(err, "update role")
 	}
 	return nil
@@ -952,7 +959,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []api.UserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
+	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
 	if cr.CompareVersion("1.13.0") >= 0 {
 		users = append(users, api.RoleDatabaseAdmin)
 	}
@@ -963,7 +970,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			log.Error(err, "failed to get credentials", "role", role)
 			continue
 		}
-		user, err := cli.GetUserInfo(ctx, creds.Username)
+		user, err := cli.GetUserInfo(ctx, creds.Username, "admin")
 		if err != nil {
 			return errors.Wrap(err, "get user info")
 		}

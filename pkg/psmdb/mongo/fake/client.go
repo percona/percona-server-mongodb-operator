@@ -58,15 +58,15 @@ func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error
 	return mongo.RSConfig{}, nil
 }
 
-func (c *fakeMongoClient) CreateRole(ctx context.Context, role string, privileges []mongo.RolePrivilege, roles []interface{}) error {
+func (c *fakeMongoClient) CreateRole(ctx context.Context, db string, role mongo.Role) error {
 	return nil
 }
 
-func (c *fakeMongoClient) UpdateRole(ctx context.Context, role string, privileges []mongo.RolePrivilege, roles []interface{}) error {
+func (c *fakeMongoClient) UpdateRole(ctx context.Context, db string, role mongo.Role) error {
 	return nil
 }
 
-func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
+func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.Role, error) {
 	return nil, nil
 }
 
@@ -134,7 +134,7 @@ func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, er
 	return nil, nil
 }
 
-func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string) (*mongo.User, error) {
+func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string, db string) (*mongo.User, error) {
 	return nil, nil
 }
 
