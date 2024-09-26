@@ -74,6 +74,19 @@ spec:
 #        maxSkew: 1
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
+#    replsetOverrides:
+#      my-cluster-name-rs0-0:
+#        host: my-cluster-name-rs0-0.example.net:27017
+#        tags:
+#          key: value-0
+#      my-cluster-name-rs0-1:
+#        host: my-cluster-name-rs0-1.example.net:27017
+#        tags:
+#          key: value-1
+#      my-cluster-name-rs0-2:
+#        host: my-cluster-name-rs0-2.example.net:27017
+#        tags:
+#          key: value-2
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -547,6 +560,39 @@ spec:
 #        - "host1"
 #        - "host2"
 
+#  roles:
+#    - role: myClusterwideAdmin
+#      db: admin
+#      privileges:
+#        - resource:
+#            cluster: true
+#          actions:
+#            - addShard
+#        - resource:
+#            db: config
+#            collection: ''
+#          actions:
+#            - find
+#            - update
+#            - insert
+#            - remove
+#      roles:
+#        - role: read
+#          db: admin
+#    - role: my-role
+#      db: myDb
+#      privileges:
+#        - resource:
+#            db: ''
+#            collection: ''
+#          actions:
+#            - find
+#      authenticationRestrictions:
+#        - clientSource:
+#            - 127.0.0.1
+#          serverAddress:
+#            - 127.0.0.1
+
 #  users:
 #  - name: my-user
 #    db: admin
@@ -569,7 +615,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.5.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:

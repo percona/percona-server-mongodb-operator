@@ -53,7 +53,7 @@ func (p *fakePBM) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.St
 	return nil, nil
 }
 
-func (p *fakePBM) ResyncStorage(ctx context.Context, l pbmLog.LogEvent) error {
+func (p *fakePBM) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
 	return nil
 }
 
@@ -81,12 +81,20 @@ func (p *fakePBM) DeleteBackup(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *fakePBM) SetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	return nil
 }
 
 func (p *fakePBM) SetConfigVar(ctx context.Context, key, val string) error {
 	return nil
+}
+
+func (p *fakePBM) SetConfig(ctx context.Context, cfg *config.Config) error {
+	return nil
+}
+
+func (p *fakePBM) GetConfig(ctx context.Context) (*config.Config, error) {
+	return nil, nil
 }
 
 func (p *fakePBM) GetConfigVar(ctx context.Context, key string) (any, error) {

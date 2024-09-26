@@ -365,21 +365,21 @@ type fakeMongoClientProvider struct {
 	connectionCount *int
 }
 
-func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
 
-func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
 
-func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
@@ -403,13 +403,13 @@ func (c *fakeMongoClient) GetFCV(ctx context.Context) (string, error) {
 	return "4.0", nil
 }
 
-func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
+func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.Role, error) {
 	return &mongo.Role{
 		Role: string(api.RoleClusterAdmin),
 	}, nil
 }
 
-func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string) (*mongo.User, error) {
+func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username, db string) (*mongo.User, error) {
 	return &mongo.User{
 		Roles: []map[string]interface{}{},
 	}, nil
