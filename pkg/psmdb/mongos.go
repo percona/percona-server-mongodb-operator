@@ -245,29 +245,24 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 		"mongos",
 		"--bind_ip_all",
 		"--port=" + strconv.Itoa(int(msSpec.Port)),
-		"--sslAllowInvalidCertificates",
+	}
+	if !cr.TLSEnabled() || *cr.Spec.TLS.AllowInvalidCertificates {
+		args = append(args, "--sslAllowInvalidCertificates")
+	}
+	args = append(args, []string{
 		"--configdb",
 		configDB,
-	}
-	if cr.CompareVersion("1.7.0") >= 0 {
-		args = append(args,
-			"--relaxPermChecks",
-		)
-	}
+		"--relaxPermChecks",
+	}...)
 
-	if cr.TLSEnabled() {
-		if !*cr.Spec.TLS.AllowInvalidCertificates {
-			// remove --sslAllowInvalidCertificates
-			args = append(args[:3], args[3+1:]...)
-		}
-
-		args = append(args,
-			"--clusterAuthMode=x509",
-		)
-	} else if (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf) {
+	if (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || cr.UnsafeTLSDisabled() || cr.Spec.Secrets.InternalKey != "" {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
+		)
+	} else if cr.TLSEnabled() {
+		args = append(args,
+			"--clusterAuthMode=x509",
 		)
 	}
 
