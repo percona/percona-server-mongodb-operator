@@ -559,6 +559,39 @@ spec:
 #        - "host1"
 #        - "host2"
 
+#  roles:
+#    - role: myClusterwideAdmin
+#      db: admin
+#      privileges:
+#        - resource:
+#            cluster: true
+#          actions:
+#            - addShard
+#        - resource:
+#            db: config
+#            collection: ''
+#          actions:
+#            - find
+#            - update
+#            - insert
+#            - remove
+#      roles:
+#        - role: read
+#          db: admin
+#    - role: my-role
+#      db: myDb
+#      privileges:
+#        - resource:
+#            db: ''
+#            collection: ''
+#          actions:
+#            - find
+#      authenticationRestrictions:
+#        - clientSource:
+#            - 127.0.0.1
+#          serverAddress:
+#            - 127.0.0.1
+
 #  users:
 #  - name: my-user
 #    db: admin

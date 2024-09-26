@@ -93,19 +93,58 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
+	Roles                        []Role                               `json:"roles,omitempty"`
 	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
 }
 
+type UserRole struct {
+	Name string `json:"name"`
+	DB   string `json:"db"`
+}
+
+type SecretKeySelector struct {
+	Name string `json:"name"`
+	Key  string `json:"key,omitempty"`
+}
+
 type User struct {
-	Name              string                   `json:"name"`
-	Db                string                   `json:"db"`
-	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []Role                   `json:"roles"`
+	Name              string            `json:"name"`
+	DB                string            `json:"db,omitempty"`
+	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
+	Roles             []UserRole        `json:"roles"`
+}
+
+func (u *User) UserID() string {
+	return u.DB + "." + u.Name
+}
+
+type RoleAuthenticationRestriction struct {
+	ClientSource  []string `json:"clientSource,omitempty"`
+	ServerAddress []string `json:"serverAddress,omitempty"`
+}
+
+type RoleResource struct {
+	Collection string `json:"collection,omitempty"`
+	DB         string `json:"db,omitempty"`
+	Cluster    *bool  `json:"cluster,omitempty"`
+}
+
+type RolePrivilege struct {
+	Actions  []string     `json:"actions"`
+	Resource RoleResource `json:"resource,omitempty"`
+}
+
+type InheritenceRole struct {
+	Role string `json:"role"`
+	DB   string `json:"db"`
 }
 
 type Role struct {
-	Name string `json:"name"`
-	Db   string `json:"db"`
+	Role                       string                          `json:"role"`
+	DB                         string                          `json:"db"`
+	Privileges                 []RolePrivilege                 `json:"privileges"`
+	AuthenticationRestrictions []RoleAuthenticationRestriction `json:"authenticationRestrictions,omitempty"`
+	Roles                      []InheritenceRole               `json:"roles,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -1071,14 +1110,14 @@ const (
 	EnvPMMServerAPIKey               = PMMAPIKey
 )
 
-type UserRole string
+type SystemUserRole string
 
 const (
-	RoleDatabaseAdmin  UserRole = "databaseAdmin"
-	RoleClusterAdmin   UserRole = "clusterAdmin"
-	RoleUserAdmin      UserRole = "userAdmin"
-	RoleClusterMonitor UserRole = "clusterMonitor"
-	RoleBackup         UserRole = "backup"
+	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
+	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
+	RoleUserAdmin      SystemUserRole = "userAdmin"
+	RoleClusterMonitor SystemUserRole = "clusterMonitor"
+	RoleBackup         SystemUserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
