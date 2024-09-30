@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"crypto/md5"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"sort"
@@ -575,11 +576,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		return "", errors.Wrap(err, "get pods list for mongos")
 	}
 
+	var errs []error
 	clusterStatus := api.AppStateNone
 	for _, replset := range repls {
 		replsetStatus, err := r.reconcileCluster(ctx, cr, replset, mongosPods.Items)
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+			errs = append(errs, err)
 		}
 
 		statusPriority := []api.AppState{
@@ -596,7 +599,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			}
 		}
 	}
-	return clusterStatus, nil
+	return clusterStatus, stderrors.Join(errs...)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
