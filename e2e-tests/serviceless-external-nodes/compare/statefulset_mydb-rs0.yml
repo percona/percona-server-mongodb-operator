@@ -51,7 +51,7 @@ spec:
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=keyFile
             - --keyFile=/etc/mongodb-secrets/mongodb-key
-            - --tlsMode=requireTLS
+            - --tlsMode=allowTLS
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25

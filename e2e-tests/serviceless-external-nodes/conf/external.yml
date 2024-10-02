@@ -3,6 +3,8 @@ kind: PerconaServerMongoDB
 metadata:
   name: mydb
 spec:
+  tls:
+    mode: allowTLS
   unmanaged: true
   unsafeFlags:
     replsetSize: true
