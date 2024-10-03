@@ -3392,15 +3392,10 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
-                        loadBalancerIP:
-                          type: string
                         loadBalancerSourceRanges:
                           items:
                             type: string
                           type: array
-                        nodePort:
-                          format: int32
-                          type: integer
                         serviceAnnotations:
                           additionalProperties:
                             type: string
@@ -11155,15 +11150,10 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
-                          loadBalancerIP:
-                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
                             type: array
-                          nodePort:
-                            format: int32
-                            type: integer
                           serviceAnnotations:
                             additionalProperties:
                               type: string
@@ -16610,8 +16600,6 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
-                          loadBalancerIP:
-                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string

@@ -106,7 +106,6 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
 		svc.Spec.ExternalTrafficPolicy = "Cluster"
 		svc.Spec.LoadBalancerSourceRanges = replset.Expose.LoadBalancerSourceRanges
-		svc.Spec.LoadBalancerIP = replset.Expose.LoadBalancerIP
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}

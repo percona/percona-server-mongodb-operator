@@ -217,7 +217,6 @@ spec:
     expose:
       enabled: false
       type: ClusterIP
-#      loadBalancerIP: 10.0.0.0/8
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      annotations:
@@ -431,14 +430,12 @@ spec:
       expose:
         enabled: false
         type: ClusterIP
-#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        labels:
 #          rack: rack-22
-#        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
       resources:
@@ -544,7 +541,6 @@ spec:
       expose:
         type: ClusterIP
 #        servicePerPod: true
-#        loadBalancerIP: 10.0.0.0/8
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        annotations:
