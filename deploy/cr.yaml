@@ -435,7 +435,6 @@ spec:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
 #        labels:
 #          rack: rack-22
-#        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
       resources:

@@ -1002,7 +1002,8 @@ func (a *Arbiter) GetSize() int32 {
 }
 
 type MongosExpose struct {
-	ServicePerPod bool `json:"servicePerPod,omitempty"`
+	ServicePerPod bool  `json:"servicePerPod,omitempty"`
+	NodePort      int32 `json:"nodePort,omitempty"`
 
 	Expose `json:",inline"`
 }
@@ -1027,8 +1028,6 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
-
-	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
