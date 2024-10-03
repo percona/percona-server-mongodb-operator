@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,10 +36,6 @@ const (
 	mongodPortName   = "mongodb"
 	mongosPortName   = "mongos"
 )
-
-func InternalKey(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-mongodb-keyfile"
-}
 
 type CustomConfig struct {
 	Type    VolumeSourceType

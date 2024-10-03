@@ -27,6 +27,7 @@ const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
 
 const (
 	MongodRESTencryptDir = "/etc/mongodb-encryption"
+	InternalKeyName      = "mongodb-key"
 	EncryptionKeyName    = "encryption-key"
 )
 

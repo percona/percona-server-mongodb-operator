@@ -736,13 +736,24 @@ type PVCSpec struct {
 }
 
 type SecretsSpec struct {
-	Users         string `json:"users,omitempty"`
-	SSL           string `json:"ssl,omitempty"`
-	SSLInternal   string `json:"sslInternal,omitempty"`
+	Users       string `json:"users,omitempty"`
+	SSL         string `json:"ssl,omitempty"`
+	SSLInternal string `json:"sslInternal,omitempty"`
+
+	// Use (*SecretsSpec) GetInternalKey() to get InternalKey
+	InternalKey string `json:"keyFile,omitempty"`
+
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
+}
+
+func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
+	if s == nil || s.InternalKey == "" {
+		return cr.Name + "-mongodb-keyfile"
+	}
+	return s.InternalKey
 }
 
 func SSLSecretName(cr *PerconaServerMongoDB) string {
