@@ -1017,7 +1017,6 @@ type Expose struct {
 	ExposeType           corev1.ServiceType `json:"type,omitempty"`
 	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 
-	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
 
 	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
