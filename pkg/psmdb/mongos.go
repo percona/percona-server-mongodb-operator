@@ -255,7 +255,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 		"--relaxPermChecks",
 	}...)
 
-	if (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || cr.UnsafeTLSDisabled() || cr.Spec.Secrets.InternalKey != "" {
+	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
