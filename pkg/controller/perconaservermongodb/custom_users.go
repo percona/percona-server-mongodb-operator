@@ -94,15 +94,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
+
 		if userInfo == nil {
-			err = createUser(ctx, r.client, cli, &user, &sec)
+			err = createUser(ctx, r.client, cli, &user, &sec, annotationKey)
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
 			}
 			continue
 		}
 
-		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec, cr.Name)
+		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec, annotationKey)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
 			continue
@@ -240,14 +242,12 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	cluster string) error {
+	annotationKey string) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil {
 		return nil
 	}
-
-	annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cluster, user.Name)
 
 	newHash := sha256Hash(secret.Data[user.PasswordSecretRef.Key])
 
@@ -314,10 +314,9 @@ func createUser(
 	cli client.Client,
 	mongoCli mongo.Client,
 	user *api.User,
-	secret *corev1.Secret) error {
+	secret *corev1.Secret,
+	annotationKey string) error {
 	log := logf.FromContext(ctx)
-
-	annotationKey := fmt.Sprintf("percona.com/%s-hash", user.Name)
 
 	roles := make([]map[string]interface{}, 0)
 	for _, role := range user.Roles {
@@ -331,6 +330,10 @@ func createUser(
 	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]), roles...)
 	if err != nil {
 		return err
+	}
+
+	if secret.Annotations == nil {
+		secret.Annotations = make(map[string]string)
 	}
 
 	secret.Annotations[annotationKey] = string(sha256Hash(secret.Data[user.PasswordSecretRef.Key]))

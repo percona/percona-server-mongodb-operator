@@ -122,7 +122,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			MountPath: MongodContainerDataDir,
 		},
 		{
-			Name:      InternalKey(cr),
+			Name:      cr.Spec.Secrets.GetInternalKey(cr),
 			MountPath: mongodSecretsDir,
 			ReadOnly:  true,
 		},
@@ -245,29 +245,24 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 		"mongos",
 		"--bind_ip_all",
 		"--port=" + strconv.Itoa(int(msSpec.Port)),
-		"--sslAllowInvalidCertificates",
+	}
+	if !cr.TLSEnabled() || *cr.Spec.TLS.AllowInvalidCertificates {
+		args = append(args, "--sslAllowInvalidCertificates")
+	}
+	args = append(args, []string{
 		"--configdb",
 		configDB,
-	}
-	if cr.CompareVersion("1.7.0") >= 0 {
-		args = append(args,
-			"--relaxPermChecks",
-		)
-	}
+		"--relaxPermChecks",
+	}...)
 
-	if cr.TLSEnabled() {
-		if !*cr.Spec.TLS.AllowInvalidCertificates {
-			// remove --sslAllowInvalidCertificates
-			args = append(args[:3], args[3+1:]...)
-		}
-
-		args = append(args,
-			"--clusterAuthMode=x509",
-		)
-	} else if (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf) {
+	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
+		)
+	} else if cr.TLSEnabled() {
+		args = append(args,
+			"--clusterAuthMode=x509",
 		)
 	}
 
@@ -301,11 +296,11 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 
 	volumes := []corev1.Volume{
 		{
-			Name: InternalKey(cr),
+			Name: cr.Spec.Secrets.GetInternalKey(cr),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &secretFileMode,
-					SecretName:  InternalKey(cr),
+					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
 					Optional:    &fvar,
 				},
 			},
@@ -466,7 +461,6 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
 		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
-		spec.LoadBalancerIP = cr.Spec.Sharding.Mongos.Expose.LoadBalancerIP
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}

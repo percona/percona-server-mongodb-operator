@@ -3,6 +3,8 @@ kind: PerconaServerMongoDB
 metadata:
   name: mydb
 spec:
+  tls:
+    mode: allowTLS
   unmanaged: true
   unsafeFlags:
     replsetSize: true
@@ -11,10 +13,11 @@ spec:
   image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
   secrets:
-    users: mydb-users
-    ssl: mydb-ssl
-    sslInternal: mydb-ssl-internal
-    encryptionKey: mydb-encryption-key
+    users: mydb-custom-users
+    ssl: mydb-custom-ssl
+    sslInternal: mydb-custom-ssl-internal
+    encryptionKey: mydb-custom-encryption-key
+    keyFile: mydb-custom-mongodb-keyfile
   replsets:
 
   - name: rs0

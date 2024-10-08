@@ -736,13 +736,24 @@ type PVCSpec struct {
 }
 
 type SecretsSpec struct {
-	Users         string `json:"users,omitempty"`
-	SSL           string `json:"ssl,omitempty"`
-	SSLInternal   string `json:"sslInternal,omitempty"`
+	Users       string `json:"users,omitempty"`
+	SSL         string `json:"ssl,omitempty"`
+	SSLInternal string `json:"sslInternal,omitempty"`
+
+	// Use (*SecretsSpec) GetInternalKey() to get InternalKey
+	InternalKey string `json:"keyFile,omitempty"`
+
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
+}
+
+func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
+	if s == nil || s.InternalKey == "" {
+		return cr.Name + "-mongodb-keyfile"
+	}
+	return s.InternalKey
 }
 
 func SSLSecretName(cr *PerconaServerMongoDB) string {
@@ -1002,7 +1013,8 @@ func (a *Arbiter) GetSize() int32 {
 }
 
 type MongosExpose struct {
-	ServicePerPod bool `json:"servicePerPod,omitempty"`
+	ServicePerPod bool  `json:"servicePerPod,omitempty"`
+	NodePort      int32 `json:"nodePort,omitempty"`
 
 	Expose `json:",inline"`
 }
@@ -1017,7 +1029,6 @@ type Expose struct {
 	ExposeType           corev1.ServiceType `json:"type,omitempty"`
 	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 
-	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
 
 	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
@@ -1028,8 +1039,6 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
-
-	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {

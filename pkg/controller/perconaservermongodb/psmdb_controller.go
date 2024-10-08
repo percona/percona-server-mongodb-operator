@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"crypto/md5"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"sort"
@@ -395,15 +396,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	internalKey := psmdb.InternalKey(cr)
-	ikCreated, err := r.ensureSecurityKey(ctx, cr, internalKey, "mongodb-key", 768, true)
+	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
 	if err != nil {
-		err = errors.Wrapf(err, "ensure mongo Key %s", internalKey)
+		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
 		return reconcile.Result{}, err
 	}
-
 	if ikCreated {
-		log.Info("Created a new mongo key", "KeyName", internalKey)
+		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
 	}
 
 	created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)
@@ -575,11 +574,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		return "", errors.Wrap(err, "get pods list for mongos")
 	}
 
+	var errs []error
 	clusterStatus := api.AppStateNone
 	for _, replset := range repls {
 		replsetStatus, err := r.reconcileCluster(ctx, cr, replset, mongosPods.Items)
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
+			errs = append(errs, err)
 		}
 
 		statusPriority := []api.AppState{
@@ -596,7 +597,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			}
 		}
 	}
-	return clusterStatus, nil
+	return clusterStatus, stderrors.Join(errs...)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
