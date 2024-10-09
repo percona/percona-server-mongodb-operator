@@ -192,7 +192,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args = append(args, "--sslAllowInvalidCertificates")
 	}
 
-	if (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || cr.UnsafeTLSDisabled() || cr.Spec.Secrets.InternalKey != "" {
+	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
 			"--keyFile="+mongodSecretsDir+"/mongodb-key",
