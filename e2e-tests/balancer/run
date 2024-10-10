@@ -21,6 +21,35 @@ check_balancer() {
 	fi
 }
 
+check_service() {
+	state=$1
+    svc_name=$2
+	if [ $state = "present" ]; then
+		echo "check that $svc_name was created"
+		local timeout=0
+		until kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep -vq NotFound; do
+			sleep 1
+			timeout=$((timeout + 1))
+			echo -n '.'
+			if [[ ${timeout} -gt 900 ]]; then
+				echo
+				echo "Waiting timeout has been reached. Service $svc_name is not present. Exiting..."
+				exit 1
+			fi
+		done
+	elif [ $state = "removed" ]; then
+		echo "check that $svc_name was removed"
+		if [[ -z $(kubectl get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]] ; then
+			echo "$svc_name was not removed."
+			exit 1
+        else
+            echo "service $svc_name was removed"
+		fi
+	else
+		echo "unknown state $state"
+	fi
+}
+
 main() {
 	create_infra "$namespace"
 
@@ -56,6 +85,15 @@ main() {
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":true}}}}'
 	sleep 20
 	check_balancer "full"
+
+# Add check that servicePerPod creates 3 services for the running cluster
+	desc 'enabling servicePerPod for mongos'
+	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"mongos":{"expose":{"servicePerPod":true}}}}}'
+	# wait_for_running $cluster-mongos 3
+	check_service present $cluster-mongos-0
+	check_service present $cluster-mongos-1
+	check_service present $cluster-mongos-2
+	check_service removed $cluster-mongos
 
 	destroy "$namespace"
 }
