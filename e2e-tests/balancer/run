@@ -86,7 +86,7 @@ main() {
 	sleep 20
 	check_balancer "full"
 
-# Add check that servicePerPod creates 3 services for the running cluster
+	# Add check that servicePerPod creates 3 services for the running cluster
 	desc 'enabling servicePerPod for mongos'
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"mongos":{"expose":{"servicePerPod":true}}}}}'
 	wait_for_running $cluster-mongos 3
