@@ -25,25 +25,25 @@ check_service() {
 	state=$1
 	svc_name=$2
 	if [ $state = "present" ]; then
-		echo "check that $svc_name was created"
+		echo -n "check that $svc_name was created"
 		local timeout=0
 		until kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep -vq NotFound; do
 			sleep 1
 			timeout=$((timeout + 1))
 			echo -n '.'
 			if [[ ${timeout} -gt 900 ]]; then
-				echo
 				echo "Waiting timeout has been reached. Service $svc_name is not present. Exiting..."
 				exit 1
 			fi
 		done
+		echo ".OK"
 	elif [ $state = "removed" ]; then
-		echo "check that $svc_name was removed"
-		if [[ -z $(kubectl get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]]; then
+		echo -n "check that $svc_name was removed"
+		if [[ -z $(kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]]; then
 			echo "$svc_name was not removed."
 			exit 1
 		else
-			echo "service $svc_name was removed"
+			echo ".OK"
 		fi
 	else
 		echo "unknown state $state"
