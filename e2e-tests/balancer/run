@@ -39,7 +39,7 @@ check_service() {
 		done
 	elif [ $state = "removed" ]; then
 		echo "check that $svc_name was removed"
-		if [[ -z $(kubectl get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]] ; then
+		if [[ -z $(kubectl get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]]; then
 			echo "$svc_name was not removed."
 			exit 1
         else
