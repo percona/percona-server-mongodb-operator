@@ -23,7 +23,7 @@ check_balancer() {
 
 check_service() {
 	state=$1
-    svc_name=$2
+	svc_name=$2
 	if [ $state = "present" ]; then
 		echo "check that $svc_name was created"
 		local timeout=0
