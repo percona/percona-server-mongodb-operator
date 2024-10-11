@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: true
   crVersion: 1.18.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  image: percona/percona-server-mongodb:7.0.14
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -608,7 +608,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:2.6.0
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
