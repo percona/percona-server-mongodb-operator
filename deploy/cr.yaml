@@ -224,7 +224,6 @@ spec:
 #      labels:
 #        rack: rack-22
 #      internalTrafficPolicy: Local
-#      externalTrafficPolicy: Local
     resources:
       limits:
         cpu: "300m"
@@ -437,7 +436,6 @@ spec:
 #        labels:
 #          rack: rack-22
 #        internalTrafficPolicy: Local
-#        externalTrafficPolicy: Local
       resources:
         limits:
           cpu: "300m"
@@ -549,7 +547,6 @@ spec:
 #          rack: rack-22
 #        nodePort: 32017
 #        internalTrafficPolicy: Local
-#        externalTrafficPolicy: Local
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
