@@ -331,6 +331,14 @@ EOF
                 archiveArtifacts 'results/docker/TAG'
             }
         }
+        stage('Test') {
+          steps {
+            echo 'Testing...'
+            sh """
+              ls /mnt/jenkins/tools/io.snyk.jenkins.tools.SnykInstallation/snyk_test/snyk-linux
+            """
+          }
+        }
         stage('GoLicenseDetector test') {
             when {
                 expression {
