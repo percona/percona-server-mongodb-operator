@@ -171,23 +171,28 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 	log.Info("AAAAAAAAAAAAAAAAA DB ROLEEE", "role", r2)
 
 	if privilegesChanged(r1.Privileges, r2.Privileges) {
+		log.Info("AAAAAAAAAAAAAAA")
 		return true
 	}
 
 	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
+		log.Info("BBBBBBBBBBBBBBBBBBBB")
 		return true
 	}
 
 	opts := cmpopts.SortSlices(func(x, y string) bool { return x < y })
 
 	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
+		log.Info("CCCCCCCCCCCCCCCCCCCCCC")
 		return true
 	}
 
 	if len(r1.Roles) != len(r2.Roles) {
+		log.Info("DDDDDDDDDDDDDDDDDDD")
 		return true
 	}
 	if !cmp.Equal(r1.Roles, r2.Roles) {
+		log.Info("EEEEEEEEEEEEEEEEEEEE")
 		return true
 	}
 

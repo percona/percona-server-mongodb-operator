@@ -6,6 +6,88 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
+func TestRolesChangedUUUU(t *testing.T) {
+	r2 := &mongo.Role{
+		Privileges: []mongo.RolePrivilege{
+			{
+				Resource: map[string]interface{}{
+					"db":         "test",
+					"collection": "test",
+				},
+				Actions: []string{"find"},
+			},
+			{
+				Resource: map[string]interface{}{
+					"db":         "test-two",
+					"collection": "test-two",
+				},
+				Actions: []string{"find", "insert", "remove", "update"},
+			},
+		},
+		AuthenticationRestrictions: nil,
+		Roles: []mongo.InheritenceRole{
+			{
+				Role: "read",
+				DB:   "test",
+			},
+			{
+				Role: "insert",
+				DB:   "test",
+			},
+		},
+	}
+
+	tests := []struct {
+		name string
+		r1   *mongo.Role
+		r2   *mongo.Role
+		want bool
+	}{
+		{
+			name: "Roles the same AAAAAAAAAAAAAAA",
+			want: false,
+			r1: &mongo.Role{
+				Privileges: []mongo.RolePrivilege{
+					{
+						Resource: map[string]interface{}{
+							"collection": "test",
+							"db":         "test",
+						},
+						Actions: []string{"find"},
+					},
+					{
+						Resource: map[string]interface{}{
+							"db":         "test-two",
+							"collection": "test-two",
+						},
+						Actions: []string{"find", "update", "insert", "remove"},
+					},
+				},
+				AuthenticationRestrictions: nil,
+				Roles: []mongo.InheritenceRole{
+					{
+						Role: "read",
+						DB:   "test",
+					},
+					{
+						Role: "insert",
+						DB:   "test",
+					},
+				},
+			},
+			r2: r2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rolesChanged(tt.r1, tt.r2); got != tt.want {
+				t.Errorf("rolesChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRolesChanged(t *testing.T) {
 	r2 := &mongo.Role{
 		Privileges: []mongo.RolePrivilege{
@@ -198,7 +280,7 @@ func TestRolesChanged(t *testing.T) {
 							"collection": "test-two",
 							"db":         "test-two",
 						},
-						Actions: []string{"insert","find",},
+						Actions: []string{"insert", "find"},
 					},
 				},
 				AuthenticationRestrictions: []mongo.RoleAuthenticationRestriction{
