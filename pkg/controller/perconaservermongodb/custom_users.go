@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -169,14 +171,16 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 		return true
 	}
 
-	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
+	opts := cmpopts.SortSlices(func(x, y string) bool { return x < y })
+
+	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
 		return true
 	}
 
 	if len(r1.Roles) != len(r2.Roles) {
 		return true
 	}
-	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
+	if !cmp.Equal(r1.Roles, r2.Roles) {
 		return true
 	}
 

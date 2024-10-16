@@ -815,7 +815,7 @@ func privilegesChanged(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 		return true
 	}
 	for i := range x {
-		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
+		if !compareResources(x[i].Resource, y[i].Resource) || !compareSlices(x[i].Actions, y[i].Actions) {
 			return true
 		}
 	}
