@@ -76,6 +76,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		if len(user.Roles) == 0 {
+			log.Error(nil, "user must have at least one role", "user", user.Name)
+			continue
+		}
+
 		if user.DB == "" {
 			user.DB = "admin"
 		}
