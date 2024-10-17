@@ -245,7 +245,7 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		}
 
 		if p.Resource.Cluster != nil {
-			rp.Resource["cluster"] = p.Resource.Cluster
+			rp.Resource["cluster"] = &p.Resource.Cluster
 		} else {
 			rp.Resource["db"] = p.Resource.DB
 			rp.Resource["collection"] = p.Resource.Collection
