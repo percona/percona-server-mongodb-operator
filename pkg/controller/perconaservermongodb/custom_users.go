@@ -176,7 +176,7 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 		cmpopts.EquateEmpty(),
 	}
 
-	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
+	if len(r1.Privileges) != len(r2.Privileges) {
 		log.Info("AAAAAAAAAAAAAAA")
 		return true
 	}
