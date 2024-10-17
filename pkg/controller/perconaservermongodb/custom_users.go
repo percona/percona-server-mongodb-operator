@@ -163,58 +163,28 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 }
 
 func rolesChanged(r1, r2 *mongo.Role) bool {
-
-	log := logf.FromContext(context.TODO())
-
-	log.Info("AAAAAAAAAAAAAAAAA CR ROLEEE", "role", r1)
-	log.Info("AAAAAAAAAAAAAAAAA DB ROLEEE", "role", r2)
+	if len(r1.Privileges) != len(r2.Privileges) {
+		return true
+	}
+	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
+		return true
+	}
+	if len(r1.Roles) != len(r2.Roles) {
+		return true
+	}
 
 	opts := cmp.Options{
 		cmpopts.SortSlices(func(x, y string) bool { return x < y }),
 		cmpopts.EquateEmpty(),
 	}
 
-	if len(r1.Privileges) != len(r2.Privileges) {
-		log.Info("AAAAAAAAAAAAAAA")
-		return true
-	}
-
 	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
-		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB")
-		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB CR PRIV", "role", r1.Privileges)
-		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB DB PRIV", "role", r2.Privileges)
-
-		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB", "diff", cmp.Diff(r1.Privileges, r2.Privileges))
 		return true
 	}
-
-	// if privilegesChanged(r1.Privileges, r2.Privileges) {
-	// 	log.Info("AAAAAAAAAAAAAAA")
-	// 	return true
-	// }
-
-	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
-		log.Info("BBBBBBBBBBBBBBBBBBBB")
-		return true
-	}
-
-	// opts := cmp.Options{
-	// 	cmpopts.SortSlices(func(x, y string) bool { return x < y }),
-	// 	cmpopts.EquateEmpty(),
-	// }
-
 	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
-		log.Info("CCCCCCCCCCCCCCCCCCCCCC")
 		return true
 	}
-
-	if len(r1.Roles) != len(r2.Roles) {
-		log.Info("DDDDDDDDDDDDDDDDDDD")
-		return true
-	}
-
 	if !cmp.Equal(r1.Roles, r2.Roles, opts) {
-		log.Info("EEEEEEEEEEEEEEEEEEEE")
 		return true
 	}
 

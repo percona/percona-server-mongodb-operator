@@ -6,67 +6,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-func TestRolesChangedUUUU(t *testing.T) {
-
-	tests := []struct {
-		name string
-		r1   *mongo.Role
-		r2   *mongo.Role
-		want bool
-	}{
-		{
-			name: "Roles the same",
-			want: false,
-			r1: &mongo.Role{
-				Privileges: []mongo.RolePrivilege{
-					{
-						Resource: map[string]interface{}{
-							"cluster": true,
-						},
-						Actions: []string{"addShard"},
-					},
-					{
-						Resource: map[string]interface{}{
-							"db":         "config",
-							"collection": "",
-						},
-						Actions: []string{"find", "insert", "remove", "update"},
-					},
-				},
-				AuthenticationRestrictions: nil,
-				Roles:                      nil,
-			},
-			r2: &mongo.Role{
-				Privileges: []mongo.RolePrivilege{
-					{
-						Resource: map[string]interface{}{
-							"cluster": true,
-						},
-						Actions: []string{"addShard"},
-					},
-					{
-						Resource: map[string]interface{}{
-							"collection": "",
-							"db":         "config",
-						},
-						Actions: []string{"find", "update", "insert", "remove"},
-					},
-				},
-				AuthenticationRestrictions: nil,
-				Roles:                      []mongo.InheritenceRole{},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := rolesChanged(tt.r1, tt.r2); got != tt.want {
-				t.Errorf("rolesChanged() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestRolesChanged(t *testing.T) {
 	r2 := &mongo.Role{
 		Privileges: []mongo.RolePrivilege{
