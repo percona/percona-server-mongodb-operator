@@ -7,25 +7,6 @@ import (
 )
 
 func TestRolesChangedUUUU(t *testing.T) {
-	r2 := &mongo.Role{
-		Privileges: []mongo.RolePrivilege{
-			{
-				Resource: map[string]interface{}{
-					"cluster": true,
-				},
-				Actions: []string{"addShard"},
-			},
-			{
-				Resource: map[string]interface{}{
-					"db":         "config",
-					"collection": "",
-				},
-				Actions: []string{"find", "update", "insert", "remove"},
-			},
-		},
-		AuthenticationRestrictions: nil,
-		Roles:                      []mongo.InheritenceRole{},
-	}
 
 	tests := []struct {
 		name string
@@ -34,7 +15,7 @@ func TestRolesChangedUUUU(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "Roles the same AAAAAAAAAAAAAAA",
+			name: "Roles the same",
 			want: false,
 			r1: &mongo.Role{
 				Privileges: []mongo.RolePrivilege{
@@ -55,7 +36,25 @@ func TestRolesChangedUUUU(t *testing.T) {
 				AuthenticationRestrictions: nil,
 				Roles:                      nil,
 			},
-			r2: r2,
+			r2: &mongo.Role{
+				Privileges: []mongo.RolePrivilege{
+					{
+						Resource: map[string]interface{}{
+							"cluster": true,
+						},
+						Actions: []string{"addShard"},
+					},
+					{
+						Resource: map[string]interface{}{
+							"collection": "",
+							"db":         "config",
+						},
+						Actions: []string{"find", "update", "insert", "remove"},
+					},
+				},
+				AuthenticationRestrictions: nil,
+				Roles:                      []mongo.InheritenceRole{},
+			},
 		},
 	}
 

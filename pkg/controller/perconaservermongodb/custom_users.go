@@ -13,7 +13,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -165,7 +164,7 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 
 func rolesChanged(r1, r2 *mongo.Role) bool {
 
-	log := log.FromContext(context.TODO())
+	log := logf.FromContext(context.TODO())
 
 	log.Info("AAAAAAAAAAAAAAAAA CR ROLEEE", "role", r1)
 	log.Info("AAAAAAAAAAAAAAAAA DB ROLEEE", "role", r2)
@@ -184,6 +183,8 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB")
 		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB CR PRIV", "role", r1.Privileges)
 		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB DB PRIV", "role", r2.Privileges)
+
+		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB", "diff", cmp.Diff(r1.Privileges, r2.Privileges))
 		return true
 	}
 
