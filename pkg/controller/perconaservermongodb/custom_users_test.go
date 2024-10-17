@@ -11,30 +11,20 @@ func TestRolesChangedUUUU(t *testing.T) {
 		Privileges: []mongo.RolePrivilege{
 			{
 				Resource: map[string]interface{}{
-					"db":         "test",
-					"collection": "test",
+					"cluster": "true",
 				},
 				Actions: []string{"find"},
 			},
 			{
 				Resource: map[string]interface{}{
 					"db":         "test-two",
-					"collection": "test-two",
+					"collection": "",
 				},
 				Actions: []string{"find", "insert", "remove", "update"},
 			},
 		},
 		AuthenticationRestrictions: nil,
-		Roles: []mongo.InheritenceRole{
-			{
-				Role: "read",
-				DB:   "test",
-			},
-			{
-				Role: "insert",
-				DB:   "test",
-			},
-		},
+		Roles:                      []mongo.InheritenceRole{},
 	}
 
 	tests := []struct {
@@ -50,30 +40,20 @@ func TestRolesChangedUUUU(t *testing.T) {
 				Privileges: []mongo.RolePrivilege{
 					{
 						Resource: map[string]interface{}{
-							"collection": "test",
-							"db":         "test",
+							"cluster": "true",
 						},
 						Actions: []string{"find"},
 					},
 					{
 						Resource: map[string]interface{}{
 							"db":         "test-two",
-							"collection": "test-two",
+							"collection": "",
 						},
 						Actions: []string{"find", "update", "insert", "remove"},
 					},
 				},
 				AuthenticationRestrictions: nil,
-				Roles: []mongo.InheritenceRole{
-					{
-						Role: "read",
-						DB:   "test",
-					},
-					{
-						Role: "insert",
-						DB:   "test",
-					},
-				},
+				Roles:                      nil,
 			},
 			r2: r2,
 		},

@@ -170,17 +170,37 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 	log.Info("AAAAAAAAAAAAAAAAA CR ROLEEE", "role", r1)
 	log.Info("AAAAAAAAAAAAAAAAA DB ROLEEE", "role", r2)
 
-	if privilegesChanged(r1.Privileges, r2.Privileges) {
+
+	opts := cmp.Options{
+		cmpopts.SortSlices(func(x, y string) bool { return x < y }),
+		cmpopts.EquateEmpty(),
+	}
+
+	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
 		log.Info("AAAAAAAAAAAAAAA")
 		return true
 	}
+
+	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
+		log.Info("AAAAAAAAAAAAAAABBBBBBBBBBB")
+		return true
+	}
+
+
+	// if privilegesChanged(r1.Privileges, r2.Privileges) {
+	// 	log.Info("AAAAAAAAAAAAAAA")
+	// 	return true
+	// }
 
 	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
 		log.Info("BBBBBBBBBBBBBBBBBBBB")
 		return true
 	}
 
-	opts := cmpopts.SortSlices(func(x, y string) bool { return x < y })
+	// opts := cmp.Options{
+	// 	cmpopts.SortSlices(func(x, y string) bool { return x < y }),
+	// 	cmpopts.EquateEmpty(),
+	// }
 
 	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
 		log.Info("CCCCCCCCCCCCCCCCCCCCCC")
@@ -191,7 +211,8 @@ func rolesChanged(r1, r2 *mongo.Role) bool {
 		log.Info("DDDDDDDDDDDDDDDDDDD")
 		return true
 	}
-	if !cmp.Equal(r1.Roles, r2.Roles) {
+
+	if !cmp.Equal(r1.Roles, r2.Roles, opts) {
 		log.Info("EEEEEEEEEEEEEEEEEEEE")
 		return true
 	}
