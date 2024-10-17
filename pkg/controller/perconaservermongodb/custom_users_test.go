@@ -11,16 +11,16 @@ func TestRolesChangedUUUU(t *testing.T) {
 		Privileges: []mongo.RolePrivilege{
 			{
 				Resource: map[string]interface{}{
-					"cluster": "true",
+					"cluster": true,
 				},
-				Actions: []string{"find"},
+				Actions: []string{"addShard"},
 			},
 			{
 				Resource: map[string]interface{}{
-					"db":         "test-two",
+					"db":         "config",
 					"collection": "",
 				},
-				Actions: []string{"find", "insert", "remove", "update"},
+				Actions: []string{"find", "update", "insert", "remove"},
 			},
 		},
 		AuthenticationRestrictions: nil,
@@ -40,16 +40,16 @@ func TestRolesChangedUUUU(t *testing.T) {
 				Privileges: []mongo.RolePrivilege{
 					{
 						Resource: map[string]interface{}{
-							"cluster": "true",
+							"cluster": true,
 						},
-						Actions: []string{"find"},
+						Actions: []string{"addShard"},
 					},
 					{
 						Resource: map[string]interface{}{
-							"db":         "test-two",
+							"db":         "config",
 							"collection": "",
 						},
-						Actions: []string{"find", "update", "insert", "remove"},
+						Actions: []string{"find", "insert", "remove", "update"},
 					},
 				},
 				AuthenticationRestrictions: nil,
