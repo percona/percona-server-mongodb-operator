@@ -809,7 +809,7 @@ func compareSlices(x, y []string) bool {
 	return true
 }
 
-// privilegesChanged compares 2 RolePrivilege arrays and returns true if they are equal
+// privilegesChanged compares 2 RolePrivilege arrays and returns true if they are not equal
 func privilegesChanged(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 	if len(x) != len(y) {
 		return true
