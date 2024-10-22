@@ -9,6 +9,7 @@ data-at-rest-encryption
 data-sharded
 default-cr
 demand-backup
+demand-backup-fs
 demand-backup-eks-credentials
 demand-backup-physical
 demand-backup-physical-sharded

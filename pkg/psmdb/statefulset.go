@@ -437,6 +437,10 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 		})
 	}
 
+	if len(cr.Spec.Backup.VolumeMounts) > 0 {
+		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
+	}
+
 	return c
 }
 
