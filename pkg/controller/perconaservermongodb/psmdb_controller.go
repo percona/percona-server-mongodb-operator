@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -474,6 +473,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
+	if err := r.reconcileServices(ctx, cr, repls); err != nil {
+		return "", errors.Wrap(err, "reconcile services")
+	}
+
 	for _, replset := range repls {
 		if cr.Spec.Sharding.Enabled && replset.ClusterRole != api.ClusterRoleConfigSvr && replset.Name == api.ConfigReplSetName {
 			return "", errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
@@ -481,13 +484,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 
 		matchLabels := naming.MongodLabels(cr, replset)
 
-		pods, err := psmdb.GetRSPods(ctx, r.client, cr, replset.Name)
-		if err != nil {
-			err = errors.Errorf("get pods list for replset %s: %v", replset.Name, err)
-			return "", err
-		}
-
-		_, err = r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 		if err != nil {
 			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 			return "", err
@@ -527,34 +524,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 
 			if err != nil && !k8serrors.IsNotFound(err) {
 				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
-				return "", err
-			}
-		}
-
-		err = r.removeOutdatedServices(ctx, cr, replset)
-		if err != nil {
-			err = errors.Wrapf(err, "failed to remove old services of replset %s", replset.Name)
-			return "", err
-		}
-
-		// Create headless service
-		service := psmdb.Service(cr, replset)
-
-		err = setControllerReference(cr, service, r.scheme)
-		if err != nil {
-			return "", errors.Wrapf(err, "set owner ref for service %s", service.Name)
-		}
-
-		err = r.createOrUpdateSvc(ctx, cr, service, true)
-		if err != nil {
-			return "", errors.Wrapf(err, "create or update service for replset %s", replset.Name)
-		}
-
-		// Create exposed services
-		if replset.Expose.Enabled {
-			_, err := r.ensureExternalServices(ctx, cr, replset, &pods)
-			if err != nil {
-				err = errors.Errorf("failed to ensure services of replset %s: %v", replset.Name, err)
 				return "", err
 			}
 		}
@@ -1297,76 +1266,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
 	}
 
-	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-			err = r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos-"+strconv.Itoa(i))
-			if err != nil {
-				return errors.Wrap(err, "create or update mongos service")
-			}
-		}
-	} else {
-		err = r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos")
-		if err != nil {
-			return errors.Wrap(err, "create or update mongos service")
-		}
-	}
-
-	err = r.removeOutdatedMongosSvc(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "remove outdated mongos services")
-	}
-
 	err = r.smartMongosUpdate(ctx, cr, sts)
 	if err != nil {
 		return errors.Wrap(err, "smart update")
 	}
 
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Pause && cr.Spec.Sharding.Enabled {
-		return nil
-	}
-
-	svcNames := make(map[string]struct{}, cr.Spec.Sharding.Mongos.Size)
-	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-			svcNames[cr.Name+"-mongos-"+strconv.Itoa(i)] = struct{}{}
-		}
-	} else {
-		svcNames[cr.Name+"-mongos"] = struct{}{}
-	}
-
-	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to list mongos services")
-	}
-
-	for _, service := range svcList.Items {
-		if _, ok := svcNames[service.Name]; !ok {
-			err = r.client.Delete(ctx, &service)
-			if err != nil {
-				return errors.Wrapf(err, "failed to delete service %s", service.Name)
-			}
-		}
-	}
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) createOrUpdateMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB, name string) error {
-	svc := psmdb.MongosService(cr, name)
-	err := setControllerReference(cr, &svc, r.scheme)
-	if err != nil {
-		return errors.Wrapf(err, "set owner ref for service %s", svc.Name)
-	}
-
-	svc.Spec = psmdb.MongosServiceSpec(cr, name)
-
-	err = r.createOrUpdateSvc(ctx, cr, &svc, cr.Spec.Sharding.Mongos.Expose.SaveOldMeta())
-	if err != nil {
-		return errors.Wrap(err, "create or update mongos service")
-	}
 	return nil
 }
 
