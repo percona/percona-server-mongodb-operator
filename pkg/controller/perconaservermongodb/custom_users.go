@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -74,6 +76,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		if len(user.Roles) == 0 {
+			log.Error(nil, "user must have at least one role", "user", user.Name)
+			continue
+		}
+
 		if user.DB == "" {
 			user.DB = "admin"
 		}
@@ -121,6 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 }
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
+	log := logf.FromContext(ctx)
 	if len(cr.Spec.Roles) == 0 {
 		return nil
 	}
@@ -137,44 +145,55 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 		}
 
 		if roleInfo == nil {
+			log.Info("Creating role", "role", role.Role)
 			err := cli.CreateRole(ctx, role.DB, *mr)
 			if err != nil {
 				return errors.Wrapf(err, "create role %s", role.Role)
 			}
+			log.Info("Role created", "role", role.Role)
 			continue
 		}
 
-		if !compareRole(mr, roleInfo) {
+		if rolesChanged(mr, roleInfo) {
+			log.Info("Updating role", "role", role.Role)
 			err := cli.UpdateRole(ctx, role.DB, *mr)
 			if err != nil {
 				return errors.Wrapf(err, "update role %s", role.Role)
 			}
+			log.Info("Role updated", "role", role.Role)
 		}
 	}
 
 	return nil
 }
 
-func compareRole(r1, r2 *mongo.Role) bool {
-	if !comparePrivileges(r1.Privileges, r2.Privileges) {
-		return false
+func rolesChanged(r1, r2 *mongo.Role) bool {
+	if len(r1.Privileges) != len(r2.Privileges) {
+		return true
 	}
-
 	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
-		return false
+		return true
 	}
-	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
-		return false
-	}
-
 	if len(r1.Roles) != len(r2.Roles) {
-		return false
-	}
-	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
-		return false
+		return true
 	}
 
-	return true
+	opts := cmp.Options{
+		cmpopts.SortSlices(func(x, y string) bool { return x < y }),
+		cmpopts.EquateEmpty(),
+	}
+
+	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
+		return true
+	}
+	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
+		return true
+	}
+	if !cmp.Equal(r1.Roles, r2.Roles, opts) {
+		return true
+	}
+
+	return false
 }
 
 func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
@@ -201,7 +220,7 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		}
 
 		if p.Resource.Cluster != nil {
-			rp.Resource["cluster"] = p.Resource.Cluster
+			rp.Resource["cluster"] = *p.Resource.Cluster
 		} else {
 			rp.Resource["db"] = p.Resource.DB
 			rp.Resource["collection"] = p.Resource.Collection
