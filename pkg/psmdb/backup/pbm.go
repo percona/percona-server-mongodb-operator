@@ -31,6 +31,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/resync"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -121,7 +122,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
-	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name )
+	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", tlsPemFile)
@@ -132,7 +133,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
-	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name )
+	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
 	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", caCertFile)
@@ -380,7 +381,12 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 	case api.BackupStorageFilesystem:
-		return conf, errors.New("filesystem backup storage not supported yet, skipping storage name")
+		conf.Storage = config.StorageConf{
+			Type: storage.Filesystem,
+			Filesystem: &fs.Config{
+				Path: stg.Filesystem.Path,
+			},
+		}
 	default:
 		return conf, errors.New("unsupported backup storage type")
 	}
@@ -389,6 +395,10 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 }
 
 func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+	if cfg.Storage.Type == storage.Filesystem {
+		return nil
+	}
+
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
 	backupName := bcp.Status.PBMname
 	s, err := util.StorageFromConfig(&cfg.Storage, e)

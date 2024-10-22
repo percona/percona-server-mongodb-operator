@@ -283,15 +283,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Err
-	case defs.StatusPartlyDone:
-		status.State = psmdbv1.RestoreStateError
-		var pbmErr string
-		for _, rs := range meta.Replsets {
-			if rs.Status == defs.StatusError {
-				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
-			}
-		}
-		status.Error = pbmErr
 	case defs.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case defs.StatusDone:
@@ -446,6 +437,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		MountPath: "/etc/pbm/",
 		ReadOnly:  true,
 	})
+	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, cluster.Spec.Backup.VolumeMounts...)
 	sts.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/physical-restore-ps-entry.sh"}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
