@@ -28,6 +28,14 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
+var anotherOpBackoff = wait.Backoff{
+	Steps:    13,
+	Duration: time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
+	Cap:      15 * time.Minute,
+}
+
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
@@ -47,12 +55,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "get pod/%s", podName)
 		}
 
-		if err := r.waitForPBMOperationsToFinish(ctx, &pod); err != nil {
-			return status, err
-		}
-
-		if err := r.disablePITR(ctx, &pod); err != nil {
-			return status, err
+		if err := retry.OnError(anotherOpBackoff, func(err error) bool {
+			return strings.Contains(err.Error(), "another operation")
+		}, func() error {
+			return r.disablePITR(ctx, &pod)
+		}); err != nil {
+			return status, errors.Wrap(err, "disable pitr")
 		}
 
 		if cr.Spec.PITR != nil {
@@ -150,14 +158,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
 		}
 
-		backoff := wait.Backoff{
-			Steps:    5,
-			Duration: 500 * time.Millisecond,
-			Factor:   5.0,
-			Jitter:   0.1,
-		}
-
-		err = retry.OnError(backoff, func(err error) bool {
+		err = retry.OnError(anotherOpBackoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
 			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
