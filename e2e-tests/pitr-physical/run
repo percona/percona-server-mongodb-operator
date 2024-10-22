@@ -152,11 +152,6 @@ main() {
 	sleep 360
 
 	backup_name_minio="backup-minio"
-	run_backup $backup_name_minio 1 physical
-
-	# 2nd backup is required for to workaround PBM-1391
-	# in case of the 1st, pbmPITR collection is created after the backup
-	# and it causes crashes after physical restore
 	run_backup $backup_name_minio 2 physical
 
 	write_document "-2nd"
