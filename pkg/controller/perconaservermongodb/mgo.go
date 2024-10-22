@@ -816,17 +816,17 @@ func compareSlices(x, y []string) bool {
 	return true
 }
 
-// comparePrivileges compares 2 RolePrivilege arrays and returns true if they are equal
-func comparePrivileges(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
+// privilegesChanged compares 2 RolePrivilege arrays and returns true if they are not equal
+func privilegesChanged(x []mongo.RolePrivilege, y []mongo.RolePrivilege) bool {
 	if len(x) != len(y) {
-		return false
+		return true
 	}
 	for i := range x {
-		if !(compareResources(x[i].Resource, y[i].Resource) && compareSlices(x[i].Actions, y[i].Actions)) {
-			return false
+		if !compareResources(x[i].Resource, y[i].Resource) || !compareSlices(x[i].Actions, y[i].Actions) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func compareTags(tags mongo.ReplsetTags, selector api.PrimaryPreferTagSelectorSpec) bool {
@@ -858,7 +858,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Co
 		err = cli.CreateRole(ctx, "admin", mo)
 		return errors.Wrapf(err, "create role %s", role)
 	}
-	if !comparePrivileges(privileges, roleInfo.Privileges) {
+	if privilegesChanged(privileges, roleInfo.Privileges) {
 		err = cli.UpdateRole(ctx, "admin", mo)
 		return errors.Wrapf(err, "update role")
 	}
