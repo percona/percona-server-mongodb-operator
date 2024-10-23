@@ -54,7 +54,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
-	err := b.pbm.SetConfig(ctx, k8sclient, cluster, stg)
+	err := b.pbm.GetNSetConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
 		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}

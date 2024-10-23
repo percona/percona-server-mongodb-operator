@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-rs0-0
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-0
+  type: ClusterIP
+  ports:
+  - name: mongodb
+    port: 27017
+    protocol: TCP
+    targetPort: 27017
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-rs0-1
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-1
+  type: ClusterIP
+  ports:
+  - name: mongodb
+    port: 27017
+    protocol: TCP
+    targetPort: 27017
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-rs0-2
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-2
+  type: ClusterIP
+  ports:
+  - name: mongodb
+    port: 27017
+    protocol: TCP
+    targetPort: 27017

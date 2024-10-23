@@ -118,7 +118,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.5.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
     storages:
       test-s3-storage:
         type: s3

@@ -93,19 +93,58 @@ type PerconaServerMongoDBSpec struct {
 	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
 	TLS                          *TLSSpec                             `json:"tls,omitempty"`
 	Users                        []User                               `json:"users,omitempty"`
+	Roles                        []Role                               `json:"roles,omitempty"`
 	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
 }
 
+type UserRole struct {
+	Name string `json:"name"`
+	DB   string `json:"db"`
+}
+
+type SecretKeySelector struct {
+	Name string `json:"name"`
+	Key  string `json:"key,omitempty"`
+}
+
 type User struct {
-	Name              string                   `json:"name"`
-	Db                string                   `json:"db"`
-	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []Role                   `json:"roles"`
+	Name              string            `json:"name"`
+	DB                string            `json:"db,omitempty"`
+	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
+	Roles             []UserRole        `json:"roles"`
+}
+
+func (u *User) UserID() string {
+	return u.DB + "." + u.Name
+}
+
+type RoleAuthenticationRestriction struct {
+	ClientSource  []string `json:"clientSource,omitempty"`
+	ServerAddress []string `json:"serverAddress,omitempty"`
+}
+
+type RoleResource struct {
+	Collection string `json:"collection,omitempty"`
+	DB         string `json:"db,omitempty"`
+	Cluster    *bool  `json:"cluster,omitempty"`
+}
+
+type RolePrivilege struct {
+	Actions  []string     `json:"actions"`
+	Resource RoleResource `json:"resource,omitempty"`
+}
+
+type InheritenceRole struct {
+	Role string `json:"role"`
+	DB   string `json:"db"`
 }
 
 type Role struct {
-	Name string `json:"name"`
-	Db   string `json:"db"`
+	Role                       string                          `json:"role"`
+	DB                         string                          `json:"db"`
+	Privileges                 []RolePrivilege                 `json:"privileges"`
+	AuthenticationRestrictions []RoleAuthenticationRestriction `json:"authenticationRestrictions,omitempty"`
+	Roles                      []InheritenceRole               `json:"roles,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -417,6 +456,8 @@ type ExternalNode struct {
 	Port     int    `json:"port,omitempty"`
 	Priority int    `json:"priority"`
 	Votes    int    `json:"votes"`
+
+	ReplsetOverride `json:",inline"`
 }
 
 func (e *ExternalNode) HostPort() string {
@@ -580,6 +621,14 @@ func (conf *MongoConfiguration) SetDefaults() error {
 	return nil
 }
 
+type ReplsetOverrides map[string]ReplsetOverride
+
+type ReplsetOverride struct {
+	Host     string            `json:"host,omitempty"`
+	Horizons map[string]string `json:"horizons,omitempty"`
+	Tags     map[string]string `json:"tags,omitempty"`
+}
+
 type HorizonsSpec map[string]map[string]string
 
 type PrimaryPreferTagSelectorSpec map[string]string
@@ -603,6 +652,7 @@ type ReplsetSpec struct {
 	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
 	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
+	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 }
 
@@ -686,13 +736,24 @@ type PVCSpec struct {
 }
 
 type SecretsSpec struct {
-	Users         string `json:"users,omitempty"`
-	SSL           string `json:"ssl,omitempty"`
-	SSLInternal   string `json:"sslInternal,omitempty"`
+	Users       string `json:"users,omitempty"`
+	SSL         string `json:"ssl,omitempty"`
+	SSLInternal string `json:"sslInternal,omitempty"`
+
+	// Use (*SecretsSpec) GetInternalKey() to get InternalKey
+	InternalKey string `json:"keyFile,omitempty"`
+
 	EncryptionKey string `json:"encryptionKey,omitempty"`
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
+}
+
+func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
+	if s == nil || s.InternalKey == "" {
+		return cr.Name + "-mongodb-keyfile"
+	}
+	return s.InternalKey
 }
 
 func SSLSecretName(cr *PerconaServerMongoDB) string {
@@ -952,7 +1013,8 @@ func (a *Arbiter) GetSize() int32 {
 }
 
 type MongosExpose struct {
-	ServicePerPod bool `json:"servicePerPod,omitempty"`
+	ServicePerPod bool  `json:"servicePerPod,omitempty"`
+	NodePort      int32 `json:"nodePort,omitempty"`
 
 	Expose `json:",inline"`
 }
@@ -967,7 +1029,6 @@ type Expose struct {
 	ExposeType           corev1.ServiceType `json:"type,omitempty"`
 	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 
-	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
 
 	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
@@ -978,8 +1039,6 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
-
-	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
@@ -1060,14 +1119,14 @@ const (
 	EnvPMMServerAPIKey               = PMMAPIKey
 )
 
-type UserRole string
+type SystemUserRole string
 
 const (
-	RoleDatabaseAdmin  UserRole = "databaseAdmin"
-	RoleClusterAdmin   UserRole = "clusterAdmin"
-	RoleUserAdmin      UserRole = "userAdmin"
-	RoleClusterMonitor UserRole = "clusterMonitor"
-	RoleBackup         UserRole = "backup"
+	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
+	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
+	RoleUserAdmin      SystemUserRole = "userAdmin"
+	RoleClusterMonitor SystemUserRole = "clusterMonitor"
+	RoleBackup         SystemUserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {

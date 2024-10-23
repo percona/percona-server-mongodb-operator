@@ -2,6 +2,7 @@ package tls
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -235,7 +236,7 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 	}
 	err = checker.Check(ctx)
 	if err != nil {
-		switch cmapichecker.TranslateToSimpleError(err) {
+		switch translateCheckError(err) {
 		case cmapichecker.ErrCertManagerCRDsNotFound:
 			return ErrCertManagerNotFound
 		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
@@ -245,6 +246,18 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 		return err
 	}
 	return nil
+}
+
+func translateCheckError(err error) error {
+	const crdsMapping3Error = `error finding the scope of the object: failed to get restmapping: no matches for kind "Certificate" in version "cert-manager.io/v1"`
+	// TODO: remove as soon as TranslateToSimpleError uses this regexp
+	regexErrCertManagerCRDsNotFound := regexp.MustCompile(`^(` + regexp.QuoteMeta(crdsMapping3Error) + `)$`)
+
+	if regexErrCertManagerCRDsNotFound.MatchString(err.Error()) {
+		return cmapichecker.ErrCertManagerCRDsNotFound
+	}
+
+	return cmapichecker.TranslateToSimpleError(err)
 }
 
 func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
