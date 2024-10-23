@@ -109,7 +109,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 			rsDeleted = false
 			switch err {
 			case errWaitingTermination, errWaitingFirstPrimary:
-				log.Info(err.Error(), "rs", rs.Name)
+				log.Error(err, "rs", rs.Name)
 				continue
 			default:
 				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
