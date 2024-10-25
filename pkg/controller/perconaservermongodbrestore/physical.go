@@ -242,15 +242,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Err
-	case defs.StatusPartlyDone:
-		status.State = psmdbv1.RestoreStateError
-		var pbmErr string
-		for _, rs := range meta.Replsets {
-			if rs.Status == defs.StatusError {
-				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
-			}
-		}
-		status.Error = pbmErr
 	case defs.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case defs.StatusDone:
