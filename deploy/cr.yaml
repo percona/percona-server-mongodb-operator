@@ -189,6 +189,10 @@ spec:
 #    - name: sidecar-config
 #      configMap:
 #        name: myconfigmap
+#    - name: backup-nfs
+#      nfs:
+#        server: "nfs-service.storage.svc.cluster.local"
+#        path: "/psmdb-some-name-rs0"
 #    sidecarPVCs:
 #    - apiVersion: v1
 #      kind: PersistentVolumeClaim
@@ -657,6 +661,13 @@ spec:
 #          prefix: PREFIX-NAME
 #          endpointUrl: https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
+#      backup-nfs:
+#        type: filesystem
+#        filesystem:
+#          path: /mnt/nfs/
+#    volumeMounts:
+#    - mountPath: /mnt/nfs/
+#      name: backup-nfs
     pitr:
       enabled: false
       oplogOnly: false
