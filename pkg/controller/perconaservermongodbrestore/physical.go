@@ -147,53 +147,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 
 		time.Sleep(5 * time.Second) // wait until pbm will start resync
-
-		waitErr := errors.New("waiting for PBM operation to finish")
-		err = retry.OnError(wait.Backoff{
-			Duration: 5 * time.Second,
-			Factor:   2.0,
-			Cap:      time.Hour,
-			Steps:    12,
-		}, func(err error) bool { return err == waitErr }, func() error {
-			err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-				stdoutBuf.Reset()
-				stderrBuf.Reset()
-
-				command := []string{"/opt/percona/pbm", "status", "--out", "json"}
-				err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-				if err != nil {
-					log.Error(err, "failed to get PBM status")
-					return err
-				}
-
-				log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-				return nil
-			})
-			if err != nil {
-				return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-			}
-
-			var pbmStatus struct {
-				Running struct {
-					Type string `json:"type,omitempty"`
-					OpId string `json:"opID,omitempty"`
-				} `json:"running"`
-			}
-
-			if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-				return errors.Wrap(err, "unmarshal PBM status output")
-			}
-
-			if len(pbmStatus.Running.OpId) == 0 {
-				return nil
-			}
-
-			log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
-
-			return waitErr
-		})
-		if err != nil {
+		if err := r.waitForPBMOperationsToFinish(ctx, &pod); err != nil {
 			return status, err
 		}
 
@@ -929,4 +883,71 @@ func (r *ReconcilePerconaServerMongoDBRestore) pbmConfigName(cluster *psmdbv1.Pe
 		return "pbm-config"
 	}
 	return cluster.Name + "-pbm-config"
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) waitForPBMOperationsToFinish(ctx context.Context, pod *corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	container := "mongod"
+	pbmBinary := "/opt/percona/pbm"
+	for _, c := range pod.Spec.Containers {
+		if c.Name == "backup-agent" {
+			container = c.Name
+			pbmBinary = "pbm"
+		}
+	}
+
+	waitErr := errors.New("waiting for PBM operation to finish")
+	err := retry.OnError(wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2.0,
+		Cap:      time.Hour,
+		Steps:    12,
+	}, func(err error) bool { return err == waitErr }, func() error {
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
+			stdoutBuf.Reset()
+			stderrBuf.Reset()
+
+			command := []string{pbmBinary, "status", "--out", "json"}
+			err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false)
+			if err != nil {
+				log.Error(err, "failed to get PBM status")
+				return err
+			}
+
+			log.V(1).Info("PBM status", "status", stdoutBuf.String())
+
+			return nil
+		})
+		if err != nil {
+			return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		}
+
+		var pbmStatus struct {
+			Running struct {
+				Type string `json:"type,omitempty"`
+				OpId string `json:"opID,omitempty"`
+			} `json:"running"`
+		}
+
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+			return errors.Wrap(err, "unmarshal PBM status output")
+		}
+
+		if len(pbmStatus.Running.OpId) == 0 {
+			return nil
+		}
+
+		log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+
+		return waitErr
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
