@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: true
   crVersion: 1.18.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  image: percona/percona-server-mongodb:7.0.14-8
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -27,7 +27,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: perconalab/percona-server-mongodb-operator:main
+#  initImage: percona/percona-server-mongodb-operator:1.18.0
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -57,7 +57,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: percona/pmm-client:2.43.1
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    mongodParams: --environment=ENVIRONMENT
@@ -608,7 +608,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:2.6.0
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
