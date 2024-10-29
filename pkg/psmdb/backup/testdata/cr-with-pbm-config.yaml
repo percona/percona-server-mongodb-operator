@@ -5,7 +5,7 @@ metadata:
   namespace: test-namespace
 spec:
   crVersion: 1.16.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  image: percona/percona-server-mongodb:7.0.14-8
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
@@ -19,7 +19,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: percona/pmm-client:2.43.1
     serverHost: monitoring-service
   replsets:
   - name: rs0
@@ -118,7 +118,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:2.6.0
     storages:
       test-s3-storage:
         type: s3
