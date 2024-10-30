@@ -272,6 +272,10 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 
 	overrides := rs.ReplsetOverrides[pod.Name]
 
+	if overrides.Priority != nil {
+		member.Priority = *overrides.Priority
+	}
+
 	horizons := make(map[string]string)
 	for h, domain := range rs.Horizons[pod.Name] {
 		d := domain
