@@ -1,7 +1,7 @@
-switched to db admin
+switched to db $external
 {
-	"_id" : "$external.user-gen",
-	"user" : "user-gen",
+	"_id" : "$external.user-external",
+	"user" : "user-external",
 	"db" : "$external",
 	"roles" : [
 		{
@@ -14,8 +14,7 @@ switched to db admin
 		}
 	],
 	"mechanisms" : [
-		"SCRAM-SHA-1",
-		"SCRAM-SHA-256"
+		"external"
 	]
 }
 bye

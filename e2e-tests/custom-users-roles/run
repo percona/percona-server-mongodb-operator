@@ -51,9 +51,11 @@ generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.
 compare 'admin' 'db.getUser("user-gen")' "$mongoUri" "user-gen"
 check_mongo_auth "user-gen:$generatedPass@$cluster-0.$cluster.$namespace"
 
+# Only check if $external.user-external user exists, as the password is not known
+# since we don't have a external provider set in this test
 compare '$external' 'db.getUser("user-external")' "$mongoUri" "user-external"
 
-desc 'delete initial user from CR and create a new one'
+desc 'delete initial users from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
 			{
