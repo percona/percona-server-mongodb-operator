@@ -401,7 +401,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		if err != nil {
 			return errors.Wrap(err, "get storage")
 		}
-		if err := pbmBackup.DeleteBackupFiles(getPBMBackupMeta(cr), stg); err != nil {
+		if err := pbmBackup.DeleteBackupFiles(stg, getPBMBackupMeta(cr).Name); err != nil {
 			return errors.Wrap(err, "failed to delete backup files with dummy PBM")
 		}
 		return nil

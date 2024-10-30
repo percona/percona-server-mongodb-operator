@@ -12,6 +12,7 @@ spec:
       labels:
         name: psmdb-client
     spec:
+      terminationGracePeriodSeconds: 10
       containers:
         - name: psmdb-client
           image: percona/percona-server-mongodb:4.4
