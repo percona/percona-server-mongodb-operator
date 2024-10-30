@@ -3,8 +3,16 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"time"
 
+	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,18 +21,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
-	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -65,28 +64,12 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("psmdbbackup-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), &psmdbv1.PerconaServerMongoDBBackup{}, &handler.TypedEnqueueRequestForObject[*psmdbv1.PerconaServerMongoDBBackup]{}))
-	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
-		mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBBackup{}, handler.OnlyControllerOwner(),
-	)))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return builder.ControllerManagedBy(mgr).
+		For(&psmdbv1.PerconaServerMongoDBBackup{}).
+		Named("psmdbbackup-controller").
+		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
+			mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBBackup{}, handler.OnlyControllerOwner()))).
+		Complete(r)
 }
 
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}

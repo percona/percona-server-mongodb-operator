@@ -2,11 +2,15 @@ package perconaservermongodbrestore
 
 import (
 	"context"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"strings"
 	"time"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,14 +18,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -58,30 +57,14 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("psmdbrestore-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource PerconaServerMongoDBRestore
-	err = c.Watch(source.Kind(mgr.GetCache(), &psmdbv1.PerconaServerMongoDBRestore{}, &handler.TypedEnqueueRequestForObject[*psmdbv1.PerconaServerMongoDBRestore]{}))
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBRestore
-	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
-		mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBRestore{}, handler.OnlyControllerOwner(),
-	)))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return builder.ControllerManagedBy(mgr).
+		For(&psmdbv1.PerconaServerMongoDBRestore{}).
+		Named("psmdbrestore-controller").
+		WatchesRawSource(
+			source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
+				mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBRestore{}, handler.OnlyControllerOwner()))).
+		Complete(r)
 }
-
-var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBRestore{}
 
 // ReconcilePerconaServerMongoDBRestore reconciles a PerconaServerMongoDBRestore object
 type ReconcilePerconaServerMongoDBRestore struct {

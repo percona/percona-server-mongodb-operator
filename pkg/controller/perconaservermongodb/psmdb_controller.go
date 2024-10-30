@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sort"
 	"strings"
 	"sync"
@@ -13,6 +14,15 @@ import (
 	"time"
 
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-server-mongodb-operator/clientcmd"
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+	"github.com/percona/percona-server-mongodb-operator/version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,22 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
-	"github.com/percona/percona-server-mongodb-operator/pkg/util"
-	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 var secretFileMode int32 = 288
@@ -134,19 +131,10 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("psmdb-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource PerconaServerMongoDB
-	err = c.Watch(source.Kind(mgr.GetCache(), &api.PerconaServerMongoDB{}, &handler.TypedEnqueueRequestForObject[*api.PerconaServerMongoDB]{}))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return builder.ControllerManagedBy(mgr).
+		For(&api.PerconaServerMongoDB{}).
+		Named("psmdb-controller").
+		Complete(r)
 }
 
 type CronRegistry struct {
