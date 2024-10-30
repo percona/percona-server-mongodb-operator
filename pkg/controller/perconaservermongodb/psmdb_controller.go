@@ -137,6 +137,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		Complete(r)
 }
 
+var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDB{}
+
 type CronRegistry struct {
 	crons      *cron.Cron
 	jobs       map[string]Schedule
@@ -159,8 +161,6 @@ func NewCronRegistry() CronRegistry {
 
 	return c
 }
-
-var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDB{}
 
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {

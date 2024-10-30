@@ -66,6 +66,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		Complete(r)
 }
 
+var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBRestore{}
+
 // ReconcilePerconaServerMongoDBRestore reconciles a PerconaServerMongoDBRestore object
 type ReconcilePerconaServerMongoDBRestore struct {
 	// This client, initialized using mgr.Client() above, is a split client
