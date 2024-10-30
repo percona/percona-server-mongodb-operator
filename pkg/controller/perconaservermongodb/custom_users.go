@@ -83,7 +83,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		if user.PasswordSecretRef == nil && user.DB != "$external" {
+		if user.PasswordSecretRef != nil && user.DB != "$external" {
 			log.Error(nil, "user must have passwordSecretRef or $external DB set", "user", user.Name)
 			continue
 		}
@@ -92,7 +92,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			user.DB = "admin"
 		}
 
-		if user.PasswordSecretRef.Key == "" {
+		if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key == "" {
 			user.PasswordSecretRef.Key = "password"
 		}
 
