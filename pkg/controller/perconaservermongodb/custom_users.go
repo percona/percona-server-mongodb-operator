@@ -126,17 +126,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
 
 		if userInfo == nil {
-
-			log.Info("AAAAAAAAAAAAAAAAAAAA Creating user", "user", user.Name, "secretttttt", sec)
-
-			err = createUser(ctx, r.client, cli, &user, sec, annotationKey)
+			err = createUser(ctx, r.client, cli, &user, sec, annotationKey, userSecretPassKey)
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
 			}
 			continue
 		}
 
-		err = updatePass(ctx, r.client, cli, &user, userInfo, sec, annotationKey)
+		err = updatePass(ctx, r.client, cli, &user, userInfo, sec, annotationKey, userSecretPassKey)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
 			continue
@@ -286,14 +283,14 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	annotationKey string) error {
+	annotationKey, passKey string) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil {
 		return nil
 	}
 
-	newHash := sha256Hash(secret.Data[user.PasswordSecretRef.Key])
+	newHash := sha256Hash(secret.Data[passKey])
 
 	hash, ok := secret.Annotations[annotationKey]
 	if ok && hash == newHash {
@@ -306,7 +303,7 @@ func updatePass(
 
 	log.Info("User password changed, updating it.", "user", user.UserID())
 
-	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]))
+	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[passKey]))
 	if err != nil {
 		return errors.Wrapf(err, "update user %s password", user.Name)
 	}
@@ -359,7 +356,7 @@ func createUser(
 	mongoCli mongo.Client,
 	user *api.User,
 	secret *corev1.Secret,
-	annotationKey string) error {
+	annotationKey, passKey string) error {
 	log := logf.FromContext(ctx)
 
 	roles := make([]map[string]interface{}, 0)
@@ -371,7 +368,7 @@ func createUser(
 	}
 
 	log.Info("Creating user", "user", user.UserID())
-	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]), roles...)
+	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[passKey]), roles...)
 	if err != nil {
 		return err
 	}
@@ -380,7 +377,7 @@ func createUser(
 		secret.Annotations = make(map[string]string)
 	}
 
-	secret.Annotations[annotationKey] = string(sha256Hash(secret.Data[user.PasswordSecretRef.Key]))
+	secret.Annotations[annotationKey] = string(sha256Hash(secret.Data[passKey]))
 	if err := cli.Update(ctx, secret); err != nil {
 		return err
 	}
