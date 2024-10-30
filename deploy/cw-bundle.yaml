@@ -19413,7 +19413,6 @@ spec:
                       type: array
                   required:
                   - name
-                  - passwordSecretRef
                   - roles
                   type: object
                 type: array
