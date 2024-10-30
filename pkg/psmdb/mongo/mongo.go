@@ -917,35 +917,42 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 			continue
 		}
 
-		if votes < MaxVotingMembers {
-			[]ConfigMember(*m)[i].Votes = 1
-			votes++
-
-			if !member.ArbiterOnly {
-				lastVoteIdx = i
-				// In unsafe PSA (Primary with a Secondary and an Arbiter),
-				// we are unable to set the votes and the priority simultaneously.
-				// Therefore, setting only the votes.
-				if !unsafePSA || member.Votes == 1 {
-					priority := DefaultPriority
-					if c, ok := cm[member.Host]; ok {
-						priority = c
-					}
-
-					// Priority can be any number in range [0,1000].
-					// We're setting it to 2 as default, to allow
-					// users to configure external nodes with lower
-					// priority than local nodes.
-					[]ConfigMember(*m)[i].Priority = priority
-				}
-			}
-		} else if member.ArbiterOnly {
+		if member.ArbiterOnly {
 			// Arbiter should always have a vote
 			[]ConfigMember(*m)[i].Votes = 1
+			// Arbiter should never have priority
+			[]ConfigMember(*m)[i].Priority = 0
+		} else {
+			[]ConfigMember(*m)[i].Votes = 1
+			lastVoteIdx = i
 
-			// We're over the max voters limit. Make room for the arbiter
-			[]ConfigMember(*m)[lastVoteIdx].Votes = 0
-			[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+			// In unsafe PSA (Primary with a Secondary and an Arbiter),
+			// we are unable to set the votes and the priority simultaneously.
+			// Therefore, setting only the votes.
+			if !unsafePSA || member.Votes == 1 {
+				// Priority can be any number in range [0,1000].
+				// We're setting it to 2 as default, to allow
+				// users to configure external nodes with lower
+				// priority than local nodes.
+				priority := DefaultPriority
+
+				if c, ok := cm[member.Host]; ok {
+					priority = c
+				}
+
+				[]ConfigMember(*m)[i].Priority = priority
+			}
+		}
+		votes++
+
+		if votes > MaxVotingMembers {
+			if member.ArbiterOnly {
+				[]ConfigMember(*m)[lastVoteIdx].Votes = 0
+				[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+			} else {
+				[]ConfigMember(*m)[i].Votes = 0
+				[]ConfigMember(*m)[i].Priority = 0
+			}
 		}
 	}
 
