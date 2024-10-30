@@ -1,0 +1,21 @@
+switched to db admin
+{
+	"_id" : "$external.user-gen",
+	"user" : "user-gen",
+	"db" : "$external",
+	"roles" : [
+		{
+			"role" : "clusterAdmin",
+			"db" : "admin"
+		},
+		{
+			"role" : "userAdminAnyDatabase",
+			"db" : "admin"
+		}
+	],
+	"mechanisms" : [
+		"SCRAM-SHA-1",
+		"SCRAM-SHA-256"
+	]
+}
+bye

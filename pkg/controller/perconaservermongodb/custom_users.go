@@ -58,8 +58,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		return nil
 	}
 
+	err = handleUsers(ctx, cr, cli, r.client)
+	if err != nil {
+		return errors.Wrap(err, "handle users")
+	}
+
+	return nil
+}
+
+func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client, client client.Client) error {
+	log := logf.FromContext(ctx)
+
 	sysUsersSecret := corev1.Secret{}
-	err = r.client.Get(ctx,
+	err := client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.InternalUserSecretName(cr),
@@ -83,11 +94,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
-		// if user.PasswordSecretRef == nil && user.DB != "$external" {
-		// 	log.Error(nil, "user must have passwordSecretRef or $external DB set", "user", user.Name)
-		// 	continue
-		// }
-
 		if user.DB == "" {
 			user.DB = "admin"
 		}
@@ -105,17 +111,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			userSecretPassKey = user.PasswordSecretRef.Key
 		}
 
-		sec, err := getCustomUserSecret(ctx, r.client, cr, userSecretName, defaultUserSecretName, userSecretPassKey)
+		sec, err := getCustomUserSecret(ctx, client, cr, userSecretName, defaultUserSecretName, userSecretPassKey)
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
 			continue
 		}
-
-		// sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
-		// if err != nil {
-		// 	log.Error(err, "failed to get user secret", "user", user)
-		// 	continue
-		// }
 
 		userInfo, err := cli.GetUserInfo(ctx, user.Name, user.DB)
 		if err != nil {
@@ -126,14 +126,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
 
 		if userInfo == nil {
-			err = createUser(ctx, r.client, cli, &user, sec, annotationKey, userSecretPassKey)
+			err = createUser(ctx, client, cli, &user, sec, annotationKey, userSecretPassKey)
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
 			}
 			continue
 		}
 
-		err = updatePass(ctx, r.client, cli, &user, userInfo, sec, annotationKey, userSecretPassKey)
+		err = updatePass(ctx, client, cli, &user, userInfo, sec, annotationKey, userSecretPassKey)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
 			continue

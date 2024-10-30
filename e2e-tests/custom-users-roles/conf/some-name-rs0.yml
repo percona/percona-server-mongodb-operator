@@ -50,6 +50,13 @@ spec:
         db: admin
       - name: userAdminAnyDatabase
         db: admin
+  - name: user-external
+    db: $external
+    roles:
+      - name: clusterAdmin
+        db: admin
+      - name: userAdminAnyDatabase
+        db: admin
 
   backup:
     enabled: true
