@@ -105,9 +105,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			userSecretPassKey = user.PasswordSecretRef.Key
 		}
 
-
-		log.Info("AAAAAAAAAAAAAAAAAAAA Getting user secret", "user", user.Name, "secret", userSecretName)
-
 		sec, err := getCustomUserSecret(ctx, r.client, cr, userSecretName, defaultUserSecretName, userSecretPassKey)
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
@@ -129,6 +126,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
 
 		if userInfo == nil {
+
+			log.Info("AAAAAAAAAAAAAAAAAAAA Creating user", "user", user.Name, "secretttttt", sec)
+
 			err = createUser(ctx, r.client, cli, &user, sec, annotationKey)
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
@@ -405,9 +405,6 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 		return nil, errors.Wrap(err, "failed to get user secret")
 	}
 
-
-	log.Info("XXXXXXXXXX")
-
 	if err != nil && k8serrors.IsNotFound(err) {
 		secret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -415,8 +412,6 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 				Namespace: cr.Namespace,
 			},
 		}
-
-		log.Info("CCCCCCCCCCCCCCCCCCCCCC Creating custom user secrets", "secrets", secret.Name)
 
 		pass, err := s.GeneratePassword()
 		if err != nil {
@@ -430,11 +425,10 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 
 		err = cl.Create(ctx, secret)
 		if err != nil {
-			return nil, fmt.Errorf("create custom users secret: %v", err)
+			return nil, errors.Wrap(err, "create custom users secret")
 		}
 
 		log.Info("Created custom user secrets", "secrets", secret.Name)
-		return secret, nil
 	}
 
 	return secret, nil
