@@ -46,6 +46,13 @@ userOnePass=$(getSecretData "user-one" "userOnePassKey")
 compare 'admin' 'db.getUser("user-one")' "$mongoUri" "user-one"
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
+generatedUserSecret="$cluster-custom-user-secret"
+generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
+compare 'admin' 'db.getUser("user-gen")' "$mongoUri" "user-gen"
+check_mongo_auth "user-gen:$generatedPass@$cluster-0.$cluster.$namespace"
+
+echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 desc 'delete initial user from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
