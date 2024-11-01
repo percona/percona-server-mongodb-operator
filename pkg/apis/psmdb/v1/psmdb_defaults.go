@@ -6,13 +6,15 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -25,6 +27,7 @@ const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
 
 const (
 	MongodRESTencryptDir = "/etc/mongodb-encryption"
+	InternalKeyName      = "mongodb-key"
 	EncryptionKeyName    = "encryption-key"
 )
 
@@ -312,10 +315,32 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
+
+			if deprecatedType := cr.Spec.Sharding.Mongos.Expose.DeprecatedExposeType; deprecatedType != "" {
+				cr.Spec.Sharding.Mongos.Expose.ExposeType = deprecatedType
+			}
+		}
+		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels) > 0 {
+			cr.Spec.Sharding.Mongos.Expose.ServiceLabels = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels, cr.Spec.Sharding.Mongos.Expose.ServiceLabels)
+		}
+		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations) > 0 {
+			cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)
 		}
 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
+	}
+
+	if mongos := cr.Spec.Sharding.Mongos; mongos != nil && cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if mongos.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.spec.sharding.mongos.expose.exposeType` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace)
 		}
 	}
 
@@ -602,8 +627,32 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
 	}
 
-	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
-		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	if rs.Expose.Enabled {
+		if rs.Expose.ExposeType == "" {
+			rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+
+			if rs.Expose.DeprecatedExposeType != "" {
+				rs.Expose.ExposeType = rs.Expose.DeprecatedExposeType
+			}
+		}
+		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
+			rs.Expose.ServiceLabels = util.MapMerge(rs.Expose.DeprecatedServiceLabels, rs.Expose.ServiceLabels)
+		}
+		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
+			rs.Expose.ServiceAnnotations = util.MapMerge(rs.Expose.DeprecatedServiceAnnotations, rs.Expose.ServiceAnnotations)
+		}
+	}
+
+	if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if rs.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.expose.exposeType` was deprecated in 1.18.0. Consider using `.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
 	}
 
 	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
@@ -889,7 +938,6 @@ const AffinityOff = "none"
 // - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
 func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
-
 	if cr.CompareVersion("1.16.0") < 0 {
 		affinityValidTopologyKeys = map[string]struct{}{
 			AffinityOff:                                {},

@@ -8,6 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 )
 
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
@@ -18,6 +20,26 @@ type PerconaServerMongoDBRestoreSpec struct {
 	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
 	StorageName  string                            `json:"storageName,omitempty"`
 	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
+	Selective    *SelectiveRestoreOpts             `json:"selective,omitempty"`
+}
+
+type SelectiveRestoreOpts struct {
+	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
+	Namespaces        []string `json:"namespaces,omitempty"`
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaces() []string {
+	if s == nil {
+		return nil
+	}
+	return s.Namespaces
+}
+
+func (s *SelectiveRestoreOpts) GetWithUsersAndRoles() bool {
+	if s == nil {
+		return false
+	}
+	return s.WithUsersAndRoles
 }
 
 // RestoreState is for restore status states
@@ -70,6 +92,15 @@ type PerconaServerMongoDBRestoreList struct {
 	Items           []PerconaServerMongoDBRestore `json:"items"`
 }
 
+func (r *PerconaServerMongoDBRestore) SetDefaults() error {
+	if bs := r.Spec.BackupSource; bs != nil {
+		if bs.Type == "" {
+			bs.Type = defs.LogicalBackup
+		}
+	}
+	return nil
+}
+
 func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
@@ -117,6 +148,7 @@ type PITRestoreDate struct {
 }
 
 func (PITRestoreDate) OpenAPISchemaType() []string { return []string{"string"} }
+
 func (PITRestoreDate) OpenAPISchemaFormat() string { return "" }
 
 func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {

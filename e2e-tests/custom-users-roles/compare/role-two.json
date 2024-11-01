@@ -1,0 +1,80 @@
+switched to db admin
+{
+	"_id" : "admin.role-two",
+	"role" : "role-two",
+	"db" : "admin",
+	"privileges" : [
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find"
+			]
+		}
+	],
+	"roles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"authenticationRestrictions" : [ ],
+	"inheritedRoles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"inheritedPrivileges" : [
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : ""
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : "system.js"
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"listSearchIndexes",
+				"planCacheRead"
+			]
+		}
+	],
+	"inheritedAuthenticationRestrictions" : [ ],
+	"isBuiltin" : false
+}
+bye

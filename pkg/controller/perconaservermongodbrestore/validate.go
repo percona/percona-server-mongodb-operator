@@ -42,6 +42,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		}
 	}
 
+	if bcp.Status.Type != defs.LogicalBackup && cr.Spec.Selective != nil {
+		return errors.New("`.spec.selective` field is supported only for logical backups")
+	}
+
 	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
 	if err != nil {
 		return errors.Wrap(err, "get storage")

@@ -62,7 +62,7 @@ spec:
           cpu: 100m
           memory: 0.1G
       expose:
-        exposeType: LoadBalancer
+        type: LoadBalancer
     configsvrReplSet:
       affinity:
         antiAffinityTopologyKey: none
@@ -80,7 +80,7 @@ spec:
               storage: 3Gi
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
       size: 3
       configuration: |
         operationProfiling:
@@ -121,7 +121,7 @@ spec:
             storage: 3Gi
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     size: 3
     configuration: |
       operationProfiling:

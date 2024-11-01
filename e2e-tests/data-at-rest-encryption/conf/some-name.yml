@@ -78,7 +78,7 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
 
   replsets:
   - name: rs0

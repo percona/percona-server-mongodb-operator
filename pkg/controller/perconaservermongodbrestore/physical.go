@@ -28,6 +28,14 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
+var anotherOpBackoff = wait.Backoff{
+	Steps:    13,
+	Duration: time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
+	Cap:      15 * time.Minute,
+}
+
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
@@ -47,8 +55,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			return status, errors.Wrapf(err, "get pod/%s", podName)
 		}
 
-		if err := r.disablePITR(ctx, &pod); err != nil {
-			return status, err
+		if err := retry.OnError(anotherOpBackoff, func(err error) bool {
+			return strings.Contains(err.Error(), "another operation")
+		}, func() error {
+			return r.disablePITR(ctx, &pod)
+		}); err != nil {
+			return status, errors.Wrap(err, "disable pitr")
 		}
 
 		if cr.Spec.PITR != nil {
@@ -135,53 +147,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		}
 
 		time.Sleep(5 * time.Second) // wait until pbm will start resync
-
-		waitErr := errors.New("waiting for PBM operation to finish")
-		err = retry.OnError(wait.Backoff{
-			Duration: 5 * time.Second,
-			Factor:   2.0,
-			Cap:      time.Hour,
-			Steps:    12,
-		}, func(err error) bool { return err == waitErr }, func() error {
-			err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-				stdoutBuf.Reset()
-				stderrBuf.Reset()
-
-				command := []string{"/opt/percona/pbm", "status", "--out", "json"}
-				err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-				if err != nil {
-					log.Error(err, "failed to get PBM status")
-					return err
-				}
-
-				log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-				return nil
-			})
-			if err != nil {
-				return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-			}
-
-			var pbmStatus struct {
-				Running struct {
-					Type string `json:"type,omitempty"`
-					OpId string `json:"opID,omitempty"`
-				} `json:"running"`
-			}
-
-			if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-				return errors.Wrap(err, "unmarshal PBM status output")
-			}
-
-			if len(pbmStatus.Running.OpId) == 0 {
-				return nil
-			}
-
-			log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
-
-			return waitErr
-		})
-		if err != nil {
+		if err := r.waitForPBMOperationsToFinish(ctx, &pod); err != nil {
 			return status, err
 		}
 
@@ -192,14 +158,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
 		}
 
-		backoff := wait.Backoff{
-			Steps:    5,
-			Duration: 500 * time.Millisecond,
-			Factor:   5.0,
-			Jitter:   0.1,
-		}
-
-		err = retry.OnError(backoff, func(err error) bool {
+		err = retry.OnError(anotherOpBackoff, func(err error) bool {
 			return strings.Contains(err.Error(), "another operation")
 		}, func() error {
 			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
@@ -283,15 +242,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Err
-	case defs.StatusPartlyDone:
-		status.State = psmdbv1.RestoreStateError
-		var pbmErr string
-		for _, rs := range meta.Replsets {
-			if rs.Status == defs.StatusError {
-				pbmErr += fmt.Sprintf("%s %s;", rs.Name, rs.Error)
-			}
-		}
-		status.Error = pbmErr
 	case defs.StatusRunning:
 		status.State = psmdbv1.RestoreStateRunning
 	case defs.StatusDone:
@@ -574,7 +524,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.UserRole) (psmdb.Credentials, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.SystemUserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
 
 	usersSecret := corev1.Secret{}
@@ -932,4 +882,71 @@ func (r *ReconcilePerconaServerMongoDBRestore) pbmConfigName(cluster *psmdbv1.Pe
 		return "pbm-config"
 	}
 	return cluster.Name + "-pbm-config"
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) waitForPBMOperationsToFinish(ctx context.Context, pod *corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	container := "mongod"
+	pbmBinary := "/opt/percona/pbm"
+	for _, c := range pod.Spec.Containers {
+		if c.Name == "backup-agent" {
+			container = c.Name
+			pbmBinary = "pbm"
+		}
+	}
+
+	waitErr := errors.New("waiting for PBM operation to finish")
+	err := retry.OnError(wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2.0,
+		Cap:      time.Hour,
+		Steps:    12,
+	}, func(err error) bool { return err == waitErr }, func() error {
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
+			stdoutBuf.Reset()
+			stderrBuf.Reset()
+
+			command := []string{pbmBinary, "status", "--out", "json"}
+			err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false)
+			if err != nil {
+				log.Error(err, "failed to get PBM status")
+				return err
+			}
+
+			log.V(1).Info("PBM status", "status", stdoutBuf.String())
+
+			return nil
+		})
+		if err != nil {
+			return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		}
+
+		var pbmStatus struct {
+			Running struct {
+				Type string `json:"type,omitempty"`
+				OpId string `json:"opID,omitempty"`
+			} `json:"running"`
+		}
+
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+			return errors.Wrap(err, "unmarshal PBM status output")
+		}
+
+		if len(pbmStatus.Running.OpId) == 0 {
+			return nil
+		}
+
+		log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
+
+		return waitErr
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

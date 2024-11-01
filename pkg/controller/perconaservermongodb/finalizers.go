@@ -3,8 +3,10 @@ package perconaservermongodb
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -43,18 +45,31 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			if err == nil {
 				shouldReconcile = true
 			}
+		case naming.FinalizerDeletePITR:
+			err = r.deleteAllPITRChunks(ctx, cr)
 		default:
 			finalizers = append(finalizers, f)
 			continue
 		}
 		if err != nil {
+			if cr.Status.State == api.AppStateError {
+				/*
+					If a finalizer returns an error, the operator will continue the reconciliation process.
+					However, if the cluster is already in an error state, it is likely that this state will
+					persist in each subsequent reconcile, causing the cluster deletion process to get stuck.
+
+					The operator should attempt to execute finalizers, but when the cluster is in an error state,
+					any errors from finalizer functions should be ignored to allow the deletion process to continue.
+
+					Do not move this check elsewhere. Finalizers should not put the cluster into an error state.
+					If a finalizer function does cause the cluster to enter an error state, its logic should be changed.
+				*/
+				continue
+			}
 			switch err {
 			case errWaitingTermination:
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
-				if cr.Status.State == api.AppStateError {
-					continue
-				}
 			}
 			finalizers = append(finalizers, orderedFinalizers[i:]...)
 			break
@@ -67,6 +82,21 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	}
 
 	return shouldReconcile, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	pbmc, err := r.newPBM(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "new pbm")
+	}
+	defer pbmc.Close(ctx)
+
+	if err := pbmc.DeletePITRChunks(ctx, primitive.Timestamp{
+		T: uint32(time.Now().Unix()),
+	}); err != nil {
+		return errors.Wrap(err, "delete pitr chunks")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -276,7 +306,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 }
 
 func GetOrderedFinalizers(cr *api.PerconaServerMongoDB) []string {
-	order := []string{naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
+	order := []string{naming.FinalizerDeletePITR, naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
 
 	if cr.CompareVersion("1.17.0") < 0 {
 		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}

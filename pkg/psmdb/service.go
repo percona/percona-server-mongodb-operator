@@ -94,6 +94,8 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		},
 		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
 		PublishNotReadyAddresses: true,
+		InternalTrafficPolicy:    replset.Expose.InternalTrafficPolicy,
+		ExternalTrafficPolicy:    replset.Expose.ExternalTrafficPolicy,
 	}
 
 	switch replset.Expose.ExposeType {
@@ -211,11 +213,11 @@ func getServiceClusterIP(ctx context.Context, cl client.Client, serviceNN types.
 }
 
 // GetReplsetAddrs returns a slice of replset host:port addresses
-func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rsName string, rsExposed bool, pods []corev1.Pod) ([]string, error) {
+func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rs *api.ReplsetSpec, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
-		host, err := MongoHost(ctx, cl, cr, dnsMode, rsName, rsExposed, pod)
+		host, err := MongoHost(ctx, cl, cr, dnsMode, rs, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
 		}
@@ -253,7 +255,16 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 }
 
 // MongoHost returns the mongo host for given pod
-func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rsName string, rsExposed bool, pod corev1.Pod) (string, error) {
+func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, replset *api.ReplsetSpec, rsExposed bool, pod corev1.Pod) (string, error) {
+	overrides := replset.ReplsetOverrides[pod.Name]
+	if len(overrides.Host) > 0 {
+		if strings.Contains(overrides.Host, ":") {
+			return overrides.Host, nil
+		}
+
+		return fmt.Sprintf("%s:%d", overrides.Host, api.DefaultMongodPort), nil
+	}
+
 	switch dnsMode {
 	case api.DNSModeServiceMesh:
 		return GetServiceMeshAddr(cr, pod.Name, cr.Namespace), nil
@@ -265,13 +276,13 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			}
 
 			if !imported {
-				return GetAddr(cr, pod.Name, rsName), nil
+				return GetAddr(cr, pod.Name, replset.Name), nil
 			}
 
 			return GetMCSAddr(cr, pod.Name), nil
 		}
 
-		return GetAddr(cr, pod.Name, rsName), nil
+		return GetAddr(cr, pod.Name, replset.Name), nil
 	case api.DNSModeExternal:
 		if rsExposed {
 			if cr.MCSEnabled() {
@@ -290,9 +301,9 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			return getExtAddr(ctx, cl, cr.Namespace, pod)
 		}
 
-		return GetAddr(cr, pod.Name, rsName), nil
+		return GetAddr(cr, pod.Name, replset.Name), nil
 	default:
-		return GetAddr(cr, pod.Name, rsName), nil
+		return GetAddr(cr, pod.Name, replset.Name), nil
 	}
 }
 

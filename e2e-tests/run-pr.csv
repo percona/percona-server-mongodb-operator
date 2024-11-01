@@ -2,6 +2,8 @@ arbiter
 balancer
 custom-replset-name
 custom-tls
+custom-users-roles
+custom-users-roles-sharded
 cross-site-sharded
 data-at-rest-encryption
 data-sharded
@@ -30,6 +32,7 @@ pitr-sharded
 pitr-physical
 pvc-resize
 recover-no-primary
+replset-overrides
 rs-shard-migration
 scaling
 scheduled-backup

@@ -158,7 +158,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if sfs.Labels[naming.LabelKubernetesComponent] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, *replset, api.RoleClusterAdmin)
+		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client: %v", err)
 		}
