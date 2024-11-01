@@ -1,6 +1,5 @@
 #!/bin/bash
 set -Eeuo pipefail
-set -o xtrace
 
 if [ "${1:0:1}" = '-' ]; then
 	set -- mongod "$@"
@@ -421,16 +420,14 @@ if [[ $originalArgOne == mongo* ]]; then
 		tlsMode="preferTLS"
 	fi
 
-	# don't add --tlsMode if TLS is disabled
-	if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "${mongodHackedArgs[@]}")"; then
-		if [[ ${clusterAuthMode} != "keyFile" ]]; then
-			_mongod_hack_ensure_arg_val --tlsMode "${tlsMode}" "${mongodHackedArgs[@]}"
-		else
-			_mongod_hack_ensure_no_arg --sslAllowInvalidCertificates "${mongodHackedArgs[@]}"
-		fi
+	_mongod_hack_ensure_arg_val --tlsMode "${tlsMode}" "${mongodHackedArgs[@]}"
+
+	if [[ ${tlsMode} == "disabled" ]]; then
+		_mongod_hack_ensure_no_arg --sslAllowInvalidCertificates "${mongodHackedArgs[@]}"
 	fi
 
 	if [[ ${tlsMode} != "disabled" ]]; then
+
 		MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
 		CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 		if [ -f /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt ]; then
