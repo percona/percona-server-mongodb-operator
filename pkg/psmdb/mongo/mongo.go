@@ -183,8 +183,6 @@ func (client *mongoClient) CreateRole(ctx context.Context, db string, role Role)
 			m["clientSource"] = r.ClientSource
 		}
 
-		log.Info("AAA authRestrictions", "m", m)
-
 		authRestrictionsArr = append(authRestrictionsArr, m)
 	}
 
