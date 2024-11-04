@@ -427,7 +427,6 @@ if [[ $originalArgOne == mongo* ]]; then
 	fi
 
 	if [[ ${tlsMode} != "disabled" ]]; then
-
 		MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
 		CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 		if [ -f /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt ]; then

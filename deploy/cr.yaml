@@ -13,7 +13,7 @@ spec:
 #  pause: true
 #  unmanaged: false
 #  enableVolumeExpansion: true
-  crVersion: 1.19.0
+  crVersion: 1.18.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
 #  tls:
