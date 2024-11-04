@@ -1,6 +1,11 @@
 #!/bin/bash
 
-PBM_MONGODB_URI="mongodb://${PBM_AGENT_MONGODB_USERNAME}:${PBM_AGENT_MONGODB_PASSWORD}@localhost:${PBM_MONGODB_PORT}/?replicaSet=${PBM_MONGODB_REPLSET}"
+function urlencode {
+	uri="$1"
+	echo -n "$uri" | jq -s -R -r @uri
+}
+
+PBM_MONGODB_URI="mongodb://$(urlencode "$PBM_AGENT_MONGODB_USERNAME"):$(urlencode "$PBM_AGENT_MONGODB_PASSWORD")@localhost:${PBM_MONGODB_PORT}/?replicaSet=${PBM_MONGODB_REPLSET}"
 
 if [[ -z ${PBM_AGENT_TLS_ENABLED} ]] || [[ ${PBM_AGENT_TLS_ENABLED} == "true" ]]; then
 	MONGO_SSL_DIR=/etc/mongodb-ssl
