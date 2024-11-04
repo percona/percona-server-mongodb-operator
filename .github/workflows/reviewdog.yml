@@ -14,7 +14,7 @@ jobs:
       uses: JJ/github-pr-contains-action@releases/v14.1
       with:
         github-token: ${{github.token}}
-        bodyDoesNotContain: '- [ ]'
+        bodyDoesNotContain: '\[ \]'
 
   golangci-lint:
     name: runner / suggester / golangci-lint
