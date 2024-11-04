@@ -14,7 +14,7 @@ if [ $EKS -ne 1 ]; then
 fi
 cluster="some-name-rs0"
 
-# get cluster oidc
+desc  "get cluster oidc"
 eks_cluster=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}' | awk -F/ '{print $NF}')
 IFS='.' read -r eks_cluster_name eks_cluster_region _ <<< "$eks_cluster"
 
@@ -22,14 +22,14 @@ eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$e
 policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
-# Create policy. Already done, we don't need to do it every time. But all steps should be illustrated in the
+# Create policy. Already done, we don't need to do it every time. But all steps should be illustrated in the test
 #aws iam create-policy --policy-name operator-testing-allow-access-s3 --policy-document file://conf/s3-bucket-policy.json
 
 
 desc "create role"
 jq --arg eks_cluster_oidc "$eks_cluster_oidc" \
    '.Statement[0].Principal.Federated = "arn:aws:iam::119175775298:oidc-provider/\($eks_cluster_oidc)" |
-    .Statement[0].Condition.StringEquals["$eks_cluster_oidc:aud"] = "sts.amazonaws.com"' \
+    .Statement[0].Condition.StringEquals[($eks_cluster_oidc + ":aud")] = "sts.amazonaws.com"' \
    $test_dir/conf/template.json > $test_dir/conf/role-trust-policy.json
 
 role_arn=$(aws iam create-role \
@@ -37,9 +37,7 @@ role_arn=$(aws iam create-role \
     --assume-role-policy-document file://$test_dir/conf/role-trust-policy.json \
     --description "Allow access to s3 bucket" \
     --query "Role.Arn" \
-    --output text || true)
-
-role_arn="arn:aws:iam::119175775298:role/some-name-rs0-psmdb-access-s3-bucket"
+    --output text)
 
 desc "connect role and policy"
 aws iam attach-role-policy --role-name "$role_name" --policy-arn $policy_arn
