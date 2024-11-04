@@ -1,6 +1,21 @@
 name: reviewdog
 on: [pull_request]
 jobs:
+  pr-description:
+    name: runner / pull-request
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check PR description
+      uses: JJ/github-pr-contains-action@releases/v14.1
+      with:
+        github-token: ${{github.token}}
+        bodyDoesNotContain: 'Short explanation of the problem'
+    - name: Check PR checklist
+      uses: JJ/github-pr-contains-action@releases/v14.1
+      with:
+        github-token: ${{github.token}}
+        bodyDoesNotContain: '- [ ]'
+
   golangci-lint:
     name: runner / suggester / golangci-lint
     runs-on: ubuntu-latest
