@@ -230,7 +230,7 @@ var (
 
 func (c *certManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
 	log := logf.FromContext(ctx)
-	checker, err := cmapichecker.New(config, c.scheme, ns)
+	checker, err := cmapichecker.New(config, ns)
 	if err != nil {
 		return err
 	}
