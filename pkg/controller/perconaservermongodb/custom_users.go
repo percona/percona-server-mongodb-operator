@@ -47,10 +47,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		}
 	}()
 
-	err = handleRoles(ctx, cr, cli)
-	if err != nil {
-		return errors.Wrap(err, "handle roles")
-	}
+	handleRoles(ctx, cr, cli)
 
 	if len(cr.Spec.Users) == 0 {
 		return nil
@@ -127,28 +124,31 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	return nil
 }
 
-func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
+func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) {
 	log := logf.FromContext(ctx)
 	if len(cr.Spec.Roles) == 0 {
-		return nil
+		return
 	}
 
 	for _, role := range cr.Spec.Roles {
 		roleInfo, err := cli.GetRole(ctx, role.DB, role.Role)
 		if err != nil {
-			return errors.Wrap(err, "mongo get role")
+			log.Error(err, "get role info", "role", role.Role)
+			continue
 		}
 
 		mr, err := toMongoRoleModel(role)
 		if err != nil {
-			return err
+			log.Error(err, "to mongo role model", "role", role.Role)
+			continue
 		}
 
 		if roleInfo == nil {
 			log.Info("Creating role", "role", role.Role)
 			err := cli.CreateRole(ctx, role.DB, *mr)
 			if err != nil {
-				return errors.Wrapf(err, "create role %s", role.Role)
+				log.Error(err, "create role", "role", role.Role)
+				continue
 			}
 			log.Info("Role created", "role", role.Role)
 			continue
@@ -158,13 +158,12 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			log.Info("Updating role", "role", role.Role)
 			err := cli.UpdateRole(ctx, role.DB, *mr)
 			if err != nil {
-				return errors.Wrapf(err, "update role %s", role.Role)
+				log.Error(err, "update role %s", role.Role)
+				continue
 			}
 			log.Info("Role updated", "role", role.Role)
 		}
 	}
-
-	return nil
 }
 
 func rolesChanged(r1, r2 *mongo.Role) bool {
