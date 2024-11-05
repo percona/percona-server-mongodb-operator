@@ -121,7 +121,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
-	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name )
+	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", tlsPemFile)
@@ -132,7 +132,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
-	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name )
+	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
 	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", caCertFile)
@@ -391,23 +391,23 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
 	backupName := bcp.Status.PBMname
-	s, err := util.StorageFromConfig(&cfg.Storage, e)
+	stg, err := util.StorageFromConfig(&cfg.Storage, e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
-	m, err := restore.GetMetaFromStore(s, backupName)
+	m, err := restore.GetMetaFromStore(stg, backupName)
 	if err != nil {
 		return errors.Wrap(err, "get backup metadata from storage")
 	}
 	switch bcp.Status.Type {
 	case "", defs.LogicalBackup:
-		if err := backup.CheckBackupFiles(ctx, m, s); err != nil {
+		if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
 			return errors.Wrap(err, "check backup files")
 		}
 	case defs.PhysicalBackup:
 		for _, rs := range m.Replsets {
 			f := path.Join(m.Name, rs.Name)
-			files, err := s.List(f, "")
+			files, err := stg.List(f, "")
 			if err != nil {
 				return errors.Wrapf(err, "failed to list backup files at %s", f)
 			}
@@ -428,7 +428,7 @@ func (b *pbmC) Conn() *mongo.Client {
 // by given storageName
 func (b *pbmC) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	log := logf.FromContext(ctx)
-	log.Info("Setting PBM config", "backup", cluster.Name)
+	log.Info("Setting PBM config", "cluster", cluster.Name)
 
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
