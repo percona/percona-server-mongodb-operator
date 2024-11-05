@@ -42,7 +42,6 @@ import (
 )
 
 const (
-	agentContainerName               = "backup-agent"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"

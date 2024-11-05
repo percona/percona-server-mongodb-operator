@@ -1096,6 +1096,11 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		*out = new(BackupStorageAzureSpec)
 		**out = **in
 	}
+	if in.Filesystem != nil {
+		in, out := &in.Filesystem, &out.Filesystem
+		*out = new(BackupStorageFilesystemSpec)
+		**out = **in
+	}
 	if in.ReplsetNames != nil {
 		in, out := &in.ReplsetNames, &out.ReplsetNames
 		*out = make([]string, len(*in))
