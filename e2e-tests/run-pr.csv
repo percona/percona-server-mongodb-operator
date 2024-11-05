@@ -8,7 +8,6 @@ cross-site-sharded
 data-at-rest-encryption
 data-sharded
 demand-backup
-demand-backup-eks-credentials
 demand-backup-physical
 demand-backup-physical-sharded
 demand-backup-sharded
