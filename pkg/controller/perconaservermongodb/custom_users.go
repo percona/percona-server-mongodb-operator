@@ -164,8 +164,6 @@ func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Cl
 			log.Info("Role updated", "role", role.Role)
 		}
 	}
-
-	return
 }
 
 func rolesChanged(r1, r2 *mongo.Role) bool {
