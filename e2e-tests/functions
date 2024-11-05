@@ -342,7 +342,7 @@ wait_restore() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 
 	if [ $wait_cluster_consistency -eq 1 ]; then
 		wait_cluster_consistency "${cluster_name}"
