@@ -262,6 +262,8 @@ const (
 	AppStatePaused   AppState = "paused"
 	AppStateReady    AppState = "ready"
 	AppStateError    AppState = "error"
+
+	AppStateSharding AppState = "sharding"
 )
 
 type UpgradeStrategy string
@@ -321,6 +323,9 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
+
+	ConditionEnabled  ConditionStatus = "Enabled"
+	ConditionDisabled ConditionStatus = "Disabled"
 )
 
 type ClusterCondition struct {
@@ -329,6 +334,16 @@ type ClusterCondition struct {
 	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
 	Reason             string          `json:"reason,omitempty"`
 	Message            string          `json:"message,omitempty"`
+}
+
+// FindCondition finds the conditionType in conditions.
+func (s *PerconaServerMongoDBStatus) FindCondition(conditionType AppState) *ClusterCondition {
+	for i, c := range s.Conditions {
+		if c.Type == conditionType {
+			return &s.Conditions[i]
+		}
+	}
+	return nil
 }
 
 type PMMSpec struct {
@@ -1178,21 +1193,15 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	return nil
 }
 
-const maxStatusesQuantity = 20
-
 func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	if len(s.Conditions) == 0 {
-		s.Conditions = append(s.Conditions, c)
-		return
+	for i, cond := range s.Conditions {
+		if cond.Type != c.Type {
+			continue
+		}
+		s.Conditions[i] = c
 	}
-
-	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
-		s.Conditions = append(s.Conditions, c)
-	}
-
-	if len(s.Conditions) > maxStatusesQuantity {
-		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
-	}
+	s.Conditions = append(s.Conditions, c)
+	return
 }
 
 // GetExternalNodes returns all external nodes for all replsets

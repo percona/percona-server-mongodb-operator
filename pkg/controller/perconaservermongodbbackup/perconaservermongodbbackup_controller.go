@@ -170,7 +170,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
 
-		err = cluster.CheckNSetDefaults(svr.Platform, log)
+		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
 			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 		}
