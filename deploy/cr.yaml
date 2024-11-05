@@ -77,6 +77,7 @@ spec:
 #    replsetOverrides:
 #      my-cluster-name-rs0-0:
 #        host: my-cluster-name-rs0-0.example.net:27017
+#        priority: 3
 #        tags:
 #          key: value-0
 #      my-cluster-name-rs0-1:
