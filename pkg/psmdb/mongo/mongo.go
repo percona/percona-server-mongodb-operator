@@ -225,7 +225,17 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 
 	authRestrictionsArr := bson.A{}
 	for _, r := range role.AuthenticationRestrictions {
-		authRestrictionsArr = append(authRestrictionsArr, r)
+		m := bson.M{}
+
+		if len(r.ServerAddress) > 0 {
+			m["serverAddress"] = r.ServerAddress
+		}
+
+		if len(r.ClientSource) > 0 {
+			m["clientSource"] = r.ClientSource
+		}
+
+		authRestrictionsArr = append(authRestrictionsArr, m)
 	}
 
 	m := bson.D{
