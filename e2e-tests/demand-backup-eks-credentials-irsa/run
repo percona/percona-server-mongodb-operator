@@ -14,30 +14,29 @@ if [ $EKS -ne 1 ]; then
 fi
 cluster="some-name-rs0"
 
-desc  "get cluster oidc"
+desc "get cluster oidc"
 eks_cluster=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cluster}' | awk -F/ '{print $NF}')
-IFS='.' read -r eks_cluster_name eks_cluster_region _ <<< "$eks_cluster"
+IFS='.' read -r eks_cluster_name eks_cluster_region _ <<<"$eks_cluster"
 
-eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$eks_cluster_region  --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
+eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$eks_cluster_region --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
 policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
 # Create policy. Already done, we don't need to do it every time. But all steps should be illustrated in the test
 #aws iam create-policy --policy-name operator-testing-allow-access-s3 --policy-document file://conf/s3-bucket-policy.json
 
-
 desc "create role"
 jq --arg eks_cluster_oidc "$eks_cluster_oidc" \
-   '.Statement[0].Principal.Federated = "arn:aws:iam::119175775298:oidc-provider/\($eks_cluster_oidc)" |
+	'.Statement[0].Principal.Federated = "arn:aws:iam::119175775298:oidc-provider/\($eks_cluster_oidc)" |
     .Statement[0].Condition.StringEquals[($eks_cluster_oidc + ":aud")] = "sts.amazonaws.com"' \
-   $test_dir/conf/template.json > $test_dir/conf/role-trust-policy.json
+	$test_dir/conf/template.json >$test_dir/conf/role-trust-policy.json
 
 role_arn=$(aws iam create-role \
-    --role-name "$role_name" \
-    --assume-role-policy-document file://$test_dir/conf/role-trust-policy.json \
-    --description "Allow access to s3 bucket" \
-    --query "Role.Arn" \
-    --output text)
+	--role-name "$role_name" \
+	--assume-role-policy-document file://$test_dir/conf/role-trust-policy.json \
+	--description "Allow access to s3 bucket" \
+	--query "Role.Arn" \
+	--output text)
 
 desc "connect role and policy"
 aws iam attach-role-policy --role-name "$role_name" --policy-arn $policy_arn
@@ -61,12 +60,12 @@ compare_kubectl statefulset/$cluster
 desc "update service accounts for operator and default (our cluster uses this one)"
 
 kubectl_bin annotate serviceaccount default \
-    eks.amazonaws.com/role-arn="$role_arn" \
-    --overwrite
+	eks.amazonaws.com/role-arn="$role_arn" \
+	--overwrite
 
 kubectl_bin annotate serviceaccount percona-server-mongodb-operator \
-    eks.amazonaws.com/role-arn="$role_arn" \
-    --overwrite
+	eks.amazonaws.com/role-arn="$role_arn" \
+	--overwrite
 
 desc "restart operator and cluster"
 operator_pod=$(get_operator_pod)
@@ -97,7 +96,6 @@ desc "compare mongo cmd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
-
 
 #desc "wait backup agent"
 wait_backup_agent $cluster-0
