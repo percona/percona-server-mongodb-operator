@@ -35,6 +35,9 @@ $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(D
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
+e2e-test:
+	IMAGE=$(IMAGE) ./e2e-tests/$(TEST)/run
+
 ##@ Build
 
 .PHONY: build

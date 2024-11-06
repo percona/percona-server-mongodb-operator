@@ -135,6 +135,7 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 
 	cfg, err := pbmc.GetConfig(ctx)
 	if err != nil {
+		return "", errors.Wrap(err, "get PBM config")
 	}
 
 	if cfg.Storage.Type != storage.Filesystem {
