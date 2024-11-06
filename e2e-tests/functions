@@ -1165,6 +1165,11 @@ getSecretData() {
 	echo "$data"
 }
 
+function urlencode {
+	uri="$1"
+	echo -n "$uri" | jq -s -R -r @uri
+}
+
 check_mongo_auth() {
 	local uri="$1"
 
