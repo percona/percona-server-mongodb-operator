@@ -51,7 +51,7 @@ spec:
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
-#    keyFile: my-cluster-name-mongodb-keyfile
+    keyFile: my-cluster-name-mongodb-keyfile
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
 #    sse: my-cluster-name-sse
@@ -608,7 +608,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.7.0
+    image: percona/percona-backup-mongodb:2.7.0-multi
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
