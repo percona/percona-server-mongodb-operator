@@ -1201,7 +1201,6 @@ func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
 		s.Conditions[i] = c
 	}
 	s.Conditions = append(s.Conditions, c)
-	return
 }
 
 // GetExternalNodes returns all external nodes for all replsets
