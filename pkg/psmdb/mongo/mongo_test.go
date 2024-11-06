@@ -20,35 +20,55 @@ func TestVoting(t *testing.T) {
 		{
 			"3 mongos",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 			},
 		},
 		{
 			"2 mongos",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -59,21 +79,34 @@ func TestVoting(t *testing.T) {
 		{
 			"2 mongos + 1 arbiter",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{ArbiterOnly: true},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:        "host2",
+					Votes:       mongo.DefaultVotes,
+					Priority:    0,
+					ArbiterOnly: true,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
+					Votes:    mongo.DefaultVotes,
 					Priority: 0,
 				},
 			},
@@ -81,66 +114,115 @@ func TestVoting(t *testing.T) {
 		{
 			"2 mongos + 1 first arbiter",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{ArbiterOnly: true},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
+				mongo.ConfigMember{
+					Host:        "host0",
+					Votes:       mongo.DefaultVotes,
+					Priority:    0,
+					ArbiterOnly: true,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
+					Votes:    mongo.DefaultVotes,
 					Priority: 0,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 			},
 		},
 		{
 			"9 mongos",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host3",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host4",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host5",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host6",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host7",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host8",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -155,43 +237,75 @@ func TestVoting(t *testing.T) {
 		{
 			"8 mongos",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host3",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host4",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host5",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host6",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host7",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
@@ -202,51 +316,88 @@ func TestVoting(t *testing.T) {
 		{
 			"8 mongos + 1 arbiter",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{ArbiterOnly: true},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host3",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host4",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host5",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host6",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host7",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:        "host8",
+					Votes:       mongo.DefaultVotes,
+					Priority:    0,
+					ArbiterOnly: true,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
 				mongo.ConfigMember{
-					Votes:    0,
-					Priority: 0,
-				},
-				mongo.ConfigMember{
-					Votes:    1,
+					Votes:    mongo.DefaultVotes,
 					Priority: 0,
 				},
 			},
@@ -254,26 +405,43 @@ func TestVoting(t *testing.T) {
 		{
 			"3 mongos + 1 arbiter",
 			&mongo.ConfigMembers{
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{},
-				mongo.ConfigMember{ArbiterOnly: true},
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host2",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:        "host3",
+					Votes:       mongo.DefaultVotes,
+					Priority:    0,
+					ArbiterOnly: true,
+				},
 			},
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
-					Priority: 2,
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
 				},
 				mongo.ConfigMember{
 					Votes:    0,
 					Priority: 0,
 				},
 				mongo.ConfigMember{
-					Votes:    1,
+					Votes:    mongo.DefaultVotes,
 					Priority: 0,
 				},
 			},
@@ -290,7 +458,7 @@ func TestVoting(t *testing.T) {
 		for i, member := range *c.mset {
 			d := []mongo.ConfigMember(*c.desiered)
 			if member.Votes != d[i].Votes || member.Priority != d[i].Priority {
-				t.Errorf("%s: member %d want %v, have %v", c.name, i, d[i], member)
+				t.Errorf("%s: member (%s) want %v, have %v", c.name, member.Host, d[i], member)
 			}
 		}
 	}
