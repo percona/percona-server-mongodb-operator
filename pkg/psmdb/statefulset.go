@@ -415,11 +415,15 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 					},
 				},
 			},
-			{
-				Name:  "PBM_MONGODB_URI",
-				Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
-			},
 		}...)
+		if cr.CompareVersion("1.18.0") < 0 {
+			c.Env = append(c.Env, []corev1.EnvVar{
+				{
+					Name:  "PBM_MONGODB_URI",
+					Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
+				},
+			}...)
+		}
 
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
