@@ -642,6 +642,7 @@ type ReplsetOverride struct {
 	Host     string            `json:"host,omitempty"`
 	Horizons map[string]string `json:"horizons,omitempty"`
 	Tags     map[string]string `json:"tags,omitempty"`
+	Priority *int              `json:"priority,omitempty"`
 }
 
 type HorizonsSpec map[string]map[string]string
