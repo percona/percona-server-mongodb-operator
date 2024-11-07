@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -399,31 +397,19 @@ func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMon
 	}
 
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
-	backupName := bcp.Status.PBMname
 	stg, err := util.StorageFromConfig(&cfg.Storage, e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
+
+	backupName := bcp.Status.PBMname
 	m, err := restore.GetMetaFromStore(stg, backupName)
 	if err != nil {
 		return errors.Wrap(err, "get backup metadata from storage")
 	}
-	switch bcp.Status.Type {
-	case "", defs.LogicalBackup:
-		if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
-			return errors.Wrap(err, "check backup files")
-		}
-	case defs.PhysicalBackup:
-		for _, rs := range m.Replsets {
-			f := path.Join(m.Name, rs.Name)
-			files, err := stg.List(f, "")
-			if err != nil {
-				return errors.Wrapf(err, "failed to list backup files at %s", f)
-			}
-			if len(files) == 0 {
-				return errors.Wrap(err, "no physical backup files")
-			}
-		}
+
+	if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
+		return errors.Wrap(err, "check backup files")
 	}
 
 	return nil
