@@ -570,7 +570,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 }
 
 func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Pause {
+	if cr.Spec.Pause || !cr.Spec.Backup.Enabled {
 		return nil
 	}
 
