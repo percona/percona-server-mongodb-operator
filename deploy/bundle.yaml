@@ -7105,6 +7105,8 @@ spec:
                             type: object
                           host:
                             type: string
+                          priority:
+                            type: integer
                           tags:
                             additionalProperties:
                               type: string
@@ -14863,6 +14865,8 @@ spec:
                               type: object
                             host:
                               type: string
+                            priority:
+                              type: integer
                             tags:
                               additionalProperties:
                                 type: string
