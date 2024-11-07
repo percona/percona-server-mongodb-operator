@@ -211,8 +211,8 @@ func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"cluster":  cr.Name,
-				"ancestor": ancestor,
+				naming.LabelCluster:        cr.Name,
+				naming.LabelBackupAncestor: ancestor,
 			}),
 		},
 	)
