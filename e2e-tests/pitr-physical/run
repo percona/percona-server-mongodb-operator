@@ -13,7 +13,7 @@ format_date() {
 
 get_latest_oplog_chunk_ts() {
 	local cluster=$1
-	echo $(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+	echo $(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- /opt/percona/pbm-entry.sh pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 }
 
 write_document() {
@@ -156,7 +156,7 @@ main() {
 
 	write_document "-2nd"
 
-	backup_last_write=$(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+	backup_last_write=$(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- /opt/percona/pbm-entry.sh pbm status -o json | jq .backups.snapshot[0].restoreTo)
 	last_chunk=$(get_latest_oplog_chunk_ts $cluster)
 
 	retries=0
