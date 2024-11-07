@@ -7,7 +7,7 @@ log=/tmp/pbm-agent.log
 
 touch /opt/percona/restore-in-progress
 
-/opt/percona/pbm-agent 1>&2 2>${log} &
+/opt/percona/pbm-entry.sh /opt/percona/pbm-agent 1>&2 2>${log} &
 /opt/percona/ps-entry.sh "$@" 1>&2 2>/tmp/mongod.log
 
 echo "Physical restore in progress"
