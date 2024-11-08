@@ -52,13 +52,24 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 			continue
 		}
 		if err != nil {
+			if cr.Status.State == api.AppStateError {
+				/*
+					If a finalizer returns an error, the operator will continue the reconciliation process.
+					However, if the cluster is already in an error state, it is likely that this state will
+					persist in each subsequent reconcile, causing the cluster deletion process to get stuck.
+
+					The operator should attempt to execute finalizers, but when the cluster is in an error state,
+					any errors from finalizer functions should be ignored to allow the deletion process to continue.
+
+					Do not move this check elsewhere. Finalizers should not put the cluster into an error state.
+					If a finalizer function does cause the cluster to enter an error state, its logic should be changed.
+				*/
+				continue
+			}
 			switch err {
 			case errWaitingTermination:
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
-				if cr.Status.State == api.AppStateError {
-					continue
-				}
 			}
 			finalizers = append(finalizers, orderedFinalizers[i:]...)
 			break

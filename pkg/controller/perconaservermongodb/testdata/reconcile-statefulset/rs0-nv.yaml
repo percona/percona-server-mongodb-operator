@@ -201,6 +201,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
+        image: perconalab/percona-server-mongodb-operator:main
         imagePullPolicy: Always
         name: mongo-init
         resources:

@@ -18,7 +18,11 @@ func TestCheckFinalizers(t *testing.T) {
 	crName := "check-finalizers"
 	ns := crName + "-ns"
 
-	defaultCR := readDefaultCR(t, crName, ns)
+	defaultCR, err := readDefaultCR(crName, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	obj := append(
 		fakePodsForRS(defaultCR, defaultCR.Spec.Replsets[0]),
 		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0], defaultCR.Spec.Replsets[0].Size, ""),

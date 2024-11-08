@@ -25,7 +25,17 @@ run_recovery_check() {
 	wait_cluster_consistency "${cluster}"
 }
 
-test_override_after_deploy() {
+delete_cluster() {
+	local cluster=$1
+
+	echo "deleting cluster: ${cluster}"
+	kubectl_bin delete psmdb ${cluster}
+	wait_for_delete psmdb/${cluster}
+	wait_for_delete pod/${cluster}-rs0-0
+	kubectl delete secrets --all
+}
+
+test_override_host_after_deploy() {
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets_with_tls.yml \
 		-f ${conf_dir}/minio-secret.yml
@@ -58,14 +68,10 @@ test_override_after_deploy() {
 
 	run_recovery_check "${cluster}" "backup-minio-logical" "external-rs0-0.${namespace}"
 
-	echo "deleting cluster"
-	kubectl_bin delete psmdb ${cluster}
-	wait_for_delete psmdb/${cluster}
-	wait_for_delete pod/${cluster}-rs0-0
-	kubectl delete secrets --all
+	delete_cluster ${cluster}
 }
 
-test_deploy_with_overrides() {
+test_deploy_with_host_overrides() {
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets_with_tls.yml \
 		-f ${conf_dir}/minio-secret.yml
@@ -88,11 +94,34 @@ test_deploy_with_overrides() {
 	wait_backup "backup-minio-physical"
 	run_recovery_check "${cluster}" "backup-minio-physical" "external-rs0-0.${namespace}"
 
-	echo "deleting cluster"
-	kubectl_bin delete psmdb ${cluster}
-	wait_for_delete psmdb/${cluster}
-	wait_for_delete pod/${cluster}-rs0-0
-	kubectl_bin delete secret --all
+	delete_cluster ${cluster}
+}
+
+test_override_priority() {
+	kubectl_bin apply \
+		-f ${conf_dir}/secrets_with_tls.yml \
+		-f ${conf_dir}/minio-secret.yml
+
+	echo "creating PSMDB cluster: ${cluster}"
+	apply_cluster ${test_dir}/conf/${cluster}-override-priority.yml
+	wait_for_running ${cluster}-rs0 3
+
+	echo "writing some data"
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
+
+	echo "checking member priorities"
+	run_mongo \
+		"rs.conf().members.map(m => m.priority)" \
+		"databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"  \
+		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
+			> ${tmp_dir}/priorities.json
+	diff -u ${test_dir}/compare/priorities.json ${tmp_dir}/priorities.json
+	echo "member priorities are OK"
+
+	delete_cluster ${cluster}
 }
 
 main() {
@@ -101,13 +130,17 @@ main() {
 
 	deploy_minio
 
-	desc "Case 1: Deploying a new cluster with replsetOverrides"
-	test_deploy_with_overrides
+	desc "Case 1: Deploying a new cluster with hostname overrides"
+	test_deploy_with_host_overrides
 	desc "Case 1: PASSED"
 
-	desc "Case 2: Patching a running cluster with replsetOverrides"
-	test_override_after_deploy
+	desc "Case 2: Patching a running cluster to override hostnames"
+	test_override_host_after_deploy
 	desc "Case 2: PASSED"
+
+	desc "Case 3: Overriding member priorities"
+	test_override_priority
+	desc "Case 3: PASSED"
 
 	desc "All cases PASSED"
 }
