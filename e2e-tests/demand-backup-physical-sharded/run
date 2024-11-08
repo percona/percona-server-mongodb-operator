@@ -42,10 +42,11 @@ run_recovery_check() {
 		exit 1
 	fi
 	echo
+
 	wait_cluster_consistency ${cluster} 42
+	wait_for_pbm_operations ${cluster}
+
 	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
-	echo
-	set -o xtrace
 }
 
 check_exported_mongos_service_endpoint() {
