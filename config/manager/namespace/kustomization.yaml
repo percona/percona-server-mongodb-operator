@@ -9,5 +9,5 @@ commonLabels:
   app.kubernetes.io/part-of: percona-server-mongodb-operator
 images:
 - name: psmdb-operator
-  newName: tishina/percona-server-mongodb-operator
-  newTag: main
+  newName: percona/percona-server-mongodb-operator
+  newTag: 1.18.0
