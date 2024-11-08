@@ -428,7 +428,7 @@ func (b *pbmC) Conn() *mongo.Client {
 // by given storageName
 func (b *pbmC) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	log := logf.FromContext(ctx)
-	log.Info("Setting PBM config", "backup", cluster.Name)
+	log.Info("Setting PBM config", "cluster", cluster.Name)
 
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
