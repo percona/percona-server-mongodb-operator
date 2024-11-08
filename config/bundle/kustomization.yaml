@@ -7,4 +7,4 @@ resources:
 images:
 - name: percona-server-mongodb-operator
   newName: perconalab/percona-server-mongodb-operator
-  newTag: main
+  newTag: 1.18.0

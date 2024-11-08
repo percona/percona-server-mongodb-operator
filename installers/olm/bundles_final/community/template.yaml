@@ -1,0 +1,6 @@
+Schema: olm.semver
+GenerateMajorChannels: true
+GenerateMinorChannels: false
+Stable:
+  Bundles:
+    - Image: docker.io/perconalab/percona-server-mongodb-operator:1.18.0-bundle

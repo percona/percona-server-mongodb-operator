@@ -1,0 +1,13 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: percona-server-mongodb-operator
+  namespace: openshift-marketplace
+spec:
+  displayName: Test-Operators
+  updateStrategy:
+    registryPoll:
+      interval: 5m
+  image: docker.io/perconalab/test-catalog:latest
+  publisher: Red Hat Partner
+  sourceType: grpc

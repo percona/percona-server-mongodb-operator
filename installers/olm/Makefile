@@ -1,5 +1,5 @@
 NAME ?= percona-server-mongodb-operator
-IMAGE_TAG_OWNER ?= perconalab
+IMAGE_TAG_OWNER ?= percona
 IMAGE_TAG_BASE ?= $(IMAGE_TAG_OWNER)/$(NAME)
 SED := $(shell which gsed || which sed)
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
@@ -13,14 +13,14 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=stable
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.23
+ENVTEST_K8S_VERSION = 1.28
 .DEFAULT_GOAL := help
 .SUFFIXES:
 
 CONTAINER ?= docker
-OPENSHIFT_VERSIONS ?= v4.12-v4.15
+OPENSHIFT_VERSIONS ?= v4.13-v4.17
 PACKAGE_CHANNEL ?= stable
-MIN_KUBE_VERSION ?= 1.24.0
+MIN_KUBE_VERSION ?= 1.28.0
 DOCKER_DEFAULT_PLATFORM ?= linux/amd64
 SHELL := /bin/bash
 REPO_ROOT = $(shell git rev-parse --show-toplevel)
