@@ -22,6 +22,12 @@ eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$e
 policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
+desc "delete role "
+echo $role_name
+echo $policy_arn
+aws iam detach-role-policy --role-name "$role_name" --policy-arn "$policy_arn" || true
+aws iam delete-role --role-name "$role_name" || true
+
 # Create policy. Already done, we don't need to do it every time. But all steps should be illustrated in the test
 #aws iam create-policy --policy-name operator-testing-allow-access-s3 --policy-document file://conf/s3-bucket-policy.json
 
@@ -127,9 +133,5 @@ kubectl_bin delete psmdb-backup --all
 check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
 
 destroy $namespace
-
-desc "delete role"
-aws iam detach-role-policy --role-name "$role_name" --policy-arn "$policy_arn"
-aws iam delete-role --role-name "$role_name"
 
 desc 'test passed'
