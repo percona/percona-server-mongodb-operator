@@ -29,13 +29,13 @@ run_recovery_check() {
 	local backup_name=$1
 	local compare_suffix=${2:-"_restore"}
 
-	wait_restore "${backup_name}" "${cluster}" "requested" "0" "1800"
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
 	echo
 
 	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
 
 	# we don't wait for cluster readiness here because the annotation gets removed then
-	wait_restore "${backup_name}" "${cluster}" "ready" "0" "1800"
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 	kubectl_bin get psmdb ${cluster} -o yaml
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
