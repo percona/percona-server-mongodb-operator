@@ -10,9 +10,9 @@ create_infra "$namespace"
 cluster="some-name"
 
 desc 'create secrets and start client'
-kubectl_bin apply \
-	-f $conf_dir/secrets_with_tls.yml \
-	-f $conf_dir/client.yml
+kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
+apply_client $conf_dir/client.yml
+
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'

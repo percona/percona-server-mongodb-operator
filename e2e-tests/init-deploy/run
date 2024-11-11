@@ -11,9 +11,8 @@ max_conn=13
 create_infra $namespace
 
 desc 'create secrets and start client'
-kubectl_bin apply \
-	-f $conf_dir/secrets_with_tls.yml \
-	-f $conf_dir/client.yml
+kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
+apply_client $conf_dir/client.yml
 
 desc 'create custom RuntimeClass'
 if version_gt "1.19" && [ $EKS -ne 1 ]; then

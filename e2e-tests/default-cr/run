@@ -48,7 +48,7 @@ function main() {
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f $deploy_dir/secrets.yaml
-	kubectl_bin apply -f $conf_dir/client.yml
+	apply_client $conf_dir/client.yml
 
 	desc "create first PSMDB cluster $cluster"
 	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml

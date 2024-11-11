@@ -28,6 +28,17 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs || :)
 
+archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}')
+
+if [[ "$ARCH" == "arm64" ]]; then
+	for arch in $archs; do
+		if [[ "$arch" != "arm64" ]]; then
+			echo "All nodes in the cluster must be arm64, because ARCH=$ARCH !"
+			exit 1
+		fi
+	done
+fi
+
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then
 		mkdir "${logs_dir}"
@@ -362,6 +373,8 @@ deploy_operator() {
 	desc 'start PSMDB operator'
 
 	local cr_file
+	local temp_operator_yaml="$(mktemp)"
+
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
 		cr_file="${test_dir}/conf/crd.yaml"
 	else
@@ -369,21 +382,27 @@ deploy_operator() {
 	fi
 
 	kubectl_bin apply --server-side --force-conflicts -f "${cr_file}"
-	if [ -n "$OPERATOR_NS" ]; then
+
+	if [[ "$OPERATOR_NS" ]]; then
 		apply_rbac cw-rbac
 		yq eval '
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
-			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml > $temp_operator_yaml
 	else
 		apply_rbac rbac
 		yq eval '
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
-			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
-			| kubectl_bin apply -f -
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml > $temp_operator_yaml
 	fi
+
+	if [[ "$ARCH" == "arm64" ]]; then
+		yq eval '(.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}])' $temp_operator_yaml | kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f $temp_operator_yaml
+	fi
+
 	sleep 2
 	wait_pod $(get_operator_pod)
 }
@@ -684,6 +703,10 @@ compare_kubectl() {
 			del(.spec.ipFamilyPolicy) |
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
+
+	if [[ "$ARCH" == "arm64" ]]; then
+		yq -i eval 'del(.spec.template.spec.tolerations)' ${new_result}
+	fi
 
 	yq -i eval 'del(.spec.persistentVolumeClaimRetentionPolicy)' ${new_result}
 
@@ -1080,12 +1103,30 @@ EOF
 }
 
 cat_config() {
-	cat "$1" \
-		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
-		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
-		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
-		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
-		| yq eval '.spec.upgradeOptions.apply="Never"'
+    local temp_cr="$(mktemp)"
+
+	yq eval '
+		(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'" |
+		(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'" |
+		(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'" |
+		(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'" |
+		.spec.upgradeOptions.apply="Never"' "$1" > $temp_cr
+
+	if [[ "$ARCH" == "arm64" ]]; then
+        yq eval '.spec.replsets[].tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
+				(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
+                (.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr
+	else
+		cat $temp_cr
+	fi
+}
+
+apply_client() {
+	if [[ "$ARCH" == "arm64" ]]; then
+	    yq eval '.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' "$1" | kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f "$1"
+	fi
 }
 
 apply_cluster() {
