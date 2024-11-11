@@ -286,7 +286,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 		if changed {
 			switch u.nameKey {
 			case api.EnvMongoDBBackupUser:
-				containers = append(containers, "backup-agent")
+				containers = append(containers, naming.ContainerBackupAgent)
 			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey:
 				containers = append(containers, "pmm-client")
 			}
