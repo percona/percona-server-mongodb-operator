@@ -51,6 +51,8 @@ spec:
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
+#    ssl: my-cluster-name-ssl
+#    sslInternal: my-cluster-name-ssl-internal
 #    keyFile: my-cluster-name-mongodb-keyfile
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
@@ -77,6 +79,7 @@ spec:
 #    replsetOverrides:
 #      my-cluster-name-rs0-0:
 #        host: my-cluster-name-rs0-0.example.net:27017
+#        priority: 3
 #        tags:
 #          key: value-0
 #      my-cluster-name-rs0-1:
@@ -189,6 +192,10 @@ spec:
 #    - name: sidecar-config
 #      configMap:
 #        name: myconfigmap
+#    - name: backup-nfs
+#      nfs:
+#        server: "nfs-service.storage.svc.cluster.local"
+#        path: "/psmdb-some-name-rs0"
 #    sidecarPVCs:
 #    - apiVersion: v1
 #      kind: PersistentVolumeClaim
@@ -657,6 +664,13 @@ spec:
 #          prefix: PREFIX-NAME
 #          endpointUrl: https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
+#      backup-nfs:
+#        type: filesystem
+#        filesystem:
+#          path: /mnt/nfs/
+#    volumeMounts:
+#    - mountPath: /mnt/nfs/
+#      name: backup-nfs
     pitr:
       enabled: false
       oplogOnly: false
