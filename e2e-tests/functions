@@ -257,7 +257,6 @@ wait_for_pbm_operations() {
 	set_debug
 }
 
-
 run_restore() {
 	local backup_name=$1
 
