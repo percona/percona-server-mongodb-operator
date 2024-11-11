@@ -1,8 +1,10 @@
 package perconaservermongodbbackup
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,6 +31,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -354,7 +357,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 		for _, f := range cr.GetFinalizers() {
 			switch f {
 			case "delete-backup":
-				log.Info("The value delete-backup is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
+				log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
 				fallthrough
 			case naming.FinalizerDeleteBackup:
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
@@ -375,6 +378,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	if len(cr.Status.PBMname) == 0 {
 		return nil
 	}
+
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "pbmName", cr.Status.PBMname)
 
 	var meta *backup.BackupMeta
 	var err error
@@ -411,22 +416,63 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure
+	case cr.Status.Filesystem != nil:
+		err := r.deleteFilesystemBackup(ctx, cluster, cr)
+		if err != nil {
+			return errors.Wrap(err, "delete filesystem backup")
+		}
+		return nil
 	}
 
 	err = b.pbm.GetNSetConfig(ctx, r.client, cluster, storage)
 	if err != nil {
 		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
+
 	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
 	// as it's not possible to delete backup if it is a base for the PITR timeline
 	err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete PITR")
 	}
+	log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
+
 	err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete backup")
 	}
+	log.Info("Backup deleted")
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+	log := logf.FromContext(ctx)
+
+	rsName := bcp.Status.ReplsetNames[0]
+	rsPods, err := psmdb.GetRSPods(ctx, r.client, cluster, rsName)
+	if err != nil {
+		return errors.Wrapf(err, "get %s pods", rsName)
+	}
+
+	pod := rsPods.Items[0]
+
+	cmd := []string{
+		"pbm",
+		"delete-backup",
+		bcp.Status.PBMname,
+		"--yes",
+	}
+
+	log.V(1).Info("Deleting filesystem backup", "pod", pod.Name, "cmd", strings.Join(cmd, " "))
+
+	outB := bytes.Buffer{}
+	errB := bytes.Buffer{}
+	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
+	if err != nil {
+		return errors.Wrap(err, "exec delete-backup")
+	}
+
 	return nil
 }
 

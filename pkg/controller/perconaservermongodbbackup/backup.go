@@ -124,6 +124,9 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 				status.Destination = "azure://" + status.Destination
 			}
 		}
+	case api.BackupStorageFilesystem:
+		status.Filesystem = &stg.Filesystem
+		status.Destination = strings.TrimSuffix(stg.Filesystem.Path, "/")
 	}
 	status.Destination += "/" + status.PBMname
 

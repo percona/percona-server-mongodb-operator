@@ -14,6 +14,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -134,10 +135,13 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 
 	cfg, err := pbmc.GetConfig(ctx)
 	if err != nil {
+		return "", errors.Wrap(err, "get PBM config")
 	}
 
-	if err := pbmc.ResyncStorage(ctx, &cfg.Storage); err != nil {
-		return "", errors.Wrap(err, "resync storage")
+	if cfg.Storage.Type != storage.Filesystem {
+		if err := pbmc.ResyncStorage(ctx, &cfg.Storage); err != nil {
+			return "", errors.Wrap(err, "resync storage")
+		}
 	}
 
 	var (
