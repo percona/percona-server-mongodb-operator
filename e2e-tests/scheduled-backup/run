@@ -18,6 +18,18 @@ unlabel_node() {
 	kubectl_bin label nodes "${LABELED_NODE}" backupWorker- --overwrite
 }
 
+check_backup_count() {
+	local ancestor=$1
+	local expected=$2
+
+	local count=$(kubectl_bin get psmdb-backup -l percona.com/backup-ancestor=${ancestor} | grep ready | wc -l)
+
+	if [[ ${count} != ${expected} ]]; then
+		echo "${ancestor}: Expected ${expected} backups but found ${count}."
+		exit 1
+	fi
+}
+
 create_infra "$namespace"
 deploy_minio
 
@@ -69,11 +81,13 @@ wait_backup_agent $cluster-0
 wait_backup_agent $cluster-1
 wait_backup_agent $cluster-2
 
-desc 'add backups schedule, wait for the first backup'
+desc 'add backups schedule, wait for backups'
 apply_cluster "$test_dir/conf/$cluster-2.yml"
 sleep 55
 
+desc 'disable backups schedule'
 apply_cluster "$test_dir/conf/$cluster.yml"
+
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
 	backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
@@ -87,6 +101,22 @@ backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' 
 wait_backup "$backup_name_minio"
 
 sleep 5
+
+echo -n "checking backup count for every-min-minio..."
+check_backup_count every-min-minio 1
+echo "OK"
+
+echo -n "checking backup count for every-min-aws-s3..."
+check_backup_count every-min-aws-s3 1
+echo "OK"
+
+echo -n "checking backup count for every-min-gcp-cs..."
+check_backup_count every-min-gcp-cs 1
+echo "OK"
+
+echo -n "checking backup count for every-min-azure-blob..."
+check_backup_count every-min-azure-blob 1
+echo "OK"
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
@@ -147,7 +177,6 @@ fi
 
 desc 'add physical backup schedule, wait for the first backup'
 apply_cluster "$test_dir/conf/$cluster-3.yml"
-
 sleep 55
 
 apply_cluster "$test_dir/conf/$cluster.yml"

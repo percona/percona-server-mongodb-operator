@@ -16,7 +16,6 @@ ldap
 ldap-tls
 mongod-major-upgrade
 mongod-major-upgrade-sharded
-monitoring-2-0
 non-voting
 one-pod
 pitr
