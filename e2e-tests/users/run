@@ -134,6 +134,7 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
+newmonitorusername="newmonitorusername"
 desc 'update monitor user username'
 patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_USER" "$(echo -n "$newmonitorusername" | base64)"
 sleep 35
@@ -154,6 +155,6 @@ check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
-destroy $namespace
+destroy "$namespace"
 
 desc 'test passed'
