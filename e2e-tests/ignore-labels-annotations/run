@@ -61,7 +61,7 @@ check_service() {
             }
         }]'
 
-	sleep 5 # waiting for reconcile
+	sleep 7 # waiting for reconcile
 	desc "check if annotations/labels are not deleted from service $svc_name"
 	compare_kubectl "service/$svc_name" "-manual"
 
@@ -78,7 +78,7 @@ check_service() {
             "value": ["ignoredLabel"]
         }
     ]'
-	sleep 5
+	sleep 7
 	desc "check if annotations/labels are not deleted from service $svc_name"
 	compare_kubectl "service/$svc_name" "-manual"
 
