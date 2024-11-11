@@ -1160,10 +1160,6 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	logf.FromContext(ctx).V(1).Info("checking if backup is allowed", "backup", cr.Name)
 
-	if cr.Spec.Unmanaged {
-		return errors.Errorf("backups are not allowed on unmanaged clusters")
-	}
-
 	if cr.Status.State == AppStateReady {
 		return nil
 	}
