@@ -15,7 +15,7 @@ metadata:
       kind: PerconaServerMongoDB
       name: node-port
 spec:
-  externalTrafficPolicy: Local
+  externalTrafficPolicy: Cluster
   ports:
     - name: mongodb
       port: 27017
