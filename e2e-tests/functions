@@ -250,7 +250,7 @@ wait_for_pbm_operations() {
 	set +o xtrace
 	echo -n "waiting for PBM operation to finish"
 	retry=0
-	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
+	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- /opt/percona/pbm-entry.sh pbm status -o json -s running | jq -r .running.opID) == null ]]; do
 		if [ $retry -ge 540 ]; then
 			echo max retry count $retry reached. something went wrong with PBM operations
 			exit 1
@@ -261,7 +261,6 @@ wait_for_pbm_operations() {
 	echo
 	set_debug
 }
-
 
 run_restore() {
 	local backup_name=$1
