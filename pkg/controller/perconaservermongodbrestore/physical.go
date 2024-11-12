@@ -371,7 +371,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	// remove backup-agent container
 	pbmIdx := -1
 	for idx, c := range sts.Spec.Template.Spec.Containers {
-		if c.Name == "backup-agent" {
+		if c.Name == naming.ContainerBackupAgent {
 			pbmIdx = idx
 			break
 		}
@@ -394,6 +394,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		MountPath: "/etc/pbm/",
 		ReadOnly:  true,
 	})
+	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, cluster.Spec.Backup.VolumeMounts...)
 	sts.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/physical-restore-ps-entry.sh"}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
@@ -805,7 +806,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 			}
 
 			for _, c := range pod.Spec.Containers {
-				if c.Name == "backup-agent" {
+				if c.Name == naming.ContainerBackupAgent {
 					return false, nil
 				}
 			}
@@ -850,7 +851,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) pbmExec(ctx context.Context, comm
 	container := "mongod"
 	pbmBinary := "/opt/percona/pbm"
 	for _, c := range pod.Spec.Containers {
-		if c.Name == "backup-agent" {
+		if c.Name == naming.ContainerBackupAgent {
 			container = c.Name
 			pbmBinary = "/bin/pbm"
 		}
