@@ -322,15 +322,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}, nil
 }
 
-const agentContainerName = "backup-agent"
-
 // backupAgentContainer creates the container object for a backup agent
 func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsEnabled bool) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
 	c := corev1.Container{
-		Name:            agentContainerName,
+		Name:            naming.ContainerBackupAgent,
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
@@ -435,6 +433,10 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 			Name:  "PBM_AGENT_TLS_ENABLED",
 			Value: strconv.FormatBool(tlsEnabled),
 		})
+	}
+
+	if len(cr.Spec.Backup.VolumeMounts) > 0 {
+		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
 	}
 
 	return c
