@@ -56,7 +56,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			svc.Labels[k] = v
 		}
 	}
-	
+
 	return svc
 }
 
