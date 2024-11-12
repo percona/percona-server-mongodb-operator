@@ -936,6 +936,10 @@ type BackupStorageAzureSpec struct {
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
+type BackupStorageFilesystemSpec struct {
+	Path string `json:"path"`
+}
+
 type BackupStorageType string
 
 const (
@@ -945,9 +949,10 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type  BackupStorageType      `json:"type"`
-	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
-	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
+	Type       BackupStorageType           `json:"type"`
+	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
 type PITRSpec struct {
@@ -1002,6 +1007,7 @@ type BackupSpec struct {
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
+	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {

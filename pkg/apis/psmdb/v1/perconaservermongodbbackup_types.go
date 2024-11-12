@@ -35,17 +35,18 @@ const (
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
-	Type           defs.BackupType         `json:"type,omitempty"`
-	State          BackupState             `json:"state,omitempty"`
-	StartAt        *metav1.Time            `json:"start,omitempty"`
-	CompletedAt    *metav1.Time            `json:"completed,omitempty"`
-	LastTransition *metav1.Time            `json:"lastTransition,omitempty"`
-	Destination    string                  `json:"destination,omitempty"`
-	StorageName    string                  `json:"storageName,omitempty"`
-	S3             *BackupStorageS3Spec    `json:"s3,omitempty"`
-	Azure          *BackupStorageAzureSpec `json:"azure,omitempty"`
-	ReplsetNames   []string                `json:"replsetNames,omitempty"`
-	PBMname        string                  `json:"pbmName,omitempty"`
+	Type           defs.BackupType              `json:"type,omitempty"`
+	State          BackupState                  `json:"state,omitempty"`
+	StartAt        *metav1.Time                 `json:"start,omitempty"`
+	CompletedAt    *metav1.Time                 `json:"completed,omitempty"`
+	LastTransition *metav1.Time                 `json:"lastTransition,omitempty"`
+	Destination    string                       `json:"destination,omitempty"`
+	StorageName    string                       `json:"storageName,omitempty"`
+	S3             *BackupStorageS3Spec         `json:"s3,omitempty"`
+	Azure          *BackupStorageAzureSpec      `json:"azure,omitempty"`
+	Filesystem     *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	ReplsetNames   []string                     `json:"replsetNames,omitempty"`
+	PBMname        string                       `json:"pbmName,omitempty"`
 
 	// Deprecated: Use PBMPods instead
 	PBMPod               string            `json:"pbmPod,omitempty"`
