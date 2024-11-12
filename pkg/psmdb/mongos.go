@@ -451,6 +451,9 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	case corev1.ServiceTypeNodePort:
 		spec.Type = corev1.ServiceTypeNodePort
 		spec.ExternalTrafficPolicy = "Local"
+		if cr.CompareVersion("1.19.0") >= 0 {
+			spec.ExternalTrafficPolicy = "Cluster"
+		}
 		if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 			for i, port := range spec.Ports {
 				port.NodePort = cr.Spec.Sharding.Mongos.Expose.NodePort
@@ -460,6 +463,9 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	case corev1.ServiceTypeLoadBalancer:
 		spec.Type = corev1.ServiceTypeLoadBalancer
 		spec.ExternalTrafficPolicy = "Cluster"
+		if cr.CompareVersion("1.19.0") >= 0 {
+			spec.ExternalTrafficPolicy = "Local"
+		}
 		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
