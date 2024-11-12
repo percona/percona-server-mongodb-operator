@@ -920,9 +920,52 @@ deploy_cert_manager() {
 
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+
+	helm uninstall cert-manager --namespace cert-manager || :
+	helm repo remove jetstack || :
+    helm repo add jetstack https://charts.jetstack.io
+
+	# Check and delete existing conflicting resources
+	kubectl_bin delete role cert-manager-cainjector:leaderelection -n kube-system --ignore-not-found=true
+	kubectl_bin delete role cert-manager:leaderelection -n kube-system --ignore-not-found=true
+	kubectl_bin delete rolebinding cert-manager-cainjector:leaderelection -n kube-system --ignore-not-found=true
+    kubectl_bin delete rolebinding cert-manager:leaderelection -n kube-system --ignore-not-found=true
+
+	if [[ "$ARCH" == "arm64" ]]; then
+		helm install cert-manager \
+			--namespace cert-manager \
+			--version v${CERT_MANAGER_VER} \
+			--set nodeSelector."kubernetes\.io/arch"=arm64 \
+			--set tolerations[0].key="kubernetes.io/arch" \
+			--set tolerations[0].operator="Equal" \
+			--set tolerations[0].value="arm64" \
+			--set tolerations[0].effect="NoSchedule" \
+			--set startupapicheck.nodeSelector."kubernetes\.io/arch"=arm64 \
+			--set startupapicheck.tolerations[0].key="kubernetes.io/arch" \
+			--set startupapicheck.tolerations[0].operator="Equal" \
+			--set startupapicheck.tolerations[0].value="arm64" \
+			--set startupapicheck.tolerations[0].effect="NoSchedule" \
+			--set cainjector.nodeSelector."kubernetes\.io/arch"=arm64 \
+			--set cainjector.tolerations[0].key="kubernetes.io/arch" \
+			--set cainjector.tolerations[0].operator="Equal" \
+			--set cainjector.tolerations[0].value="arm64" \
+			--set cainjector.tolerations[0].effect="NoSchedule" \
+			--set webhook.nodeSelector."kubernetes\.io/arch"=arm64 \
+			--set webhook.tolerations[0].key="kubernetes.io/arch" \
+			--set webhook.tolerations[0].operator="Equal" \
+			--set webhook.tolerations[0].value="arm64" \
+			--set webhook.tolerations[0].effect="NoSchedule" \
+			--no-hooks \
+			jetstack/cert-manager
+	else
+		helm install cert-manager \
+		--namespace cert-manager \
+		--version v${CERT_MANAGER_VER} \
+		--no-hooks \
+		jetstack/cert-manager
+	fi
+
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
-	sleep 120
 }
 
 delete_crd() {
@@ -1115,7 +1158,8 @@ cat_config() {
 	if [[ "$ARCH" == "arm64" ]]; then
         yq eval '.spec.replsets[].tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
 				(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-                (.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr
+                (.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
+				(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr
 	else
 		cat $temp_cr
 	fi
