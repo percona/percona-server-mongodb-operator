@@ -16,7 +16,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.15.3"
+CERT_MANAGER_VER="1.16.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -68,6 +68,10 @@ else
 fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+log() {
+	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
@@ -75,6 +79,7 @@ set_debug() {
 		set +o xtrace
 	fi
 }
+
 version_gt() {
 	# return true if kubernetes version equal or greater than desired
 	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
@@ -239,6 +244,25 @@ wait_backup() {
 	set_debug
 }
 
+wait_for_pbm_operations() {
+	local cluster=$1
+
+	set +o xtrace
+	echo -n "waiting for PBM operation to finish"
+	retry=0
+	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
+		if [ $retry -ge 540 ]; then
+			echo max retry count $retry reached. something went wrong with PBM operations
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo
+	set_debug
+}
+
+
 run_restore() {
 	local backup_name=$1
 
@@ -342,7 +366,7 @@ wait_restore() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 
 	if [ $wait_cluster_consistency -eq 1 ]; then
 		wait_cluster_consistency "${cluster_name}"
@@ -800,7 +824,7 @@ compare_mongo_cmd() {
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
 }
 
 compare_mongos_cmd() {

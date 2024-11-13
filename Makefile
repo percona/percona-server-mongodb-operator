@@ -6,6 +6,8 @@ VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
 DEPLOYDIR = ./deploy
 
+ENVTEST_K8S_VERSION = 1.31
+
 all: build
 
 help: ## Display this help.
@@ -35,6 +37,9 @@ $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(D
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
+e2e-test:
+	IMAGE=$(IMAGE) ./e2e-tests/$(TEST)/run
+
 ##@ Build
 
 .PHONY: build
@@ -60,6 +65,9 @@ deploy: ## Deploy operator
 undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
+test: envtest ## Run tests.
+	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
@@ -81,6 +89,10 @@ controller-gen: ## Download controller-gen locally if necessary.
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
 	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.3)
+
+ENVTEST = $(shell pwd)/bin/setup-envtest
+envtest: ## Download envtest-setup locally if necessary.
+	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
 # Prepare release
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
