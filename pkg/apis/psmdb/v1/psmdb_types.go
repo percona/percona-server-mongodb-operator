@@ -323,9 +323,6 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
-
-	ConditionEnabled  ConditionStatus = "Enabled"
-	ConditionDisabled ConditionStatus = "Disabled"
 )
 
 type ClusterCondition struct {

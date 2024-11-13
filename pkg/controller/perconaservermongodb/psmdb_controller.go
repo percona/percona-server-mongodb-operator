@@ -576,9 +576,9 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 
 	getShardingStatus := func(cr *api.PerconaServerMongoDB) api.ConditionStatus {
 		if cr.Spec.Sharding.Enabled {
-			return api.ConditionEnabled
+			return api.ConditionTrue
 		} else {
-			return api.ConditionDisabled
+			return api.ConditionFalse
 		}
 	}
 
