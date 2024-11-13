@@ -57,13 +57,7 @@ sleep 5
 
 desc "check backup and restore -- minio"
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-retry 3 8 kubectl_bin run -i --rm aws-cli --image=amazon/aws-cli \
-	--restart=Never \
-	--env=AWS_ACCESS_KEY_ID=some-access-key \
-	--env=AWS_SECRET_ACCESS_KEY=some-secret-key \
-	--env=AWS_DEFAULT_REGION=us-east-1 -- \
-	--endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep myApp.test.gz
+retry 3 8 aws_cli "--endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/" | grep myApp.test.gz
 
 run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"

@@ -433,6 +433,17 @@ deploy_operator_gh() {
 	wait_pod "$(get_operator_pod)"
 }
 
+aws_cli() {
+	local cmd=$1
+
+	kubectl_bin run -i --rm aws-cli --image=amazon/aws-cli \
+		--restart=Never \
+		--env=AWS_ACCESS_KEY_ID=some-access-key \
+		--env=AWS_SECRET_ACCESS_KEY=some-secret-key \
+		--env=AWS_DEFAULT_REGION=us-east-1 -- \
+		$cmd
+}
+
 deploy_minio() {
 	desc 'install Minio'
 	helm uninstall minio-service || :
@@ -462,12 +473,7 @@ deploy_minio() {
 	fi
 
 	# create bucket
-	kubectl_bin run -i --rm aws-cli --image=amazon/aws-cli \
-		--restart=Never \
-		--env=AWS_ACCESS_KEY_ID=some-access-key \
-		--env=AWS_SECRET_ACCESS_KEY=some-secret-key \
-		--env=AWS_DEFAULT_REGION=us-east-1 -- \
-		--endpoint-url http://minio-service:9000 s3 mb s3://operator-testing
+	aws_cli "--endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
 
 deploy_vault() {
