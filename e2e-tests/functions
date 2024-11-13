@@ -441,7 +441,7 @@ aws_cli() {
 		--env=AWS_ACCESS_KEY_ID=some-access-key \
 		--env=AWS_SECRET_ACCESS_KEY=some-secret-key \
 		--env=AWS_DEFAULT_REGION=us-east-1 -- \
-		$cmd
+		--endpoint-url http://minio-service:9000 $cmd
 }
 
 deploy_minio() {
@@ -473,7 +473,7 @@ deploy_minio() {
 	fi
 
 	# create bucket
-	aws_cli "--endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
+	aws_cli "s3 mb s3://operator-testing"
 }
 
 deploy_vault() {

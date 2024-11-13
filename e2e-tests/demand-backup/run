@@ -216,7 +216,7 @@ fi
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 sleep 20
-aws_cli "--endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/"	| grep myApp.test.gz
+aws_cli "s3 ls s3://${backup_dest_minio}/rs0/"	| grep myApp.test.gz
 
 run_recovery_check "$backup_name_minio" "$cluster"
 
@@ -249,7 +249,7 @@ run_recovery_check_bkp_source "$backup_name_minio" "$backup_dest_minio" "$cluste
 
 desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
-backup_exists=$(aws_cli "--endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/" | grep -c ${backup_dest_minio} | cat)
+backup_exists=$(aws_cli "s3 ls s3://operator-testing/" | grep -c ${backup_dest_minio} | cat)
 
 if [[ $backup_exists -eq 1 ]]; then
 	echo "Backup was not removed from bucket -- minio"
@@ -282,7 +282,7 @@ sleep 60
 
 desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
-backup_exists=$(aws_cli "--endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/" | grep -c ${backup_dest_minio} | cat)
+backup_exists=$(aws_cli "s3 ls s3://operator-testing/" | grep -c ${backup_dest_minio} | cat)
 
 if [[ $backup_exists -eq 1 ]]; then
 	echo "Backup was not removed from bucket -- minio"
