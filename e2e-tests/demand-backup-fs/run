@@ -35,7 +35,7 @@ run_recovery_check() {
 
 get_latest_oplog_chunk_ts() {
 	local cluster=$1
-	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- /opt/percona/pbm-entry.sh pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
 }
 
 format_date() {
@@ -46,7 +46,7 @@ format_date() {
 wait_for_oplogs() {
 	local cluster1=$1
 
-	local backup_last_write=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+	local backup_last_write=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- /opt/percona/pbm-entry.sh pbm status -o json | jq .backups.snapshot[0].restoreTo)
 
 	local retries=0
 	local last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
@@ -93,7 +93,6 @@ write_data() {
 		"myApp:myPass@${cluster}-rs0.${namespace}"
 	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
 }
-
 
 cluster="some-name"
 
