@@ -199,11 +199,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
 	pods := make(map[string]string)
 	for _, rs := range replsets {
-		spl := strings.Split(rs.Node, ".")
-		if len(spl) == 0 {
-			continue
-		}
-		pods[rs.Name] = spl[0]
+		pods[rs.Name] = rs.Node
 	}
 	return pods
 }
