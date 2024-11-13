@@ -12,7 +12,7 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-#  enableVolumeExpansion: true
+#  enableVolumeExpansion: false
   crVersion: 1.19.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
