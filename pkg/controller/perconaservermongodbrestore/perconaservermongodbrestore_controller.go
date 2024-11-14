@@ -139,15 +139,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, nil
 	}
 
-	bcp, err := r.getBackup(ctx, cr)
-	if err != nil {
-		return rr, errors.Wrap(err, "get backup")
-	}
-
 	cluster := new(psmdbv1.PerconaServerMongoDB)
 	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	if err = cluster.CanRestore(ctx); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "can cluster restore")
+	}
+
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return rr, errors.Wrap(err, "get backup")
 	}
 
 	var svr *version.ServerVersion
