@@ -74,14 +74,14 @@ userOnePass=$(getSecretData "user-one" "userOnePassKey")
 compare 'admin' 'db.getUser("user-one")' "$mongosUri" "user-one"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
 
-generatedUserSecret="$psmdb-custom-user-secret"
+generatedUserSecret="$cluster-custom-user-secret"
 generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
-compare 'admin' 'db.getUser("user-gen")' "$mongoUri" "user-gen"
-check_mongo_auth "user-gen:$generatedPass@$cluster-0.$cluster.$namespace"
+compare 'admin' 'db.getUser("user-gen")' "$mongosUri" "user-gen"
+check_auth "user-gen:$generatedPass@$cluster-mongos.$namespace"
 
 # Only check if $external.user-external user exists, as the password is not known
 # since we don't have a external provider set in this test
-compare '$external' 'db.getUser("user-external")' "$mongoUri" "user-external"
+compare '$external' 'db.getUser("user-external")' "$mongosUri" "user-external"
 
 desc 'delete initial user from CR and create a new one'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
