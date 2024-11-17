@@ -9,6 +9,12 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    pitr:
+      compressionLevel: 6
+      compressionType: gzip
+      enabled: true
+      oplogOnly: false
+      oplogSpanMin: 1
     storages:
       aws-s3:
         type: s3
