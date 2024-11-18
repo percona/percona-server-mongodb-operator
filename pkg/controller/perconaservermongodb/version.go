@@ -242,7 +242,7 @@ func versionUpgradeEnabled(cr *api.PerconaServerMongoDB) bool {
 		cr.Spec.UpgradeOptions.Apply.Lower() != api.UpgradeStrategyDisabled
 }
 
-func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService, operatorDepl *appsv1.Deployment) (VersionMeta, error) {
+func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *api.PerconaServerMongoDB, operatorDepl *appsv1.Deployment) (VersionMeta, error) {
 	watchNs, err := k8s.GetWatchNamespace()
 	if err != nil {
 		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
@@ -324,7 +324,7 @@ func (r *ReconcilePerconaServerMongoDB) getNewVersions(ctx context.Context, cr *
 	endpoint := api.GetDefaultVersionServiceEndpoint()
 	log.V(1).Info("Use version service endpoint", "endpoint", endpoint)
 
-	vm, err := r.getVersionMeta(ctx, cr, vs, operatorDepl)
+	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "get version meta")
 	}
@@ -497,7 +497,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.Wrap(err, "failed to get operator deployment")
 	}
 
-	vm, err := r.getVersionMeta(ctx, cr, vs, operatorDepl)
+	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
 	if err != nil {
 		return errors.Wrap(err, "failed to get version meta")
 	}
