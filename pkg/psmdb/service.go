@@ -47,15 +47,13 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		},
 	}
 
-	if cr.CompareVersion("1.12.0") >= 0 {
-		svc.Labels = make(map[string]string)
-		for k, v := range ls {
+	svc.Labels = make(map[string]string)
+	for k, v := range ls {
+		svc.Labels[k] = v
+	}
+	for k, v := range replset.Expose.ServiceLabels {
+		if _, ok := svc.Labels[k]; !ok {
 			svc.Labels[k] = v
-		}
-		for k, v := range replset.Expose.ServiceLabels {
-			if _, ok := svc.Labels[k]; !ok {
-				svc.Labels[k] = v
-			}
 		}
 	}
 
@@ -101,10 +99,26 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	switch replset.Expose.ExposeType {
 	case corev1.ServiceTypeNodePort:
 		svc.Spec.Type = corev1.ServiceTypeNodePort
-		svc.Spec.ExternalTrafficPolicy = "Local"
+		if len(replset.Expose.ExternalTrafficPolicy) != 0 {
+			svc.Spec.ExternalTrafficPolicy = replset.Expose.ExternalTrafficPolicy
+		} else {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
+		}
+
+		if cr.CompareVersion("1.19.0") < 0 {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		}
 	case corev1.ServiceTypeLoadBalancer:
 		svc.Spec.Type = corev1.ServiceTypeLoadBalancer
-		svc.Spec.ExternalTrafficPolicy = "Cluster"
+		if len(replset.Expose.ExternalTrafficPolicy) != 0 {
+			svc.Spec.ExternalTrafficPolicy = replset.Expose.ExternalTrafficPolicy
+		} else {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		}
+
+		if cr.CompareVersion("1.19.0") < 0 {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
+		}
 		svc.Spec.LoadBalancerSourceRanges = replset.Expose.LoadBalancerSourceRanges
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP

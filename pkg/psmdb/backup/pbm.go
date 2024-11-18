@@ -639,7 +639,7 @@ func (b *pbmC) Node(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return strings.Split(lock.Node, ".")[0], nil
+	return lock.Node, nil
 }
 
 func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error) {
