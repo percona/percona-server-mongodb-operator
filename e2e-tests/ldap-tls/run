@@ -152,9 +152,8 @@ main() {
 
 	desc 'create secrets and start client'
 	cluster="some-name"
-	kubectl_bin apply \
-		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client.yml"
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
 
 	test_mongod_openldap
 	test_sharded_openldap

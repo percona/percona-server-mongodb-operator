@@ -28,8 +28,9 @@ fail_pod() {
 	yq eval '
 		.metadata.name = "chaos-operator-pod-failure" |
 		del(.spec.selector.pods.test-namespace) |
-		.spec.selector.pods.'$test_namespace'[0] = "'$init_pod'"' $conf_dir/chaos-pod-failure.yml \
-		| kubectl apply --namespace $test_namespace -f -
+		.spec.selector.pods.'$test_namespace'[0] = "'$init_pod'" |
+		.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' \
+		$conf_dir/chaos-pod-failure.yml | kubectl apply --namespace $test_namespace -f -
 	sleep 10
 
 	desc 'check if operator works fine: scale down from 5 to 3'

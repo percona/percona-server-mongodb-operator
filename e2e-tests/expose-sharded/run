@@ -94,9 +94,9 @@ function main() {
 	desc 'create first PSMDB cluster'
 	cluster="some-name"
 
-	kubectl_bin apply \
-		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client.yml"
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
+
 
 	apply_s3_storage_secrets
 	if version_gt "1.19" && [ $EKS -ne 1 ]; then
