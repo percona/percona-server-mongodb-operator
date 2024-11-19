@@ -1568,11 +1568,18 @@ renew_certificate() {
 }
 
 deploy_cmctl() {
-	local service_account="cmctl"
+	local temp_cr="$(mktemp)"
 
-	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
-		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
-		| kubectl_bin apply -f -
+	$sed -e "s/percona-server-mongodb-operator/cmctl/g" "${src_dir}/deploy/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' > $temp_cr
+
+	if [[ "$ARCH" == "arm64" ]]; then
+		yq eval '(.spec.template.spec.tolerations // []) += [{"key": "node.kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]' $temp_cr |
+		kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f $temp_cr
+	fi
+
 	kubectl_bin apply -f "$conf_dir/cmctl.yml"
 }
 
