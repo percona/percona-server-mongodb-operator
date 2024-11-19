@@ -69,8 +69,9 @@ wait_service_export() {
 }
 
 desc "Register Kubernetes cluster"
-k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+kubectl -n default delete pod curl || :
+k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=alpine/curl --overrides='{"spec": {"tolerations":[{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
+k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=alpine/curl --overrides='{"spec": {"tolerations":[{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
 
 gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
 
