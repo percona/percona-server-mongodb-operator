@@ -97,7 +97,7 @@ test_deploy_with_overrides() {
 
 main() {
 	create_infra ${namespace}
-	kubectl_bin apply -f ${conf_dir}/client.yml
+	apply_client $conf_dir/client.yml
 
 	deploy_minio
 
