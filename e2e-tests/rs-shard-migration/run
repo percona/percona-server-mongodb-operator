@@ -18,7 +18,9 @@ function main() {
 	create_infra $namespace
 
 	desc 'create secrets and start client'
-	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
+
 	cluster="some-name"
 	CLUSTER_SIZE=3
 
