@@ -22,6 +22,7 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -398,15 +399,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	})
 	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, cluster.Spec.Backup.VolumeMounts...)
 	sts.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/physical-restore-ps-entry.sh"}
-	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
+
+	f := false
+	pbmEnvVars := []corev1.EnvVar{
 		{
 			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_USER",
+					Key: "MONGODB_BACKUP_USER_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cluster.Spec.Secrets.Users,
+						Name: api.UserSecretName(cluster),
 					},
+					Optional: &f,
 				},
 			},
 		},
@@ -414,13 +418,24 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Name: "PBM_AGENT_MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_PASSWORD",
+					Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cluster.Spec.Secrets.Users,
+						Name: api.UserSecretName(cluster),
 					},
+					Optional: &f,
 				},
 			},
 		},
+	}
+	if cluster.CompareVersion("1.18.0") < 0 {
+		for i, v := range pbmEnvVars {
+			pbmEnvVars[i].ValueFrom.SecretKeyRef.Key = strings.TrimSuffix(v.ValueFrom.SecretKeyRef.Key, "_ESCAPED")
+			pbmEnvVars[i].ValueFrom.SecretKeyRef.LocalObjectReference.Name = cluster.Spec.Secrets.Users
+			pbmEnvVars[i].ValueFrom.SecretKeyRef.Optional = nil
+		}
+	}
+	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
 			ValueFrom: &corev1.EnvVarSource{
