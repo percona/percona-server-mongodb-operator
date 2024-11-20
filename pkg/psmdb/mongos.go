@@ -450,9 +450,14 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	switch cr.Spec.Sharding.Mongos.Expose.ExposeType {
 	case corev1.ServiceTypeNodePort:
 		spec.Type = corev1.ServiceTypeNodePort
-		spec.ExternalTrafficPolicy = "Local"
-		if cr.CompareVersion("1.19.0") >= 0 {
-			spec.ExternalTrafficPolicy = "Cluster"
+		if len(cr.Spec.Sharding.Mongos.Expose.ExternalTrafficPolicy) != 0 {
+			spec.ExternalTrafficPolicy = cr.Spec.Sharding.Mongos.Expose.ExternalTrafficPolicy
+		} else {
+			spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
+		}
+
+		if cr.CompareVersion("1.19.0") < 0 {
+			spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
 		}
 		if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 			for i, port := range spec.Ports {
@@ -462,9 +467,13 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		}
 	case corev1.ServiceTypeLoadBalancer:
 		spec.Type = corev1.ServiceTypeLoadBalancer
-		spec.ExternalTrafficPolicy = "Cluster"
-		if cr.CompareVersion("1.19.0") >= 0 {
-			spec.ExternalTrafficPolicy = "Local"
+		if len(cr.Spec.Sharding.Mongos.Expose.ExternalTrafficPolicy) != 0 {
+			spec.ExternalTrafficPolicy = cr.Spec.Sharding.Mongos.Expose.ExternalTrafficPolicy
+		} else {
+			spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		}
+		if cr.CompareVersion("1.19.0") < 0 {
+			spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
 		}
 		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
 	default:
