@@ -116,11 +116,11 @@ create_infra $namespace
 
 deploy_minio
 
-desc 'create secrets and start client'
 cluster="some-name-rs0"
-kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets.yml
+apply_client $conf_dir/client.yml
 
 apply_s3_storage_secrets
 

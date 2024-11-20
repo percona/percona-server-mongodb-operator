@@ -19,11 +19,9 @@ create_infra "$namespace"
 
 deploy_minio
 
-desc 'create first PSMDB cluster'
-cluster="some-name"
-kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets.yml
+apply_client $conf_dir/client.yml
 
 apply_s3_storage_secrets
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
@@ -34,6 +32,8 @@ else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
+desc 'create first PSMDB cluster'
+cluster="some-name"
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3

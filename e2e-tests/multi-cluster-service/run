@@ -78,9 +78,8 @@ gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8
 wait_mcs_api
 
 create_infra "$namespace"
-desc 'create first PSMDB cluster'
-cluster="some-name"
 
+desc 'create secrets and start client'
 kubectl_bin apply -f $conf_dir/secrets.yml
 apply_client $conf_dir/client.yml
 
@@ -93,7 +92,9 @@ else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
-apply_cluster "$test_dir/conf/$cluster.yml"
+desc 'create first PSMDB cluster'
+cluster="some-name"
+apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"

@@ -61,11 +61,13 @@ apply_s3_storage_secrets
 
 desc 'Testing on not sharded cluster'
 
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets.yml
+apply_client $conf_dir/client_with_tls.yml
+
 echo "Creating PSMDB cluster"
 cluster="some-name"
-kubectl_bin apply -f "${conf_dir}/secrets.yml"
-apply_cluster "${test_dir}/conf/${cluster}.yml"
-kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+apply_cluster $test_dir/conf/$cluster.yml
 
 echo "check if all pods started"
 wait_for_running ${cluster}-rs0 3

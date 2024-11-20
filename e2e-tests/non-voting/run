@@ -42,7 +42,6 @@ main() {
 	kubectl_bin apply -f $conf_dir/secrets.yml
 	apply_client $conf_dir/client.yml
 
-
 	desc "check non-voting members"
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml"
 

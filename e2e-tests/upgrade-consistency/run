@@ -12,8 +12,8 @@ main() {
 	create_infra $namespace
 
 	desc 'create secrets and start client'
-	kubectl_bin apply -f "${conf_dir}/client.yml" \
-		-f "${conf_dir}/secrets.yml"
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
 
 	desc "create first PSMDB cluster 1.16.2 $CLUSTER"
 	apply_cluster "$test_dir/conf/${CLUSTER}-rs0.yml"

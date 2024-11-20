@@ -7,13 +7,12 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 
 create_infra "$namespace"
-cluster="some-name"
 
 desc 'create secrets and start client'
 kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
 apply_client $conf_dir/client.yml
 
-
+cluster="some-name"
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
 wait_for_running "$cluster-rs0" 3

@@ -151,7 +151,6 @@ main() {
 	deploy_openldap
 
 	desc 'create secrets and start client'
-	cluster="some-name"
 	kubectl_bin apply -f $conf_dir/secrets.yml
 	apply_client $conf_dir/client.yml
 

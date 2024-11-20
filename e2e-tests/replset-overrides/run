@@ -26,9 +26,9 @@ run_recovery_check() {
 }
 
 test_override_after_deploy() {
-	kubectl_bin apply \
-		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+	# kubectl_bin apply \
+	# 	-f ${conf_dir}/secrets_with_tls.yml \
+	# 	-f ${conf_dir}/minio-secret.yml
 
 	echo "creating PSMDB cluster: ${cluster}"
 	apply_cluster ${test_dir}/conf/${cluster}.yml
@@ -66,10 +66,6 @@ test_override_after_deploy() {
 }
 
 test_deploy_with_overrides() {
-	kubectl_bin apply \
-		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
-
 	echo "creating external services"
 	kubectl_bin apply -f ${test_dir}/conf/external-services.yml
 
@@ -96,7 +92,9 @@ test_deploy_with_overrides() {
 }
 
 main() {
-	create_infra ${namespace}
+	create_infra $namespace
+	kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
+	kubectl_bin apply -f $conf_dir/minio-secret.yml
 	apply_client $conf_dir/client.yml
 
 	deploy_minio

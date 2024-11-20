@@ -167,9 +167,9 @@ function main() {
 	deploy_minio
 
 	desc 'create secrets and start client'
-	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
-	kubectl_bin apply -f "${conf_dir}/client.yml" \
-		-f "${tmp_dir}/secrets.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" > $tmp_dir/secrets.yaml
+	kubectl_bin apply -f $tmp_dir/secrets.yaml
+	apply_client $conf_dir/client.yml
 
 	desc "create first PSMDB cluster $cluster"
 	local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"

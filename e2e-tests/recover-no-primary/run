@@ -6,12 +6,13 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-create_infra ${namespace}
+create_infra $namespace
+
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
+apply_client $conf_dir/client.yml
 
 cluster="some-name"
-kubectl_bin apply \
-	-f ${conf_dir}/secrets_with_tls.yml \
-	-f ${conf_dir}/client.yml
 
 function test_single_replset() {
 	apply_cluster ${test_dir}/conf/${cluster}.yml
