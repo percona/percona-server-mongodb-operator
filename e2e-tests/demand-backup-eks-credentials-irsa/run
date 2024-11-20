@@ -23,7 +23,7 @@ eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$e
 policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
-desc "delete role "
+desc "delete role"
 echo $role_name
 echo $policy_arn
 aws iam detach-role-policy --role-name "$role_name" --policy-arn "$policy_arn" || true
@@ -55,7 +55,7 @@ kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
-desc "create first PSMDB cluster $cluster"
+desc "create PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster.yml
 
 desc 'check if all 3 Pods started'
