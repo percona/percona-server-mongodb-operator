@@ -77,7 +77,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		if cr.CompareVersion("1.17.0") < 0 {
 			internalSysUsersSecret.Labels = nil
 		}
-		if cr.CompareVersion("1.18.0") >= 0 {
+		if cr.CompareVersion("1.19.0") >= 0 {
 			internalSysUsersSecret.Data = getInternalSecretData(&sysUsersSecretObj)
 		}
 		err = r.client.Create(ctx, internalSysUsersSecret)

@@ -868,7 +868,7 @@ get_mongo_primary() {
 
 compare_mongo_user() {
 	local uri="$1"
-	local user=$(echo $uri | cut -d : -f 1)
+	local user="$2"
 	local expected_result=${test_dir}/compare/$user.json
 
 	if [[ $IMAGE_MONGOD =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
@@ -1607,7 +1607,13 @@ wait_for_cluster_state() {
 	echo
 }
 
-function urlencode {
+urlencode() {
 	uri="$1"
 	echo -n "$uri" | jq -s -R -r @uri
+}
+
+getUserData() {
+	local secretName=$1
+	local dataKey=$2
+	urlencode "$(getSecretData "$secretName" "$dataKey")"
 }

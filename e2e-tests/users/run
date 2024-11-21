@@ -15,7 +15,7 @@ deploy_minio
 
 desc 'create secrets and start client'
 kubectl_bin apply -f "${conf_dir}/client.yml" \
-	-f "${conf_dir}/secrets.yml" \
+	-f "${test_dir}/conf/secrets.yml" \
 	-f "${conf_dir}/minio-secret.yml"
 
 cluster="some-name-rs0"
@@ -33,12 +33,6 @@ sleep 25
 psmdb="some-name"
 wait_cluster_consistency $psmdb
 sleep 15
-
-getUserData() {
-	local secretName=$1
-	local dataKey=$2
-	urlencode "$(getSecretData "$secretName" "$dataKey")"
-}
 
 user=$(getUserData "some-users" "MONGODB_DATABASE_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"

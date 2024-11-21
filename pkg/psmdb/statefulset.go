@@ -368,7 +368,7 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
 	}
-	if cr.CompareVersion("1.18.0") < 0 {
+	if cr.CompareVersion("1.19.0") < 0 {
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
