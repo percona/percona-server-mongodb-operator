@@ -87,16 +87,7 @@ sleep 55
 desc 'disable backups schedule'
 apply_cluster "$test_dir/conf/$cluster.yml"
 
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
-	backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
-	backup_name_azure=$(kubectl_bin get psmdb-backup | grep azure-blob | awk '{print$1}' | head -1)
-	wait_backup "$backup_name_aws"
-	wait_backup "$backup_name_gcp"
-	wait_backup "$backup_name_azure"
-fi
-
-backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
+backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print $1}' | head -1)
 wait_backup "$backup_name_minio"
 
 sleep 5
@@ -105,24 +96,32 @@ echo -n "checking backup count for every-min-minio..."
 check_backup_count every-min-minio 1
 echo "OK"
 
-echo -n "checking backup count for every-min-aws-s3..."
-check_backup_count every-min-aws-s3 1
-echo "OK"
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
+	backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
+	backup_name_azure=$(kubectl_bin get psmdb-backup | grep azure-blob | awk '{print$1}' | head -1)
+	wait_backup "$backup_name_aws"
+	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_azure"
 
-echo -n "checking backup count for every-min-gcp-cs..."
-check_backup_count every-min-gcp-cs 1
-echo "OK"
+	echo -n "checking backup count for every-min-aws-s3..."
+	check_backup_count every-min-aws-s3 1
+	echo "OK"
 
-echo -n "checking backup count for every-min-azure-blob..."
-check_backup_count every-min-azure-blob 1
-echo "OK"
+	echo -n "checking backup count for every-min-gcp-cs..."
+	check_backup_count every-min-gcp-cs 1
+	echo "OK"
+
+	echo -n "checking backup count for every-min-azure-blob..."
+	check_backup_count every-min-azure-blob 1
+	echo "OK"
+fi
 
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep "myApp.test.gz"
+
+aws_cli "s3 ls s3://${backup_dest_minio}/rs0/" | grep "myApp.test.gz"
+
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"

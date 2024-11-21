@@ -34,10 +34,12 @@ pvc-resize
 recover-no-primary
 replset-overrides
 scaling
+scheduled-backup
 security-context
 service-per-pod
 serviceless-external-nodes
 split-horizon
+storage
 tls-issue-cert-manager
 upgrade
 upgrade-consistency

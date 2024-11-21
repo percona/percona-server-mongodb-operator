@@ -30,15 +30,6 @@ logs_dir=$(realpath $test_dir/../logs || :)
 
 archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}')
 
-# if [[ "$ARCH" == "arm64" ]]; then
-# 	for arch in $archs; do
-# 		if [[ "$arch" != "arm64" ]]; then
-# 			echo "All nodes in the cluster must be arm64, because ARCH=$ARCH !"
-# 			exit 1
-# 		fi
-# 	done
-# fi
-
 first_arch=$(echo $archs | awk '{print $1}')
 
 if [[ "$first_arch" == "amd64" || "$first_arch" == "arm64" ]]; then
@@ -542,9 +533,23 @@ deploy_vault() {
 			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
 			--set server.image.repository="docker.io/hashicorp/vault"
 	else
-		retry 10 60 helm install $name hashicorp/vault \
-			--disable-openapi-validation \
-			--set dataStorage.enabled=false
+		if [[ "$ARCH" == "arm64" ]]; then
+			helm install vault-service hashicorp/vault \
+			    --disable-openapi-validation \
+				--set dataStorage.enabled=false \
+				--set server.tolerations[0].key=kubernetes.io/arch \
+				--set server.tolerations[0].operator=Equal \
+				--set server.tolerations[0].value=arm64 \
+				--set server.tolerations[0].effect=NoSchedule \
+				--set injector.tolerations[0].key=kubernetes.io/arch \
+				--set injector.tolerations[0].operator=Equal \
+				--set injector.tolerations[0].value=arm64 \
+				--set injector.tolerations[0].effect=NoSchedule
+		else
+			retry 10 60 helm install $name hashicorp/vault \
+				--disable-openapi-validation \
+				--set dataStorage.enabled=false
+		fi
 	fi
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
