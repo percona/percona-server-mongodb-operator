@@ -141,8 +141,10 @@ check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'secret without userAdmin'
-kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+kubectl_bin apply -f "${test_dir}/conf/secrets-2.yml"
 sleep 25
+wait_cluster_consistency $psmdb
+sleep 15
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 pass=$(getUserData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
