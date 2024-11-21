@@ -60,7 +60,7 @@ desc 'Testing on not sharded cluster'
 
 echo "Creating PSMDB cluster"
 cluster="some-name"
-kubectl_bin apply -f "${test_dir}/conf/${secrets}.yml"
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}.yml"
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 
