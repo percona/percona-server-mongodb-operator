@@ -25,7 +25,7 @@ main() {
 
 	deploy_cmctl
 
-	desc "create first PSMDB cluster 1.16.2 $CLUSTER"
+	desc "create first PSMDB cluster 1.17.0 $CLUSTER"
 	apply_cluster "$test_dir/conf/${CLUSTER}.yml"
 
 	desc 'check if Pod started'
@@ -52,14 +52,14 @@ main() {
 	compare_generation "3" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1162"
-	compare_kubectl service/${CLUSTER}-cfg "-1162"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1162"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1162"
+	compare_kubectl service/${CLUSTER}-rs0 "-1170"
+	compare_kubectl service/${CLUSTER}-cfg "-1170"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1170"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1170"
 
-	desc 'test 1.17.0'
+	desc 'test 1.18.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.17.0"}
+        "spec": {"crVersion":"1.18.0"}
     }'
 	# Wait for at least one reconciliation
 	sleep 20
@@ -81,14 +81,14 @@ main() {
 	compare_generation "5" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1170"
-	compare_kubectl service/${CLUSTER}-cfg "-1170"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1170"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1170"
+	compare_kubectl service/${CLUSTER}-rs0 "-1180"
+	compare_kubectl service/${CLUSTER}-cfg "-1180"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1180"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1180"
 
-	desc 'test 1.18.0'
+	desc 'test 1.19.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.18.0"}
+        "spec": {"crVersion":"1.19.0"}
     }'
 	# Wait for at least one reconciliation
 	sleep 20
@@ -110,10 +110,10 @@ main() {
 	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1180"
-	compare_kubectl service/${CLUSTER}-cfg "-1180"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1180"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1180"
+	compare_kubectl service/${CLUSTER}-rs0 "-1190"
+	compare_kubectl service/${CLUSTER}-cfg "-1190"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1190"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1190"
 
 	destroy "$namespace"
 
