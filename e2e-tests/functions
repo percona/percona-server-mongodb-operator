@@ -340,7 +340,7 @@ wait_restore() {
 	local cluster_name=$2
 	local target_state=${3:-"ready"}
 	local wait_cluster_consistency=${4:-1}
-	local wait_time=${5:-780}
+	local wait_time=${5:-1780}
 
 	set +o xtrace
 	retry=0
@@ -1616,4 +1616,55 @@ getUserData() {
 	local secretName=$1
 	local dataKey=$2
 	urlencode "$(getSecretData "$secretName" "$dataKey")"
+}
+
+get_latest_oplog_chunk_ts() {
+	local cluster=$1
+	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+}
+
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+}
+
+run_pitr_check() {
+	local backup=$1
+	local cluster=$2
+	local find_prefix=$3
+
+	wait_for_oplogs "${cluster}"
+	local target_time=$(format_date $(get_latest_oplog_chunk_ts ${cluster}))
+
+	log "dropping test collection"
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	log "checking pitr... backup: ${backup} target: ${target_time}"
+	cat $test_dir/conf/pitr.yml \
+		| yq eval ".metadata.name = \"restore-${backup}\"" \
+		| yq eval ".spec.backupName = \"${backup}\"" \
+		| yq eval ".spec.pitr.date = \"${target_time}\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "${backup}" "${cluster}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
+}
+
+wait_for_oplogs() {
+	local cluster1=$1
+
+	local backup_last_write=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+
+	local retries=0
+	local last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+	until [[ ${last_chunk} -gt ${backup_last_write} ]]; do
+		if [[ $retries -gt 30 ]]; then
+			log "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${backup_last_write}))"
+			exit 1
+		fi
+		last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+		retries=$((retries + 1))
+		log "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${backup_last_write}))"
+		sleep 10
+	done
 }

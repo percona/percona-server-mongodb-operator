@@ -10,7 +10,7 @@ data-sharded
 default-cr
 demand-backup
 demand-backup-fs
-demand-backup-eks-credentials
+demand-backup-eks-credentials-irsa
 demand-backup-physical
 demand-backup-physical-sharded
 demand-backup-sharded
