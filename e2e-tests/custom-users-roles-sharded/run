@@ -28,40 +28,40 @@ check_auth() {
 }
 
 get_user_cmd() {
-  local user="$1"
+	local user="$1"
 
-  cmd="(function() {
-    var user = db.getUser(${user});
-    var roles = user.roles;
-    roles.sort((a, b) => {
-      if (a.role < b.role) return -1;
-      if (a.role > b.role) return 1;
-      return 0;
-    });
-    user.roles = roles;
-    printjson(user);
-  })();"
+	cmd="(function() {
+	var user = db.getUser(${user});
+	var roles = user.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	user.roles = roles;
+	printjson(user);
+	})();"
 
-  echo "$cmd"
+	echo "$cmd"
 }
 
 
 get_role_cmd() {
-  local role="$1"
+	local role="$1"
 
-  cmd="(function() {
-    var role = db.getRole(${role}, {showPrivileges: true, showAuthenticationRestrictions: true});
-    var roles = role.roles;
-    roles.sort((a, b) => {
-      if (a.role < b.role) return -1;
-      if (a.role > b.role) return 1;
-      return 0;
-    });
-    role.roles = roles;
-    printjson(role);
-  })();"
+	cmd="(function() {
+	var role = db.getRole(${role}, {showPrivileges: true, showAuthenticationRestrictions: true});
+	var roles = role.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	role.roles = roles;
+	printjson(role);
+	})();"
 
-  echo "$cmd"
+	echo "$cmd"
 }
 
 test_dir=$(realpath $(dirname $0))
