@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sort"
 	"strings"
 	"sync"
@@ -134,6 +135,7 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
 		For(&api.PerconaServerMongoDB{}).
+		WithOptions(controller.Options{Reconciler: r}).
 		Named("psmdb-controller").
 		Complete(r)
 }

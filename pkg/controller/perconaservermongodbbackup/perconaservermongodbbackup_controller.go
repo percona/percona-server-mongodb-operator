@@ -4,9 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"strings"
 	"time"
 
+	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -20,13 +26,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
-	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -67,12 +66,20 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
+
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
+		Named("psmdbrestore-controller").
+		WithOptions(controller.Options{Reconciler: r}).
 		For(&psmdbv1.PerconaServerMongoDBBackup{}).
-		Named("psmdbbackup-controller").
-		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
-			mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBBackup{}, handler.OnlyControllerOwner()))).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(), mgr.GetRESTMapper(),
+				&psmdbv1.PerconaServerMongoDBBackup{},
+				handler.OnlyControllerOwner(),
+			),
+		).
 		Complete(r)
 }
 
