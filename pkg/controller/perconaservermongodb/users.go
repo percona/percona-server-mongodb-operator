@@ -140,7 +140,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		}
 	}
 
-	internalSysSecretObj.Data = getInternalSecretData(&sysUsersSecretObj)
+	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		internalSysSecretObj.Data = getInternalSecretData(&sysUsersSecretObj)
+	}
 	err = r.client.Update(ctx, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret")
