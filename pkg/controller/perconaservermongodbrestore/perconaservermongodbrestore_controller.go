@@ -2,7 +2,6 @@ package perconaservermongodbrestore
 
 import (
 	"context"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"strings"
 	"time"
 
@@ -60,7 +59,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
 		Named("psmdbrestore-controller").
-		WithOptions(controller.Options{Reconciler: r}).
 		For(&psmdbv1.PerconaServerMongoDBRestore{}).
 		Watches(
 			&corev1.Pod{},
