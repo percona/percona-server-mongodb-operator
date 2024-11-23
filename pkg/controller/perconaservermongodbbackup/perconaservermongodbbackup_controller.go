@@ -7,11 +7,6 @@ import (
 	"strings"
 	"time"
 
-	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
-	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
