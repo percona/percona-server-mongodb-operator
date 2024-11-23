@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -120,24 +121,43 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
-	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", errors.Wrapf(err, "open %s", tlsPemFile)
+	tlsPem := append(tlsKey, tlsCert...)
+
+	isTlsPemFileOutdated := true
+	_, err = os.Stat(tlsPemFile)
+	if !os.IsNotExist(err) {
+		// File with tls pem exists, read and compare data from file with secret
+		tlsPemFileData, err := os.ReadFile(tlsPemFile)
+		if err == nil && bytes.Equal(tlsPem, tlsPemFileData) {
+			isTlsPemFileOutdated = false
+		}
 	}
-	defer f.Close()
-	if _, err := f.Write(append(tlsKey, tlsCert...)); err != nil {
-		return "", errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
+
+	if isTlsPemFileOutdated {
+		err = os.WriteFile(tlsPemFile, tlsPem, 0o600)
+		if err != nil {
+			return "", errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
+		}
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
 	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
-	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", errors.Wrapf(err, "open %s", caCertFile)
+
+	isCaCertFileOutdated := true
+	_, err = os.Stat(caCertFile)
+	if !os.IsNotExist(err) {
+		// File with ca cert exists, read and compare data from file with secret
+		caCertFileData, err := os.ReadFile(caCertFile)
+		if err == nil && bytes.Equal(caCert, caCertFileData) {
+			isCaCertFileOutdated = false
+		}
 	}
-	defer f.Close()
-	if _, err := f.Write(caCert); err != nil {
-		return "", errors.Wrapf(err, "write CA certificate to %s", caCertFile)
+
+	if isCaCertFileOutdated {
+		err = os.WriteFile(caCertFile, caCert, 0o600)
+		if err != nil {
+			return "", errors.Wrapf(err, "write CA certificate to %s", caCertFile)
+		}
 	}
 
 	murl += fmt.Sprintf(
