@@ -33,8 +33,47 @@ function main() {
 	simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
 
 	desc 'initiate migration from replicaset to sharded cluster'
-	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"add","path":"/spec/sharding","value":{"configsvrReplSet":{"size":'${CLUSTER_SIZE}',"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},"enabled":true,"mongos":{"size":1}}}]'
+
+	kubectl patch psmdb/some-name --type json '-p=[{
+		"op": "add",
+		"path": "/spec/sharding",
+		"value": {
+		"configsvrReplSet": {
+			"size": 3,
+			"volumeSpec": {
+			"persistentVolumeClaim": {
+				"resources": {
+				"requests": {
+					"storage": "3Gi"
+				}
+				}
+			}
+			},
+			"tolerations": [
+			{
+				"key": "kubernetes.io/arch",
+				"operator": "Equal",
+				"value": "arm64",
+				"effect": "NoSchedule"
+			}
+			]
+		},
+		"enabled": true,
+		"mongos": {
+			"size": 1,
+			"tolerations": [
+			{
+				"key": "kubernetes.io/arch",
+				"operator": "Equal",
+				"value": "arm64",
+				"effect": "NoSchedule"
+			}
+			]
+		}
+		}
+	}]'
 	sleep 10
+
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}"

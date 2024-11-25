@@ -109,8 +109,7 @@ create_namespace $replica_namespace 0
 deploy_operator
 
 desc 'start client'
-kubectl_bin apply \
-	-f "$conf_dir/client.yml"
+apply_client $conf_dir/client.yml
 
 desc "copy secrets from main to replica namespace and create all of them"
 kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \

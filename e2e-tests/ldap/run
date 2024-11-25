@@ -12,7 +12,11 @@ deploy_openldap() {
 			select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.add[0]="NET_BIND_SERVICE"' "$test_dir/conf/openldap.yaml" \
 			| kubectl_bin apply -f -
 	else
-		kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+		if [[ "$ARCH" == "arm64" ]]; then
+			yq eval '(select(.kind == "Deployment") | .spec.template.spec.tolerations) += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $test_dir/conf/openldap.yaml | kubectl_bin apply -f -
+		else
+			kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+		fi
 	fi
 
 	kubectl rollout status deployment/openldap --timeout=120s

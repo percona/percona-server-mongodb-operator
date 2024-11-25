@@ -120,7 +120,16 @@ fi
 desc 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 
-aws_cli "s3 ls s3://${backup_dest_minio}/rs0/" | grep "myApp.test.gz"
+retry=0
+until aws_cli "s3 ls s3://$backup_dest_minio/rs0/" | grep "myApp.test.gz"; do
+	if [[ $retry -ge 10 ]]; then
+		echo "Max retry count $retry reached. File myApp.test.gz wasn't found on s3://$backup_dest_minio/rs0/"
+		exit 1
+	fi
+	((retry += 1))
+	echo -n .
+	sleep 5
+done
 
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"

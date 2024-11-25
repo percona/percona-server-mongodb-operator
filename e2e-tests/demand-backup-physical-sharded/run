@@ -70,8 +70,8 @@ desc 'create secrets and start client'
 kubectl_bin apply -f $conf_dir/secrets.yml
 apply_client $conf_dir/client_with_tls.yml
 
-echo "Creating PSMDB cluster"
 cluster="some-name"
+desc "create first PSMDB cluster $cluster"
 apply_cluster $test_dir/conf/$cluster-sharded.yml
 
 echo "check if all pods started"

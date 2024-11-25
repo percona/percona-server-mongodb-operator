@@ -33,9 +33,11 @@ pitr-physical
 pvc-resize
 recover-no-primary
 replset-overrides
+rs-shard-migration
 scaling
 scheduled-backup
 security-context
+self-healing-chaos
 service-per-pod
 serviceless-external-nodes
 split-horizon
