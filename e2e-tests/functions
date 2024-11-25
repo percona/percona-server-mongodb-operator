@@ -28,22 +28,22 @@ conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs || :)
 
-archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}')
+if archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}'); then
+	first_arch=$(echo $archs | awk '{print $1}')
 
-first_arch=$(echo $archs | awk '{print $1}')
-
-if [[ "$first_arch" == "amd64" || "$first_arch" == "arm64" ]]; then
-	for arch in $archs; do
-		if [[ "$arch" != "$first_arch" ]]; then
-			echo "All nodes in the cluster must be equal to the 1-st one: $first_arch !"
-			exit 1
-		fi
-	done
-	ARCH="$first_arch"
-	echo "================================== Using ARCH=$ARCH =================================="
-else
-	echo "Unsupported architecture: $first_arch"
-	exit 1
+	if [[ "$first_arch" == "amd64" || "$first_arch" == "arm64" ]]; then
+		for arch in $archs; do
+			if [[ "$arch" != "$first_arch" ]]; then
+				echo "All nodes in the cluster must be equal to the 1-st one: $first_arch !"
+				exit 1
+			fi
+		done
+		ARCH="$first_arch"
+		echo "================================== Using ARCH=$ARCH =================================="
+	else
+		echo "Unsupported architecture: $first_arch"
+		exit 1
+	fi
 fi
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
