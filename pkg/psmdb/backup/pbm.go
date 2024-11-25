@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -31,6 +29,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/resync"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -41,7 +40,6 @@ import (
 )
 
 const (
-	agentContainerName               = "backup-agent"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
@@ -380,7 +378,12 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 	case api.BackupStorageFilesystem:
-		return conf, errors.New("filesystem backup storage not supported yet, skipping storage name")
+		conf.Storage = config.StorageConf{
+			Type: storage.Filesystem,
+			Filesystem: &fs.Config{
+				Path: stg.Filesystem.Path,
+			},
+		}
 	default:
 		return conf, errors.New("unsupported backup storage type")
 	}
@@ -389,32 +392,24 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 }
 
 func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+	if cfg.Storage.Type == storage.Filesystem {
+		return nil
+	}
+
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
-	backupName := bcp.Status.PBMname
 	stg, err := util.StorageFromConfig(&cfg.Storage, e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
+
+	backupName := bcp.Status.PBMname
 	m, err := restore.GetMetaFromStore(stg, backupName)
 	if err != nil {
 		return errors.Wrap(err, "get backup metadata from storage")
 	}
-	switch bcp.Status.Type {
-	case "", defs.LogicalBackup:
-		if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
-			return errors.Wrap(err, "check backup files")
-		}
-	case defs.PhysicalBackup:
-		for _, rs := range m.Replsets {
-			f := path.Join(m.Name, rs.Name)
-			files, err := stg.List(f, "")
-			if err != nil {
-				return errors.Wrapf(err, "failed to list backup files at %s", f)
-			}
-			if len(files) == 0 {
-				return errors.Wrap(err, "no physical backup files")
-			}
-		}
+
+	if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
+		return errors.Wrap(err, "check backup files")
 	}
 
 	return nil
@@ -644,7 +639,7 @@ func (b *pbmC) Node(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return strings.Split(lock.Node, ".")[0], nil
+	return lock.Node, nil
 }
 
 func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error) {

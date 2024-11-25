@@ -153,15 +153,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, nil
 	}
 
-	bcp, err := r.getBackup(ctx, cr)
-	if err != nil {
-		return rr, errors.Wrap(err, "get backup")
-	}
-
 	cluster := new(psmdbv1.PerconaServerMongoDB)
 	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
+	}
+
+	if err = cluster.CanRestore(ctx); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "can cluster restore")
+	}
+
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return rr, errors.Wrap(err, "get backup")
 	}
 
 	var svr *version.ServerVersion
@@ -220,18 +224,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaSer
 	}
 	var azure psmdbv1.BackupStorageAzureSpec
 	var s3 psmdbv1.BackupStorageS3Spec
-	storageType := psmdbv1.BackupStorageS3
+	var fs psmdbv1.BackupStorageFilesystemSpec
+	var storageType psmdbv1.BackupStorageType
 
-	if cr.Spec.BackupSource.Azure != nil {
-		storageType = psmdbv1.BackupStorageAzure
+	switch {
+	case cr.Spec.BackupSource.Azure != nil:
 		azure = *cr.Spec.BackupSource.Azure
-	} else if cr.Spec.BackupSource.S3 != nil {
+		storageType = psmdbv1.BackupStorageAzure
+	case cr.Spec.BackupSource.S3 != nil:
 		s3 = *cr.Spec.BackupSource.S3
+		storageType = psmdbv1.BackupStorageS3
+	case cr.Spec.BackupSource.Filesystem != nil:
+		fs = *cr.Spec.BackupSource.Filesystem
+		storageType = psmdbv1.BackupStorageFilesystem
 	}
+
 	return psmdbv1.BackupStorageSpec{
-		Type:  storageType,
-		S3:    s3,
-		Azure: azure,
+		Type:       storageType,
+		S3:         s3,
+		Azure:      azure,
+		Filesystem: fs,
 	}, nil
 }
 
@@ -256,6 +268,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				StorageName: cr.Spec.StorageName,
 				S3:          cr.Spec.BackupSource.S3,
 				Azure:       cr.Spec.BackupSource.Azure,
+				Filesystem:  cr.Spec.BackupSource.Filesystem,
 				PBMname:     backupName,
 			},
 		}, nil

@@ -94,6 +94,13 @@ spec:
                 type: string
               error:
                 type: string
+              filesystem:
+                properties:
+                  path:
+                    type: string
+                required:
+                - path
+                type: object
               lastTransition:
                 format: date-time
                 type: string
@@ -241,6 +248,13 @@ spec:
                     type: string
                   error:
                     type: string
+                  filesystem:
+                    properties:
+                      path:
+                        type: string
+                    required:
+                    - path
+                    type: object
                   lastTransition:
                     format: date-time
                     type: string
@@ -990,6 +1004,13 @@ spec:
                           required:
                           - credentialsSecret
                           type: object
+                        filesystem:
+                          properties:
+                            path:
+                              type: string
+                          required:
+                          - path
+                          type: object
                         s3:
                           properties:
                             bucket:
@@ -1067,6 +1088,28 @@ spec:
                           type: string
                       required:
                       - enabled
+                      - name
+                      type: object
+                    type: array
+                  volumeMounts:
+                    items:
+                      properties:
+                        mountPath:
+                          type: string
+                        mountPropagation:
+                          type: string
+                        name:
+                          type: string
+                        readOnly:
+                          type: boolean
+                        recursiveReadOnly:
+                          type: string
+                        subPath:
+                          type: string
+                        subPathExpr:
+                          type: string
+                      required:
+                      - mountPath
                       - name
                       type: object
                     type: array
@@ -7062,6 +7105,8 @@ spec:
                             type: object
                           host:
                             type: string
+                          priority:
+                            type: integer
                           tags:
                             additionalProperties:
                               type: string
@@ -14820,6 +14865,8 @@ spec:
                               type: object
                             host:
                               type: string
+                            priority:
+                              type: integer
                             tags:
                               additionalProperties:
                                 type: string

@@ -410,7 +410,7 @@ func (m *MultiAZ) WithSidecarVolumes(log logr.Logger, volumes []corev1.Volume) [
 
 	for _, v := range m.SidecarVolumes {
 		if _, ok := names[v.Name]; ok {
-			log.Info("Wrong sidecar volume name, it is skipped", "volumeName", v.Name)
+			log.Error(errors.New("Wrong sidecar volume name, it is skipped"), "volumeName", v.Name)
 			continue
 		}
 
@@ -431,7 +431,7 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 
 	for _, p := range m.SidecarPVCs {
 		if _, ok := names[p.Name]; ok {
-			log.Info("Wrong sidecar PVC name, it is skipped", "PVCName", p.Name)
+			log.Error(errors.New("Wrong sidecar PVC name, it is skipped"), "PVCName", p.Name)
 			continue
 		}
 
@@ -627,6 +627,7 @@ type ReplsetOverride struct {
 	Host     string            `json:"host,omitempty"`
 	Horizons map[string]string `json:"horizons,omitempty"`
 	Tags     map[string]string `json:"tags,omitempty"`
+	Priority *int              `json:"priority,omitempty"`
 }
 
 type HorizonsSpec map[string]map[string]string
@@ -920,6 +921,10 @@ type BackupStorageAzureSpec struct {
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
+type BackupStorageFilesystemSpec struct {
+	Path string `json:"path"`
+}
+
 type BackupStorageType string
 
 const (
@@ -929,9 +934,10 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type  BackupStorageType      `json:"type"`
-	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
-	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
+	Type       BackupStorageType           `json:"type"`
+	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
 type PITRSpec struct {
@@ -986,6 +992,7 @@ type BackupSpec struct {
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
+	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {
@@ -1151,11 +1158,8 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 }
 
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
-	logf.FromContext(ctx).V(1).Info("checking if backup is allowed", "backup", cr.Name)
-
-	if cr.Spec.Unmanaged {
-		return errors.Errorf("backups are not allowed on unmanaged clusters")
-	}
+	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
+	log.Info("checking if backup is allowed")
 
 	if cr.Status.State == AppStateReady {
 		return nil
@@ -1173,6 +1177,17 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 		if rs.Ready < int32(1) {
 			return errors.New(rsName + " has no ready nodes")
 		}
+	}
+
+	return nil
+}
+
+func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
+	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
+	log.Info("checking if restore is allowed")
+
+	if cr.Spec.Unmanaged {
+		return errors.New("can't run restore in an unmanaged cluster")
 	}
 
 	return nil

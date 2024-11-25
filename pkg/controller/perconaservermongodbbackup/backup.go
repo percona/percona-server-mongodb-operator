@@ -124,6 +124,9 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 				status.Destination = "azure://" + status.Destination
 			}
 		}
+	case api.BackupStorageFilesystem:
+		status.Filesystem = &stg.Filesystem
+		status.Destination = strings.TrimSuffix(stg.Filesystem.Path, "/")
 	}
 	status.Destination += "/" + status.PBMname
 
@@ -196,11 +199,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
 	pods := make(map[string]string)
 	for _, rs := range replsets {
-		spl := strings.Split(rs.Node, ".")
-		if len(spl) == 0 {
-			continue
-		}
-		pods[rs.Name] = spl[0]
+		pods[rs.Name] = rs.Node
 	}
 	return pods
 }
