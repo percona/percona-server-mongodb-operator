@@ -157,6 +157,11 @@ if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
 	else
 		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 	fi
+	echo "Enabling PVC resize after recreating PSMDB cluster ${cluster} "
+	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/enableVolumeExpansion", "value":true }]'
+	sleep 10
+
+	wait_cluster_consistency "$cluster"
 fi
 
 desc 'create resourcequota'

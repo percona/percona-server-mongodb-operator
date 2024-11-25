@@ -2,85 +2,74 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 1
   labels:
-    app.kubernetes.io/component: cfg
-    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: mydb
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: some-name-cfg
+    app.kubernetes.io/replset: rs0
+  name: mydb-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: some-name
+      name: mydb
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 3
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
-      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: mydb
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: some-name-cfg
+      app.kubernetes.io/replset: rs0
+  serviceName: mydb-rs0
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: cfg
-        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: mydb
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs0
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: cfg
-                  app.kubernetes.io/instance: some-name
-                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
-                  app.kubernetes.io/name: percona-server-mongodb
-                  app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: cfg
-              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=cfg
+            - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
-            - --clusterAuthMode=x509
-            - --tlsMode=preferTLS
-            - --configsvr
+            - --clusterAuthMode=keyFile
+            - --keyFile=/etc/mongodb-secrets/mongodb-key
+            - --tlsMode=allowTLS
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
             - --quiet
           command:
             - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: some-name
+              value: mydb
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: cfg
+              value: rs0
           envFrom:
             - secretRef:
-                name: internal-some-name-users
+                name: internal-mydb-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -115,7 +104,7 @@ spec:
                 - readiness
                 - --component
                 - mongod
-            failureThreshold: 3
+            failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
@@ -135,7 +124,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
+              name: mydb-custom-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -143,10 +132,12 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
+              name: mydb-custom-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
@@ -178,34 +169,41 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: some-name-mongodb-keyfile
+        - name: mydb-custom-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-keyfile
+            secretName: mydb-custom-mongodb-keyfile
         - emptyDir: {}
           name: bin
-        - name: some-name-mongodb-encryption-key
+        - configMap:
+            defaultMode: 420
+            name: mydb-rs0-mongod
+            optional: true
+          name: config
+        - name: mydb-custom-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-encryption-key
+            secretName: mydb-custom-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-ssl
+            secretName: mydb-custom-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: some-name-ssl-internal
+            secretName: mydb-custom-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-some-name-users
+            secretName: internal-mydb-users
   updateStrategy:
-    type: OnDelete
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
