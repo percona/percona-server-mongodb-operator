@@ -6,7 +6,7 @@ spec:
   crVersion: 1.16.0
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.0.4
+    image:
     pitr:
       enabled: false
     serviceAccountName: percona-server-mongodb-operator
@@ -33,7 +33,7 @@ spec:
           bucket: operator-testing
           prefix: psmdb
           endpointUrl: https://storage.googleapis.com
-  image: percona/percona-server-mongodb:4.4.10-11
+  image:
   imagePullPolicy: Always
   pmm:
     enabled: false
