@@ -1,0 +1,111 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+deploy_nfs_server() {
+	kubectl_bin create namespace storage
+	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yaml
+	sleep 5 # wait for NFS server pod to be created
+	local nfsPod=$(kubectl_bin get pod -n storage -l app=nfs-server -o jsonpath={.items[].metadata.name})
+
+	until [[ "$(kubectl_bin get pod ${nfsPod} -n storage -o jsonpath={.status.phase})" == "Running" ]]; do
+		log "Waiting for ${nfsPod} to start Running"
+		sleep 1
+	done
+
+	kubectl_bin exec -n storage ${nfsPod} -- mkdir /exports/psmdb-${cluster}-rs0
+	kubectl_bin exec -n storage ${nfsPod} -- chown 1001:1001 /exports/psmdb-${cluster}-rs0
+}
+
+run_recovery_check() {
+	local backup=$1
+	local cluster=$2
+	local find_prefix_before=$3
+	local find_prefix_after=$4
+
+	write_data 100501 "${find_prefix_before}"
+	run_restore "${backup}"
+	wait_restore "${backup}" "${cluster}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix_after}" ".svc.cluster.local" "myApp" "test"
+}
+
+write_data() {
+	local x=$1
+	local find_prefix=$2
+
+	run_mongo \
+		"use myApp\n db.test.insert({ x: ${x} })" \
+		"myApp:myPass@${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
+}
+
+
+cluster="some-name"
+
+create_infra ${namespace}
+
+kubectl_bin delete ns storage || :
+
+log "deploying NFS server"
+deploy_nfs_server
+
+log 'creating secrets and start client'
+kubectl_bin apply \
+	-f "${conf_dir}/secrets.yml" \
+	-f "${conf_dir}/client.yml"
+
+log "creating PSMDB cluster ${cluster}"
+apply_cluster ${test_dir}/conf/${cluster}.yaml
+
+log 'wait for all 3 pods to start'
+wait_for_running ${cluster}-rs0 3
+
+log 'checking if statefulset created with expected config'
+compare_kubectl statefulset/${cluster}-rs0
+
+log 'creating user'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 2
+
+log 'write initial data'
+write_data 100500 ""
+
+wait_backup_agent ${cluster}-rs0-0
+wait_backup_agent ${cluster}-rs0-1
+wait_backup_agent ${cluster}-rs0-2
+
+desc "CASE 1: Logical backup and restore"
+backup_name="backup-nfs-logical"
+run_backup "nfs" "${backup_name}" "logical"
+wait_backup "${backup_name}"
+run_recovery_check "${backup_name}" "${cluster}" "-2nd" ""
+
+desc "CASE 2: Logical backup and PiTR"
+backup_name="backup-nfs-logical-pitr"
+run_backup "nfs" "${backup_name}" "logical"
+wait_backup "${backup_name}"
+write_data 100502 "-3rd"
+run_pitr_check "${backup_name}" "${cluster}" "-3rd"
+
+desc "CASE 3: Physical backup and restore"
+backup_name="backup-nfs-physical"
+run_backup "nfs" "${backup_name}" "physical"
+wait_backup "${backup_name}"
+run_recovery_check "${backup_name}" "${cluster}" "-4th" "-3rd"
+
+desc "CASE 4: Physical backup and PiTR"
+backup_name="backup-nfs-physical-pitr"
+run_backup "nfs" "${backup_name}" "physical"
+wait_backup "${backup_name}"
+write_data 100503 "-5th"
+run_pitr_check "${backup_name}" "${cluster}" "-5th"
+
+destroy $namespace
+
+desc 'test passed'

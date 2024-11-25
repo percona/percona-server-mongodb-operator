@@ -83,7 +83,7 @@ spec:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: percona/percona-server-mongodb:7.0.14-8
+        image: perconalab/percona-server-mongodb-operator:main-mongod7.0
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -154,6 +154,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
+        image: perconalab/percona-server-mongodb-operator:main
         imagePullPolicy: Always
         name: mongo-init
         resources:
