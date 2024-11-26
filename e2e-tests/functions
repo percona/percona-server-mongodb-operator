@@ -1041,7 +1041,6 @@ deploy_cert_manager() {
 		helm install cert-manager \
 		--namespace cert-manager \
 		--version v${CERT_MANAGER_VER} \
-		--no-hooks \
 		jetstack/cert-manager
 	fi
 
