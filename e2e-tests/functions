@@ -1596,11 +1596,11 @@ renew_certificate() {
 }
 
 deploy_cmctl() {
-	local temp_cr="$(mktemp)"
+	local service_account="cmctl"
 
-	$sed -e "s/percona-server-mongodb-operator/cmctl/g" "${src_dir}/deploy/rbac.yaml" \
-		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' > $temp_cr
-
+	$sed -e "s/percona-server-mongodb-operator/$service_account/g" "${src_dir}/deploy/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
+		| kubectl_bin apply -f -
 	kubectl_bin apply -f "$conf_dir/cmctl.yml"
 }
 
