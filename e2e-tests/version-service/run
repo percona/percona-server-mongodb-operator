@@ -11,12 +11,12 @@ function check_telemetry_transfer() {
 	local cr_vs_uri=${1}
 	local cr_vs_channel=${2:-"disabled"}
 	local telemetry_state=${3:-"enabled"}
+	local cluster="minimal-cluster"
 
 	desc 'create secrets and start client'
 	apply_client $conf_dir/client.yml
 	yq eval '.metadata.name = "'$cluster'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
 
-	cluster="minimal-cluster"
 	desc "create PSMDB minimal cluster $cluster"
 	yq eval '
 		.spec.upgradeOptions.versionServiceEndpoint = "'${cr_vs_uri}'" |
