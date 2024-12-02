@@ -108,10 +108,10 @@ type SecretKeySelector struct {
 }
 
 type User struct {
-	Name              string            `json:"name"`
-	DB                string            `json:"db,omitempty"`
-	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []UserRole        `json:"roles"`
+	Name              string             `json:"name"`
+	DB                string             `json:"db,omitempty"`
+	PasswordSecretRef *SecretKeySelector `json:"passwordSecretRef,omitempty"`
+	Roles             []UserRole         `json:"roles"`
 }
 
 func (u *User) UserID() string {
