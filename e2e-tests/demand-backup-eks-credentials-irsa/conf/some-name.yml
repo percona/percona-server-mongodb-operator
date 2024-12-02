@@ -3,25 +3,39 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.17.0
   #platform: openshift
   image:
   imagePullPolicy: Always
-  initImage: -init
-  allowUnsafeConfigurations: false
   backup:
-    enabled: false
-    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    pitr:
+      compressionLevel: 6
+      compressionType: gzip
+      enabled: true
+      oplogOnly: false
+      oplogSpanMin: 1
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb-demand-backup-eks-irsa
+    tasks:
+    - name: weekly
+      enabled: true
+      schedule: "0 0 * * 0"
+      compressionType: gzip
+      storageName: aws-s3
   replsets:
   - name: rs0
-    # readinessDelaySec: 40
-    # livenessDelaySec: 120
     affinity:
       antiAffinityTopologyKey: none
     resources:
       limits:
         cpu: 500m
-        memory: 0.5G
+        memory: 1G
       requests:
         cpu: 100m
         memory: 0.1G
@@ -36,6 +50,7 @@ spec:
         mode: slowOp
         slowOpThresholdMs: 100
       security:
+        enableEncryption: true
         redactClientLogData: false
       setParameter:
         ttlMonitorSleepSecs: 60

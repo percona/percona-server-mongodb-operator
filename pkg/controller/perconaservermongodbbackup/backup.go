@@ -81,6 +81,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	if err != nil {
 		return status, err
 	}
+	status.State = api.BackupStateRequested
 
 	status = api.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,

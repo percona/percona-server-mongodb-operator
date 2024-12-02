@@ -1,0 +1,122 @@
+switched to db admin
+{
+	"_id" : "admin.role-one",
+	"role" : "role-one",
+	"db" : "admin",
+	"privileges" : [
+		{
+			"resource" : {
+				"cluster" : true
+			},
+			"actions" : [
+				"addShard"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"insert",
+				"remove",
+				"update"
+			]
+		}
+	],
+	"roles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"authenticationRestrictions" : [
+		[
+			{
+				"clientSource" : [
+					"127.0.0.1"
+				],
+				"serverAddress" : [
+					"127.0.0.1"
+				]
+			}
+		]
+	],
+	"inheritedRoles" : [
+		{
+			"role" : "read",
+			"db" : "admin"
+		}
+	],
+	"inheritedPrivileges" : [
+		{
+			"resource" : {
+				"cluster" : true
+			},
+			"actions" : [
+				"addShard"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "config",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"insert",
+				"remove",
+				"update"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : ""
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"planCacheRead"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "admin",
+				"collection" : "system.js"
+			},
+			"actions" : [
+				"changeStream",
+				"collStats",
+				"dbHash",
+				"dbStats",
+				"find",
+				"killCursors",
+				"listCollections",
+				"listIndexes",
+				"planCacheRead"
+			]
+		}
+	],
+	"inheritedAuthenticationRestrictions" : [
+		[
+			{
+				"clientSource" : [
+					"127.0.0.1"
+				],
+				"serverAddress" : [
+					"127.0.0.1"
+				]
+			}
+		]
+	],
+	"isBuiltin" : false
+}
+bye
