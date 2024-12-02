@@ -31,6 +31,43 @@ check_auth() {
 	fi
 }
 
+get_user_cmd() {
+	local user="$1"
+
+	cmd="(function() {
+	var user = db.getUser(${user});
+	var roles = user.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	user.roles = roles;
+	printjson(user);
+	})();"
+
+	echo "$cmd"
+}
+
+
+get_role_cmd() {
+	local role="$1"
+
+	cmd="(function() {
+	var role = db.getRole(${role}, {showPrivileges: true, showAuthenticationRestrictions: true});
+	var roles = role.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	role.roles = roles;
+	printjson(role);
+	})();"
+
+	echo "$cmd"
+}
+
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
@@ -75,8 +112,17 @@ desc 'check user created on cluster creation'
 
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
-compare 'admin' 'db.getUser("user-one")' "$mongosUri" "user-one"
+compare 'admin' "$(get_user_cmd \"user-one\")" "$mongosUri" "user-one"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
+
+generatedUserSecret="$cluster-custom-user-secret"
+generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
+compare 'admin' "$(get_user_cmd \"user-gen\")" "$mongosUri" "user-gen"
+check_auth "user-gen:$generatedPass@$cluster-mongos.$namespace"
+
+# Only check if $external.user-external user exists, as the password is not known
+# since we don't have a external provider set in this test
+compare '$external' "$(get_user_cmd \"user-external\")" "$mongosUri" "user-external"
 
 desc 'delete initial user from CR and create a new one'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -97,7 +143,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two"
 
 userTwo="user-two"
 userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
@@ -131,7 +177,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 desc 'check user roles update from DB'
 
@@ -139,14 +185,14 @@ run_mongos \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
 	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 desc 'check user recreated after deleted from DB'
 run_mongos \
 	'use admin\n db.dropUser("user-two")' \
 	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 desc 'check new user created after updated user name via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -166,8 +212,8 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
-compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-admin-db"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 # user-three and user-two should be in the DB
 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
@@ -191,8 +237,8 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'newDb' 'db.getUser("user-three")' "$mongosUri" "user-three-newDb-db"
-compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
+compare 'newDb' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-newDb-db"
+compare 'admin' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-admin-db"
 
 desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -210,21 +256,19 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getUser("user-four")' "$mongosUri" "user-four"
+compare 'admin' "$(get_user_cmd \"user-four\")" "$mongosUri" "user-four"
 
 # ======================== Roles ========================
 
 desc 'check user role on cluster initialization'
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-one\")" "$mongosUri" "role-one"
 
 desc 'check role recreated after deleted from DB'
 run_mongos \
 	'use admin\n db.dropRole("role-one")' \
 	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-one\" )" "$mongosUri" "role-one"
 
 desc 'delete initial role from CR and create a new one'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -255,10 +299,8 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-one"
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-two"
+compare 'admin' "$(get_role_cmd \"role-one\" )" "$mongosUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-two\" )" "$mongosUri" "role-two"
 
 desc 'check role update from CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -282,16 +324,14 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-two-updated"
+compare 'admin' "$(get_role_cmd \"role-two\" )" "$mongosUri" "role-two-updated"
 
 desc 'check role update from DB'
 run_mongos \
 	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
 	"$mongosUri"
 sleep 15
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-two-updated"
+compare 'admin' "$(get_role_cmd \"role-two\" )" "$mongosUri" "role-two-updated"
 
 desc 'check new role created after updated role name via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -315,8 +355,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-three"
+compare 'admin' "$(get_role_cmd \"role-three\" )" "$mongosUri" "role-three"
 
 desc 'check creating multiple roles and the users in a single CR apply'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -433,12 +472,10 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 			]
 	}}'
 wait_for_running $cluster-rs0 3
-compare 'testAdmin1' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-four"
-compare 'testAdmin2' 'db.getRole("role-five", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongosUri" "role-five"
-compare 'testAdmin' 'db.getUser("user-five")' "$mongosUri" "user-five"
-compare 'testAdmin' 'db.getUser("user-six")' "$mongosUri" "user-six"
+compare 'testAdmin1' "$(get_role_cmd \"role-four\" )" "$mongosUri" "role-four"
+compare 'testAdmin2' "$(get_role_cmd \"role-five\" )" "$mongosUri" "role-five"
+compare 'testAdmin' "$(get_user_cmd \"user-five\")" "$mongosUri" "user-five"
+compare 'testAdmin' "$(get_user_cmd \"user-six\")" "$mongosUri" "user-six"
 
 destroy $namespace
 
