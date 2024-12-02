@@ -1,7 +1,7 @@
 switched to db admin
 {
-	"_id" : "admin.user-two",
-	"user" : "user-two",
+	"_id" : "admin.user-gen",
+	"user" : "user-gen",
 	"db" : "admin",
 	"roles" : [
 		{
