@@ -303,11 +303,16 @@ func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role,
 func (client *mongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error {
 	resp := OKResponse{}
 
-	res := client.Database(db).RunCommand(ctx, bson.D{
+	d := bson.D{
 		{Key: "createUser", Value: user},
-		{Key: "pwd", Value: pwd},
 		{Key: "roles", Value: roles},
-	})
+	}
+
+	if db != "$external" {
+		d = append(d, bson.E{Key: "pwd", Value: pwd})
+	}
+
+	res := client.Database(db).RunCommand(ctx, d)
 	if res.Err() != nil {
 		return errors.Wrap(res.Err(), "failed to create user")
 	}
