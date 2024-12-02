@@ -160,6 +160,7 @@ func TestConnectionLeaks(t *testing.T) {
 			r := buildFakeClient(obj...)
 			r.mongoClientProvider = &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount}
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			r.crons = NewCronRegistry()
 
 			g, gCtx := errgroup.WithContext(ctx)
 			gCtx, cancel := context.WithCancel(gCtx)
