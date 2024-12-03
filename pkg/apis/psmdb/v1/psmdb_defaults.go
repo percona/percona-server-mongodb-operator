@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 
@@ -57,7 +59,9 @@ const (
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
-func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
+func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform version.Platform) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Replsets == nil {
 		return errors.New("at least one replica set should be specified")
 	}

@@ -20,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 )
@@ -109,7 +110,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 			return
 		}
 
-		err = localCr.CheckNSetDefaults(r.serverVersion.Platform, log)
+		err = localCr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
 		if err != nil {
 			log.Error(err, "failed to set defaults for CR")
 			return
