@@ -115,10 +115,9 @@ fi
 
 create_infra "${namespace}"
 
-desc 'create secrets and psmdb client'
-kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets.yml
+apply_client $conf_dir/client.yml
 
 desc 'create PSMDB cluster'
 cluster="some-name"

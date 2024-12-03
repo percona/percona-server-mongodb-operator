@@ -45,16 +45,16 @@ check_service() {
 	# `notIgnoredLabel` and `notIgnoredAnnotation` should be deleted
 	kubectl_bin patch "service/$svc_name" --type=json --patch '[
         {
-            "op": "add", 
-            "path": "/metadata/labels", 
+            "op": "add",
+            "path": "/metadata/labels",
             "value": {
                 "notIgnoredLabel": "true",
                 "ignoredLabel": "true"
             }
         },
         {
-            "op": "add", 
-            "path": "/metadata/annotations", 
+            "op": "add",
+            "path": "/metadata/annotations",
             "value": {
                 "notIgnoredAnnotation": "true",
                 "ignoredAnnotation": "true"
@@ -85,15 +85,15 @@ check_service() {
 	desc "adding labels and annotations to $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
-            "op": "replace", 
-            "path": "'$expose_path'/labels", 
+            "op": "replace",
+            "path": "'$expose_path'/labels",
 			"value": {
 				"crLabel": "true",
 			}
         },
         {
-            "op": "replace", 
-            "path": "'$expose_path'/annotations", 
+            "op": "replace",
+            "path": "'$expose_path'/annotations",
 			"value": {
 				"crAnnotation": "true",
 			}
@@ -105,11 +105,11 @@ check_service() {
 	desc "removing labels and annotations from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
-            "op": "remove", 
+            "op": "remove",
             "path": "'$expose_path'/labels"
         },
         {
-            "op": "remove", 
+            "op": "remove",
             "path": "'$expose_path'/annotations"
         }]'
 	sleep 5
@@ -119,16 +119,16 @@ check_service() {
 	desc "adding other labels and annotations to $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
-            "op": "replace", 
-            "path": "'$expose_path'/labels", 
+            "op": "replace",
+            "path": "'$expose_path'/labels",
 			"value": {
 				"otherCrLabel": "true",
 				"secondCrLabel": "true",
 			}
         },
 		{
-            "op": "replace", 
-            "path": "'$expose_path'/annotations", 
+            "op": "replace",
+            "path": "'$expose_path'/annotations",
 			"value": {
 				"otherCrAnnotation": "true",
 				"secondCrAnnotation": "true",
@@ -141,15 +141,15 @@ check_service() {
 	desc "adding removing one labels from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
-            "op": "replace", 
-            "path": "'$expose_path'/labels", 
+            "op": "replace",
+            "path": "'$expose_path'/labels",
 			"value": {
 				"otherCrLabel": "true",
 			}
         },
         {
-            "op": "replace", 
-            "path": "'$expose_path'/annotations", 
+            "op": "replace",
+            "path": "'$expose_path'/annotations",
 			"value": {
 				"otherCrAnnotation": "true",
 			}
@@ -162,11 +162,11 @@ check_service() {
 	# When `labels` and `annotations` are not set, old metadata should stay
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
-            "op": "remove", 
+            "op": "remove",
             "path": "/spec/ignoreAnnotations",
         },
         {
-            "op": "remove", 
+            "op": "remove",
             "path": "/spec/ignoreLabels",
         }]'
 
