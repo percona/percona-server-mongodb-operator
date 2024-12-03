@@ -141,21 +141,27 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDB{}
 
 type CronRegistry struct {
-	crons      *cron.Cron
-	jobs       map[string]Schedule
-	backupJobs *sync.Map
+	crons             *cron.Cron
+	ensureVersionJobs *sync.Map
+	backupJobs        *sync.Map
 }
 
-type Schedule struct {
-	ID           int
-	CronSchedule string
+// AddFuncWithSeconds does the same as cron.AddFunc but changes the schedule so that the function will run the exact second that this method is called.
+func (r *CronRegistry) AddFuncWithSeconds(spec string, cmd func()) (cron.EntryID, error) {
+	schedule, err := cron.ParseStandard(spec)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse cron schedule")
+	}
+	schedule.(*cron.SpecSchedule).Second = uint64(1 << time.Now().Second())
+	id := r.crons.Schedule(schedule, cron.FuncJob(cmd))
+	return id, nil
 }
 
 func NewCronRegistry() CronRegistry {
 	c := CronRegistry{
-		crons:      cron.New(),
-		jobs:       make(map[string]Schedule),
-		backupJobs: new(sync.Map),
+		crons:             cron.New(),
+		ensureVersionJobs: new(sync.Map),
+		backupJobs:        new(sync.Map),
 	}
 
 	c.crons.Start()
@@ -444,7 +450,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	err = r.scheduleEnsureVersion(ctx, cr, VersionServiceClient{})
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "failed to ensure version")
+		return reconcile.Result{}, errors.Wrap(err, "schedule ensure version job")
+	}
+
+	err = r.scheduleTelemetryRequests(ctx, cr, VersionServiceClient{})
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "schedule telemetry job")
 	}
 
 	if err = r.updatePITR(ctx, cr); err != nil {

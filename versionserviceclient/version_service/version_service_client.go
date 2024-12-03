@@ -23,31 +23,33 @@ type Client struct {
 	formats   strfmt.Registry
 }
 
-// ClientOption is the option for Client methods
-type ClientOption func(*runtime.ClientOperation)
-
 // ClientService is the interface for Client methods
 type ClientService interface {
-	VersionServiceApply(params *VersionServiceApplyParams, opts ...ClientOption) (*VersionServiceApplyOK, error)
+	VersionServiceApply(params *VersionServiceApplyParams) (*VersionServiceApplyOK, error)
 
-	VersionServiceOperator(params *VersionServiceOperatorParams, opts ...ClientOption) (*VersionServiceOperatorOK, error)
+	VersionServiceGetReleaseNotes(params *VersionServiceGetReleaseNotesParams) (*VersionServiceGetReleaseNotesOK, error)
 
-	VersionServiceProduct(params *VersionServiceProductParams, opts ...ClientOption) (*VersionServiceProductOK, error)
+	VersionServiceMetadata(params *VersionServiceMetadataParams) (*VersionServiceMetadataOK, error)
+
+	VersionServiceOperator(params *VersionServiceOperatorParams) (*VersionServiceOperatorOK, error)
+
+	VersionServiceProduct(params *VersionServiceProductParams) (*VersionServiceProductOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
 }
 
 /*
-VersionServiceApply specifics version
+  VersionServiceApply specifics version
 
-Return specific product version
+  Return specific product version
 */
-func (a *Client) VersionServiceApply(params *VersionServiceApplyParams, opts ...ClientOption) (*VersionServiceApplyOK, error) {
+func (a *Client) VersionServiceApply(params *VersionServiceApplyParams) (*VersionServiceApplyOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewVersionServiceApplyParams()
 	}
-	op := &runtime.ClientOperation{
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
 		ID:                 "VersionService_Apply",
 		Method:             "GET",
 		PathPattern:        "/versions/v1/{product}/{operatorVersion}/{apply}",
@@ -58,12 +60,7 @@ func (a *Client) VersionServiceApply(params *VersionServiceApplyParams, opts ...
 		Reader:             &VersionServiceApplyReader{formats: a.formats},
 		Context:            params.Context,
 		Client:             params.HTTPClient,
-	}
-	for _, opt := range opts {
-		opt(op)
-	}
-
-	result, err := a.transport.Submit(op)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -77,16 +74,87 @@ func (a *Client) VersionServiceApply(params *VersionServiceApplyParams, opts ...
 }
 
 /*
-VersionServiceOperator products versions for specific operator version
+  VersionServiceGetReleaseNotes gets the release notes for a product version
 
-Return product versions for specific operator
+  Return release notes for a product version
 */
-func (a *Client) VersionServiceOperator(params *VersionServiceOperatorParams, opts ...ClientOption) (*VersionServiceOperatorOK, error) {
+func (a *Client) VersionServiceGetReleaseNotes(params *VersionServiceGetReleaseNotesParams) (*VersionServiceGetReleaseNotesOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewVersionServiceGetReleaseNotesParams()
+	}
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
+		ID:                 "VersionService_GetReleaseNotes",
+		Method:             "GET",
+		PathPattern:        "/release-notes/v1/{product}/{version}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &VersionServiceGetReleaseNotesReader{formats: a.formats},
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	})
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*VersionServiceGetReleaseNotesOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	unexpectedSuccess := result.(*VersionServiceGetReleaseNotesDefault)
+	return nil, runtime.NewAPIError("unexpected success response: content available as default response in error", unexpectedSuccess, unexpectedSuccess.Code())
+}
+
+/*
+  VersionServiceMetadata metadata for a product
+
+  Return metadata information for a product
+*/
+func (a *Client) VersionServiceMetadata(params *VersionServiceMetadataParams) (*VersionServiceMetadataOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewVersionServiceMetadataParams()
+	}
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
+		ID:                 "VersionService_Metadata",
+		Method:             "GET",
+		PathPattern:        "/metadata/v1/{product}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &VersionServiceMetadataReader{formats: a.formats},
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	})
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*VersionServiceMetadataOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	unexpectedSuccess := result.(*VersionServiceMetadataDefault)
+	return nil, runtime.NewAPIError("unexpected success response: content available as default response in error", unexpectedSuccess, unexpectedSuccess.Code())
+}
+
+/*
+  VersionServiceOperator products versions for specific operator version
+
+  Return product versions for specific operator
+*/
+func (a *Client) VersionServiceOperator(params *VersionServiceOperatorParams) (*VersionServiceOperatorOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewVersionServiceOperatorParams()
 	}
-	op := &runtime.ClientOperation{
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
 		ID:                 "VersionService_Operator",
 		Method:             "GET",
 		PathPattern:        "/versions/v1/{product}/{operatorVersion}",
@@ -97,12 +165,7 @@ func (a *Client) VersionServiceOperator(params *VersionServiceOperatorParams, op
 		Reader:             &VersionServiceOperatorReader{formats: a.formats},
 		Context:            params.Context,
 		Client:             params.HTTPClient,
-	}
-	for _, opt := range opts {
-		opt(op)
-	}
-
-	result, err := a.transport.Submit(op)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -116,16 +179,17 @@ func (a *Client) VersionServiceOperator(params *VersionServiceOperatorParams, op
 }
 
 /*
-VersionServiceProduct products versions for all operator version
+  VersionServiceProduct products versions for all operator version
 
-Return product versions for all operator
+  Return product versions for all operator
 */
-func (a *Client) VersionServiceProduct(params *VersionServiceProductParams, opts ...ClientOption) (*VersionServiceProductOK, error) {
+func (a *Client) VersionServiceProduct(params *VersionServiceProductParams) (*VersionServiceProductOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewVersionServiceProductParams()
 	}
-	op := &runtime.ClientOperation{
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
 		ID:                 "VersionService_Product",
 		Method:             "GET",
 		PathPattern:        "/versions/v1/{product}",
@@ -136,12 +200,7 @@ func (a *Client) VersionServiceProduct(params *VersionServiceProductParams, opts
 		Reader:             &VersionServiceProductReader{formats: a.formats},
 		Context:            params.Context,
 		Client:             params.HTTPClient,
-	}
-	for _, opt := range opts {
-		opt(op)
-	}
-
-	result, err := a.transport.Submit(op)
+	})
 	if err != nil {
 		return nil, err
 	}
