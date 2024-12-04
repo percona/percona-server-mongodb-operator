@@ -1,8 +1,8 @@
-switched to db admin
+switched to db $external
 {
-	"_id" : "admin.user-two",
-	"user" : "user-two",
-	"db" : "admin",
+	"_id" : "$external.user-external",
+	"user" : "user-external",
+	"db" : "$external",
 	"roles" : [
 		{
 			"role" : "clusterAdmin",
@@ -14,8 +14,7 @@ switched to db admin
 		}
 	],
 	"mechanisms" : [
-		"SCRAM-SHA-1",
-		"SCRAM-SHA-256"
+		"external"
 	]
 }
 bye

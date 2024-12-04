@@ -5,11 +5,11 @@ switched to db admin
 	"db" : "admin",
 	"roles" : [
 		{
-			"role" : "userAdminAnyDatabase",
+			"role" : "clusterAdmin",
 			"db" : "admin"
 		},
 		{
-			"role" : "clusterAdmin",
+			"role" : "userAdminAnyDatabase",
 			"db" : "admin"
 		}
 	],

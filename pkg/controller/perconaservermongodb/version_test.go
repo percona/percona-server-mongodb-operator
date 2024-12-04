@@ -19,9 +19,9 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
@@ -39,7 +39,6 @@ func Test_majorUpgradeRequested(t *testing.T) {
 		want    UpgradeRequest
 		wantErr bool
 	}{
-
 		{
 			name: "TestWithEmptyMongoVersionInStatus",
 			args: args{
@@ -563,12 +562,11 @@ func TestVersionMeta(t *testing.T) {
 				scheme:        scheme,
 				serverVersion: sv,
 			}
-			log := logf.Log.WithName(tt.name)
 
 			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {
 				t.Fatal(err, "set CR version")
 			}
-			err := tt.cr.CheckNSetDefaults(version.PlatformKubernetes, log)
+			err := tt.cr.CheckNSetDefaults(context.TODO(), version.PlatformKubernetes)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -629,8 +627,7 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 	return nil
 }
 
-type fakeVS struct {
-}
+type fakeVS struct{}
 
 func (b *fakeVS) Product(ctx context.Context, req *pbVersion.ProductRequest) (*pbVersion.ProductResponse, error) {
 	return &pbVersion.ProductResponse{}, nil

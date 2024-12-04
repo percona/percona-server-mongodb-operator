@@ -5,12 +5,12 @@ switched to db testAdmin
 	"db" : "testAdmin",
 	"roles" : [
 		{
-			"role" : "role-four",
-			"db" : "testAdmin1"
-		},
-		{
 			"role" : "role-five",
 			"db" : "testAdmin2"
+		},
+		{
+			"role" : "role-four",
+			"db" : "testAdmin1"
 		}
 	],
 	"mechanisms" : [

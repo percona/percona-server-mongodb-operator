@@ -94,6 +94,10 @@ ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
 	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
+SWAGGER = $(shell pwd)/bin/swagger
+swagger: ## Download swagger locally if necessary.
+	$(call go-get-tool,$(SWAGGER),github.com/go-swagger/go-swagger/cmd/swagger@latest)
+
 # Prepare release
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
@@ -124,3 +128,13 @@ after-release: manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-backup#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mongodb-operator:main#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml
+
+version-service-client: swagger
+	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
+		--output ./version.swagger.yaml
+	rm -rf ./versionserviceclient
+	swagger generate client \
+		-f ./version.swagger.yaml \
+		-c ./versionserviceclient/ \
+		-m ./versionserviceclient/models
+	rm ./version.swagger.yaml

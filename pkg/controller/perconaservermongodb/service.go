@@ -18,7 +18,7 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcileServices(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	if err := r.reconcileReplsetServices(ctx, cr, repls); err != nil {
-		return errors.Wrap(err, "reconcile mongos services")
+		return errors.Wrap(err, "reconcile replset services")
 	}
 
 	if err := r.reconcileMongosSvc(ctx, cr); err != nil {

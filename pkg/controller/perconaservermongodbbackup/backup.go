@@ -82,6 +82,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	if err != nil {
 		return status, err
 	}
+	status.State = api.BackupStateRequested
 
 	status = api.PerconaServerMongoDBBackupStatus{
 		StorageName: cr.Spec.StorageName,
@@ -138,6 +139,8 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
+	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
+
 	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
 	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm backup meta")
@@ -153,6 +156,8 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 			Time: time.Unix(meta.StartTS, 0),
 		}
 	}
+
+	log.V(1).Info("Got backup meta", "meta", meta)
 
 	switch meta.Status {
 	case defs.StatusError:

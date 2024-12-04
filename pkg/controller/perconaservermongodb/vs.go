@@ -53,6 +53,10 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 		ClusterSize:             &vm.ClusterSize,
 		PitrEnabled:             &vm.PITREnabled,
 		PhysicalBackupScheduled: &vm.PhysicalBackupScheduled,
+		McsEnabled:              &vm.MCSEnabled,
+		RoleManagementEnabled:   &vm.RoleManagementEnabled,
+		UserManagementEnabled:   &vm.UserManagementEnabled,
+		VolumeExpansionEnabled:  &vm.VolumeExpansionEnabled,
 	}
 	applyParams = applyParams.WithTimeout(10 * time.Second)
 
@@ -165,4 +169,8 @@ type VersionMeta struct {
 	ClusterSize             int32
 	PITREnabled             bool
 	PhysicalBackupScheduled bool
+	MCSEnabled              bool
+	VolumeExpansionEnabled  bool
+	UserManagementEnabled   bool
+	RoleManagementEnabled   bool
 }

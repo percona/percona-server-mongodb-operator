@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -32,7 +31,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 	}
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
-	if err := defaultCR.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
 

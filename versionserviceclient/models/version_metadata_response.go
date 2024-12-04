@@ -13,17 +13,17 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// VersionOperatorResponse version operator response
+// VersionMetadataResponse version metadata response
 //
-// swagger:model versionOperatorResponse
-type VersionOperatorResponse struct {
+// swagger:model versionMetadataResponse
+type VersionMetadataResponse struct {
 
 	// versions
-	Versions []*VersionOperatorVersion `json:"versions"`
+	Versions []*VersionMetadataVersion `json:"versions"`
 }
 
-// Validate validates this version operator response
-func (m *VersionOperatorResponse) Validate(formats strfmt.Registry) error {
+// Validate validates this version metadata response
+func (m *VersionMetadataResponse) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateVersions(formats); err != nil {
@@ -36,7 +36,7 @@ func (m *VersionOperatorResponse) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *VersionOperatorResponse) validateVersions(formats strfmt.Registry) error {
+func (m *VersionMetadataResponse) validateVersions(formats strfmt.Registry) error {
 
 	if swag.IsZero(m.Versions) { // not required
 		return nil
@@ -62,7 +62,7 @@ func (m *VersionOperatorResponse) validateVersions(formats strfmt.Registry) erro
 }
 
 // MarshalBinary interface implementation
-func (m *VersionOperatorResponse) MarshalBinary() ([]byte, error) {
+func (m *VersionMetadataResponse) MarshalBinary() ([]byte, error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -70,8 +70,8 @@ func (m *VersionOperatorResponse) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary interface implementation
-func (m *VersionOperatorResponse) UnmarshalBinary(b []byte) error {
-	var res VersionOperatorResponse
+func (m *VersionMetadataResponse) UnmarshalBinary(b []byte) error {
+	var res VersionMetadataResponse
 	if err := swag.ReadJSON(b, &res); err != nil {
 		return err
 	}

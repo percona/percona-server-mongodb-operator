@@ -6,11 +6,10 @@ package models
 // Editing this file might prove futile when you re-run the swagger generate command
 
 import (
-	"context"
-
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
+	"github.com/go-openapi/validate"
 )
 
 // VersionVersion Version represents product version information.
@@ -24,16 +23,27 @@ type VersionVersion struct {
 	// image hash
 	ImageHash string `json:"imageHash,omitempty"`
 
+	// image hash arm64
+	ImageHashArm64 string `json:"imageHashArm64,omitempty"`
+
 	// image path
 	ImagePath string `json:"imagePath,omitempty"`
 
+	// release_timestamp is the release time of this image.
+	// Format: date-time
+	ImageReleaseTimestamp strfmt.DateTime `json:"imageReleaseTimestamp,omitempty"`
+
 	// status
-	Status *VersionStatus `json:"status,omitempty"`
+	Status VersionStatus `json:"status,omitempty"`
 }
 
 // Validate validates this version version
 func (m *VersionVersion) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateImageReleaseTimestamp(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateStatus(formats); err != nil {
 		res = append(res, err)
@@ -45,50 +55,30 @@ func (m *VersionVersion) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *VersionVersion) validateImageReleaseTimestamp(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.ImageReleaseTimestamp) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("imageReleaseTimestamp", "body", "date-time", m.ImageReleaseTimestamp.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *VersionVersion) validateStatus(formats strfmt.Registry) error {
+
 	if swag.IsZero(m.Status) { // not required
 		return nil
 	}
 
-	if m.Status != nil {
-		if err := m.Status.Validate(formats); err != nil {
-			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("status")
-			} else if ce, ok := err.(*errors.CompositeError); ok {
-				return ce.ValidateName("status")
-			}
-			return err
+	if err := m.Status.Validate(formats); err != nil {
+		if ve, ok := err.(*errors.Validation); ok {
+			return ve.ValidateName("status")
 		}
-	}
-
-	return nil
-}
-
-// ContextValidate validate this version version based on the context it is used
-func (m *VersionVersion) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
-	var res []error
-
-	if err := m.contextValidateStatus(ctx, formats); err != nil {
-		res = append(res, err)
-	}
-
-	if len(res) > 0 {
-		return errors.CompositeValidationError(res...)
-	}
-	return nil
-}
-
-func (m *VersionVersion) contextValidateStatus(ctx context.Context, formats strfmt.Registry) error {
-
-	if m.Status != nil {
-		if err := m.Status.ContextValidate(ctx, formats); err != nil {
-			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("status")
-			} else if ce, ok := err.(*errors.CompositeError); ok {
-				return ce.ValidateName("status")
-			}
-			return err
-		}
+		return err
 	}
 
 	return nil
