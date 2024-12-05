@@ -622,7 +622,7 @@ wait_for_delete() {
 	set +o xtrace
 	echo -n "waiting for $res to be deleted"
 	retry=0
-	until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
+	until (kubectl get $res || :) 2>&1 | grep NotFound; do
 		sleep 1
 		echo -n .
 		let retry+=1
