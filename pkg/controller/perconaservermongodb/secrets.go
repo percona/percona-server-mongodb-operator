@@ -10,57 +10,11 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
-
-func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
-	secrets := corev1.Secret{}
-	err := cl.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
-	return secrets, errors.Wrap(err, "get user secrets")
-}
-
-func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (psmdb.Credentials, error) {
-	return getCredentials(ctx, cl, cr, api.UserSecretName(cr), role)
-}
-
-func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
-	usersSecret, err := getUserSecret(ctx, cl, cr, name)
-	if err != nil {
-		return creds, errors.Wrap(err, "failed to get user secret")
-	}
-
-	switch role {
-	case api.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminPassword])
-	case api.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterAdminPassword])
-	case api.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBUserAdminPassword])
-	case api.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterMonitorPassword])
-	case api.RoleBackup:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
-
-	if creds.Username == "" || creds.Password == "" {
-		return creds, errors.Errorf("can't find credentials for role %s", role)
-	}
-
-	return creds, nil
-}
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}

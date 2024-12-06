@@ -278,10 +278,15 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr
 	}
 
 	for _, rst := range restores.Items {
-		if rst.Status.State != api.RestoreStateReady && rst.Status.State != api.RestoreStateNew && rst.Status.State != api.RestoreStateError &&
-			rst.Spec.ClusterName == cr.Name {
-			return true, nil
+		if rst.Spec.ClusterName != cr.Name {
+			continue
 		}
+
+		if rst.Status.State == api.RestoreStateReady || rst.Status.State == api.RestoreStateError {
+			continue
+		}
+
+		return true, nil
 	}
 
 	return false, nil
