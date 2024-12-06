@@ -119,7 +119,7 @@ deploy_minio
 desc 'create secrets and start client'
 cluster="some-name-rs0"
 kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
+	-f "$test_dir/conf/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
 apply_s3_storage_secrets

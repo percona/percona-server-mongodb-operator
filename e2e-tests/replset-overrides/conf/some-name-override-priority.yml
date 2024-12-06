@@ -5,7 +5,6 @@ metadata:
   - percona.com/delete-psmdb-pvc
   name: some-name
 spec:
-  crVersion: 1.17.0
   image: perconalab/percona-server-mongodb-operator:main-mongod7.0
   imagePullPolicy: Always
   backup:

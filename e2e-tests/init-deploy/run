@@ -12,8 +12,8 @@ create_infra $namespace
 
 desc 'create secrets and start client'
 kubectl_bin apply \
-	-f $conf_dir/secrets_with_tls.yml \
-	-f $conf_dir/client.yml
+	-f "$test_dir/conf/secrets_with_tls.yml" \
+	-f "$conf_dir/client.yml"
 
 desc 'create custom RuntimeClass'
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
@@ -36,10 +36,25 @@ compare_kubectl statefulset/$cluster
 compare_kubectl service/$cluster
 
 desc 'check if users created'
-compare_mongo_user "userAdmin:userAdmin123456@$cluster.$namespace"
-compare_mongo_user "backup:backup123456@$cluster.$namespace"
-compare_mongo_user "clusterAdmin:clusterAdmin123456@$cluster.$namespace"
-compare_mongo_user "clusterMonitor:clusterMonitor123456@$cluster.$namespace"
+
+secret_name="some-users"
+
+user=$(getUserData "$secret_name" "MONGODB_USER_ADMIN_USER")
+pass=$(getUserData "$secret_name" "MONGODB_USER_ADMIN_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "userAdmin"
+
+user=$(getUserData "$secret_name" "MONGODB_BACKUP_USER")
+pass=$(getUserData "$secret_name" "MONGODB_BACKUP_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "backup"
+
+user=$(getUserData "$secret_name" "MONGODB_CLUSTER_ADMIN_USER")
+pass=$(getUserData "$secret_name" "MONGODB_CLUSTER_ADMIN_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "clusterAdmin"
+
+user=$(getUserData "$secret_name" "MONGODB_CLUSTER_MONITOR_USER")
+pass=$(getUserData "$secret_name" "MONGODB_CLUSTER_MONITOR_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "clusterMonitor"
+
 # check that test user don't have access
 (run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "test:test@$cluster.$namespace" || :) 2>&1 \
 	| grep 'Authentication failed'
