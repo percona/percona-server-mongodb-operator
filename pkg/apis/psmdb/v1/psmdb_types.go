@@ -217,6 +217,10 @@ type BalancerSpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+func (b *BalancerSpec) IsEnabled() bool {
+	return b.Enabled == nil || *b.Enabled
+}
+
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`
@@ -1211,6 +1215,7 @@ func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
 			continue
 		}
 		s.Conditions[i] = c
+		return
 	}
 	s.Conditions = append(s.Conditions, c)
 }

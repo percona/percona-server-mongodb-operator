@@ -440,7 +440,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleTelemetryRequests(ctx context.Co
 			return
 		}
 
-		err = localCr.CheckNSetDefaults(r.serverVersion.Platform, log)
+		err = localCr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
 		if err != nil {
 			log.Error(err, "failed to set defaults for CR")
 			return
