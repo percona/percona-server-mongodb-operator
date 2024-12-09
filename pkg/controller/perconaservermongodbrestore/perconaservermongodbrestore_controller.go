@@ -24,6 +24,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -179,6 +180,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
+		if cluster.Spec.Sharding.Enabled {
+			_, err := psmdb.GetMongosSts(ctx, r.client, cluster)
+			if client.IgnoreNotFound(err) != nil {
+				return rr, errors.Wrap(err, "get mongos statefulset")
+			}
+
+			if err == nil {
+				log.Info("Terminating mongos pods")
+				err = r.client.Delete(ctx, psmdb.MongosStatefulset(cluster))
+				if err != nil && !k8serrors.IsNotFound(err) {
+					return rr, errors.Wrap(err, "failed to delete mongos statefulset")
+				}
+
+				return rr, nil
+			}
+		}
+
 		err = r.validate(ctx, cr, cluster)
 		if err != nil {
 			if errors.Is(err, errWaitingPBM) || errors.Is(err, errWaitingRestore) {
