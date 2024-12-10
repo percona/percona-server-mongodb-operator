@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="some-name"
+
+create_infra ${namespace}
+
+desc "create PSMDB cluster ${cluster}"
+apply_cluster ${test_dir}/conf/${cluster}.yml
+
+desc 'check if all pods started'
+wait_for_running ${cluster}-rs0 3 "false"
+wait_for_running ${cluster}-cfg 3 "false"
+wait_for_running ${cluster}-mongos 3 "false"
+
+wait_cluster_consistency ${cluster}
+
+desc 'check if .metadata.resourceVersion is stable'
+
+initial_resource_version=$(kubectl_bin get psmdb ${cluster} -o jsonpath={.metadata.resourceVersion})
+for i in $(seq 1 5); do
+	sleep 7  # wait for a reconciliation loop
+	echo -n "check ${i}: expected resourceVersion is ${initial_resource_version}"
+	resource_version=$(kubectl_bin get psmdb ${cluster} -o jsonpath={.metadata.resourceVersion})
+	if [[ ${initial_resource_version} != ${resource_version} ]]; then
+		echo "...FAIL! .metadata.resourceVersion is ${resource_version}"
+		exit 1
+	fi
+	echo "...OK"
+done
+
+desc 'test passed'
+
+exit 0

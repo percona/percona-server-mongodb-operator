@@ -1473,7 +1473,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	_, err := util.Apply(ctx, r.client, obj)
+	log := logf.FromContext(ctx).WithValues(
+		"name", obj.GetName(),
+		"kind", obj.GetObjectKind(),
+		"generation", obj.GetGeneration(),
+		"resourceVersion", obj.GetResourceVersion(),
+	)
+
+	status, err := util.Apply(ctx, r.client, obj)
+
+	switch status {
+	case util.ApplyStatusCreated:
+		log.V(1).Info("Object created")
+	case util.ApplyStatusUpdated:
+		log.V(1).Info("Object updated")
+	}
 	return err
 }
 
