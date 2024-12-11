@@ -931,33 +931,6 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, c
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) stopMongosInCaseOfRestore(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled {
-		return nil
-	}
-
-	rstRunning, err := r.isRestoreRunning(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check running restores")
-	}
-
-	if !rstRunning {
-		return nil
-	}
-
-	err = r.disableBalancer(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to disable balancer")
-	}
-
-	err = r.deleteMongos(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete mongos")
-	}
-
-	return nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, newFCV string) error {
 	if !cr.Spec.UpgradeOptions.SetFCV || newFCV == "" {
 		return nil
@@ -1180,10 +1153,6 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Cont
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if err := r.stopMongosInCaseOfRestore(ctx, cr); err != nil {
-		return errors.Wrap(err, "on restore")
-	}
-
 	if err := r.reconcileMongosStatefulset(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile mongos")
 	}
@@ -1473,7 +1442,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdate(ctx context.Context, obj client.Object) error {
-	_, err := util.Apply(ctx, r.client, obj)
+	log := logf.FromContext(ctx).WithValues(
+		"name", obj.GetName(),
+		"kind", obj.GetObjectKind(),
+		"generation", obj.GetGeneration(),
+		"resourceVersion", obj.GetResourceVersion(),
+	)
+
+	status, err := util.Apply(ctx, r.client, obj)
+
+	switch status {
+	case util.ApplyStatusCreated:
+		log.V(1).Info("Object created")
+	case util.ApplyStatusUpdated:
+		log.V(1).Info("Object updated")
+	}
 	return err
 }
 
