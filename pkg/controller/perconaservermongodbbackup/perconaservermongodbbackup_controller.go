@@ -133,6 +133,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -384,7 +385,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "pbmName", cr.Status.PBMname)
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "namespace", cr.Namespace, "pbmName", cr.Status.PBMname)
 
 	var meta *backup.BackupMeta
 	var err error
@@ -452,7 +453,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", bcp.Name, "namespace", bcp.Namespace, "pbmName", bcp.Status.PBMname)
 
 	rsName := bcp.Status.ReplsetNames[0]
 	rsPods, err := psmdb.GetRSPods(ctx, r.client, cluster, rsName)
@@ -477,6 +478,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	if err != nil {
 		return errors.Wrap(err, "exec delete-backup")
 	}
+
+	log.Info("Backup deleted")
 
 	return nil
 }
