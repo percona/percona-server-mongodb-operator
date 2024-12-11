@@ -44,8 +44,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 
 // Start requests backup on PBM
 func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
-	log := logf.FromContext(ctx)
-	log.Info("Starting backup", "backup", cr.Name, "storage", cr.Spec.StorageName)
+	log := logf.FromContext(ctx).WithValues("backup", cr.Name, "storage", cr.Spec.StorageName)
+
+	log.Info("Starting backup")
 
 	var status api.PerconaServerMongoDBBackupStatus
 
@@ -56,7 +57,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 
 	err := b.pbm.GetNSetConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
-		return api.PerconaServerMongoDBBackupStatus{}, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+		return status, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
 	}
 
 	name := time.Now().UTC().Format(time.RFC3339)

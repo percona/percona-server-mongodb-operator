@@ -9,7 +9,7 @@ set_debug
 check_cr_config() {
 	local cluster="$1"
 
-	desc "create first PSMDB cluster $cluster"
+	desc "create PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster.yml
 
 	desc 'check if all 3 Pods started'
@@ -40,8 +40,8 @@ check_cr_config() {
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-1)" "" ":27017"
 	compare_mongo_cmd "find" "myApp:myPass@$(get_service_ip $cluster-2)" "" ":27017"
 
-	desc 'add service-per-pod lebel and annotation'
 	if [[ $cluster == "node-port-rs0" ]]; then
+		desc 'add service-per-pod label and annotation'
 		old_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
 		kubectl_bin patch psmdb node-port --type=json --patch '[
 		{
@@ -74,6 +74,36 @@ check_cr_config() {
 		-f $test_dir/conf/$cluster.yml
 }
 
+check_service() {
+	state=$1
+	svc_name=$2
+	if [ $state = "present" ]; then
+		echo -n "check that $svc_name was created"
+		local timeout=0
+		until kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep -vq NotFound; do
+			sleep 1
+			timeout=$((timeout + 1))
+			echo -n '.'
+			if [[ ${timeout} -gt 900 ]]; then
+				echo "Waiting timeout has been reached. Service $svc_name is not present. Exiting..."
+				exit 1
+			fi
+		done
+		echo ".OK"
+	elif [ $state = "removed" ]; then
+		echo -n "check that $svc_name was removed"
+		if [[ -z $(kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]]; then
+			echo "$svc_name was not removed."
+			exit 1
+		else
+			echo ".OK"
+		fi
+	else
+		echo "unknown state $state"
+	fi
+}
+
+
 main() {
 	create_infra $namespace
 	deploy_cert_manager
@@ -91,6 +121,21 @@ main() {
 
 	desc 'check NodePort'
 	check_cr_config "node-port-rs0"
+
+	desc 'check Mongos in sharded cluster'
+	local cluster=some-name
+	apply_cluster "$test_dir/conf/sharded.yml"
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'enabling servicePerPod for mongos'
+	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"mongos":{"expose":{"servicePerPod":true}}}}}'
+	wait_for_running $cluster-mongos 3
+	check_service present $cluster-mongos-0
+	check_service present $cluster-mongos-1
+	check_service present $cluster-mongos-2
+	check_service removed $cluster-mongos
 
 	destroy $namespace
 
