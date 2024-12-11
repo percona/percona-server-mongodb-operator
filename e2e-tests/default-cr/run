@@ -64,7 +64,7 @@ function main() {
 		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" > $temp_operator_yaml
 
 		if [[ "$ARCH" == "arm64" ]]; then
-			yq eval -i '(.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}])' $temp_operator_yaml
+			yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' $temp_operator_yaml
 		fi
 
 		kubectl_bin apply -f  $temp_operator_yaml
@@ -79,11 +79,11 @@ function main() {
 		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml > $temp_cr
 
 	if [[ "$ARCH" == "arm64" ]]; then
-        yq eval '.spec.replsets[].tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr |
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr |
 			kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f $temp_cr
@@ -161,11 +161,11 @@ function main() {
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml > $temp_cr_minimal
 
 	if [[ "$ARCH" == "arm64" ]]; then
-        yq eval '.spec.replsets[].tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr_minimal |
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr_minimal |
 			kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f $temp_cr_minimal

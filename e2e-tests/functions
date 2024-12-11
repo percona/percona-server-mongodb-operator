@@ -16,6 +16,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
+TOLERATIONS_ARM64='[{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]'
 CERT_MANAGER_VER="1.16.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
@@ -428,7 +429,7 @@ deploy_operator() {
 	fi
 
 	if [[ "$ARCH" == "arm64" ]]; then
-		yq eval -i '(.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}])' $temp_operator_yaml
+		yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' $temp_operator_yaml
 	fi
 
 	kubectl_bin apply -f $temp_operator_yaml
@@ -454,7 +455,7 @@ deploy_operator_gh() {
 	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
 	if [[ "$ARCH" == "arm64" ]]; then
-		yq eval -i '(.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}])' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+		yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 	fi
 
 	kubectl_bin apply -f "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
@@ -783,7 +784,7 @@ compare_kubectl() {
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
 
-	if [[ "$ARCH" == "arm64" ]]; then
+	if [[ $ARCH == "arm64" ]]; then
 		yq -i eval 'del(.spec.template.spec.tolerations)' ${new_result}
 	fi
 
@@ -1227,11 +1228,11 @@ cat_config() {
 		.spec.upgradeOptions.apply="Never"' "$1" > $temp_cr
 
 	if [[ "$ARCH" == "arm64" ]]; then
-        yq eval '.spec.replsets[].tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec | select(has("sharding"))).sharding.mongos.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}] |
-			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $temp_cr
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr
 	else
 		cat $temp_cr
 	fi
@@ -1239,7 +1240,7 @@ cat_config() {
 
 apply_client() {
 	if [[ "$ARCH" == "arm64" ]]; then
-	    yq eval '.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' "$1" | kubectl_bin apply -f -
+	    yq eval '.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"'' "$1" | kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f "$1"
 	fi

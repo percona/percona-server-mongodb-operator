@@ -13,7 +13,7 @@ deploy_openldap() {
 			| kubectl_bin apply -f -
 	else
 		if [[ "$ARCH" == "arm64" ]]; then
-			yq eval '(select(.kind == "Deployment") | .spec.template.spec.tolerations) += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' $test_dir/conf/openldap.yaml | kubectl_bin apply -f -
+			yq eval '(select(.kind == "Deployment") | .spec.template.spec.tolerations) += '"$TOLERATIONS_ARM64"'' $test_dir/conf/openldap.yaml | kubectl_bin apply -f -
 		else
 			kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
 		fi

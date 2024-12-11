@@ -54,7 +54,7 @@ main() {
 	check_cr_config "emptydir-rs0"
 
 	if [[ "$ARCH" == "arm64" ]]; then
-		yq eval '.spec.template.spec.tolerations += [{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]' \
+		yq eval '.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"'' \
 		$test_dir/conf/hostpath-helper.yml | kubectl_bin apply -f -
 	else
 		kubectl_bin apply -f $test_dir/conf/hostpath-helper.yml
