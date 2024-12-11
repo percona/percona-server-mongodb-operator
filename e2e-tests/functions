@@ -32,7 +32,7 @@ logs_dir=$(realpath $test_dir/../logs || :)
 if archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}'); then
 	first_arch=$(echo $archs | awk '{print $1}')
 
-	if [[ "$first_arch" == "amd64" || "$first_arch" == "arm64" ]]; then
+	if [[ $first_arch =~ ^(amd64|arm64)$ ]]; then
 		for arch in $archs; do
 			if [[ "$arch" != "$first_arch" ]]; then
 				echo "All nodes in the cluster must be equal to the 1-st one: $first_arch !"
