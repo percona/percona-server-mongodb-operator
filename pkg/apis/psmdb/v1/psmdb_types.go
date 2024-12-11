@@ -218,6 +218,10 @@ type BalancerSpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+func (b *BalancerSpec) IsEnabled() bool {
+	return b.Enabled == nil || *b.Enabled
+}
+
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`

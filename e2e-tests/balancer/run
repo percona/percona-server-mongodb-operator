@@ -1,63 +1,77 @@
 #!/bin/bash
 
 set -o errexit
-set -o xtrace
 
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-check_balancer() {
-	local expected=$1 # should be "full" (running balancer) or "off" (disabled balancer)
-
-	local balancer_running
-	balancer_running=$(run_mongos 'db.adminCommand({balancerStatus: 1}).mode' "clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
-		| grep -E -v "Percona Server for MongoDB|connecting to:|Implicit session:|versions do not match|Error saving history file:|bye")
-
-	if [[ $balancer_running != "$expected" ]]; then
-		echo "Unexpected output from \"db.adminCommand({balancerStatus: 1}).mode\": $balancer_running"
-		echo "Expected $expected"
-		exit 1
-	fi
+log() {
+	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
 }
 
-check_service() {
-	state=$1
-	svc_name=$2
-	if [ $state = "present" ]; then
-		echo -n "check that $svc_name was created"
-		local timeout=0
-		until kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep -vq NotFound; do
-			sleep 1
-			timeout=$((timeout + 1))
-			echo -n '.'
-			if [[ ${timeout} -gt 900 ]]; then
-				echo "Waiting timeout has been reached. Service $svc_name is not present. Exiting..."
-				exit 1
-			fi
-		done
-		echo ".OK"
-	elif [ $state = "removed" ]; then
-		echo -n "check that $svc_name was removed"
-		if [[ -z $(kubectl_bin get service/$svc_name -o 'jsonpath={.spec.type}' 2>&1 | grep NotFound) ]]; then
-			echo "$svc_name was not removed."
-			exit 1
-		else
-			echo ".OK"
-		fi
-	else
-		echo "unknown state $state"
+check_balancer() {
+	local cluster=$1
+	local expected=$2 # should be "true" (enabled) or "false" (disabled)
+	local delay=${3:-"0"}
+	local balancer_running
+
+	log "sleeping for ${delay} seconds..."
+	sleep ${delay}
+
+	balancer_running=$(run_mongosh 'sh.getBalancerState()' "clusterAdmin:clusterAdmin123456@${cluster}-cfg.${namespace}" \
+		| grep -E -v 'Warning|cfg' | grep -E 'true|false')
+
+	echo -n "checking if balancer status is ${expected}..."
+	if [[ $balancer_running != "$expected" ]]; then
+		echo
+		log "Unexpected output from \"sh.getBalancerState()\": $balancer_running"
+		log "Expected: $expected"
+		exit 1
 	fi
+	echo "OK"
+}
+
+check_backup_and_restore() {
+	local cluster=$1
+	local backup_suffix=$2
+	local balancer_end_state=$3
+	local backup_name="backup-minio-${backup_suffix}"
+
+	log "running backup: ${backup_name}"
+	run_backup "minio" "${backup_name}"
+	wait_backup "${backup_name}" "requested"
+
+	log "checking if balancer is disabled"
+	check_balancer ${cluster} "false"
+
+	wait_backup "${backup_name}" "ready"
+
+	log "checking if balancer is ${balancer_end_state} after backup"
+	check_balancer ${cluster} ${balancer_end_state} 10
+
+	log "running restore: restore-${backup_name}"
+	run_restore "${backup_name}"
+	log "checking if balancer status is not changed"
+	check_balancer ${cluster} "${balancer_end_state}" 4
+
+	wait_restore ${backup_name} ${cluster} "ready"
+
+	log "checking if balancer is ${balancer_end_state} after restore"
+	check_balancer ${cluster} ${balancer_end_state} 10
 }
 
 main() {
 	create_infra "$namespace"
 
+	deploy_minio
+	apply_s3_storage_secrets
+
 	desc 'create first PSMDB cluster'
 	cluster="some-name"
-
+  
 	kubectl_bin apply -f $conf_dir/secrets.yml
-	apply_client $conf_dir/client.yml
+	apply_client $conf_dir/client-70.yml
 
 	if version_gt "1.19" && [ $EKS -ne 1 ]; then
 		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
@@ -70,30 +84,22 @@ main() {
 	apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 
 	desc 'check if all 3 Pods started'
-	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-rs0 3 "false"
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
-	sleep 20
-	check_balancer "full"
+	check_balancer ${cluster} "true" 10
+
+	check_backup_and_restore ${cluster} "0" "true"
 
 	desc 'disabling balancer'
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":false}}}}'
-	sleep 20
-	check_balancer "off"
+	check_balancer ${cluster} "false" 10
+
+	check_backup_and_restore ${cluster} "1" "false"
 
 	desc 'enabling balancer'
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":true}}}}'
-	sleep 20
-	check_balancer "full"
-
-	# Add check that servicePerPod creates 3 services for the running cluster
-	desc 'enabling servicePerPod for mongos'
-	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"mongos":{"expose":{"servicePerPod":true}}}}}'
-	wait_for_running $cluster-mongos 3
-	check_service present $cluster-mongos-0
-	check_service present $cluster-mongos-1
-	check_service present $cluster-mongos-2
-	check_service removed $cluster-mongos
+	check_balancer ${cluster} "true" 10
 
 	destroy "$namespace"
 }

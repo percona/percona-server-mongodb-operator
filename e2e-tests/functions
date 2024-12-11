@@ -237,12 +237,13 @@ wait_backup_agent() {
 
 wait_backup() {
 	local backup_name=$1
+	local target_state=${2:-"ready"}
 
 	set +o xtrace
 	retry=0
-	echo -n $backup_name
+	echo -n "waiting for ${backup_name} to reach ${target_state} state"
 	local current_status=
-	until [[ ${current_status} == "ready" ]]; do
+	until [[ ${current_status} == ${target_state} ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -363,7 +364,7 @@ wait_restore() {
 
 	set +o xtrace
 	retry=0
-	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
+	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
 	local current_state=
 	until [[ ${current_state} == ${target_state} ]]; do
 		sleep 1
@@ -813,8 +814,21 @@ run_mongo() {
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
-
 }
+
+run_mongosh() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-"mongodb+srv"}
+	local suffix=${4:-".svc.cluster.local"}
+	local mongo_flag="$5"
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+}
+
 
 run_mongo_tls() {
 	local command="$1"

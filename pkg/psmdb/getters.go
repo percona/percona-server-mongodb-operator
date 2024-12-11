@@ -102,6 +102,12 @@ func GetPrimaryPod(ctx context.Context, mgoClient mongo.Client) (string, error) 
 	return status.Primary().Name, nil
 }
 
+func GetMongosSts(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*appsv1.StatefulSet, error) {
+	sts := MongosStatefulset(cr)
+	err := cl.Get(ctx, client.ObjectKeyFromObject(sts), sts)
+	return sts, err
+}
+
 func GetMongosPods(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
 	pods := corev1.PodList{}
 	err := cl.List(ctx,
