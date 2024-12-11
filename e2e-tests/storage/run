@@ -53,7 +53,7 @@ main() {
 	desc 'check emptydir'
 	check_cr_config "emptydir-rs0"
 
-	if [[ "$ARCH" == "arm64" ]]; then
+	if [[ $ARCH == "arm64" ]]; then
 		yq eval '.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"'' \
 		$test_dir/conf/hostpath-helper.yml | kubectl_bin apply -f -
 	else

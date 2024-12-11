@@ -13,7 +13,7 @@ deploy_openldap() {
 			select(.metadata.name == "ldap-ca").spec.dnsNames[0]="openldap.'$namespace'.svc.cluster.local"' "$test_dir/conf/openldap.yaml" \
 			| kubectl_bin apply -f -
 	else
-		if [[ "$ARCH" == "arm64" ]]; then
+		if [[ $ARCH == "arm64" ]]; then
 			yq 'select(.metadata.name == "ldap-ca").spec.dnsNames[0]="openldap.'$namespace'.svc.cluster.local"' "$test_dir/conf/openldap.yaml" |
 			yq eval '(select(.kind == "Deployment") | .spec.template.spec.tolerations) += '"$TOLERATIONS_ARM64"'' $test_dir/conf/openldap.yaml |
 			kubectl_bin apply -f -

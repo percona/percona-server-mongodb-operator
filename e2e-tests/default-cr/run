@@ -63,7 +63,7 @@ function main() {
 		apply_rbac rbac
 		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" > $temp_operator_yaml
 
-		if [[ "$ARCH" == "arm64" ]]; then
+		if [[ $ARCH == "arm64" ]]; then
 			yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' $temp_operator_yaml
 		fi
 
@@ -78,7 +78,7 @@ function main() {
 		.spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey = "none" |
 		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml > $temp_cr
 
-	if [[ "$ARCH" == "arm64" ]]; then
+	if [[ $ARCH == "arm64" ]]; then
         yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
 			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
 			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
@@ -160,7 +160,7 @@ function main() {
 	local temp_cr_minimal="$(mktemp)"
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml > $temp_cr_minimal
 
-	if [[ "$ARCH" == "arm64" ]]; then
+	if [[ $ARCH == "arm64" ]]; then
         yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
 			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
 			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
