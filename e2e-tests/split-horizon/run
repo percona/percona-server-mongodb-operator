@@ -25,13 +25,13 @@ configure_client_hostAliases() {
 	wait_pod $(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 }
 
-create_infra ${namespace}
+create_infra $namespace
+
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets_with_tls.yml
+apply_client $conf_dir/client_with_tls.yml
 
 cluster="some-name"
-kubectl_bin apply \
-	-f ${conf_dir}/secrets_with_tls.yml \
-	-f ${conf_dir}/client_with_tls.yml
-
 apply_cluster ${test_dir}/conf/${cluster}-3horizons.yml
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency ${cluster}

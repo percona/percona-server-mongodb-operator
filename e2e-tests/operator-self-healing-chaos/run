@@ -9,9 +9,8 @@ set_debug
 cluster="some-name-rs0"
 
 setup_cluster() {
-	desc 'create secrets and start client'
-	kubectl_bin apply \
-		-f $conf_dir/secrets.yml
+	desc 'create secrets'
+	kubectl_bin apply -f $conf_dir/secrets.yml
 
 	desc "create first PSMDB cluster $cluster"
 	apply_cluster $conf_dir/$cluster.yml

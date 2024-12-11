@@ -69,20 +69,19 @@ wait_service_export() {
 }
 
 desc "Register Kubernetes cluster"
-k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+kubectl -n default delete pod curl || :
+k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=alpine/curl --overrides='{"spec": {"tolerations":[{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
+k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=alpine/curl --overrides='{"spec": {"tolerations":[{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
 
 gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
 
 wait_mcs_api
 
 create_infra "$namespace"
-desc 'create first PSMDB cluster'
-cluster="some-name"
 
-kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+desc 'create secrets and start client'
+kubectl_bin apply -f $conf_dir/secrets.yml
+apply_client $conf_dir/client.yml
 
 apply_s3_storage_secrets
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
@@ -93,7 +92,9 @@ else
 	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
 fi
 
-apply_cluster "$test_dir/conf/$cluster.yml"
+desc 'create first PSMDB cluster'
+cluster="some-name"
+apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3
 wait_for_running $cluster-cfg 3 "false"

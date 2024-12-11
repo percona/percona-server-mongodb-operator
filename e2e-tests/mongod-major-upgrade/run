@@ -16,8 +16,9 @@ function main() {
 
 	create_infra "${namespace}"
 
-	kubectl_bin apply -f "${conf_dir}/client.yml" \
-		-f "${conf_dir}/secrets.yml"
+	desc 'create secrets and start client'
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
 
 	desc 'install version service'
 
