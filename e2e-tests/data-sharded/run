@@ -29,11 +29,11 @@ check_rs_proper_component_deletion() {
 }
 
 main() {
-	# if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
-	# 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
-	# else
-	# 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
-	# fi
+	if [[ ${IMAGE_MONGOD} == *"percona-server-mongodb-operator"* ]]; then
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*([0-9].[0-9])$/\1/')
+	else
+		MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
+	fi
 
 	create_infra "$namespace"
 	deploy_cert_manager
