@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
@@ -1210,14 +1211,30 @@ func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
 }
 
 func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	for i, cond := range s.Conditions {
-		if cond.Type != c.Type {
-			continue
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
 		}
-		s.Conditions[i] = c
+		s.Conditions = append(s.Conditions, c)
 		return
 	}
-	s.Conditions = append(s.Conditions, c)
+
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+	}
+
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
+	}
 }
 
 // GetExternalNodes returns all external nodes for all replsets
