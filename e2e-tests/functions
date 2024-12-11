@@ -280,7 +280,6 @@ wait_for_pbm_operations() {
 	set_debug
 }
 
-
 run_restore() {
 	local backup_name=$1
 
@@ -948,7 +947,7 @@ get_mongo_primary() {
 
 compare_mongo_user() {
 	local uri="$1"
-	local user=$(echo $uri | cut -d : -f 1)
+	local user="$2"
 	local expected_result=${test_dir}/compare/$user.json
 
 	if [[ $IMAGE_MONGOD =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
@@ -1736,6 +1735,17 @@ wait_for_cluster_state() {
 	echo
 }
 
+urlencode() {
+	uri="$1"
+	echo -n "$uri" | jq -s -R -r @uri
+}
+
+getUserData() {
+	local secretName=$1
+	local dataKey=$2
+	urlencode "$(getSecretData "$secretName" "$dataKey")"
+}
+
 get_latest_oplog_chunk_ts() {
 	local cluster=$1
 	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
@@ -1786,4 +1796,3 @@ wait_for_oplogs() {
 		sleep 10
 	done
 }
-

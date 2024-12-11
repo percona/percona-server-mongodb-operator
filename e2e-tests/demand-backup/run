@@ -119,7 +119,7 @@ deploy_minio
 cluster="some-name-rs0"
 
 desc 'create secrets and start client'
-kubectl_bin apply -f $conf_dir/secrets.yml
+kubectl_bin apply -f $test_dir/conf/secrets.yml
 apply_client $conf_dir/client.yml
 
 apply_s3_storage_secrets

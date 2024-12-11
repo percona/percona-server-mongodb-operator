@@ -119,6 +119,25 @@ function main() {
 	compare_kubectl statefulset/$cluster-cfg
 	compare_kubectl statefulset/$cluster-mongos ""
 
+	desc 'disabling sharding'
+	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": false}]'
+	sleep 10
+	wait_cluster_consistency "$cluster" 60
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-disabled"
+
+	if [[ "$(kubectl_bin get sts -o yaml | yq '.items | length')" != 1 ]]; then
+		echo "Expected to have only 1 statefulset $cluster-rs0"
+		exit 1
+	fi
+
+	desc 'enabling sharding'
+	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": true}]'
+	sleep 10
+	wait_cluster_consistency "$cluster" 60
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-enabled"
+	compare_kubectl statefulset/$cluster-cfg
+	compare_kubectl statefulset/$cluster-mongos ""
+
 	desc 'write data, read from all'
 	run_mongos \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \

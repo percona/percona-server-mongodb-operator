@@ -133,7 +133,7 @@ func TestConnectionLeaks(t *testing.T) {
 				allPods = append(allPods, fakePodsForMongos(cr)...)
 
 				cr := cr.DeepCopy()
-				if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
 				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision))
@@ -144,7 +144,7 @@ func TestConnectionLeaks(t *testing.T) {
 
 			if cr.Spec.Unmanaged {
 				cr := cr.DeepCopy()
-				if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
 				obj = append(obj, &corev1.Secret{
@@ -160,6 +160,7 @@ func TestConnectionLeaks(t *testing.T) {
 			r := buildFakeClient(obj...)
 			r.mongoClientProvider = &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount}
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			r.crons = NewCronRegistry()
 
 			g, gCtx := errgroup.WithContext(ctx)
 			gCtx, cancel := context.WithCancel(gCtx)
@@ -226,7 +227,7 @@ func updateResource[T any](resource T, update func(T)) T {
 
 func updateUsersSecret(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
 	cr = cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return err
 	}
 	secret := corev1.Secret{}
@@ -425,9 +426,8 @@ func (c *fakeMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, err
 }
 
 func (c *fakeMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
-	log := logf.FromContext(ctx)
 	cr := c.cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, log); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return mongo.Status{}, err
 	}
 	members := []*mongo.Member{}
@@ -453,9 +453,8 @@ func (c *fakeMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
 }
 
 func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error) {
-	log := logf.FromContext(ctx)
 	cr := c.cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, log); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return mongo.RSConfig{}, err
 	}
 	members := []mongo.ConfigMember{}
@@ -505,7 +504,7 @@ func (c *fakeMongoClient) ListShard(ctx context.Context) (mongo.ShardList, error
 
 func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
 	isMaster := false
-	if err := c.cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := c.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return nil, err
 	}
 	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name) {
