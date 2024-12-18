@@ -2,15 +2,15 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 1
   labels:
-    app.kubernetes.io/component: cfg
+    app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: some-name-cfg
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -21,35 +21,35 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
+      app.kubernetes.io/component: mongod
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: some-name-cfg
+      app.kubernetes.io/replset: rs0
+  serviceName: some-name-rs0
   template:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: cfg
+        app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs0
     spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app.kubernetes.io/component: cfg
+                  app.kubernetes.io/component: mongod
                   app.kubernetes.io/instance: some-name
                   app.kubernetes.io/managed-by: percona-server-mongodb-operator
                   app.kubernetes.io/name: percona-server-mongodb
                   app.kubernetes.io/part-of: percona-server-mongodb
-                  app.kubernetes.io/replset: cfg
+                  app.kubernetes.io/replset: rs0
               topologyKey: kubernetes.io/hostname
       containers:
         - args:
@@ -57,13 +57,12 @@ spec:
             - --auth
             - --dbpath=/data/db
             - --port=27017
-            - --replSet=cfg
+            - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
-            - --configsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
@@ -77,7 +76,7 @@ spec:
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_REPLSET
-              value: cfg
+              value: rs0
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -115,7 +114,7 @@ spec:
                 - readiness
                 - --component
                 - mongod
-            failureThreshold: 3
+            failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
             successThreshold: 1
@@ -129,6 +128,7 @@ spec:
               memory: 500M
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -151,6 +151,59 @@ spec:
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
+        - args:
+            - pbm-agent-entrypoint
+          command:
+            - /opt/percona/pbm-entry.sh
+          env:
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_MONGODB_REPLSET
+              value: rs0
+            - name: PBM_MONGODB_PORT
+              value: "27017"
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
+          imagePullPolicy: Always
+          name: backup-agent
+          resources: {}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /opt/percona
+              name: bin
+              readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /mnt/nfs/
+              name: backup-nfs
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -173,7 +226,8 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
@@ -204,6 +258,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: backup-nfs
+          nfs:
+            path: /psmdb-some-name-rs0
+            server: nfs-service.storage.svc.cluster.local
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

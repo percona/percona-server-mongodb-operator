@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -12,30 +13,63 @@ import (
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 )
 
-func (r *ReconcilePerconaServerMongoDB) deleteEnsureVersion(cr *api.PerconaServerMongoDB, id int) {
-	r.crons.crons.Remove(cron.EntryID(id))
-	delete(r.crons.jobs, jobName(cr))
+type Schedule struct {
+	ID           cron.EntryID
+	CronSchedule string
+}
+
+type JobPrefix string
+
+const (
+	EnsureVersion JobPrefix = "ensure-version"
+	Telemetry     JobPrefix = "telemetry"
+)
+
+func jobName(prefix JobPrefix, cr *api.PerconaServerMongoDB) string {
+	nn := types.NamespacedName{
+		Name:      cr.Name,
+		Namespace: cr.Namespace,
+	}
+
+	return fmt.Sprintf("%s/%s", prefix, nn.String())
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteCronJob(jobName string) {
+	job, ok := r.crons.ensureVersionJobs.LoadAndDelete(jobName)
+	if !ok {
+		return
+	}
+	r.crons.crons.Remove(job.(Schedule).ID)
 }
 
 func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
-	log := logf.FromContext(ctx)
-	schedule, ok := r.crons.jobs[jobName(cr)]
+	jn := jobName(EnsureVersion, cr)
+
+	log := logf.FromContext(ctx).WithValues("job", jn)
+
+	scheduleRaw, ok := r.crons.ensureVersionJobs.Load(jn)
 	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		if ok {
-			r.deleteEnsureVersion(cr, schedule.ID)
+			r.deleteCronJob(jn)
 		}
-
 		return nil
+	}
+
+	schedule := Schedule{}
+	if ok {
+		schedule = scheduleRaw.(Schedule)
 	}
 
 	if ok && schedule.CronSchedule == cr.Spec.UpgradeOptions.Schedule {
@@ -44,7 +78,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 
 	if ok {
 		log.Info("remove job because of new", "old", schedule.CronSchedule, "new", cr.Spec.UpgradeOptions.Schedule)
-		r.deleteEnsureVersion(cr, schedule.ID)
+		r.deleteCronJob(jn)
 	}
 
 	nn := types.NamespacedName{
@@ -54,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 
 	l := r.lockers.LoadOrCreate(nn.String())
 
-	id, err := r.crons.crons.AddFunc(cr.Spec.UpgradeOptions.Schedule, func() {
+	id, err := r.crons.AddFuncWithSeconds(cr.Spec.UpgradeOptions.Schedule, func() {
 		l.statusMutex.Lock()
 		defer l.statusMutex.Unlock()
 
@@ -64,8 +98,10 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 
 		localCr := &api.PerconaServerMongoDB{}
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
-		if err != nil {
-			log.Error(err, "failed to get CR")
+		if k8serrors.IsNotFound(err) {
+			log.Info("cluster is not found, deleting the job",
+				"name", jn, "cluster", cr.Name, "namespace", cr.Namespace)
+			r.deleteCronJob(jn)
 			return
 		}
 
@@ -74,7 +110,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 			return
 		}
 
-		err = localCr.CheckNSetDefaults(r.serverVersion.Platform, log)
+		err = localCr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
 		if err != nil {
 			log.Error(err, "failed to set defaults for CR")
 			return
@@ -89,24 +125,14 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 		return err
 	}
 
-	jn := jobName(cr)
 	log.Info("add new job", "name", jn, "schedule", cr.Spec.UpgradeOptions.Schedule)
-	r.crons.jobs[jn] = Schedule{
-		ID:           int(id),
+
+	r.crons.ensureVersionJobs.Store(jn, Schedule{
+		ID:           id,
 		CronSchedule: cr.Spec.UpgradeOptions.Schedule,
-	}
+	})
 
 	return nil
-}
-
-func jobName(cr *api.PerconaServerMongoDB) string {
-	jobName := "ensure-version"
-	nn := types.NamespacedName{
-		Name:      cr.Name,
-		Namespace: cr.Namespace,
-	}
-
-	return fmt.Sprintf("%s/%s", jobName, nn.String())
 }
 
 // passed version should have format "Major.Minior"
@@ -225,22 +251,49 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
 	}
 	vm := VersionMeta{
-		Apply:                 string(cr.Spec.UpgradeOptions.Apply),
-		KubeVersion:           r.serverVersion.Info.GitVersion,
-		MongoVersion:          cr.Status.MongoVersion,
-		PMMVersion:            cr.Status.PMMVersion,
-		BackupVersion:         cr.Status.BackupVersion,
-		CRUID:                 string(cr.GetUID()),
-		Version:               cr.Version().String(),
-		ShardingEnabled:       cr.Spec.Sharding.Enabled,
-		HashicorpVaultEnabled: len(cr.Spec.Secrets.Vault) > 0,
-		ClusterWideEnabled:    len(watchNs) == 0,
-		PMMEnabled:            cr.Spec.PMM.Enabled,
-		ClusterSize:           cr.Status.Size,
-		PITREnabled:           cr.Spec.Backup.PITR.Enabled,
+		Apply:                  string(cr.Spec.UpgradeOptions.Apply),
+		CRUID:                  string(cr.GetUID()),
+		Version:                cr.Version().String(),
+		PMMEnabled:             cr.Spec.PMM.Enabled,
+		PMMVersion:             cr.Status.PMMVersion,
+		MCSEnabled:             cr.Spec.MultiCluster.Enabled,
+		KubeVersion:            r.serverVersion.Info.GitVersion,
+		PITREnabled:            cr.Spec.Backup.PITR.Enabled,
+		ClusterSize:            cr.Status.Size,
+		MongoVersion:           cr.Status.MongoVersion,
+		BackupVersion:          cr.Status.BackupVersion,
+		BackupsEnabled:         cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0,
+		ShardingEnabled:        cr.Spec.Sharding.Enabled,
+		ClusterWideEnabled:     len(watchNs) == 0,
+		HashicorpVaultEnabled:  len(cr.Spec.Secrets.Vault) > 0,
+		RoleManagementEnabled:  len(cr.Spec.Roles) > 0,
+		UserManagementEnabled:  len(cr.Spec.Users) > 0,
+		VolumeExpansionEnabled: cr.Spec.VolumeExpansionEnabled,
 	}
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if len(rs.Sidecars) > 0 {
+			vm.SidecarsUsed = true
+			break
+		}
+	}
+
+	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
+		vm.HelmDeployOperator = true
+	}
+
+	if _, ok := cr.Labels["helm.sh/chart"]; ok {
+		vm.HelmDeployCR = true
+	}
+
+	for _, task := range cr.Spec.Backup.Tasks {
+		if task.Type == defs.PhysicalBackup && task.Enabled {
+			vm.PhysicalBackupScheduled = true
+			break
+		}
 	}
 
 	fcv := ""
@@ -265,33 +318,36 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		}
 	}
 
-	for _, rs := range cr.Spec.Replsets {
-		if len(rs.Sidecars) > 0 {
-			vm.SidecarsUsed = true
-			break
-		}
-	}
-
-	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
-		vm.HelmDeployOperator = true
-	}
-
-	if _, ok := cr.Labels["helm.sh/chart"]; ok {
-		vm.HelmDeployCR = true
-	}
-
-	if len(cr.Spec.Backup.Storages) > 0 && cr.Spec.Backup.Enabled {
-		vm.BackupsEnabled = true
-	}
-
-	for _, task := range cr.Spec.Backup.Tasks {
-		if task.Type == defs.PhysicalBackup && task.Enabled {
-			vm.PhysicalBackupScheduled = true
-			break
-		}
-	}
-
 	return vm, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) getNewVersions(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService, operatorDepl *appsv1.Deployment) (DepVersion, error) {
+	log := logf.FromContext(ctx)
+
+	endpoint := api.GetDefaultVersionServiceEndpoint()
+	log.V(1).Info("Use version service endpoint", "endpoint", endpoint)
+
+	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get version meta")
+	}
+
+	log.V(1).Info("Sending request to version service", "meta", vm)
+
+	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != endpoint) {
+		_, err = vs.GetExactVersion(cr, endpoint, vm)
+		if err != nil {
+			log.Error(err, "failed to send telemetry to "+api.GetDefaultVersionServiceEndpoint())
+		}
+		return DepVersion{}, nil
+	}
+
+	versions, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "failed to check version")
+	}
+
+	return versions, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getOperatorDeployment(ctx context.Context) (*appsv1.Deployment, error) {
@@ -331,6 +387,103 @@ func (r *ReconcilePerconaServerMongoDB) getOperatorDeployment(ctx context.Contex
 	return depl, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) scheduleTelemetryRequests(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
+	jn := jobName(Telemetry, cr)
+
+	log := logf.FromContext(ctx).WithValues("job", jn)
+
+	scheduleRaw, ok := r.crons.ensureVersionJobs.Load(jn)
+	if !telemetryEnabled() {
+		if ok {
+			r.deleteCronJob(jn)
+		}
+		return nil
+	}
+
+	schedule := Schedule{}
+	if ok {
+		schedule = scheduleRaw.(Schedule)
+	}
+
+	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
+	if !found {
+		sch = fmt.Sprintf("%d * * * *", rand.Intn(60))
+	}
+
+	if ok && !found {
+		return nil
+	}
+
+	if found && schedule.CronSchedule == sch {
+		return nil
+	}
+
+	if ok {
+		log.Info("remove job because of new", "old", schedule.CronSchedule, "new", sch)
+		r.deleteCronJob(jn)
+	}
+
+	id, err := r.crons.AddFuncWithSeconds(sch, func() {
+		localCr := &api.PerconaServerMongoDB{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
+		if k8serrors.IsNotFound(err) {
+			log.Info("cluster is not found, deleting the job",
+				"name", jn, "cluster", cr.Name, "namespace", cr.Namespace)
+			r.deleteCronJob(jn)
+			return
+		}
+		if err != nil {
+			log.Error(err, "failed to get CR")
+			return
+		}
+
+		if localCr.Status.State != api.AppStateReady {
+			log.Info("cluster is not ready")
+			return
+		}
+
+		err = localCr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
+		if err != nil {
+			log.Error(err, "failed to set defaults for CR")
+			return
+		}
+
+		operatorDepl, err := r.getOperatorDeployment(ctx)
+		if err != nil {
+			log.Error(err, "failed to get operator deployment")
+			return
+		}
+
+		_, err = r.getNewVersions(ctx, localCr, vs, operatorDepl)
+		if err != nil {
+			log.Error(err, "failed to send telemetry")
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	log.Info("add new job", "name", jn, "schedule", sch)
+
+	r.crons.ensureVersionJobs.Store(jn, Schedule{
+		ID:           id,
+		CronSchedule: sch,
+	})
+
+	operatorDepl, err := r.getOperatorDeployment(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator deployment")
+	}
+
+	// send telemetry on startup
+	_, err = r.getNewVersions(ctx, cr, vs, operatorDepl)
+	if err != nil {
+		log.Error(err, "failed to send telemetry")
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs VersionService) error {
 	log := logf.FromContext(ctx)
 
@@ -350,13 +503,6 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 	vm, err := r.getVersionMeta(ctx, cr, operatorDepl)
 	if err != nil {
 		return errors.Wrap(err, "failed to get version meta")
-	}
-
-	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != api.GetDefaultVersionServiceEndpoint()) {
-		_, err = vs.GetExactVersion(cr, api.GetDefaultVersionServiceEndpoint(), vm)
-		if err != nil {
-			log.Error(err, "failed to send telemetry to "+api.GetDefaultVersionServiceEndpoint())
-		}
 	}
 
 	if !versionUpgradeEnabled(cr) {

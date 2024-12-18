@@ -211,8 +211,8 @@ func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"cluster":  cr.Name,
-				"ancestor": ancestor,
+				naming.LabelCluster:        cr.Name,
+				naming.LabelBackupAncestor: ancestor,
 			}),
 		},
 	)
@@ -278,10 +278,15 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr
 	}
 
 	for _, rst := range restores.Items {
-		if rst.Status.State != api.RestoreStateReady && rst.Status.State != api.RestoreStateNew && rst.Status.State != api.RestoreStateError &&
-			rst.Spec.ClusterName == cr.Name {
-			return true, nil
+		if rst.Spec.ClusterName != cr.Name {
+			continue
 		}
+
+		if rst.Status.State == api.RestoreStateReady || rst.Status.State == api.RestoreStateError {
+			continue
+		}
+
+		return true, nil
 	}
 
 	return false, nil
@@ -675,7 +680,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	command := []string{"pbm", "config", "--force-resync"}
 	log.Info("Starting PBM resync", "command", command)
 
-	err = r.clientcmd.Exec(ctx, pod, "backup-agent", command, nil, &stdoutBuffer, &stderrBuffer, false)
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		return errors.Wrapf(err, "start PBM resync: run %v", command)
 	}

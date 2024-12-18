@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
@@ -108,10 +109,10 @@ type SecretKeySelector struct {
 }
 
 type User struct {
-	Name              string            `json:"name"`
-	DB                string            `json:"db,omitempty"`
-	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []UserRole        `json:"roles"`
+	Name              string             `json:"name"`
+	DB                string             `json:"db,omitempty"`
+	PasswordSecretRef *SecretKeySelector `json:"passwordSecretRef,omitempty"`
+	Roles             []UserRole         `json:"roles"`
 }
 
 func (u *User) UserID() string {
@@ -217,6 +218,10 @@ type BalancerSpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+func (b *BalancerSpec) IsEnabled() bool {
+	return b.Enabled == nil || *b.Enabled
+}
+
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`
@@ -262,6 +267,8 @@ const (
 	AppStatePaused   AppState = "paused"
 	AppStateReady    AppState = "ready"
 	AppStateError    AppState = "error"
+
+	AppStateSharding AppState = "sharding"
 )
 
 type UpgradeStrategy string
@@ -329,6 +336,16 @@ type ClusterCondition struct {
 	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
 	Reason             string          `json:"reason,omitempty"`
 	Message            string          `json:"message,omitempty"`
+}
+
+// FindCondition finds the conditionType in conditions.
+func (s *PerconaServerMongoDBStatus) FindCondition(conditionType AppState) *ClusterCondition {
+	for i, c := range s.Conditions {
+		if c.Type == conditionType {
+			return &s.Conditions[i]
+		}
+	}
+	return nil
 }
 
 type PMMSpec struct {
@@ -410,7 +427,7 @@ func (m *MultiAZ) WithSidecarVolumes(log logr.Logger, volumes []corev1.Volume) [
 
 	for _, v := range m.SidecarVolumes {
 		if _, ok := names[v.Name]; ok {
-			log.Info("Wrong sidecar volume name, it is skipped", "volumeName", v.Name)
+			log.Error(errors.New("Wrong sidecar volume name, it is skipped"), "volumeName", v.Name)
 			continue
 		}
 
@@ -431,7 +448,7 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 
 	for _, p := range m.SidecarPVCs {
 		if _, ok := names[p.Name]; ok {
-			log.Info("Wrong sidecar PVC name, it is skipped", "PVCName", p.Name)
+			log.Error(errors.New("Wrong sidecar PVC name, it is skipped"), "PVCName", p.Name)
 			continue
 		}
 
@@ -627,6 +644,7 @@ type ReplsetOverride struct {
 	Host     string            `json:"host,omitempty"`
 	Horizons map[string]string `json:"horizons,omitempty"`
 	Tags     map[string]string `json:"tags,omitempty"`
+	Priority *int              `json:"priority,omitempty"`
 }
 
 type HorizonsSpec map[string]map[string]string
@@ -920,6 +938,10 @@ type BackupStorageAzureSpec struct {
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
+type BackupStorageFilesystemSpec struct {
+	Path string `json:"path"`
+}
+
 type BackupStorageType string
 
 const (
@@ -929,9 +951,10 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type  BackupStorageType      `json:"type"`
-	S3    BackupStorageS3Spec    `json:"s3,omitempty"`
-	Azure BackupStorageAzureSpec `json:"azure,omitempty"`
+	Type       BackupStorageType           `json:"type"`
+	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
 type PITRSpec struct {
@@ -986,6 +1009,7 @@ type BackupSpec struct {
 	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
+	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
 func (b BackupSpec) IsEnabledPITR() bool {
@@ -1151,11 +1175,8 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 }
 
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
-	logf.FromContext(ctx).V(1).Info("checking if backup is allowed", "backup", cr.Name)
-
-	if cr.Spec.Unmanaged {
-		return errors.Errorf("backups are not allowed on unmanaged clusters")
-	}
+	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
+	log.Info("checking if backup is allowed")
 
 	if cr.Status.State == AppStateReady {
 		return nil
@@ -1178,20 +1199,41 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	return nil
 }
 
-const maxStatusesQuantity = 20
+func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
+	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
+	log.Info("checking if restore is allowed")
+
+	if cr.Spec.Unmanaged {
+		return errors.New("can't run restore in an unmanaged cluster")
+	}
+
+	return nil
+}
 
 func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	if len(s.Conditions) == 0 {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
 		s.Conditions = append(s.Conditions, c)
 		return
 	}
 
-	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
-		s.Conditions = append(s.Conditions, c)
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
 	}
 
-	if len(s.Conditions) > maxStatusesQuantity {
-		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
 	}
 }
 

@@ -9,7 +9,8 @@ data-at-rest-encryption
 data-sharded
 default-cr
 demand-backup
-demand-backup-eks-credentials
+demand-backup-fs
+demand-backup-eks-credentials-irsa
 demand-backup-physical
 demand-backup-physical-sharded
 demand-backup-sharded
@@ -43,6 +44,7 @@ service-per-pod
 serviceless-external-nodes
 smart-update
 split-horizon
+stable-resource-version
 storage
 tls-issue-cert-manager
 upgrade

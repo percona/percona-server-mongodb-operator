@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -25,9 +25,13 @@ func TestReconcileStatefulSet(t *testing.T) {
 		crName = ns + "-cr"
 	)
 
-	defaultCR := readDefaultCR(t, crName, ns)
+	defaultCR, err := readDefaultCR(crName, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
-	if err := defaultCR.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,7 +146,7 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	t.Helper()
 
 	if !reflect.DeepEqual(got.TypeMeta, want.TypeMeta) {
-		t.Fatalf("expected sts typemeta: %v, got: %v", want.TypeMeta, got.TypeMeta)
+		t.Fatal(cmp.Diff(want.TypeMeta, got.TypeMeta))
 	}
 	compareObjectMeta := func(got, want metav1.ObjectMeta) {
 		delete(got.Annotations, "percona.com/last-config-hash")
@@ -155,7 +159,7 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 			t.Fatalf("error marshaling want: %v", err)
 		}
 		if string(gotBytes) != string(wantBytes) {
-			t.Fatalf("expected sts object meta:\n%s\ngot:\n%s", string(wantBytes), string(gotBytes))
+			t.Fatal(cmp.Diff(string(wantBytes), string(gotBytes)))
 		}
 	}
 	compareObjectMeta(got.ObjectMeta, want.ObjectMeta)
@@ -172,12 +176,12 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 			t.Fatalf("error marshaling want: %v", err)
 		}
 		if string(gotBytes) != string(wantBytes) {
-			t.Fatalf("expected sts spec:\n%s\ngot:\n%s", string(wantBytes), string(gotBytes))
+			t.Fatal(cmp.Diff(string(wantBytes), string(gotBytes)))
 		}
 	}
 	compareSpec(got.Spec, want.Spec)
 
 	if !reflect.DeepEqual(got.Status, want.Status) {
-		t.Fatalf("expected sts status: %v, got: %v", want.Status, got.Status)
+		t.Fatal(cmp.Diff(want.Status, got.Status))
 	}
 }

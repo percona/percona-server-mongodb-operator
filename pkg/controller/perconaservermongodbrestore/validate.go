@@ -28,20 +28,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get backup")
 	}
 
-	// TODO: remove this if statement after https://perconadev.atlassian.net/browse/PBM-1360 is fixed
-	if bcp.Status.Type != defs.PhysicalBackup {
-		cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewRestoreJob(cr), backup.NotPITRLock)
-		if err != nil {
-			return errors.Wrap(err, "check for concurrent jobs")
-		}
-		if cjobs {
-			if cr.Status.State != psmdbv1.RestoreStateWaiting {
-				log.Info("waiting to finish another backup/restore.")
-			}
-			return errWaitingRestore
-		}
-	}
-
 	if bcp.Status.Type != defs.LogicalBackup && cr.Spec.Selective != nil {
 		return errors.New("`.spec.selective` field is supported only for logical backups")
 	}
