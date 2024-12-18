@@ -15,7 +15,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.23.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/onsi/ginkgo/v2 v2.21.0
-	github.com/onsi/gomega v1.36.0
+	github.com/onsi/gomega v1.36.1
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20241002124601-957ac501f939
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
