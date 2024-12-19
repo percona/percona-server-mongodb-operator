@@ -242,13 +242,15 @@ void runTest(Integer TEST_ID) {
     }
 }
 
+boolean isManualBuild() {
+    def causes = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+    return !causes.isEmpty()
+}
+
 needToRunTests = true
 void checkE2EIgnoreFiles() {
-
-    boolean isRebuild = env.BUILD_CAUSE?.contains("RebuildCause")
-    echo "env.BUILD_CAUSE: ${env.BUILD_CAUSE}"
-    if (isRebuild) {
-        echo "This is a manual rebuild. Ignoring propagation rules and allowing pipeline execution."
+    if (isManualBuild()) {
+        echo "This is a manual rebuild. Forcing pipeline execution."
         return
     }
 
