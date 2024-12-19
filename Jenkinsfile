@@ -253,7 +253,6 @@ void checkE2EIgnoreFiles() {
         def build = currentBuild.previousBuild
         while (build != null) {
             // if (build.result == 'SUCCESS') {
-            if (true) {
                 try {
                     echo "Found a previous successful build: $build.number"
                     copyArtifacts(projectName: env.JOB_NAME, selector: specific("$build.number"), filter: "$lastProcessedCommitFile")
@@ -263,9 +262,9 @@ void checkE2EIgnoreFiles() {
                 } catch (Exception e) {
                     echo "No $lastProcessedCommitFile found in build $build.number. Checking earlier builds."
                 }
-            } else {
-                echo "Build $build.number was not successful. Checking earlier builds."
-            }
+            // } else {
+                // echo "Build $build.number was not successful. Checking earlier builds."
+            // }
             build = build.previousBuild
         }
 
@@ -287,12 +286,22 @@ void checkE2EIgnoreFiles() {
             echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
         } else {
             echo "All changed files are e2eignore files. Aborting pipeline execution."
+            // Skip run and propagate failure if previous build failed
+            if (currentBuild.previousBuild?.result == 'FAILURE') {
+                echo "All changed files are e2eignore files, and previous build failed. Propagating failure state."
+                currentBuild.result = 'FAILURE'
+                error "Skipping execution as non-significant changes detected and previous build failed."
+            } else {
+                echo "All changed files are e2eignore files. Aborting pipeline execution."
+            }
         }
 
         sh """
             echo \$(git rev-parse HEAD) > $lastProcessedCommitFile
         """
         archiveArtifacts "$lastProcessedCommitFile"
+    } else {
+        echo "No $e2eignoreFile file found. Proceeding with execution."
     }
 }
 
