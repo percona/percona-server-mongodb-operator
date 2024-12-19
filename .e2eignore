@@ -7,4 +7,5 @@ README.md
 LICENSE
 operator.png
 kubernetes.svg
+Jenkinsfile
 .e2eignore

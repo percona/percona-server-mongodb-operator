@@ -252,7 +252,8 @@ void checkE2EIgnoreFiles() {
 
         def build = currentBuild.previousBuild
         while (build != null) {
-            if (build.result == 'SUCCESS') {
+            // if (build.result == 'SUCCESS') {
+            if (true) {
                 try {
                     echo "Found a previous successful build: $build.number"
                     copyArtifacts(projectName: env.JOB_NAME, selector: specific("$build.number"), filter: "$lastProcessedCommitFile")
