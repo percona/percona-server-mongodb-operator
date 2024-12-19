@@ -246,6 +246,7 @@ needToRunTests = true
 void checkE2EIgnoreFiles() {
 
     boolean isRebuild = env.BUILD_CAUSE?.contains("RebuildCause")
+    echo "env.BUILD_CAUSE: ${env.BUILD_CAUSE}"
     if (isRebuild) {
         echo "This is a manual rebuild. Ignoring propagation rules and allowing pipeline execution."
         return
