@@ -161,15 +161,15 @@ function main() {
 	if [ -n "$OPERATOR_NS" ]; then
 		rbac="cw-rbac"
 	fi
-	create_infra_gh "${namespace}" "${GIT_TAG}"
+	create_infra_gh $namespace $GIT_TAG
 	deploy_cert_manager
 	apply_s3_storage_secrets
 	deploy_minio
 
 	desc 'create secrets and start client'
-	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" >"${tmp_dir}/secrets.yaml"
-	kubectl_bin apply -f "${conf_dir}/client.yml" \
-		-f "${tmp_dir}/secrets.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${GIT_TAG}/deploy/secrets.yaml" > $tmp_dir/secrets.yaml
+	kubectl_bin apply -f $tmp_dir/secrets.yaml
+	apply_client $conf_dir/client.yml
 
 	desc "create first PSMDB cluster $cluster"
 	local cr_yaml="${tmp_dir}/cr_${GIT_TAG}.yaml"
@@ -263,11 +263,7 @@ function main() {
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
 
 	backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-	retry 3 5 kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-		/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls "s3://${backup_dest_minio}/rs0/" \
-		| grep myApp.test.gz
-
+	retry 3 5 aws_cli "s3 ls s3://${backup_dest_minio}/rs0/" | grep "myApp.test.gz"
 	run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-mongos.${namespace}"
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
 	run_restore "$backup_name_minio"
