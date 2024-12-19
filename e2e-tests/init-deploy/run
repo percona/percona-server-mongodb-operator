@@ -6,7 +6,7 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-max_conn=13
+max_conn=16
 
 create_infra $namespace
 
