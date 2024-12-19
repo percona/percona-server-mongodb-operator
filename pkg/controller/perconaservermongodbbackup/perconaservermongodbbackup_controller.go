@@ -250,7 +250,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
 			},
 		}
-		return azure.New(azureConf, nil)
+		return azure.New(azureConf, "", nil)
 	case cr.Status.S3 != nil:
 		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
@@ -317,7 +317,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		return s3.New(s3Conf, nil)
+		return s3.New(s3Conf, "", nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
 	}
