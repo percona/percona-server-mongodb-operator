@@ -293,7 +293,7 @@ void checkE2EIgnoreFiles() {
         } else {
             if (currentBuild.previousBuild?.result in ['FAILURE', 'ABORTED', 'UNSTABLE']) {
                 echo "All changed files are e2eignore files, and previous build failed. Propagating failure state."
-                currentBuild.result = 'FAILURE'
+                currentBuild.result = currentBuild.previousBuild?.result
                 error "Skipping execution as non-significant changes detected and previous build failed."
             } else {
                 echo "All changed files are e2eignore files. Aborting pipeline execution."
