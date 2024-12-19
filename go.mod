@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/go-version v1.7.0
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
-	github.com/percona/percona-backup-mongodb v1.8.1-0.20241002124601-957ac501f939
+	github.com/percona/percona-backup-mongodb v1.8.1-0.20241212160532-0157f87a7eee
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.10.0
