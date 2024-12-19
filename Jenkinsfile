@@ -291,7 +291,7 @@ void checkE2EIgnoreFiles() {
         if (needToRunTests) {
             echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
         } else {
-            if (currentBuild.previousBuild?.result == 'FAILURE') {
+            if (currentBuild.previousBuild?.result == 'FAILURE' || currentBuild.previousBuild?.result == 'ABORTED' || currentBuild.previousBuild?.result == 'UNSTABLE') {
                 echo "All changed files are e2eignore files, and previous build failed. Propagating failure state."
                 currentBuild.result = 'FAILURE'
                 error "Skipping execution as non-significant changes detected and previous build failed."
