@@ -182,7 +182,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 
 	return &pbmC{
 		Client:    pbmc,
-		pbmLogger: pbmLog.New(pbmc.LogCollection(), "", ""),
+		pbmLogger: pbmLog.New(pbmc, "", ""),
 		k8c:       c,
 		namespace: cluster.Namespace,
 		rsName:    rs.Name,
@@ -397,7 +397,7 @@ func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMon
 	}
 
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
-	stg, err := util.StorageFromConfig(&cfg.Storage, e)
+	stg, err := util.StorageFromConfig(&cfg.Storage, "", e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
@@ -643,7 +643,7 @@ func (b *pbmC) Node(ctx context.Context) (string, error) {
 }
 
 func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error) {
-	return util.GetStorage(ctx, b.Client, e)
+	return util.GetStorage(ctx, b.Client, "", e)
 }
 
 func (b *pbmC) GetConfig(ctx context.Context) (*config.Config, error) {
@@ -663,7 +663,7 @@ func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.Backu
 }
 
 func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
-	return backup.DeleteBackup(ctx, b.Client, name)
+	return backup.DeleteBackup(ctx, b.Client, name, "")
 }
 
 func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error) {
@@ -671,7 +671,7 @@ func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.Restor
 }
 
 func (b *pbmC) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
-	return resync.Resync(ctx, b.Client, stg)
+	return resync.Resync(ctx, b.Client, stg, "")
 }
 
 func (b *pbmC) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {
