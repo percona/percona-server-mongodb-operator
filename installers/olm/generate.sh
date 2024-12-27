@@ -40,6 +40,22 @@ kubectl kustomize "../../config/${DISTRIBUTION}" >operator_yamls.yaml
 
 export role="${mode}Role"
 
+update_yaml_images() {
+    local yaml_file="$1"
+
+    if [ ! -f "$yaml_file" ]; then
+        echo "Error: File '$yaml_file' does not exist."
+        return 1
+    fi
+
+    local temp_file=$(mktemp)
+
+    sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" > "$temp_file"
+    mv "$temp_file" "$yaml_file"
+
+    echo "File '$yaml_file' updated successfully."
+}
+
 yq eval '. | select(.kind == "CustomResourceDefinition")' operator_yamls.yaml >operator_crds.yaml
 yq eval '. | select(.kind == "Deployment")' operator_yamls.yaml >operator_deployments.yaml
 yq eval '. | select(.kind == "ServiceAccount")' operator_yamls.yaml >operator_accounts.yaml
@@ -55,7 +71,7 @@ install -d "${project_directory}"
 
 	# Generate CRD descriptions from Go markers.
 	# https://sdk.operatorframework.io/docs/building-operators/golang/references/markers/
-	yq eval '[. | {"group": .spec.group, "kind": .spec.names.kind, "version": .spec.versions[].name}]' ../../operator_crds.yaml >crd_gvks.yaml
+	yq eval '[. | {"group": .spec.group, "kind": .spec.names.kind, "version": .spec.versions[].name}]' ../../../../deploy/crd.yaml >crd_gvks.yaml
 
 	yq eval --inplace '.multigroup = true | .resources = load("crd_gvks.yaml" | fromyaml) | .' ./PROJECT
 
@@ -85,11 +101,12 @@ yq eval '.annotations["operators.operatorframework.io.bundle.channels.v1"] = env
 
 if [ ${DISTRIBUTION} == 'community' ]; then
 	# community-operators
-	yq eval '.annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mongodb-operator" |
+	yq eval --inplace '
+	     .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mongodb-operator" |
          .annotations["org.opencontainers.image.authors"] = "info@percona.com" |
          .annotations["org.opencontainers.image.url"] = "https://percona.com" |
          .annotations["org.opencontainers.image.vendor"] = "Percona"' \
-		bundle.annotations.yaml >"${bundle_directory}/metadata/annotations.yaml"
+		    "${bundle_directory}/metadata/annotations.yaml"
 
 # certified-operators
 elif [ ${DISTRIBUTION} == 'redhat' ]; then
@@ -110,14 +127,37 @@ fi
 labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson)) | join("\n")' \
 	"${bundle_directory}/metadata/annotations.yaml")
 
+labels="${labels}
+    com.redhat.delivery.backport=true
+    com.redhat.delivery.operator.bundle=true"
+
 ANNOTATIONS="${labels}" envsubst <bundle.Dockerfile >"${bundle_directory}/Dockerfile"
 
-# Include CRDs as manifests.
-crd_names=$(yq eval -o=tsv '.metadata.name' operator_crds.yaml)
+awk '{gsub(/^[ \t]+/, "    "); print}' "${bundle_directory}/Dockerfile" > "${bundle_directory}/Dockerfile.new" && mv "${bundle_directory}/Dockerfile.new" "${bundle_directory}/Dockerfile"
 
-for name in ${crd_names}; do
-	yq eval ". | select(.metadata.name == \"${name}\")" operator_crds.yaml >"${bundle_directory}/manifests/${name}.crd.yaml"
-done
+# Include CRDs as manifests.
+crd_names=$(yq eval -o=tsv '.metadata.name' ../../deploy/crd.yaml)
+
+gawk -v names="${crd_names}" -v bundle_directory="${bundle_directory}" '
+BEGIN {
+    split(names, name_array, " ");
+    idx=1;
+}
+/apiVersion: apiextensions.k8s.io\/v1/ {
+    if (idx in name_array) {
+        current_file = bundle_directory "/manifests/" name_array[idx] ".crd.yaml";
+        idx++;
+    } else {
+        current_file = bundle_directory "/unnamed_" idx ".yaml";
+        idx++;
+    }
+}
+{
+    if (current_file != "") {
+        print > current_file;
+    }
+}
+' ../../deploy/crd.yaml
 
 abort() {
 	echo >&2 "$@"
@@ -136,9 +176,12 @@ yq eval -i '[.]' operator_roles${suffix}.yaml && yq eval 'length == 1' operator_
 # Render bundle CSV and strip comments.
 csv_stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
 
-cr_example=$(yq eval -o=json '[.]' ../../deploy/cr.yaml)
+cr_example=$(yq eval -o=json ../../deploy/cr.yaml)
+backup_example=$(yq eval -o=json ../../deploy/backup/backup.yaml)
+restore_example=$(yq eval -o=json ../../deploy/backup/restore.yaml)
+full_example=$(jq -n "[${cr_example}, ${backup_example}, ${restore_example}]")
 
-export examples="${cr_example}"
+export examples="${full_example}"
 export deployment=$(yq eval operator_deployments.yaml)
 export account=$(yq eval '.[] | .metadata.name' operator_accounts.yaml)
 export rules=$(yq eval '.[] | .rules' operator_roles${suffix}.yaml)
@@ -150,9 +193,10 @@ export name="${csv_stem}.v${VERSION}${suffix}"
 export name_certified="${csv_stem}-certified.v${VERSION}${suffix}"
 export name_certified_rhmp="${csv_stem}-certified-rhmp.v${VERSION}${suffix}"
 export skip_range="<${VERSION}"
-export containerImage=$(yq eval '.[0].spec.template.spec.containers[1].image' operator_deployments.yaml)
+export containerImage="$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)"
 export relatedImages=$(yq eval bundle.relatedImages.yaml)
 export rulesLevel=${rulesLevel}
+
 yq eval '
   .metadata.annotations["alm-examples"] = strenv(examples) |
   .metadata.annotations["containerImage"] = env(containerImage) |
@@ -164,7 +208,9 @@ yq eval '
   .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )] |
   .spec.minKubeVersion = env(minKubeVer)' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
-if [ ${DISTRIBUTION} == "redhat" ]; then
+if [ ${DISTRIBUTION} == "community" ]; then
+    update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
+elif [ ${DISTRIBUTION} == "redhat" ]; then
 
 	yq eval --inplace '
         .spec.relatedImages = env(relatedImages) |
@@ -186,5 +232,15 @@ elif [ ${DISTRIBUTION} == "marketplace" ]; then
         .spec.relatedImages = env(relatedImages)' \
 		"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 fi
+
+initImage=$(grep "containerImage:" bundles/$DISTRIBUTION/manifests/percona-server-mongodb-operator.clusterserviceversion.yaml | awk -F': ' '{print $2}' | tr -d '"')
+
+sed -i '' '/crVersion/!b
+/crVersion/n
+/crVersion/a\
+  initImage: $initImage
+' "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
+# delete blank lines.
+sed -i '' '/^$/d' "${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
 if >/dev/null command -v tree; then tree -C "${bundle_directory}"; fi

@@ -1,14 +1,10 @@
-# https://olm.operatorframework.io/docs/concepts/crds/clusterserviceversion/
-# https://docs.openshift.com/container-platform/4.7/operators/operator_sdk/osdk-generating-csvs.html
-# https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/creating-the-csv
-# https://pkg.go.dev/github.com/operator-framework/api@v0.10.1/pkg/operators/v1alpha1#ClusterServiceVersion
-
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: '' # generate.sh
+  name:
   annotations:
-    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/disconnected: "false"
     features.operators.openshift.io/fips-compliant: "false"
     features.operators.openshift.io/proxy-aware: "false"
     features.operators.openshift.io/tls-profiles: "false"
@@ -18,29 +14,18 @@ metadata:
     features.operators.openshift.io/cnf: "false"
     features.operators.openshift.io/cni: "false"
     features.operators.openshift.io/csi: "false"
-    support: percona.com
-    olm.properties: '[]'
-
-    # The following affect how the package is indexed at OperatorHub.io:
-    # https://operatorhub.io/?category=Database
-    # https://sdk.operatorframework.io/docs/advanced-topics/operator-capabilities/operator-capabilities/
+    support: percona/percona.com
     categories: Database
     capabilities: Deep Insights
     description: >-
       Percona Distribution for MongoDB Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment
-
-    # The following appear on the details page at OperatorHub.io:
-    # https://operatorhub.io/operator/postgresql
-    createdAt: 2024-10-07 19:40Z
-    repository: https://github.com/percona/percona-server-mongodb-operator
+    createdAt: "%Y-%m-%dT%H:%M:%S.%3Z"
+    repository: 'https://github.com/percona/percona-server-mongodb-operator'
     alm-examples: >-  
 
 spec:
-  # The following affect how the package is indexed at OperatorHub.io:
-  # https://operatorhub.io/
   displayName: Percona Distribution for MongoDB Operator
   provider:
-    # These values become labels on the PackageManifest.
     name: Percona
     url: https://www.percona.com/
   keywords:
@@ -49,9 +34,6 @@ spec:
     - database
     - replicaset
     - shard
-
-  # The following appear on the details page at OperatorHub.io:
-  # https://operatorhub.io/operator/percona-xtradb-cluster-operator
   description: |-
       ## Percona is Cloud Native
   
@@ -145,6 +127,8 @@ spec:
       data:
       MONGODB_BACKUP_USER: YmFja3Vw
       MONGODB_BACKUP_PASSWORD: YmFja3VwMTIzNDU2
+      MONGODB_DATABASE_ADMIN_USER: ZGF0YWJhc2VBZG1pbgo=
+      MONGODB_DATABASE_ADMIN_PASSWORD: ZGF0YWJhc2VBZG1pbjEyMzQ1Ngo=
       MONGODB_CLUSTER_ADMIN_USER: Y2x1c3RlckFkbWlu
       MONGODB_CLUSTER_ADMIN_PASSWORD: Y2x1c3RlckFkbWluMTIzNDU2
       MONGODB_CLUSTER_MONITOR_USER: Y2x1c3Rlck1vbml0b3I=
@@ -180,7 +164,7 @@ spec:
       resulted in a wide range of reduced safety features without the user’s explicit intent: disabling TLS,
       allowing backups in unhealthy clusters, etc.
 
-  version: '' # generate.sh
+  version: ''
   links:
   - name: Percona
     url: 'https://www.percona.com/'
@@ -281,22 +265,20 @@ spec:
     required: [ ]
     install:
       strategy: deployment
-  # https://olm.operatorframework.io/docs/best-practices/common/
-  # Note: The minKubeVersion must correspond to the lowest supported OCP version
   minKubeVersion: 1.28.0
   maturity: stable
-  # https://github.com/operator-framework/operator-lifecycle-manager/blob/v0.18.2/doc/design/how-to-update-operators.md#replaces--channels
-  replaces: '' # generate.sh
-
-  # https://olm.operatorframework.io/docs/advanced-tasks/operator-scoping-with-operatorgroups/
+  replaces: ''
   installModes:
-    - { type: OwnNamespace,    supported: true  }
-    - { type: SingleNamespace, supported: true  }
-    - { type: MultiNamespace,  supported: true }
-    - { type: AllNamespaces,   supported: true  }
-
+    - supported: true
+      type: OwnNamespace
+    - supported: true
+      type: SingleNamespace
+    - supported: true
+      type: MultiNamespace
+    - supported: true
+      type: AllNamespaces
   install:
     strategy: deployment
     spec:
-      permissions: # kustomize config/operator
-      deployments: # kustomize config/operator
+      permissions:
+      deployments:
