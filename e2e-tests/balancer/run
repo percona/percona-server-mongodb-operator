@@ -69,9 +69,9 @@ main() {
 
 	desc 'create first PSMDB cluster'
 	cluster="some-name"
-	kubectl_bin apply \
-		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client-70.yml"
+  
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client-70.yml
 
 	if version_gt "1.19" && [ $EKS -ne 1 ]; then
 		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
