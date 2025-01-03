@@ -95,6 +95,13 @@ spec:
                 type: string
               error:
                 type: string
+              filesystem:
+                properties:
+                  path:
+                    type: string
+                required:
+                - path
+                type: object
               lastTransition:
                 format: date-time
                 type: string

@@ -71,13 +71,15 @@ spec:
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  key: MONGODB_BACKUP_USER
-                  name: some-users
+                  key: MONGODB_BACKUP_USER_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
             - name: PBM_AGENT_MONGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  key: MONGODB_BACKUP_PASSWORD
-                  name: some-users
+                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
             - name: POD_NAME
               valueFrom:
                 fieldRef:

@@ -48,6 +48,7 @@ spec:
     tasks:
     - name: every-min-minio
       enabled: true
+      keep: 1
       type: physical
       schedule: "* * * * *"
       compressionType: gzip

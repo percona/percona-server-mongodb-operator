@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -18,7 +17,11 @@ func TestCheckFinalizers(t *testing.T) {
 	crName := "check-finalizers"
 	ns := crName + "-ns"
 
-	defaultCR := readDefaultCR(t, crName, ns)
+	defaultCR, err := readDefaultCR(crName, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	obj := append(
 		fakePodsForRS(defaultCR, defaultCR.Spec.Replsets[0]),
 		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0], defaultCR.Spec.Replsets[0].Size, ""),
@@ -87,7 +90,7 @@ func TestCheckFinalizers(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+			if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 				t.Fatal(err)
 			}
 

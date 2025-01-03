@@ -230,7 +230,7 @@ var (
 
 func (c *certManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
 	log := logf.FromContext(ctx)
-	checker, err := cmapichecker.New(config, c.scheme, ns)
+	checker, err := cmapichecker.New(config, ns)
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 		case cmapichecker.ErrCertManagerCRDsNotFound:
 			return ErrCertManagerNotFound
 		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
-			log.Info("cert-manager is not ready", "error", cmapichecker.TranslateToSimpleError(err))
+			log.Error(cmapichecker.TranslateToSimpleError(err), "cert-manager is not ready")
 			return ErrCertManagerNotReady
 		}
 		return err

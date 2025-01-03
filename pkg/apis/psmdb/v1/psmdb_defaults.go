@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 
@@ -57,7 +59,9 @@ const (
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
-func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
+func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform version.Platform) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Replsets == nil {
 		return errors.New("at least one replica set should be specified")
 	}
@@ -317,29 +321,30 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
 
 			if deprecatedType := cr.Spec.Sharding.Mongos.Expose.DeprecatedExposeType; deprecatedType != "" {
-				if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-					log.Info("Field `.spec.sharding.mongos.expose.exposeType` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace)
-				}
 				cr.Spec.Sharding.Mongos.Expose.ExposeType = deprecatedType
 			}
 		}
-
 		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels) > 0 {
-			if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-				log.Info("Field `.spec.sharding.mongos.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace)
-			}
 			cr.Spec.Sharding.Mongos.Expose.ServiceLabels = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels, cr.Spec.Sharding.Mongos.Expose.ServiceLabels)
 		}
-
 		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations) > 0 {
-			if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-				log.Info("Field `.spec.sharding.mongos.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace)
-			}
 			cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)
 		}
 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
+	}
+
+	if mongos := cr.Spec.Sharding.Mongos; mongos != nil && cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if mongos.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.spec.sharding.mongos.expose.exposeType` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace)
 		}
 	}
 
@@ -588,10 +593,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.ClusterServiceDNSMode = DNSModeInternal
 	}
 
-	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
-		return errors.New("backup.enabled must be false on unmanaged clusters")
-	}
-
 	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
 		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}
@@ -631,25 +632,26 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 			rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
 
 			if rs.Expose.DeprecatedExposeType != "" {
-				if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-					log.Info("Field `.expose.exposeType` was deprecated in 1.18.0. Consider using `.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
-				}
 				rs.Expose.ExposeType = rs.Expose.DeprecatedExposeType
 			}
 		}
-
 		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
-			if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-				log.Info("Field `.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
-			}
 			rs.Expose.ServiceLabels = util.MapMerge(rs.Expose.DeprecatedServiceLabels, rs.Expose.ServiceLabels)
 		}
-
 		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
-			if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
-				log.Info("Field `.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
-			}
 			rs.Expose.ServiceAnnotations = util.MapMerge(rs.Expose.DeprecatedServiceAnnotations, rs.Expose.ServiceAnnotations)
+		}
+	}
+
+	if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if rs.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.expose.exposeType` was deprecated in 1.18.0. Consider using `.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
 		}
 	}
 
