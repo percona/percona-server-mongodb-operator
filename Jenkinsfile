@@ -144,7 +144,7 @@ void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
         echo
         kubectl top pod --all-namespaces
         echo
-        kubectl get events --field-selector type!=Normal --all-namespaces
+        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
         echo "======================================================"
     """
 }
