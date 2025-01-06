@@ -119,6 +119,10 @@ func (u *User) UserID() string {
 	return u.DB + "." + u.Name
 }
 
+func (u *User) IsExternalDB() bool {
+	return u.DB == "$external"
+}
+
 type RoleAuthenticationRestriction struct {
 	ClientSource  []string `json:"clientSource,omitempty"`
 	ServerAddress []string `json:"serverAddress,omitempty"`
