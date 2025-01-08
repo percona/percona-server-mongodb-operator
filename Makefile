@@ -106,10 +106,10 @@ release: manifests
 	$(SED) -i "/Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" version/version.go
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD70)#}" deploy/cr-minimal.yaml
+		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD80)#}" deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD70)#}" \
+		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD80)#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
