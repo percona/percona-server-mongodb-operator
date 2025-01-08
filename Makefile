@@ -99,19 +99,20 @@ swagger: ## Download swagger locally if necessary.
 	$(call go-get-tool,$(SWAGGER),github.com/go-swagger/go-swagger/cmd/swagger@latest)
 
 # Prepare release
+include e2e-tests/release_versions
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
 	$(SED) -i "/Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" version/version.go
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: percona/percona-server-mongodb:@@SET_TAG@@#}" deploy/cr-minimal.yaml
+		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD70)#}" deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
-		-e "/^spec:/,/^  image:/{s#image: .*#image: percona/percona-server-mongodb:@@SET_TAG@@#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-backup-mongodb:@@SET_TAG@@#}" \
+		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD70)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:@@SET_TAG@@#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
