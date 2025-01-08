@@ -30,10 +30,11 @@ setup_cluster() {
 	desc "create first PSMDB cluster $cluster"
 	apply_cluster $conf_dir/$cluster.yml
 
+	wait_for_running "$cluster" 3
+
 	desc "enable backups"
 	kubectl_bin patch psmdb some-name --type='merge' -p '{"spec":{"backup":{"enabled":true}}}'
 
-	# check if all 3 Pods started
 	wait_for_running "$cluster" 3
 
 	desc 'create user myApp'
