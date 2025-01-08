@@ -10,8 +10,8 @@ deploy_nfs_server() {
 	kubectl_bin create namespace storage
 	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yaml
 	sleep 5 # wait for NFS server pod to be created
-	local nfsPod=$(kubectl_bin get pod -n storage -l app=nfs-server -o jsonpath={.items[].metadata.name})
 
+	local nfsPod=$(kubectl_bin get pod -n storage -l app=nfs-server -o jsonpath={.items[].metadata.name})
 	until [[ "$(kubectl_bin get pod ${nfsPod} -n storage -o jsonpath={.status.phase})" == "Running" ]]; do
 		log "Waiting for ${nfsPod} to start Running"
 		sleep 1
@@ -50,6 +50,11 @@ create_infra ${namespace}
 
 kubectl_bin delete ns storage || :
 
+if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
+	sc=$(kubectl_bin get storageclass | tail -1  | awk '{print $1}')
+	kubectl_bin annotate storageclass ${sc} storageclass.kubernetes.io/is-default-class=true
+fi
+
 log "deploying NFS server"
 deploy_nfs_server
 
@@ -59,13 +64,21 @@ kubectl_bin apply \
 	-f "${conf_dir}/client.yml"
 
 log "creating PSMDB cluster ${cluster}"
-apply_cluster ${test_dir}/conf/${cluster}.yaml
+if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
+	nfs_ip=$(kubectl_bin -n storage get svc nfs-service -o jsonpath={.spec.clusterIP})
+	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${test_dir}/conf/${cluster}.yaml \
+		| kubectl_bin apply -f -
+else
+	apply_cluster ${test_dir}/conf/${cluster}.yaml
+fi
 
 log 'wait for all 3 pods to start'
 wait_for_running ${cluster}-rs0 3
 
-log 'checking if statefulset created with expected config'
-compare_kubectl statefulset/${cluster}-rs0
+if [[ $EKS -ne 1 && -z ${OPENSHIFT} ]]; then
+	log 'checking if statefulset created with expected config'
+	compare_kubectl statefulset/${cluster}-rs0
+fi
 
 log 'creating user'
 run_mongo \
