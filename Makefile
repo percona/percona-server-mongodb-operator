@@ -117,7 +117,9 @@ release: manifests
 		-e "s|perconalab/percona-server-mongodb-operator:main-mongod7.0|$(IMAGE_MONGOD80)|g" \
 		-e "s|perconalab/percona-server-mongodb-operator:main-backup|$(IMAGE_BACKUP)|g" \
 		-e "s|perconalab/percona-server-mongodb-operator:main|$(IMAGE_OPERATOR)|g" \
-		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml 
+		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
+	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main|$(IMAGE_OPERATOR)|g" pkg/controller/perconaservermongodb/suite_test.go
+	
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
