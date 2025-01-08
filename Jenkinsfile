@@ -215,7 +215,7 @@ void runTest(Integer TEST_ID) {
                         export DEBUG_TESTS=1
                     fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
-                    time bash e2e-tests/$testName/run
+                    time ./e2e-tests/$testName/run
                 """
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -414,7 +414,7 @@ pipeline {
                                 docker login -u '${USER}' -p '${PASS}'
                                 export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
-                                e2e-tests/build
+                                ./e2e-tests/build
                                 docker logout
                             "
                         sudo rm -rf ./build
