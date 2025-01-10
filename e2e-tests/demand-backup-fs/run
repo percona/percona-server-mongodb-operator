@@ -50,8 +50,8 @@ create_infra ${namespace}
 
 kubectl_bin delete ns storage || :
 
-if [[ $GKE -ne 1 ]]; then
-	sc=$(kubectl_bin get storageclass | tail -1  | awk '{print $1}')
+if [[ $GKE != 1 ]]; then
+	sc=$(kubectl_bin get storageclass | tail -1 | awk '{print $1}')
 	kubectl_bin annotate storageclass ${sc} storageclass.kubernetes.io/is-default-class=true
 fi
 
@@ -64,7 +64,7 @@ kubectl_bin apply \
 	-f "${conf_dir}/client.yml"
 
 log "creating PSMDB cluster ${cluster}"
-if [[ $GKE -ne 1 ]]; then
+if [[ $GKE != 1 ]]; then
 	nfs_ip=$(kubectl_bin -n storage get svc nfs-service -o jsonpath={.spec.clusterIP})
 	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${test_dir}/conf/${cluster}.yaml \
 		| kubectl_bin apply -f -
