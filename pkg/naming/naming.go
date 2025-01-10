@@ -8,3 +8,7 @@ const (
 	FinalizerDeletePVC              = perconaPrefix + "delete-psmdb-pvc"
 	FinalizerDeletePSMDBPodsInOrder = perconaPrefix + "delete-psmdb-pods-in-order"
 )
+
+const (
+	ContainerBackupAgent = "backup-agent"
+)

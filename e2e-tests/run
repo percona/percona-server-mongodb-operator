@@ -17,6 +17,7 @@ fail() {
 "$dir/data-sharded/run" || fail "data-sharded"
 "$dir/default-cr/run" || fail "default-cr"
 "$dir/demand-backup-eks-credentials/run" || fail "demand-backup-eks-credentials"
+"$dir/demand-backup-eks-credentials-irsa/run" || fail "demand-backup-eks-credentials-irsa"
 "$dir/demand-backup-sharded/run" || fail "demand-backup-sharded"
 "$dir/demand-backup/run" || fail "demand-backup"
 "$dir/demand-backup-physical/run" || fail "demand-backup-physical"

@@ -322,15 +322,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}, nil
 }
 
-const agentContainerName = "backup-agent"
-
 // backupAgentContainer creates the container object for a backup agent
 func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsEnabled bool) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
 	c := corev1.Container{
-		Name:            agentContainerName,
+		Name:            naming.ContainerBackupAgent,
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
@@ -338,7 +336,7 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 				Name: "PBM_AGENT_MONGODB_USERNAME",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_USER",
+						Key: "MONGODB_BACKUP_USER_ESCAPED",
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: usersSecretName,
 						},
@@ -350,7 +348,7 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 				Name: "PBM_AGENT_MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_PASSWORD",
+						Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: usersSecretName,
 						},
@@ -369,6 +367,10 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
+	}
+	if cr.CompareVersion("1.19.0") < 0 {
+		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
+		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
 
 	if cr.CompareVersion("1.13.0") >= 0 {
@@ -435,6 +437,10 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 			Name:  "PBM_AGENT_TLS_ENABLED",
 			Value: strconv.FormatBool(tlsEnabled),
 		})
+	}
+
+	if len(cr.Spec.Backup.VolumeMounts) > 0 {
+		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
 	}
 
 	return c

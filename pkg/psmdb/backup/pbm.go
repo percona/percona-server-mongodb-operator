@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -31,6 +29,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/resync"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -41,7 +40,6 @@ import (
 )
 
 const (
-	agentContainerName               = "backup-agent"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
@@ -121,7 +119,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
-	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name )
+	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", tlsPemFile)
@@ -132,7 +130,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
-	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name )
+	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
 	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", errors.Wrapf(err, "open %s", caCertFile)
@@ -184,7 +182,7 @@ func NewPBM(ctx context.Context, c client.Client, cluster *api.PerconaServerMong
 
 	return &pbmC{
 		Client:    pbmc,
-		pbmLogger: pbmLog.New(pbmc.LogCollection(), "", ""),
+		pbmLogger: pbmLog.New(pbmc, "", ""),
 		k8c:       c,
 		namespace: cluster.Namespace,
 		rsName:    rs.Name,
@@ -380,7 +378,12 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 	case api.BackupStorageFilesystem:
-		return conf, errors.New("filesystem backup storage not supported yet, skipping storage name")
+		conf.Storage = config.StorageConf{
+			Type: storage.Filesystem,
+			Filesystem: &fs.Config{
+				Path: stg.Filesystem.Path,
+			},
+		}
 	default:
 		return conf, errors.New("unsupported backup storage type")
 	}
@@ -389,32 +392,24 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 }
 
 func (b *pbmC) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+	if cfg.Storage.Type == storage.Filesystem {
+		return nil
+	}
+
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
-	backupName := bcp.Status.PBMname
-	s, err := util.StorageFromConfig(&cfg.Storage, e)
+	stg, err := util.StorageFromConfig(&cfg.Storage, "", e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
 	}
-	m, err := restore.GetMetaFromStore(s, backupName)
+
+	backupName := bcp.Status.PBMname
+	m, err := restore.GetMetaFromStore(stg, backupName)
 	if err != nil {
 		return errors.Wrap(err, "get backup metadata from storage")
 	}
-	switch bcp.Status.Type {
-	case "", defs.LogicalBackup:
-		if err := backup.CheckBackupFiles(ctx, m, s); err != nil {
-			return errors.Wrap(err, "check backup files")
-		}
-	case defs.PhysicalBackup:
-		for _, rs := range m.Replsets {
-			f := path.Join(m.Name, rs.Name)
-			files, err := s.List(f, "")
-			if err != nil {
-				return errors.Wrapf(err, "failed to list backup files at %s", f)
-			}
-			if len(files) == 0 {
-				return errors.Wrap(err, "no physical backup files")
-			}
-		}
+
+	if err := backup.CheckBackupFiles(ctx, stg, m.Name); err != nil {
+		return errors.Wrap(err, "check backup files")
 	}
 
 	return nil
@@ -428,7 +423,7 @@ func (b *pbmC) Conn() *mongo.Client {
 // by given storageName
 func (b *pbmC) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
 	log := logf.FromContext(ctx)
-	log.Info("Setting PBM config", "backup", cluster.Name)
+	log.Info("Setting PBM config", "cluster", cluster.Name)
 
 	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
 	if err != nil {
@@ -644,11 +639,11 @@ func (b *pbmC) Node(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return strings.Split(lock.Node, ".")[0], nil
+	return lock.Node, nil
 }
 
 func (b *pbmC) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.Storage, error) {
-	return util.GetStorage(ctx, b.Client, e)
+	return util.GetStorage(ctx, b.Client, "", e)
 }
 
 func (b *pbmC) GetConfig(ctx context.Context) (*config.Config, error) {
@@ -668,7 +663,7 @@ func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.Backu
 }
 
 func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
-	return backup.DeleteBackup(ctx, b.Client, name)
+	return backup.DeleteBackup(ctx, b.Client, name, "")
 }
 
 func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error) {
@@ -676,7 +671,7 @@ func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.Restor
 }
 
 func (b *pbmC) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
-	return resync.Resync(ctx, b.Client, stg)
+	return resync.Resync(ctx, b.Client, stg, "")
 }
 
 func (b *pbmC) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {

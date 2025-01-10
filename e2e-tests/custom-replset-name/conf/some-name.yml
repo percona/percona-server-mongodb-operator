@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.16.0
+  crVersion: 1.18.0
   backup:
     enabled: true
     image: percona/percona-backup-mongodb:2.0.4

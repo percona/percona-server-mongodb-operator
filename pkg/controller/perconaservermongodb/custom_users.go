@@ -6,15 +6,19 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	s "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -29,33 +33,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	log := logf.FromContext(ctx)
 
 	var err error
-	var cli mongo.Client
+	var mongoCli mongo.Client
 	if cr.Spec.Sharding.Enabled {
-		cli, err = r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
+		mongoCli, err = r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
 	} else {
-		cli, err = r.mongoClientWithRole(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
+		mongoCli, err = r.mongoClientWithRole(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
 	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}
 	defer func() {
-		err := cli.Disconnect(ctx)
+		err := mongoCli.Disconnect(ctx)
 		if err != nil {
 			log.Error(err, "failed to close mongo connection")
 		}
 	}()
 
-	err = handleRoles(ctx, cr, cli)
-	if err != nil {
-		return errors.Wrap(err, "handle roles")
-	}
+	handleRoles(ctx, cr, mongoCli)
 
 	if len(cr.Spec.Users) == 0 {
 		return nil
 	}
 
+	err = handleUsers(ctx, cr, mongoCli, r.client)
+	if err != nil {
+		return errors.Wrap(err, "handle users")
+	}
+
+	return nil
+}
+
+func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mongo.Client, client client.Client) error {
+	log := logf.FromContext(ctx)
+
 	sysUsersSecret := corev1.Secret{}
-	err = r.client.Get(ctx,
+	err := client.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.InternalUserSecretName(cr),
@@ -74,43 +86,61 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 			continue
 		}
 
+		if len(user.Roles) == 0 {
+			log.Error(nil, "user must have at least one role", "user", user.Name)
+			continue
+		}
+
 		if user.DB == "" {
 			user.DB = "admin"
 		}
 
-		if user.PasswordSecretRef.Key == "" {
+		if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key == "" {
 			user.PasswordSecretRef.Key = "password"
 		}
 
-		sec, err := getUserSecret(ctx, r.client, cr, user.PasswordSecretRef.Name)
-		if err != nil {
-			log.Error(err, "failed to get user secret", "user", user)
-			continue
-		}
-
-		userInfo, err := cli.GetUserInfo(ctx, user.Name, user.DB)
+		userInfo, err := mongoCli.GetUserInfo(ctx, user.Name, user.DB)
 		if err != nil {
 			log.Error(err, "get user info")
 			continue
 		}
 
-		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
-
-		if userInfo == nil {
-			err = createUser(ctx, r.client, cli, &user, &sec, annotationKey)
+		if user.IsExternalDB() && userInfo == nil {
+			err = createExternalUser(ctx, mongoCli, &user)
 			if err != nil {
 				return errors.Wrapf(err, "create user %s", user.Name)
 			}
 			continue
 		}
 
-		err = updatePass(ctx, r.client, cli, &user, userInfo, &sec, annotationKey)
+		userSecretPassKey := user.Name
+		if user.PasswordSecretRef != nil {
+			userSecretPassKey = user.PasswordSecretRef.Key
+		}
+
+		sec, err := getCustomUserSecret(ctx, client, cr, &user, userSecretPassKey)
+		if err != nil {
+			log.Error(err, "failed to get user secret", "user", user)
+			continue
+		}
+
+		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
+
+		if userInfo == nil && !user.IsExternalDB() {
+			err = createUser(ctx, client, mongoCli, &user, sec, annotationKey, userSecretPassKey)
+			if err != nil {
+				return errors.Wrapf(err, "create user %s", user.Name)
+			}
+			continue
+		}
+
+		err = updatePass(ctx, client, mongoCli, &user, userInfo, sec, annotationKey, userSecretPassKey)
 		if err != nil {
 			log.Error(err, "update user pass", "user", user.Name)
 			continue
 		}
 
-		err = updateRoles(ctx, cli, &user, userInfo)
+		err = updateRoles(ctx, mongoCli, &user, userInfo)
 		if err != nil {
 			log.Error(err, "update user roles", "user", user.Name)
 			continue
@@ -120,61 +150,75 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	return nil
 }
 
-func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) error {
+func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) {
+	log := logf.FromContext(ctx)
 	if len(cr.Spec.Roles) == 0 {
-		return nil
+		return
 	}
 
 	for _, role := range cr.Spec.Roles {
 		roleInfo, err := cli.GetRole(ctx, role.DB, role.Role)
 		if err != nil {
-			return errors.Wrap(err, "mongo get role")
+			log.Error(err, "get role info", "role", role.Role)
+			continue
 		}
 
 		mr, err := toMongoRoleModel(role)
 		if err != nil {
-			return err
-		}
-
-		if roleInfo == nil {
-			err := cli.CreateRole(ctx, role.DB, *mr)
-			if err != nil {
-				return errors.Wrapf(err, "create role %s", role.Role)
-			}
+			log.Error(err, "to mongo role model", "role", role.Role)
 			continue
 		}
 
-		if !compareRole(mr, roleInfo) {
+		if roleInfo == nil {
+			log.Info("Creating role", "role", role.Role)
+			err := cli.CreateRole(ctx, role.DB, *mr)
+			if err != nil {
+				log.Error(err, "create role", "role", role.Role)
+				continue
+			}
+			log.Info("Role created", "role", role.Role)
+			continue
+		}
+
+		if rolesChanged(mr, roleInfo) {
+			log.Info("Updating role", "role", role.Role)
 			err := cli.UpdateRole(ctx, role.DB, *mr)
 			if err != nil {
-				return errors.Wrapf(err, "update role %s", role.Role)
+				log.Error(err, "update role %s", role.Role)
+				continue
 			}
+			log.Info("Role updated", "role", role.Role)
 		}
 	}
-
-	return nil
 }
 
-func compareRole(r1, r2 *mongo.Role) bool {
-	if !comparePrivileges(r1.Privileges, r2.Privileges) {
-		return false
+func rolesChanged(r1, r2 *mongo.Role) bool {
+	if len(r1.Privileges) != len(r2.Privileges) {
+		return true
 	}
-
 	if len(r1.AuthenticationRestrictions) != len(r2.AuthenticationRestrictions) {
-		return false
+		return true
 	}
-	if !reflect.DeepEqual(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions) {
-		return false
-	}
-
 	if len(r1.Roles) != len(r2.Roles) {
-		return false
-	}
-	if !reflect.DeepEqual(r1.Roles, r2.Roles) {
-		return false
+		return true
 	}
 
-	return true
+	opts := cmp.Options{
+		cmpopts.SortSlices(func(x, y string) bool { return x < y }),
+		cmpopts.EquateEmpty(),
+	}
+
+	if !cmp.Equal(r1.Privileges, r2.Privileges, opts) {
+		return true
+	}
+	if !cmp.Equal(r1.AuthenticationRestrictions, r2.AuthenticationRestrictions, opts) {
+		return true
+	}
+	if !cmp.Equal(r1.Roles, r2.Roles, opts) {
+		return true
+	}
+
+	return false
 }
 
 func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
@@ -201,7 +245,7 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 		}
 
 		if p.Resource.Cluster != nil {
-			rp.Resource["cluster"] = p.Resource.Cluster
+			rp.Resource["cluster"] = *p.Resource.Cluster
 		} else {
 			rp.Resource["db"] = p.Resource.DB
 			rp.Resource["collection"] = p.Resource.Collection
@@ -242,14 +286,14 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	annotationKey string) error {
+	annotationKey, passKey string) error {
 	log := logf.FromContext(ctx)
 
-	if userInfo == nil {
+	if userInfo == nil || user.IsExternalDB() {
 		return nil
 	}
 
-	newHash := sha256Hash(secret.Data[user.PasswordSecretRef.Key])
+	newHash := sha256Hash(secret.Data[passKey])
 
 	hash, ok := secret.Annotations[annotationKey]
 	if ok && hash == newHash {
@@ -262,7 +306,7 @@ func updatePass(
 
 	log.Info("User password changed, updating it.", "user", user.UserID())
 
-	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]))
+	err := mongoCli.UpdateUserPass(ctx, user.DB, user.Name, string(secret.Data[passKey]))
 	if err != nil {
 		return errors.Wrapf(err, "update user %s password", user.Name)
 	}
@@ -309,13 +353,8 @@ func updateRoles(
 	return nil
 }
 
-func createUser(
-	ctx context.Context,
-	cli client.Client,
-	mongoCli mongo.Client,
-	user *api.User,
-	secret *corev1.Secret,
-	annotationKey string) error {
+// createExternalUser creates a user with $external database authentication method.
+func createExternalUser(ctx context.Context, mongoCli mongo.Client, user *api.User) error {
 	log := logf.FromContext(ctx)
 
 	roles := make([]map[string]interface{}, 0)
@@ -327,7 +366,34 @@ func createUser(
 	}
 
 	log.Info("Creating user", "user", user.UserID())
-	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[user.PasswordSecretRef.Key]), roles...)
+	err := mongoCli.CreateUser(ctx, user.DB, user.Name, "", roles...)
+	if err != nil {
+		return err
+	}
+
+	log.Info("User created", "user", user.UserID())
+	return nil
+}
+
+func createUser(
+	ctx context.Context,
+	cli client.Client,
+	mongoCli mongo.Client,
+	user *api.User,
+	secret *corev1.Secret,
+	annotationKey, passKey string) error {
+	log := logf.FromContext(ctx)
+
+	roles := make([]map[string]interface{}, 0)
+	for _, role := range user.Roles {
+		roles = append(roles, map[string]interface{}{
+			"role": role.Name,
+			"db":   role.DB,
+		})
+	}
+
+	log.Info("Creating user", "user", user.UserID())
+	err := mongoCli.CreateUser(ctx, user.DB, user.Name, string(secret.Data[passKey]), roles...)
 	if err != nil {
 		return err
 	}
@@ -336,11 +402,91 @@ func createUser(
 		secret.Annotations = make(map[string]string)
 	}
 
-	secret.Annotations[annotationKey] = string(sha256Hash(secret.Data[user.PasswordSecretRef.Key]))
+	secret.Annotations[annotationKey] = string(sha256Hash(secret.Data[passKey]))
 	if err := cli.Update(ctx, secret); err != nil {
 		return err
 	}
 
 	log.Info("User created", "user", user.UserID())
 	return nil
+}
+
+// getCustomUserSecret gets secret by name defined by `user.PasswordSecretRef.Name` or returns a secret
+// with newly generated password if name matches defaultName
+func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, user *api.User, passKey string) (*corev1.Secret, error) {
+	log := logf.FromContext(ctx)
+
+	if user.IsExternalDB() {
+		return nil, nil
+	}
+
+	defaultSecretName := fmt.Sprintf("%s-custom-user-secret", cr.Name)
+
+	secretName := defaultSecretName
+	if user.PasswordSecretRef != nil {
+		secretName = user.PasswordSecretRef.Name
+	}
+
+	secret := &corev1.Secret{}
+	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+
+	if err != nil && secretName != defaultSecretName {
+		return nil, errors.Wrap(err, "failed to get user secret")
+	}
+
+	if err != nil && !k8serrors.IsNotFound(err) && secretName == defaultSecretName {
+		return nil, errors.Wrap(err, "failed to get user secret")
+	}
+
+	if err != nil && k8serrors.IsNotFound(err) {
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: cr.Namespace,
+			},
+		}
+
+		pass, err := s.GeneratePassword()
+		if err != nil {
+			return nil, errors.Wrap(err, "generate custom user password")
+		}
+
+		if secret.Data == nil {
+			secret.Data = make(map[string][]byte)
+		}
+		secret.Data[passKey] = pass
+
+		err = cl.Create(ctx, secret)
+		if err != nil {
+			return nil, errors.Wrap(err, "create custom users secret")
+		}
+
+		log.Info("Created custom user secrets", "secrets", secret.Name)
+	}
+
+	_, hasPass := secret.Data[passKey]
+	if !hasPass && secretName == defaultSecretName {
+		pass, err := s.GeneratePassword()
+		if err != nil {
+			return nil, errors.Wrap(err, "generate custom user password")
+		}
+
+		if secret.Data == nil {
+			secret.Data = make(map[string][]byte)
+		}
+
+		secret.Data[passKey] = pass
+
+		err = cl.Update(ctx, secret)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to update user secret")
+		}
+	}
+
+	// pass key should be present in the user provided secret
+	if !hasPass {
+		return nil, errors.New("password key not found in secret")
+	}
+
+	return secret, nil
 }

@@ -92,6 +92,38 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
+	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
+
+	updatePod := func(pod *corev1.Pod) error {
+		updateRevision := sfs.Status.UpdateRevision
+		if pod.Labels[naming.LabelKubernetesComponent] == "arbiter" {
+			arbiterSfs, err := r.getArbiterStatefulset(ctx, cr, replset)
+			if err != nil {
+				return errors.Wrap(err, "failed to get arbiter statefulset")
+			}
+
+			updateRevision = arbiterSfs.Status.UpdateRevision
+		}
+
+		if err := r.applyNWait(ctx, cr, updateRevision, pod, waitLimit); err != nil {
+			return errors.Wrap(err, "failed to apply changes")
+		}
+		return nil
+	}
+
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; !ok || !rsStatus.Initialized {
+		log.Info("Replset wasn't initialized. Continuing smart update", "replset", replset.Name)
+		for _, pod := range list.Items {
+			log.Info("apply changes to pod", "pod", pod.Name)
+
+			if err := updatePod(&pod); err != nil {
+				return err
+			}
+		}
+		log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
+		return nil
+	}
+
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active backups")
@@ -103,7 +135,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
-		return errors.Wrap(err, "failed to check active jobs")
+		if cr.Status.State == api.AppStateError {
+			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
+		} else {
+			return errors.Wrap(err, "failed to check active jobs")
+		}
 	}
 
 	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
@@ -118,8 +154,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 			return errors.Wrap(err, "failed to stop balancer")
 		}
 	}
-
-	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
 
 	sort.Slice(list.Items, func(i, j int) bool {
 		return list.Items[i].Name > list.Items[j].Name
@@ -138,18 +172,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
-		updateRevision := sfs.Status.UpdateRevision
-		if pod.Labels[naming.LabelKubernetesComponent] == "arbiter" {
-			arbiterSfs, err := r.getArbiterStatefulset(ctx, cr, replset)
-			if err != nil {
-				return errors.Wrap(err, "failed to get arbiter statefulset")
-			}
-
-			updateRevision = arbiterSfs.Status.UpdateRevision
-		}
-
-		if err := r.applyNWait(ctx, cr, updateRevision, &pod, waitLimit); err != nil {
-			return errors.Wrap(err, "failed to apply changes")
+		if err := updatePod(&pod); err != nil {
+			return err
 		}
 	}
 
@@ -183,8 +207,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 
 		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
-		if err := r.applyNWait(ctx, cr, sfs.Status.UpdateRevision, &primaryPod, waitLimit); err != nil {
-			return fmt.Errorf("failed to apply changes: %v", err)
+		if err := updatePod(&primaryPod); err != nil {
+			return err
 		}
 	}
 

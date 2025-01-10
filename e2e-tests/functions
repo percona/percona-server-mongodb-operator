@@ -8,15 +8,15 @@ IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod7.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod5.0
-
 perconalab/percona-server-mongodb-operator:main-mongod6.0
-perconalab/percona-server-mongodb-operator:main-mongod7.0'}
+perconalab/percona-server-mongodb-operator:main-mongod7.0
+perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.15.3"
+CERT_MANAGER_VER="1.16.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -68,6 +68,10 @@ else
 fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+log() {
+	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
@@ -75,6 +79,7 @@ set_debug() {
 		set +o xtrace
 	fi
 }
+
 version_gt() {
 	# return true if kubernetes version equal or greater than desired
 	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
@@ -213,12 +218,13 @@ wait_backup_agent() {
 
 wait_backup() {
 	local backup_name=$1
+	local target_state=${2:-"ready"}
 
 	set +o xtrace
 	retry=0
-	echo -n $backup_name
+	echo -n "waiting for ${backup_name} to reach ${target_state} state"
 	local current_status=
-	until [[ ${current_status} == "ready" ]]; do
+	until [[ ${current_status} == ${target_state} ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
@@ -234,6 +240,24 @@ wait_backup() {
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
+	done
+	echo
+	set_debug
+}
+
+wait_for_pbm_operations() {
+	local cluster=$1
+
+	set +o xtrace
+	echo -n "waiting for PBM operation to finish"
+	retry=0
+	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
+		if [ $retry -ge 540 ]; then
+			echo max retry count $retry reached. something went wrong with PBM operations
+			exit 1
+		fi
+		echo -n .
+		sleep 5
 	done
 	echo
 	set_debug
@@ -317,11 +341,11 @@ wait_restore() {
 	local cluster_name=$2
 	local target_state=${3:-"ready"}
 	local wait_cluster_consistency=${4:-1}
-	local wait_time=${5:-780}
+	local wait_time=${5:-1780}
 
 	set +o xtrace
 	retry=0
-	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
+	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
 	local current_state=
 	until [[ ${current_state} == ${target_state} ]]; do
 		sleep 1
@@ -342,7 +366,7 @@ wait_restore() {
 		fi
 	done
 	echo
-	set -o xtrace
+	set_debug
 
 	if [ $wait_cluster_consistency -eq 1 ]; then
 		wait_cluster_consistency "${cluster_name}"
@@ -710,8 +734,21 @@ run_mongo() {
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
-
 }
+
+run_mongosh() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-"mongodb+srv"}
+	local suffix=${4:-".svc.cluster.local"}
+	local mongo_flag="$5"
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+}
+
 
 run_mongo_tls() {
 	local command="$1"
@@ -800,7 +837,7 @@ compare_mongo_cmd() {
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
 }
 
 compare_mongos_cmd() {
@@ -845,7 +882,7 @@ get_mongo_primary() {
 
 compare_mongo_user() {
 	local uri="$1"
-	local user=$(echo $uri | cut -d : -f 1)
+	local user="$2"
 	local expected_result=${test_dir}/compare/$user.json
 
 	if [[ $IMAGE_MONGOD =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
@@ -865,6 +902,9 @@ compare_mongo_user() {
 	fi
 	if [[ $IMAGE_MONGOD =~ 7\.0 ]] && [ -f ${test_dir}/compare/$user-70.json ]; then
 		expected_result=${test_dir}/compare/$user-70.json
+	fi
+	if [[ $IMAGE_MONGOD =~ 8\.0 ]] && [ -f ${test_dir}/compare/$user-80.json ]; then
+		expected_result=${test_dir}/compare/$user-80.json
 	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
@@ -1582,4 +1622,66 @@ wait_for_cluster_state() {
 		fi
 	done
 	echo
+}
+
+urlencode() {
+	uri="$1"
+	echo -n "$uri" | jq -s -R -r @uri
+}
+
+getUserData() {
+	local secretName=$1
+	local dataKey=$2
+	urlencode "$(getSecretData "$secretName" "$dataKey")"
+}
+
+get_latest_oplog_chunk_ts() {
+	local cluster=$1
+	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+}
+
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+}
+
+run_pitr_check() {
+	local backup=$1
+	local cluster=$2
+	local find_prefix=$3
+
+	wait_for_oplogs "${cluster}"
+	local target_time=$(format_date $(get_latest_oplog_chunk_ts ${cluster}))
+
+	log "dropping test collection"
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	log "checking pitr... backup: ${backup} target: ${target_time}"
+	cat $test_dir/conf/pitr.yml \
+		| yq eval ".metadata.name = \"restore-${backup}\"" \
+		| yq eval ".spec.backupName = \"${backup}\"" \
+		| yq eval ".spec.pitr.date = \"${target_time}\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "${backup}" "${cluster}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
+}
+
+wait_for_oplogs() {
+	local cluster1=$1
+
+	local backup_last_write=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+
+	local retries=0
+	local last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+	until [[ ${last_chunk} -gt ${backup_last_write} ]]; do
+		if [[ $retries -gt 30 ]]; then
+			log "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${backup_last_write}))"
+			exit 1
+		fi
+		last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+		retries=$((retries + 1))
+		log "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${backup_last_write}))"
+		sleep 10
+	done
 }
