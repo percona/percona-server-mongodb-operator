@@ -19545,14 +19545,16 @@ spec:
                     initialized:
                       type: boolean
                     members:
-                      items:
+                      additionalProperties:
                         properties:
                           name:
                             type: string
-                          version:
+                          state:
+                            type: integer
+                          stateStr:
                             type: string
                         type: object
-                      type: array
+                      type: object
                     message:
                       type: string
                     ready:
