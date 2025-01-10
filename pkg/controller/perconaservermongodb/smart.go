@@ -112,7 +112,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	}
 
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; !ok || !rsStatus.Initialized {
-		log.Info("Replset wasn't initialized. Continuing smart update", "replset", replset.Name)
+		log.Info("replset wasn't initialized. Continuing smart update", "replset", replset.Name)
 		for _, pod := range list.Items {
 			log.Info("apply changes to pod", "pod", pod.Name)
 
@@ -122,6 +122,17 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 		log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
 		return nil
+	}
+
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
+		for _, pod := range list.Items {
+			if _, ok := rsStatus.Members[pod.Name]; !ok {
+				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "replset", replset.Name)
+				if err := updatePod(&pod); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
