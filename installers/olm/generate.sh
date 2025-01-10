@@ -176,6 +176,7 @@ yq eval -i '[.]' operator_roles${suffix}.yaml && yq eval 'length == 1' operator_
 # Render bundle CSV and strip comments.
 csv_stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
 
+
 cr_example=$(yq eval -o=json ../../deploy/cr.yaml)
 backup_example=$(yq eval -o=json ../../deploy/backup/backup.yaml)
 restore_example=$(yq eval -o=json ../../deploy/backup/restore.yaml)
@@ -233,13 +234,6 @@ elif [ ${DISTRIBUTION} == "marketplace" ]; then
 		"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 fi
 
-initImage=$(grep "containerImage:" bundles/$DISTRIBUTION/manifests/percona-server-mongodb-operator.clusterserviceversion.yaml | awk -F': ' '{print $2}' | tr -d '"')
-
-sed -i '' '/crVersion/!b
-/crVersion/n
-/crVersion/a\
-  initImage: $initImage
-' "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
 # delete blank lines.
 sed -i '' '/^$/d' "${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
