@@ -8,4 +8,4 @@ LICENSE
 operator.png
 kubernetes.svg
 release_versions
-.github/CODEOWNERS
+.github/**
