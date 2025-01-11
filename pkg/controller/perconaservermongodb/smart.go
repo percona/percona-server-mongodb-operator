@@ -26,7 +26,8 @@ import (
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec,
 ) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name, "replset", replset.Name)
+
 	if replset.Size == 0 {
 		return nil
 	}
@@ -85,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	log.Info("StatefulSet is changed, starting smart update", "name", sfs.Name)
+	log.Info("StatefulSet is changed, starting smart update")
 
 	if sfs.Status.ReadyReplicas < sfs.Status.Replicas {
 		log.Info("can't start/continue 'SmartUpdate': waiting for all replicas are ready")
@@ -112,7 +113,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	}
 
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; !ok || !rsStatus.Initialized {
-		log.Info("replset wasn't initialized. Continuing smart update", "replset", replset.Name)
+		log.Info("replset wasn't initialized. Continuing smart update")
 
 		for _, pod := range list.Items {
 			log.Info("apply changes to pod", "pod", pod.Name)
@@ -122,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 			}
 		}
 
-		log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
+		log.Info("smart update finished for statefulset")
 
 		return nil
 	}
@@ -130,7 +131,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
-				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "replset", replset.Name)
+				log.Info("pod is not a member of replset, updating it", "pod", pod.Name)
 
 				if err := updatePod(&pod); err != nil {
 					return err
@@ -184,6 +185,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 		if isPrimary {
 			primaryPod = pod
+			log.Info("primary pod detected", "pod", pod.Name)
 			continue
 		}
 
@@ -229,7 +231,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	log.Info("smart update finished for statefulset", "statefulset", sfs.Name)
+	log.Info("smart update finished for statefulset")
 
 	return nil
 }
