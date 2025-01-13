@@ -22,7 +22,7 @@ spec:
     volumeMounts:
     - mountPath: /mnt/nfs/
       name: backup-nfs
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
   pmm:
     enabled: false
