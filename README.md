@@ -44,7 +44,7 @@ Below is one of the ways to deploy the Operator using `kubectl`.
 kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/bundle.yaml
 ```
 
-2. Deploy the database cluster itself from `deploy/cr.yaml
+2. Deploy the database cluster itself from `deploy/cr.yaml`
 
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/main/deploy/cr-minimal.yaml
