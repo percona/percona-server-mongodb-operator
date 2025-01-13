@@ -525,8 +525,6 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 			}
 		}
 
-		log.V(1).Info("Member state", "member", member.Name, "state", member.State, "stateStr", member.StateStr)
-
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 			liveMembers++
