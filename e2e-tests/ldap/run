@@ -12,7 +12,11 @@ deploy_openldap() {
 			select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.add[0]="NET_BIND_SERVICE"' "$test_dir/conf/openldap.yaml" \
 			| kubectl_bin apply -f -
 	else
-		kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+		if [[ $ARCH == "arm64" ]]; then
+			yq eval '(select(.kind == "Deployment") | .spec.template.spec.tolerations) += '"$TOLERATIONS_ARM64"'' $test_dir/conf/openldap.yaml | kubectl_bin apply -f -
+		else
+			kubectl_bin apply -f "$test_dir/conf/openldap.yaml"
+		fi
 	fi
 
 	kubectl rollout status deployment/openldap --timeout=120s
@@ -147,10 +151,8 @@ main() {
 	deploy_openldap
 
 	desc 'create secrets and start client'
-	cluster="some-name"
-	kubectl_bin apply \
-		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client.yml"
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
 
 	test_mongod_openldap
 	test_sharded_openldap

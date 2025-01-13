@@ -14,10 +14,9 @@ unset OPERATOR_NS
 
 desc "Create main cluster"
 create_infra "$namespace"
-kubectl_bin apply \
-	-f "$conf_dir/client.yml" \
-	-f "$test_dir/conf/secrets.yml"
 
+kubectl_bin apply -f $test_dir/conf/secrets.yml
+apply_client $conf_dir/client.yml
 apply_cluster "$test_dir/conf/main.yml"
 wait_for_running "$cluster-rs0" 1
 compare_kubectl statefulset/mydb-rs0
@@ -33,13 +32,12 @@ kubectl_bin config set-context $(kubectl_bin config current-context) --namespace
 create_namespace $replica_namespace 0
 deploy_operator
 
-kubectl_bin apply \
-	-f "$conf_dir/client.yml" \
-	-f "$test_dir/conf/secrets.yml"
+desc 'create secrets and start client'
+kubectl_bin apply -f $test_dir/conf/secrets.yml
+apply_client $conf_dir/client.yml
 apply_cluster "$test_dir/conf/external.yml"
-
-wait_pod ${cluster}-rs0-0
-wait_pod ${cluster}-rs0-1
+wait_pod $cluster-rs0-0
+wait_pod $cluster-rs0-1
 
 secrets_count=$(kubectl_bin get secret -o json | jq --arg pattern "$cluster" '[.items[] | select(.metadata.name | test($pattern))] | length')
 if [[ $secrets_count != 6 ]]; then

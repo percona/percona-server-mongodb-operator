@@ -39,9 +39,8 @@ desc "create main cluster"
 create_infra "$namespace"
 
 desc 'create secrets and start client'
-kubectl_bin apply \
-	-f "$conf_dir/client.yml" \
-	-f "$test_dir/conf/secrets.yml"
+kubectl_bin apply -f $test_dir/conf/secrets.yml
+apply_client $conf_dir/client.yml
 
 desc "create main PSMDB cluster $main_cluster."
 apply_cluster "$test_dir/conf/$main_cluster.yml"
@@ -112,8 +111,7 @@ create_namespace $replica_namespace 0
 deploy_operator
 
 desc 'start client'
-kubectl_bin apply \
-	-f "$conf_dir/client.yml"
+apply_client $conf_dir/client.yml
 
 desc "copy secrets from main to replica namespace and create all of them"
 kubectl get secret ${main_cluster}-secrets -o yaml -n ${namespace} \

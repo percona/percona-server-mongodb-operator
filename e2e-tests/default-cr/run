@@ -48,26 +48,46 @@ function main() {
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f $deploy_dir/secrets.yaml
-	kubectl_bin apply -f $conf_dir/client.yml
+	apply_client $conf_dir/client.yml
 
 	desc "create first PSMDB cluster $cluster"
 	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml
+
+
+ 	local temp_operator_yaml="$(mktemp)"
+
 	if [ -n "$OPERATOR_NS" ]; then
 		apply_rbac cw-rbac
 		kubectl_bin apply -n ${OPERATOR_NS} -f $deploy_dir/cw-operator.yaml
 	else
 		apply_rbac rbac
-		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" \
-			| kubectl_bin apply -f -
+		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" > $temp_operator_yaml
+
+		if [[ $ARCH == "arm64" ]]; then
+			yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' $temp_operator_yaml
+		fi
+
+		kubectl_bin apply -f  $temp_operator_yaml
 	fi
 
+	local temp_cr="$(mktemp)"
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com" |
 		.spec.replsets[].affinity.antiAffinityTopologyKey = "none" |
 		.spec.replsets[].nonvoting.affinity.antiAffinityTopologyKey = "none" |
 		.spec.replsets[].arbiter.affinity.antiAffinityTopologyKey = "none" |
 		.spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey = "none" |
-		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml \
-		| kubectl_bin apply -f -
+		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml > $temp_cr
+
+	if [[ $ARCH == "arm64" ]]; then
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr |
+			kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f $temp_cr
+	fi
 
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency $cluster 70
@@ -137,7 +157,20 @@ function main() {
 	cluster="minimal-cluster"
 	yq eval '.metadata.name = "'${cluster}'"' $deploy_dir/secrets.yaml | kubectl_bin apply -f -
 
-	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | kubectl_bin apply -f -
+	local temp_cr_minimal="$(mktemp)"
+	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml > $temp_cr_minimal
+
+	if [[ $ARCH == "arm64" ]]; then
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr_minimal |
+			kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f $temp_cr_minimal
+	fi
+
 	desc 'check if all Pods started'
 	wait_cluster_consistency "${cluster}"
 

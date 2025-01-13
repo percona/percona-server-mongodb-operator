@@ -11,11 +11,11 @@ function check_telemetry_transfer() {
 	local cr_vs_uri=${1}
 	local cr_vs_channel=${2:-"disabled"}
 	local telemetry_state=${3:-"enabled"}
+	local cluster="minimal-cluster"
 
-	cluster="minimal-cluster"
 	desc 'create secrets and start client'
-	kubectl_bin apply -f $conf_dir/client.yml
-	yq eval '.metadata.name = "'${cluster}'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
+	apply_client $conf_dir/client.yml
+	yq eval '.metadata.name = "'$cluster'"' $conf_dir/secrets.yml | kubectl_bin apply -f -
 
 	desc "create PSMDB minimal cluster $cluster"
 	yq eval '
@@ -151,7 +151,9 @@ for i in "${!cases[@]}"; do
 	cluster="${cases[$i]}"
 	expected_image="${expected_images[$i]}"
 
-	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
+	desc 'create secrets and start client'
+	kubectl_bin apply -f $conf_dir/secrets.yml
+	apply_client $conf_dir/client.yml
 
 	desc 'create PSMDB cluster'
 	tmp_file=$(mktemp)

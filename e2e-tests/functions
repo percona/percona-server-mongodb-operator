@@ -16,6 +16,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
+TOLERATIONS_ARM64='[{"key": "kubernetes.io/arch", "operator": "Equal", "value": "arm64", "effect": "NoSchedule"}]'
 CERT_MANAGER_VER="1.16.1"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
@@ -27,6 +28,24 @@ replica_namespace="${test_name}-replica-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
 logs_dir=$(realpath $test_dir/../logs || :)
+
+if archs=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{" "}{end}'); then
+	first_arch=$(echo $archs | awk '{print $1}')
+
+	if [[ $first_arch =~ ^(amd64|arm64)$ ]]; then
+		for arch in $archs; do
+			if [[ "$arch" != "$first_arch" ]]; then
+				echo "All nodes in the cluster must be equal to the 1-st one: $first_arch !"
+				exit 1
+			fi
+		done
+		ARCH="$first_arch"
+		echo "================================== Using ARCH=$ARCH =================================="
+	else
+		echo "Unsupported architecture: $first_arch"
+		exit 1
+	fi
+fi
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then
@@ -386,6 +405,8 @@ deploy_operator() {
 	desc 'start PSMDB operator'
 
 	local cr_file
+	local temp_operator_yaml="$(mktemp)"
+
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
 		cr_file="${test_dir}/conf/crd.yaml"
 	else
@@ -393,21 +414,27 @@ deploy_operator() {
 	fi
 
 	kubectl_bin apply --server-side --force-conflicts -f "${cr_file}"
-	if [ -n "$OPERATOR_NS" ]; then
+
+	if [[ "$OPERATOR_NS" ]]; then
 		apply_rbac cw-rbac
 		yq eval '
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
-			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml > $temp_operator_yaml
 	else
 		apply_rbac rbac
 		yq eval '
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
-			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
-			| kubectl_bin apply -f -
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml > $temp_operator_yaml
 	fi
+
+	if [[ $ARCH == "arm64" ]]; then
+		yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' $temp_operator_yaml
+	fi
+
+	kubectl_bin apply -f $temp_operator_yaml
+
 	sleep 2
 	wait_pod $(get_operator_pod)
 }
@@ -427,10 +454,27 @@ deploy_operator_gh() {
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
 	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+
+	if [[ $ARCH == "arm64" ]]; then
+		yq eval -i '(.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"')' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+	fi
+
 	kubectl_bin apply -f "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
 	sleep 2
 	wait_pod "$(get_operator_pod)"
+}
+
+aws_cli() {
+	local cmd=$1
+
+	kubectl_bin run -i --rm aws-cli --image=amazon/aws-cli \
+		--restart=Never \
+		--env=AWS_ACCESS_KEY_ID=some-access-key \
+		--env=AWS_SECRET_ACCESS_KEY=some-secret-key \
+		--env=AWS_DEFAULT_REGION=us-east-1 \
+		--overrides='{"apiVersion": "v1","spec": {"tolerations": [{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' \
+		-- --endpoint-url http://minio-service:9000 $cmd
 }
 
 deploy_minio() {
@@ -453,7 +497,16 @@ deploy_minio() {
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
 		--set securityContext.enabled=false \
+		--set 'tolerations[0].key=kubernetes.io/arch' \
+		--set 'tolerations[0].operator=Equal' \
+		--set 'tolerations[0].value=arm64' \
+		--set 'tolerations[0].effect=NoSchedule' \
+		--set 'postJob.tolerations[0].key=kubernetes.io/arch' \
+		--set 'postJob.tolerations[0].operator=Equal' \
+		--set 'postJob.tolerations[0].value=arm64' \
+		--set 'postJob.tolerations[0].effect=NoSchedule' \
 		minio/minio
+
 	MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
 	wait_pod $MINIO_POD
 
@@ -462,9 +515,7 @@ deploy_minio() {
 	fi
 
 	# create bucket
-	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+	aws_cli "s3 mb s3://operator-testing"
 }
 
 deploy_vault() {
@@ -488,9 +539,23 @@ deploy_vault() {
 			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
 			--set server.image.repository="docker.io/hashicorp/vault"
 	else
-		retry 10 60 helm install $name hashicorp/vault \
-			--disable-openapi-validation \
-			--set dataStorage.enabled=false
+		if [[ $ARCH == "arm64" ]]; then
+			helm install vault-service hashicorp/vault \
+			    --disable-openapi-validation \
+				--set dataStorage.enabled=false \
+				--set server.tolerations[0].key=kubernetes.io/arch \
+				--set server.tolerations[0].operator=Equal \
+				--set server.tolerations[0].value=arm64 \
+				--set server.tolerations[0].effect=NoSchedule \
+				--set injector.tolerations[0].key=kubernetes.io/arch \
+				--set injector.tolerations[0].operator=Equal \
+				--set injector.tolerations[0].value=arm64 \
+				--set injector.tolerations[0].effect=NoSchedule
+		else
+			retry 10 60 helm install $name hashicorp/vault \
+				--disable-openapi-validation \
+				--set dataStorage.enabled=false
+		fi
 	fi
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
@@ -529,7 +594,18 @@ deploy_chaos_mesh() {
 
 	desc 'install chaos-mesh'
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	# helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	helm install chaos-mesh chaos-mesh/chaos-mesh \
+		--namespace=${chaos_mesh_ns} \
+		--set chaosDaemon.runtime=containerd \
+		--set chaosDaemon.socketPath=/run/containerd/containerd.sock \
+		--set dashboard.create=false \
+		--set controllerManager.tolerations[0].key="kubernetes.io/arch" \
+		--set controllerManager.tolerations[0].operator="Equal" \
+		--set controllerManager.tolerations[0].value="arm64" \
+		--set controllerManager.tolerations[0].effect="NoSchedule" \
+		--version 2.5.1
+
 	sleep 10
 }
 
@@ -708,6 +784,10 @@ compare_kubectl() {
 			del(.spec.ipFamilyPolicy) |
 			(.. | select(. == "extensions/v1beta1")) = "apps/v1" |
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
+
+	if [[ $ARCH == "arm64" ]]; then
+		yq -i eval 'del(.spec.template.spec.tolerations)' ${new_result}
+	fi
 
 	yq -i eval 'del(.spec.persistentVolumeClaimRetentionPolicy)' ${new_result}
 
@@ -937,9 +1017,44 @@ deploy_cert_manager() {
 
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || :
+
+	if [[ $ARCH == "arm64" ]]; then
+		kubectl patch deployment cert-manager -n cert-manager --type='json' -p='[{
+			"op": "add",
+			"path": "/spec/template/spec/tolerations",
+			"value": [{
+				"key": "kubernetes.io/arch",
+				"operator": "Equal",
+				"value": "arm64",
+				"effect": "NoSchedule"
+			}]
+		}]'
+
+		kubectl patch deployment cert-manager-cainjector -n cert-manager --type='json' -p='[{
+			"op": "add",
+			"path": "/spec/template/spec/tolerations",
+			"value": [{
+				"key": "kubernetes.io/arch",
+				"operator": "Equal",
+				"value": "arm64",
+				"effect": "NoSchedule"
+			}]
+		}]'
+
+		kubectl patch deployment cert-manager-webhook -n cert-manager --type='json' -p='[{
+			"op": "add",
+			"path": "/spec/template/spec/tolerations",
+			"value": [{
+				"key": "kubernetes.io/arch",
+				"operator": "Equal",
+				"value": "arm64",
+				"effect": "NoSchedule"
+			}]
+		}]'
+	fi
+
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
-	sleep 120
 }
 
 delete_crd() {
@@ -1120,25 +1235,39 @@ EOF
 }
 
 cat_config() {
-	cat "$1" \
-		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
-		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
-		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
-		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
-		| yq eval '.spec.upgradeOptions.apply="Never"'
+    local temp_cr="$(mktemp)"
+
+	yq eval '
+		(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'" |
+		(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'" |
+		(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'" |
+		(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'" |
+		.spec.upgradeOptions.apply="Never"' "$1" > $temp_cr
+
+	if [[ $ARCH == "arm64" ]]; then
+        yq eval '.spec.replsets[].tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.configsvrReplSet.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec | select(has("sharding"))).sharding.mongos.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("arbiter"))).arbiter.tolerations += '"$TOLERATIONS_ARM64"' |
+			(.spec.replsets[] | select(has("nonvoting"))).nonvoting.tolerations += '"$TOLERATIONS_ARM64"'' $temp_cr
+	else
+		cat $temp_cr
+	fi
+}
+
+apply_client() {
+	if [[ $ARCH == "arm64" ]]; then
+	    yq eval '.spec.template.spec.tolerations += '"$TOLERATIONS_ARM64"'' "$1" | kubectl_bin apply -f -
+	else
+		kubectl_bin apply -f "$1"
+	fi
 }
 
 apply_cluster() {
-	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-		cat_config "$1" \
-			| kubectl_bin apply -f -
+	if [[ "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]]; then
+		cat_config $1 | yq eval 'del(.spec.backup.tasks.[1]) | del(.spec.backup.tasks.[1]) | del(.spec.backup.tasks.[1])' - | kubectl_bin apply -f -
 	else
-		cat_config "$1" \
-			| yq eval '
-				del(.spec.backup.tasks.[1]) |
-				del(.spec.backup.tasks.[1]) |
-				del(.spec.backup.tasks.[1])' - \
-			| kubectl_bin apply -f -
+		cat_config $1 | kubectl_bin apply -f -
 	fi
 }
 
@@ -1338,7 +1467,7 @@ function run_simple_cli_inside_image() {
 	local cli=${2}
 
 	local pod_name=${RANDOM}
-	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --overrides='{"apiVersion": "v1","spec": {"tolerations": [{"key": "kubernetes.io/arch","operator": "Equal","value": "arm64","effect": "NoSchedule"}]}}' --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
 	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
