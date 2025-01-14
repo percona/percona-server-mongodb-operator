@@ -81,8 +81,7 @@ main() {
 	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
-		-f "$conf_dir/client.yml" \
-		-f $conf_dir/minio-secret.yml
+		-f "$conf_dir/client.yml"
 	apply_s3_storage_secrets
 
 	desc 'create custom RuntimeClass'
