@@ -571,6 +571,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			for pod, member := range members {
 				rs.Members[pod] = member
 			}
+			log.V(1).Info("Replset members", "rs", replset.Name, "initialized", rs.Initialized, "members", rs.Members)
 			cr.Status.Replsets[replset.Name] = rs
 		}
 	}
