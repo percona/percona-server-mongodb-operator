@@ -136,7 +136,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			LastTransitionTime: metav1.NewTime(time.Now()),
 		})
 
-		return api.AppStateInit, nil, nil
+		return api.AppStateInit, rs.Members, nil
 	}
 	defer func() {
 		if err := cli.Disconnect(ctx); err != nil {
