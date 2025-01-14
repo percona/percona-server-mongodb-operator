@@ -93,6 +93,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			currentRSstatus = api.ReplsetStatus{}
 		}
 
+		status.Members = currentRSstatus.Members
 		status.Initialized = currentRSstatus.Initialized
 		status.AddedAsShard = currentRSstatus.AddedAsShard
 

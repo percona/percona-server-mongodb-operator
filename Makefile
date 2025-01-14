@@ -60,6 +60,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 deploy: ## Deploy operator
 	yq eval '(.spec.template.spec.containers[] | select(.name=="percona-server-mongodb-operator")).image = "$(IMAGE)"' $(DEPLOYDIR)/operator.yaml \
 		| yq eval '(.spec.template.spec.containers[] | select(.name=="percona-server-mongodb-operator").env[] | select(.name=="LOG_LEVEL")).value="DEBUG"' - \
+		| yq eval '(.spec.template.spec.containers[] | select(.name=="percona-server-mongodb-operator").env[] | select(.name=="DISABLE_TELEMETRY")).value="true"' - \
 		| kubectl apply -f -
 
 undeploy: ## Undeploy operator
