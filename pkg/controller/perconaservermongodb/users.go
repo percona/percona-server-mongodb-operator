@@ -23,10 +23,12 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-func getInternalSecretData(secret *corev1.Secret) map[string][]byte {
+func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
 	m := secret.DeepCopy().Data
-	for k, v := range secret.Data {
-		m[k+"_ESCAPED"] = []byte(url.QueryEscape(string(v)))
+	if cr.CompareVersion("1.19.0") >= 0 {
+		for k, v := range secret.Data {
+			m[k+"_ESCAPED"] = []byte(url.QueryEscape(string(v)))
+		}
 	}
 	return m
 }
@@ -78,7 +80,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			internalSysUsersSecret.Labels = nil
 		}
 		if cr.CompareVersion("1.19.0") >= 0 {
-			internalSysUsersSecret.Data = getInternalSecretData(&sysUsersSecretObj)
+			internalSysUsersSecret.Data = getInternalSecretData(cr, &sysUsersSecretObj)
 		}
 		err = r.client.Create(ctx, internalSysUsersSecret)
 		if err != nil {
@@ -92,7 +94,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	}
 
-	dataChanged, err := sysUsersSecretDataChanged(&sysUsersSecretObj, &internalSysSecretObj)
+	dataChanged, err := sysUsersSecretDataChanged(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "check sys users data changes")
 	}
@@ -142,7 +144,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
 	if cr.CompareVersion("1.19.0") >= 0 {
-		internalSysSecretObj.Data = getInternalSecretData(&sysUsersSecretObj)
+		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
 	}
 	err = r.client.Update(ctx, &internalSysSecretObj)
 	if err != nil {
@@ -350,8 +352,8 @@ func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 
-func sysUsersSecretDataChanged(usersSecret *corev1.Secret, internalSecret *corev1.Secret) (bool, error) {
-	newData := getInternalSecretData(usersSecret)
+func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret, internalSecret *corev1.Secret) (bool, error) {
+	newData := getInternalSecretData(cr, usersSecret)
 	newDataJSON, err := json.Marshal(newData)
 	if err != nil {
 		return false, err
