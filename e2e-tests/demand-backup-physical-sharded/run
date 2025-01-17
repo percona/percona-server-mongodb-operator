@@ -25,6 +25,49 @@ run_restore() {
 		kubectl_bin apply -f -
 }
 
+wait_restore() {
+	local backup_name=$1
+	local cluster_name=$2
+	local target_state=${3:-"ready"}
+	local wait_cluster_consistency=${4:-1}
+	local wait_time=${5:-1780}
+
+	set +o xtrace
+	retry=0
+	log "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
+	local current_state=
+	until [[ ${current_state} == ${target_state} ]]; do
+		sleep 1
+
+		for pod in $(kubectl_bin get pod -l app.kubernetes.io/component=mongod --no-headers | awk '{print $1}'); do
+			log "(restore-${backup_name}: ${current_state}) [$pod] ps faux:"
+			kubectl_bin exec ${pod} -c mongod -- ps faux || log "ps faux failed"
+			log "(restore-${backup_name}: ${current_state}) [$pod] /tmp/pbm-agent.log:"
+			kubectl_bin exec ${pod} -c mongod -- tail -n 20 /tmp/pbm-agent.log || log "tail /tmp/pbm-agent.log failed"
+			log "(restore-${backup_name}: ${current_state}) [$pod] running pbm operations:"
+			kubectl_bin exec ${pod} -c mongod -- /opt/percona/pbm status -s running || log "/opt/percona/pbm status failed"
+			log "(restore-${backup_name}: ${current_state}) [$pod] pbm-agent statuses:"
+			kubectl_bin exec ${pod} -c mongod -- /opt/percona/pbm status -s cluster || log "/opt/percona/pbm status failed"
+		done
+
+		let retry+=1
+		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
+			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
+			log "Restore object restore-${backup_name} is in ${current_state} state."
+			log "Restore object status:"
+			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml | yq '.status'
+			exit 1
+		fi
+	done
+	echo
+	set_debug
+
+	if [ $wait_cluster_consistency -eq 1 ]; then
+		wait_cluster_consistency "${cluster_name}"
+	fi
+}
+
 run_recovery_check() {
 	local backup_name=$1
 	local compare_suffix=${2:-"_restore"}
@@ -38,7 +81,7 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 	kubectl_bin get psmdb ${cluster} -o yaml
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
-		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
 	fi
 	echo
@@ -53,7 +96,7 @@ check_exported_mongos_service_endpoint() {
 	local host=$1
 
 	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
-		echo "Exported host is not correct after the restore"
+		log "Exported host is not correct after the restore"
 		exit 1
 	fi
 }
@@ -66,13 +109,13 @@ apply_s3_storage_secrets
 ### Case 1: Backup and restore on sharded cluster
 desc 'Testing on sharded cluster'
 
-echo "Creating PSMDB cluster"
+log "Creating PSMDB cluster"
 cluster="some-name"
 kubectl_bin apply -f "${conf_dir}/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}-sharded.yml"
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 
-echo "check if all pods started"
+log "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_for_running ${cluster}-cfg 3
 wait_for_running ${cluster}-mongos 3
@@ -81,14 +124,15 @@ wait_cluster_consistency ${cluster}
 lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' |
 	jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0] | if .ip then .ip else .hostname end')
 if [ -z $lbEndpoint ]; then
-	echo "mongos service not exported correctly"
+	log "mongos service not exported correctly"
 	exit 1
 fi
 
+sleep 10
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
-sleep 1
+sleep 5
 run_mongos \
 	'use myApp\n db.test.insert({ x: 100501 })' \
 	"myApp:myPass@${cluster}-mongos.${namespace}"
@@ -96,10 +140,10 @@ sleep 5
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 
 # wait for stable timestamp in wiredtiger
-echo 'waiting 60 seconds for stable timestamp in wiredtiger'
+log 'waiting 60 seconds for stable timestamp in wiredtiger'
 sleep 80
 
-echo 'running backups'
+log 'running backups'
 backup_name_minio="backup-minio-sharded"
 run_backup minio ${backup_name_minio}
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
@@ -118,31 +162,31 @@ fi
 wait_backup "${backup_name_minio}"
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	echo "drop collection"
+	log "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo 'check backup and restore -- aws-s3'
+	log 'check backup and restore -- aws-s3'
 	run_restore ${backup_name_aws} "_restore_sharded"
 	run_recovery_check ${backup_name_aws} "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 
-	echo "drop collection"
+	log "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo 'check backup and restore -- gcp-cs'
+	log 'check backup and restore -- gcp-cs'
 	run_restore ${backup_name_gcp} "_restore_sharded"
 	run_recovery_check ${backup_name_gcp} "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 
-	echo "drop collection"
+	log "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo 'check backup and restore -- azure-blob'
+	log 'check backup and restore -- azure-blob'
 	run_restore ${backup_name_azure} "_restore_sharded"
 	run_recovery_check ${backup_name_azure} "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 fi
 
-echo "drop collection"
+log "drop collection"
 run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-echo 'check backup and restore -- minio'
+log 'check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio} "_restore_sharded"
 run_recovery_check ${backup_name_minio} "_restore_sharded"
