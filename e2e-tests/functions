@@ -1220,14 +1220,19 @@ wait_cluster_consistency() {
 
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	echo -n 'waiting for cluster readyness'
+	log "waiting for psmdb/${cluster_name} to reach ready state"
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
 		if [ $retry -ge $wait_time ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
-		echo -n .
+		log "pod statuses:"
+		kubectl_bin get pod
+		log "cluster members:"
+		kubectl_bin get psmdb ${cluster_name} -o yaml | yq '.status.replsets'
+		log "cluster conditions:"
+		kubectl_bin get psmdb ${cluster_name} -o yaml | yq '.status.conditions'
 		sleep 10
 	done
 	echo
