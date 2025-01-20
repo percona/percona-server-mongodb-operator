@@ -6,6 +6,11 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+if [[ "${OPENSHIFT}" ]]; then
+	echo "This test is not supported on OpenShift due to nfs privileged. See K8SPSMDB-1262"
+	exit 0
+fi
+
 deploy_nfs_server() {
 	kubectl_bin create namespace storage
 	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yaml
