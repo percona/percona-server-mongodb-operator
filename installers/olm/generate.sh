@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+
+# Install
+# brew install gawk coreutils
+for command in gawk gcsplit; do
+    if ! command -v $command &> /dev/null; then
+        echo "Error: $command is not installed. Please install it: brew install $command" >&2
+        exit 1
+    fi
+done
+
 set -eu
 
 DISTRIBUTION="$1"
@@ -41,7 +51,19 @@ cp ../../deploy/operator.yaml ../../config/manager/namespace
 cp ../../deploy/cw-operator.yaml ../../config/manager/cluster
 
 # Copy RBAC:
+gcsplit --elide-empty-files -f output- ../../deploy/rbac.yaml "/^---$/" "{*}"
+target_dir="../../config/rbac/namespace"
+mv output-00 "$target_dir/role.yaml"
+mv output-01 "$target_dir/service_account.yaml"
+mv output-02 "$target_dir/role_binding.yaml"
 
+# Copy RBAC for CW:
+
+gcsplit --elide-empty-files -f output- ../../deploy/cw-rbac.yaml "/^---$/" "{*}"
+target_dir="../../config/rbac/cluster"
+mv output-00 "$target_dir/role.yaml"
+mv output-01 "$target_dir/service_account.yaml"
+mv output-02 "$target_dir/role_binding.yaml"
 
 kubectl kustomize "../../config/${DISTRIBUTION}" >operator_yamls.yaml
 
