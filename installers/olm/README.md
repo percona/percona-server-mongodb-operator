@@ -11,8 +11,7 @@ export OPENSHIFT_VERSIONS="v4.13-v4.16"
 # Set namespace or cluster (to generate bundles for cluster-wide)
 MODE=namespace
 ```
-Also it could be useful to check variable in makefile and update if you need something extra. For the most cases to update these variables is enough
-2. Update rbac in config/rbac with deploy/rbac.yaml and operator in config/manager/cluster/manager-cluster.yaml with deploy/cw-operator.yaml (and  config/manager/namespace/manager-namespace.yaml with operator.yaml). (will be automated)
+2. Also it could be useful to check variable in makefile and update if you need something extra. For the most cases to update these variables is enough
 3. Choose the mode (cluster (for cluster-wide) or namespace) and update config/bundle/kustomization.yaml.
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
