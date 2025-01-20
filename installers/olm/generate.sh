@@ -35,6 +35,13 @@ else
 	echo "Please add MODE variable. It could be either namespace or cluster"
 	exit 1
 fi
+# Copy operator file to config:
+
+cp ../../deploy/operator.yaml ../../config/manager/namespace
+cp ../../deploy/cw-operator.yaml ../../config/manager/cluster
+
+# Copy RBAC:
+
 
 kubectl kustomize "../../config/${DISTRIBUTION}" >operator_yamls.yaml
 

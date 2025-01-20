@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- manager-cluster.yaml
+- cw-operator.yaml
 images:
 - name: psmdb-operator
   newName: perconalab/percona-server-mongodb-operator
