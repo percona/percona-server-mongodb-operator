@@ -25,6 +25,9 @@ DOCKER_DEFAULT_PLATFORM ?= linux/amd64
 SHELL := /bin/bash
 REPO_ROOT = $(shell git rev-parse --show-toplevel)
 
+GREEN := $(shell tput setaf 2)
+RESET := $(shell tput sgr0)
+
 export VERSION
 export BUNDLE_REPO
 export OPENSHIFT_VERSIONS
@@ -59,12 +62,14 @@ bundles/community:
 
 	env operator-sdk bundle validate $@ --select-optional='suite=operatorframework'
 	env operator-sdk bundle validate $@ --select-optional='name=community' --optional-values='index-path=$@/Dockerfile'
+	@echo "$(GREEN)!!!!!!!!!!! Build stored in installers/olm/bundles/community !!!!!!!!!!!!!!!$(RESET)"
 
 .PHONY: bundles/redhat
 bundles/redhat:
 	cd ../../config/manager/$(MODE)/ && $(KUSTOMIZE) edit set image psmdb-operator=$(IMAGE)
 	./generate.sh redhat
 	env operator-sdk bundle validate $@ --select-optional='suite=operatorframework'
+	@echo "$(GREEN)!!!!!!!!!!! Build stored in installers/olm/bundles/redhat !!!!!!!!!!!!!!!$(RESET)"
 
 # The 'marketplace' configuration is currently identical to the 'redhat', so we just copy it here.
 .PHONY: bundles/marketplace
@@ -72,6 +77,7 @@ bundles/marketplace:
 	cd ../../config/manager/$(MODE)/ && $(KUSTOMIZE) edit set image psmdb-operator=$(IMAGE)
 	./generate.sh marketplace
 	env operator-sdk bundle validate $@ --select-optional='suite=operatorframework'
+	@echo "$(GREEN)!!!!!!!!!!! Build stored in installers/olm/bundles/marketplace !!!!!!!!!!!!!!!$(RESET)"
 
 .PHONY: clean
 clean: clean-deprecated
