@@ -27,4 +27,10 @@ images:
 ```
 4. Update spec.description in bundle.csv.yaml with features added in this release.
 5. Run bundle generation:
-```make bundles```
+```bash
+# Generate all bundles community redhat and marketplace:
+make bundles
+# Generate only specific bundle:
+make bundles/community
+```
+
