@@ -32,21 +32,29 @@ project_name='percona-server-mongodb-operator'
 # https://github.com/redhat-openshift-ecosystem/certification-releases/blob/main/4.9/ga/troubleshooting.md#get-supported-versions
 file_name='percona-server-mongodb-operator'
 
+NS_RESOURCE_RBAC="../rbac/namespace"
+CLUSTER_RESOURCE_RBAC="../rbac/cluster"
+NS_RESOURCE_OPERATOR="../manager/namespace"
+CLUSTER_RESOURCE_OPERATOR="../manager/cluster"
+KUSTOMIZATION_FILE="../../config/bundle/kustomization.yaml"
+
 if [ ${MODE} == "cluster" ]; then
 	suffix="-cw"
 	mode="Cluster"
 	rulesLevel="ClusterPermissions"
-
+	sed -i '' "s|$NS_RESOURCE_RBAC|$CLUSTER_RESOURCE_RBAC|g" "$KUSTOMIZATION_FILE"
+	sed -i '' "s|$NS_RESOURCE_OPERATOR|$CLUSTER_RESOURCE_OPERATOR|g" "$KUSTOMIZATION_FILE"
 elif [ ${MODE} == "namespace" ]; then
 	suffix=""
 	mode=""
 	rulesLevel="permissions"
+    sed -i '' "s|$CLUSTER_RESOURCE_RBAC|$NS_RESOURCE_RBAC|g" "$KUSTOMIZATION_FILE"
+    sed -i '' "s|$CLUSTER_RESOURCE_OPERATOR|$NS_RESOURCE_OPERATOR|g" "$KUSTOMIZATION_FILE"
 else
 	echo "Please add MODE variable. It could be either namespace or cluster"
 	exit 1
 fi
 # Copy operator file to config:
-
 cp ../../deploy/operator.yaml ../../config/manager/namespace
 cp ../../deploy/cw-operator.yaml ../../config/manager/cluster
 
@@ -58,7 +66,6 @@ mv output-01 "$target_dir/service_account.yaml"
 mv output-02 "$target_dir/role_binding.yaml"
 
 # Copy RBAC for CW:
-
 gcsplit --elide-empty-files -f output- ../../deploy/cw-rbac.yaml "/^---$/" "{*}"
 target_dir="../../config/rbac/cluster"
 mv output-00 "$target_dir/role.yaml"
@@ -151,21 +158,6 @@ elif [ ${DISTRIBUTION} == 'marketplace' ]; then
 fi
 
 # Copy annotations into Dockerfile LABELs.
-# TODO fix tab for labels.
-
-# labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson)) | join("\n")' \
-# 	"${bundle_directory}/metadata/annotations.yaml")
-#
-# labels="${labels}
-#     com.redhat.delivery.backport=true
-#     com.redhat.delivery.operator.bundle=true"
-
-# labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson) + "\\") | join("\n")' \
-#     "${bundle_directory}/metadata/annotations.yaml")
-#
-# labels="${labels}
-#     com.redhat.delivery.backport=true \\
-#     com.redhat.delivery.operator.bundle=true"
 
 labels=$(yq eval -r '.annotations | to_entries | map("LABEL " + .key + "=" + (.value | tojson)) | join("\n")' \
     "${bundle_directory}/metadata/annotations.yaml")
@@ -283,3 +275,5 @@ fi
 sed -i '' '/^$/d' "${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
 if >/dev/null command -v tree; then tree -C "${bundle_directory}"; fi
+
+yamllint -d '{extends: default, rules: {line-length: disable, indentation: disable}}' bundles/$DISTRIBUTION
