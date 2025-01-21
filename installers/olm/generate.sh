@@ -153,14 +153,30 @@ fi
 # Copy annotations into Dockerfile LABELs.
 # TODO fix tab for labels.
 
-labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson)) | join("\n")' \
-	"${bundle_directory}/metadata/annotations.yaml")
+# labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson)) | join("\n")' \
+# 	"${bundle_directory}/metadata/annotations.yaml")
+#
+# labels="${labels}
+#     com.redhat.delivery.backport=true
+#     com.redhat.delivery.operator.bundle=true"
+
+# labels=$(yq eval -r '.annotations | to_entries | map("    " + .key + "=" + (.value | tojson) + "\\") | join("\n")' \
+#     "${bundle_directory}/metadata/annotations.yaml")
+#
+# labels="${labels}
+#     com.redhat.delivery.backport=true \\
+#     com.redhat.delivery.operator.bundle=true"
+
+labels=$(yq eval -r '.annotations | to_entries | map("LABEL " + .key + "=" + (.value | tojson)) | join("\n")' \
+    "${bundle_directory}/metadata/annotations.yaml")
 
 labels="${labels}
-    com.redhat.delivery.backport=true
-    com.redhat.delivery.operator.bundle=true"
+LABEL com.redhat.delivery.backport=true
+LABEL com.redhat.delivery.operator.bundle=true"
 
-ANNOTATIONS="${labels}" envsubst <bundle.Dockerfile >"${bundle_directory}/Dockerfile"
+echo $labels
+
+LABELS="${labels}" envsubst <bundle.Dockerfile >"${bundle_directory}/Dockerfile"
 
 awk '{gsub(/^[ \t]+/, "    "); print}' "${bundle_directory}/Dockerfile" > "${bundle_directory}/Dockerfile.new" && mv "${bundle_directory}/Dockerfile.new" "${bundle_directory}/Dockerfile"
 
