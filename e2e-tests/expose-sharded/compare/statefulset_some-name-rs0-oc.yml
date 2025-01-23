@@ -225,6 +225,7 @@ spec:
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
+      runtimeClassName: container-rc
       schedulerName: default-scheduler
       securityContext: {}
       serviceAccount: default

@@ -54,7 +54,7 @@ function main() {
 		yq eval '
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			| kubectl_bin apply -n ${OPERATOR_NS} -f -
 	else
 		create_namespace ${namespace}
 		apply_rbac rbac
