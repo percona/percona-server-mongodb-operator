@@ -236,11 +236,10 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 	}
 	err = checker.Check(ctx)
 	if err != nil {
-		value := translateCheckError(err)
-		switch value {
-		case cmapichecker.ErrCertManagerCRDsNotFound:
+		switch err := translateCheckError(err); {
+		case errors.Is(err, cmapichecker.ErrCertManagerCRDsNotFound):
 			return ErrCertManagerNotFound
-		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
+		case errors.Is(err, cmapichecker.ErrWebhookCertificateFailure), errors.Is(err, cmapichecker.ErrWebhookServiceFailure), errors.Is(err, cmapichecker.ErrWebhookDeploymentFailure):
 			log.Error(cmapichecker.TranslateToSimpleError(err), "cert-manager is not ready")
 			return ErrCertManagerNotReady
 		}
