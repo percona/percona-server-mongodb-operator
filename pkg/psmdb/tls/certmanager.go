@@ -236,7 +236,8 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 	}
 	err = checker.Check(ctx)
 	if err != nil {
-		switch translateCheckError(err) {
+		value := translateCheckError(err)
+		switch value {
 		case cmapichecker.ErrCertManagerCRDsNotFound:
 			return ErrCertManagerNotFound
 		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
@@ -249,7 +250,7 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 }
 
 func translateCheckError(err error) error {
-	const crdsMapping3Error = `error finding the scope of the object: failed to get restmapping: no matches for kind "Certificate" in version "cert-manager.io/v1"`
+	const crdsMapping3Error = `error finding the scope of the object: failed to get restmapping: unable to retrieve the complete list of server APIs: cert-manager.io/v1: no matches for cert-manager.io/v1, Resource=`
 	// TODO: remove as soon as TranslateToSimpleError uses this regexp
 	regexErrCertManagerCRDsNotFound := regexp.MustCompile(`^(` + regexp.QuoteMeta(crdsMapping3Error) + `)$`)
 
