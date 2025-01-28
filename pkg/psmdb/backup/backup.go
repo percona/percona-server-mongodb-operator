@@ -31,19 +31,6 @@ func NewBackupJob(name string) Job {
 	}
 }
 
-func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
-	j := Job{
-		Name: cr.Name,
-		Type: TypeRestore,
-	}
-
-	if cr.Spec.PITR != nil {
-		j.Type = TypePITRestore
-	}
-
-	return j
-}
-
 func IsPBMNotConfiguredError(err error) bool {
 	return strings.Contains(err.Error(), "mongo: no documents in result")
 }
