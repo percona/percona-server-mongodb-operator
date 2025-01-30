@@ -130,7 +130,7 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 	return nil
 }
 
-func validateUser(ctx context.Context, user *api.User, sysUserNames map[string]struct{}, uniqueUserNames map[string]struct{}) error {
+func validateUser(ctx context.Context, user *api.User, sysUserNames, uniqueUserNames map[string]struct{}) error {
 	log := logf.FromContext(ctx)
 
 	if sysUserNames == nil || uniqueUserNames == nil {
