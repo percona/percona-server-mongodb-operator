@@ -51,10 +51,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 	handleRoles(ctx, cr, mongoCli)
 
-	if len(cr.Spec.Users) == 0 {
-		return nil
-	}
-
 	err = handleUsers(ctx, cr, mongoCli, r.client)
 	if err != nil {
 		return errors.Wrap(err, "handle users")
@@ -66,37 +62,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mongo.Client, client client.Client) error {
 	log := logf.FromContext(ctx)
 
-	sysUsersSecret := corev1.Secret{}
-	err := client.Get(ctx,
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      api.InternalUserSecretName(cr),
-		},
-		&sysUsersSecret,
-	)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get internal sys users secret")
+	if len(cr.Spec.Users) == 0 {
+		return nil
 	}
 
-	sysUserNames := sysUserNames(sysUsersSecret)
+	systemUserNames, err := fetchSystemUserNames(ctx, cr, client)
+	if err != nil {
+		return err
+	}
+
+	uniqueUserNames := make(map[string]struct{}, len(cr.Spec.Users))
 
 	for _, user := range cr.Spec.Users {
-		if _, ok := sysUserNames[user.Name]; ok {
-			log.Error(nil, "creating user with reserved user name is forbidden", "user", user.Name)
+		err := validateUser(ctx, &user, systemUserNames, uniqueUserNames)
+		if err != nil {
 			continue
-		}
-
-		if len(user.Roles) == 0 {
-			log.Error(nil, "user must have at least one role", "user", user.Name)
-			continue
-		}
-
-		if user.DB == "" {
-			user.DB = "admin"
-		}
-
-		if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key == "" {
-			user.PasswordSecretRef.Key = "password"
 		}
 
 		userInfo, err := mongoCli.GetUserInfo(ctx, user.Name, user.DB)
@@ -148,6 +128,55 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 	}
 
 	return nil
+}
+
+func validateUser(ctx context.Context, user *api.User, sysUserNames map[string]struct{}, uniqueUserNames map[string]struct{}) error {
+	log := logf.FromContext(ctx)
+
+	if sysUserNames == nil || uniqueUserNames == nil {
+		log.Error(nil, "sys or unique usernames are nil")
+		return errors.New("invalid sys or unique usernames config")
+	}
+
+	if _, reserved := sysUserNames[user.Name]; reserved {
+		log.Error(nil, "creating user with reserved user name is forbidden", "user", user.Name)
+		return errors.New("sys reserved username")
+	}
+
+	if _, exists := uniqueUserNames[user.Name]; exists {
+		log.Error(nil, "username already exists", "user", user.Name)
+		return errors.New("username already exists")
+	}
+	uniqueUserNames[user.Name] = struct{}{}
+
+	if len(user.Roles) == 0 {
+		log.Error(nil, "user must have at least one role", "user", user.Name)
+		return errors.New("user must have at least one role")
+	}
+
+	if user.DB == "" {
+		user.DB = "admin"
+	}
+
+	if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key == "" {
+		user.PasswordSecretRef.Key = "password"
+	}
+
+	return nil
+}
+
+func fetchSystemUserNames(ctx context.Context, cr *api.PerconaServerMongoDB, client client.Client) (map[string]struct{}, error) {
+	sysUsersSecret := corev1.Secret{}
+	err := client.Get(ctx, types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      api.InternalUserSecretName(cr),
+	}, &sysUsersSecret)
+
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, errors.Wrap(err, "get internal sys users secret")
+	}
+
+	return sysUserNames(sysUsersSecret), nil
 }
 
 func handleRoles(ctx context.Context, cr *api.PerconaServerMongoDB, cli mongo.Client) {
@@ -268,15 +297,15 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 	return mr, nil
 }
 
-// sysUserNames returns a set of system user names from the sysUsersSecret.
+// sysUserNames returns a set of system usernames from the sysUsersSecret.
 func sysUserNames(sysUsersSecret corev1.Secret) map[string]struct{} {
-	sysUserNames := make(map[string]struct{}, len(sysUsersSecret.Data))
+	names := make(map[string]struct{}, len(sysUsersSecret.Data))
 	for k, v := range sysUsersSecret.Data {
 		if strings.Contains(k, "_USER") {
-			sysUserNames[string(v)] = struct{}{}
+			names[string(v)] = struct{}{}
 		}
 	}
-	return sysUserNames
+	return names
 }
 
 func updatePass(
