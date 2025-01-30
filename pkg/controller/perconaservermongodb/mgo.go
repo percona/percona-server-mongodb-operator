@@ -116,6 +116,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {
+			if errors.Is(err, errNoRunningMongodContainers) {
+				return api.AppStateInit, nil, nil
+			}
 			return api.AppStateInit, nil, errors.Wrap(err, "handleReplsetInit")
 		}
 
