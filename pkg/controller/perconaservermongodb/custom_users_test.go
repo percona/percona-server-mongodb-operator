@@ -1,9 +1,13 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"testing"
 
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRolesChanged(t *testing.T) {
@@ -228,6 +232,70 @@ func TestRolesChanged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := rolesChanged(tt.r1, tt.r2); got != tt.want {
 				t.Errorf("rolesChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateUser(t *testing.T) {
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		user            *api.User
+		actualUser      *api.User
+		sysUserNames    map[string]struct{}
+		uniqueUserNames map[string]struct{}
+		expectedErr     error
+	}{
+		"invalid input for sysUserNames and uniqueUserNames": {
+			user:        &api.User{Name: "john", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
+			expectedErr: errors.New("invalid sys or unique usernames config"),
+		},
+		"valid non-existing username": {
+			user:            &api.User{Name: "john", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
+			actualUser:      &api.User{Name: "john", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
+			sysUserNames:    map[string]struct{}{},
+			uniqueUserNames: map[string]struct{}{},
+		},
+		"valid non-existing username, missing db and password secret ref": {
+			user: &api.User{Name: "john", Roles: []api.UserRole{{Name: "rolename"}}, PasswordSecretRef: &api.SecretKeySelector{}},
+			actualUser: &api.User{
+				Name:              "john",
+				Roles:             []api.UserRole{{Name: "rolename"}},
+				DB:                "admin",
+				PasswordSecretRef: &api.SecretKeySelector{Key: "password"},
+			},
+			sysUserNames:    map[string]struct{}{},
+			uniqueUserNames: map[string]struct{}{},
+		},
+		"sys reserved username": {
+			user:            &api.User{Name: "root", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
+			sysUserNames:    map[string]struct{}{"root": {}},
+			uniqueUserNames: map[string]struct{}{},
+			expectedErr:     errors.New("sys reserved username"),
+		},
+		"not unique username": {
+			user:            &api.User{Name: "useradmin", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
+			sysUserNames:    map[string]struct{}{},
+			uniqueUserNames: map[string]struct{}{"useradmin": {}},
+			expectedErr:     errors.New("username should be unique"),
+		},
+		"no roles defined": {
+			user:            &api.User{Name: "john", Roles: []api.UserRole{}, DB: "testdb"},
+			sysUserNames:    map[string]struct{}{},
+			uniqueUserNames: map[string]struct{}{},
+			expectedErr:     errors.New("user must have at least one role"),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := validateUser(ctx, tt.user, tt.sysUserNames, tt.uniqueUserNames)
+			if tt.expectedErr != nil {
+				assert.EqualError(t, err, tt.expectedErr.Error())
+			} else {
+				assert.Equal(t, tt.user, tt.actualUser)
+				assert.NoError(t, err)
 			}
 		})
 	}

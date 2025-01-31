@@ -144,8 +144,8 @@ func validateUser(ctx context.Context, user *api.User, sysUserNames, uniqueUserN
 	}
 
 	if _, exists := uniqueUserNames[user.Name]; exists {
-		log.Error(nil, "username already exists", "user", user.Name)
-		return errors.New("username already exists")
+		log.Error(nil, "username should be unique", "user", user.Name)
+		return errors.New("username should be unique")
 	}
 	uniqueUserNames[user.Name] = struct{}{}
 
