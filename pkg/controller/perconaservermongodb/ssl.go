@@ -106,10 +106,10 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
-		switch err {
-		case tls.ErrCertManagerNotFound:
+		switch {
+		case errors.Is(err, tls.ErrCertManagerNotFound):
 			return false, nil
-		case tls.ErrCertManagerNotReady:
+		case errors.Is(err, tls.ErrCertManagerNotReady):
 			return true, nil
 		}
 		return false, err
