@@ -196,6 +196,8 @@ BEGIN {
 }
 ' ../../deploy/crd.yaml
 
+find "${bundle_directory}/manifests" -type f -name "*.crd.yaml" -exec sed -i '' '1s/^/---\n/; ${/^---$/d;}' {} +
+
 abort() {
 	echo >&2 "$@"
 	exit 1
