@@ -28,6 +28,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -234,8 +235,9 @@ type UpgradeOptions struct {
 }
 
 type ReplsetMemberStatus struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	State    mongo.MemberState `json:"state,omitempty"`
+	StateStr string            `json:"stateStr,omitempty"`
 }
 
 type MongosStatus struct {
@@ -246,8 +248,8 @@ type MongosStatus struct {
 }
 
 type ReplsetStatus struct {
-	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
-	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
+	Members     map[string]ReplsetMemberStatus `json:"members,omitempty"`
+	ClusterRole ClusterRole                    `json:"clusterRole,omitempty"`
 
 	Initialized  bool     `json:"initialized,omitempty"`
 	AddedAsShard *bool    `json:"added_as_shard,omitempty"`

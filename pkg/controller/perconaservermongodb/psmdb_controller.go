@@ -546,7 +546,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 	var errs []error
 	clusterStatus := api.AppStateNone
 	for _, replset := range repls {
-		replsetStatus, err := r.reconcileCluster(ctx, cr, replset, mongosPods.Items)
+		replsetStatus, members, err := r.reconcileCluster(ctx, cr, replset, mongosPods.Items)
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 			errs = append(errs, err)
@@ -564,6 +564,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 				clusterStatus = s
 				break
 			}
+		}
+
+		if rs, ok := cr.Status.Replsets[replset.Name]; ok {
+			rs.Members = make(map[string]api.ReplsetMemberStatus)
+			for pod, member := range members {
+				rs.Members[pod] = member
+			}
+			log.V(1).Info("Replset members", "rs", replset.Name, "initialized", rs.Initialized, "members", rs.Members)
+			cr.Status.Replsets[replset.Name] = rs
 		}
 	}
 	return clusterStatus, stderrors.Join(errs...)
@@ -650,7 +659,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 
 	for _, rs := range cr.Spec.Replsets {
 		if cr.Status.State == api.AppStateStopping {
-			log.Info("Pausing cluster", "replset", rs.Name)
+			log.Info("pausing cluster", "replset", rs.Name)
 		}
 		rs.Arbiter.Enabled = false
 		rs.NonVoting.Enabled = false
@@ -658,7 +667,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
 		if err == errWaitingTermination {
-			log.Info("pausing cluster", "error", err.Error())
 			return nil
 		}
 		return errors.Wrap(err, "delete psmdb pods")

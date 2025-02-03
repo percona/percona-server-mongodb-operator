@@ -3,8 +3,8 @@ kind: PerconaServerMongoDB
 metadata:
   name: minimal-cluster
 spec:
-  crVersion: 1.18.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  crVersion: 1.20.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   unsafeFlags:
     replsetSize: true
     mongosSize: true
