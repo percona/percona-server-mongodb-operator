@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func TestRolesChanged(t *testing.T) {
