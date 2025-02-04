@@ -191,7 +191,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "psmdb-mock-mongos.psmdb.svc.cluster.local",
+			expected: "psmdb-mock-mongos.psmdb.svc.cluster.local:27017",
 		},
 		{
 			name: "loadbalancer expose for sharding with service per pod",
@@ -231,7 +231,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "psmdb-mock-mongos-0.psmdb.svc.cluster.local,psmdb-mock-mongos-1.psmdb.svc.cluster.local,psmdb-mock-mongos-2.psmdb.svc.cluster.local",
+			expected: "psmdb-mock-mongos-0.psmdb.svc.cluster.local:27017,psmdb-mock-mongos-1.psmdb.svc.cluster.local:27017,psmdb-mock-mongos-2.psmdb.svc.cluster.local:27017",
 		},
 	}
 
@@ -309,6 +309,12 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 		Spec: corev1.ServiceSpec{
 			Type:      svcType,
 			ClusterIP: clusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name: "mongos",
+					Port: 27017,
+				},
+			},
 		},
 		Status: corev1.ServiceStatus{
 			LoadBalancer: corev1.LoadBalancerStatus{

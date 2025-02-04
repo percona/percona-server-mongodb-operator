@@ -600,6 +600,48 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	return b
 }
 
+// GetPort returns the net.port of the mongo configuration.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port
+func (conf MongoConfiguration) GetPort() (int32, error) {
+	var cfg struct {
+		Net struct {
+			Port int32 `yaml:"port,omitempty"`
+		} `yaml:"net,omitempty"`
+	}
+	err := yaml.Unmarshal([]byte(conf), &cfg)
+	if err != nil {
+		return 0, fmt.Errorf("error unmarshalling configuration %v", err)
+	}
+	return cfg.Net.Port, errors.Wrap(err, "unmarshal configuration")
+}
+
+// SetPort to set the mongo port in the MongoConfiguration according to the following documentation:
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port.
+// Caution using this since it overwrites the MongoConfiguration.
+func (conf *MongoConfiguration) SetPort(port int32) error {
+	if *conf != "" {
+		return fmt.Errorf("configuration is not empty; refusing to overwrite")
+	}
+	var cfg struct {
+		Net struct {
+			Port int32 `yaml:"port,omitempty"`
+		} `yaml:"net,omitempty"`
+	}
+
+	err := yaml.Unmarshal([]byte(*conf), &cfg)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling configuration %v", err)
+	}
+
+	cfg.Net.Port = port
+
+	newConfig, _ := yaml.Marshal(cfg)
+
+	*conf = MongoConfiguration(newConfig)
+
+	return nil
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
@@ -684,22 +726,6 @@ func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
 	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
 
-func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
-	return cr.Name + "-" + r.Name
-}
-
-func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
-	if r.Expose.Enabled {
-		return fmt.Sprintf("%s.%s.%s", podName, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
-	}
-
-	return fmt.Sprintf("%s.%s.%s.%s", podName, r.ServiceName(cr), cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
-}
-
-func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
-	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), DefaultMongodPort)
-}
-
 func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	var cfg struct {
 		Replication struct {
@@ -717,6 +743,13 @@ func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	}
 
 	return cfg.Replication.ReplSetName, nil
+}
+
+func (ms ReplsetSpec) GetPort() int32 {
+	if p, err := ms.Configuration.GetPort(); err == nil && p > 0 {
+		return p
+	}
+	return DefaultMongoPort
 }
 
 type LivenessProbeExtended struct {
@@ -804,6 +837,18 @@ type MongosSpec struct {
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
+func (ms MongosSpec) GetPort() int32 {
+	if p, err := ms.Configuration.GetPort(); err == nil && p > 0 {
+		return p
+	}
+
+	if ms.Port != 0 {
+		return ms.Port
+	}
+
+	return DefaultMongoPort
+}
+
 type MongosSpecSetParameter struct {
 	CursorTimeoutMillis int `json:"cursorTimeoutMillis,omitempty"`
 }
@@ -865,24 +910,6 @@ type MongodSpecInMemoryEngineConfig struct {
 type MongodSpecInMemory struct {
 	EngineConfig *MongodSpecInMemoryEngineConfig `json:"engineConfig,omitempty"`
 }
-
-type AuditLogDestination string
-
-var AuditLogDestinationFile AuditLogDestination = "file"
-
-type AuditLogFormat string
-
-var (
-	AuditLogFormatBSON AuditLogFormat = "BSON"
-	AuditLogFormatJSON AuditLogFormat = "JSON"
-)
-
-type OperationProfilingMode string
-
-const (
-	OperationProfilingModeAll    OperationProfilingMode = "all"
-	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
-)
 
 type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
@@ -969,11 +996,6 @@ type PITRSpec struct {
 	OplogOnly        bool                     `json:"oplogOnly,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
-}
-
-func (p PITRSpec) Disabled() PITRSpec {
-	p.Enabled = false
-	return p
 }
 
 type BackupTimeouts struct {

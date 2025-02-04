@@ -348,32 +348,29 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	removed, err := r.getSTSforRemoval(ctx, cr)
+	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	for _, sts := range removed {
-		rsName := sts.Labels[naming.LabelKubernetesReplset]
+	for _, rr := range stsForDeletion {
+		log.Info("Deleting STS component from replst", "sts", rr.sts.Name, "rs", rr.rsName, "port", rr.rsPort)
 
-		log.Info("Deleting STS component from replst", "sts", sts.Name, "rs", rsName)
-
-		err = r.checkIfPossibleToRemove(ctx, cr, rsName)
+		err = r.checkIfUserDataExistInRS(ctx, cr, rr.rsName, rr.rsPort)
 		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rsName)
+			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rr.rsName)
 		}
 
-		if sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
-			log.Info("Removing RS from shard", "rs", rsName)
-			err = r.removeRSFromShard(ctx, cr, rsName)
+		if rr.sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
+			err = r.removeRSFromShard(ctx, cr, rr.rsName)
 			if err != nil {
-				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
 			}
 		}
 
-		err = r.client.Delete(ctx, &sts)
+		err = r.client.Delete(ctx, &rr.sts)
 		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rsName)
+			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
 		}
 	}
 
@@ -741,11 +738,18 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 	return isDownscale, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr *api.PerconaServerMongoDB) ([]appsv1.StatefulSet, error) {
-	removed := make([]appsv1.StatefulSet, 0)
+type statefulSetWithReplicaNameAndPort struct {
+	sts    appsv1.StatefulSet
+	rsName string
+	rsPort int32
+}
 
-	stsList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &stsList,
+// getSTSForDeletionWithTheirRSDetails identifies StatefulSets that should be deleted and returns them
+// along with their associated replica set name and port. This information is used to create a MongoDB
+// client and perform necessary operations before the sts deletion.
+func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx context.Context, cr *api.PerconaServerMongoDB) ([]statefulSetWithReplicaNameAndPort, error) {
+	existingSTSList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &existingSTSList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -756,13 +760,15 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 		return nil, errors.Wrap(err, "failed to get statefulset list")
 	}
 
-	appliedRSNames := make(map[string]struct{}, len(cr.Spec.Replsets))
+	newlyAppliedRSNames := make(map[string]struct{}, len(cr.Spec.Replsets))
 
 	for _, rs := range cr.Spec.Replsets {
-		appliedRSNames[rs.Name] = struct{}{}
+		newlyAppliedRSNames[rs.Name] = struct{}{}
 	}
 
-	for _, sts := range stsList.Items {
+	var removed []statefulSetWithReplicaNameAndPort
+
+	for _, sts := range existingSTSList.Items {
 		component := sts.Labels[naming.LabelKubernetesComponent]
 		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
@@ -770,22 +776,40 @@ func (r *ReconcilePerconaServerMongoDB) getSTSforRemoval(ctx context.Context, cr
 
 		rsName := sts.Labels[naming.LabelKubernetesReplset]
 
-		if _, ok := appliedRSNames[rsName]; ok {
+		if _, ok := newlyAppliedRSNames[rsName]; ok {
 			continue
 		}
 
-		removed = append(removed, sts)
+		port, err := getComponentPortFromSTS(sts, component)
+		if err != nil {
+			return nil, errors.Wrap(err, "get component port from sts")
+		}
+		removed = append(removed, statefulSetWithReplicaNameAndPort{rsName: rsName, rsPort: port, sts: sts})
 	}
 
 	// Sorting in reverse order to ensure that we first delete non-voting/arbiter before the main RS sts.
 	sort.Slice(removed, func(i, j int) bool {
-		return removed[i].Name > removed[j].Name
+		return removed[i].sts.Name > removed[j].sts.Name
 	})
 
 	return removed, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
+func getComponentPortFromSTS(sts appsv1.StatefulSet, componentName string) (int32, error) {
+	for _, container := range sts.Spec.Template.Spec.Containers {
+		if container.Name == componentName {
+			if len(container.Ports) > 0 {
+				return container.Ports[0].ContainerPort, nil
+			}
+			return 0, fmt.Errorf("no ports found for container %s", componentName)
+		}
+	}
+	return 0, fmt.Errorf("container not found: %s", componentName)
+}
+
+// checkIfUserDataExistInRS verifies if a MongoDB replica set with particular name can be safely removed. It checks
+// whether any user (non-system) databases exist, if they do, that would indicate that the replica set cannot be safely deleted.
+func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string, port int32) error {
 	log := logf.FromContext(ctx)
 
 	systemDBs := map[string]struct{}{
@@ -794,19 +818,27 @@ func (r *ReconcilePerconaServerMongoDB) checkIfPossibleToRemove(ctx context.Cont
 		"config": {},
 	}
 
-	client, err := r.mongoClientWithRole(ctx, cr, &api.ReplsetSpec{Name: rsName}, api.RoleClusterAdmin)
+	rs := &api.ReplsetSpec{Name: rsName}
+	// Setting the port using the mongo configuration because currently we are not
+	// exposing the port on the rs spec as an option.
+	err := rs.Configuration.SetPort(port)
+	if err != nil {
+		return errors.Wrap(err, "failed to set port")
+	}
+
+	mc, err := r.mongoClientWithRole(ctx, cr, rs, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
 
 	defer func() {
-		err := client.Disconnect(ctx)
+		err := mc.Disconnect(ctx)
 		if err != nil {
 			log.Error(err, "failed to close connection")
 		}
 	}()
 
-	list, err := client.ListDBs(ctx)
+	list, err := mc.ListDBs(ctx)
 	if err != nil {
 		log.Error(err, "failed to list databases", "rs", rsName)
 		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)

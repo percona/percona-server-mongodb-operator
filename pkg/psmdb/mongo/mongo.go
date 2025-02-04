@@ -944,17 +944,17 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 
 		if member.ArbiterOnly {
 			// Arbiter should always have a vote
-			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Votes = DefaultVotes
 			// Arbiter should never have priority
 			[]ConfigMember(*m)[i].Priority = 0
 		} else {
-			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Votes = DefaultVotes
 			lastVoteIdx = i
 
 			// In unsafe PSA (Primary with a Secondary and an Arbiter),
 			// we are unable to set the votes and the priority simultaneously.
-			// Therefore, setting only the votes.
-			if !unsafePSA || member.Votes == 1 {
+			// Therefore, setting only the priority.
+			if !unsafePSA || member.Votes == DefaultVotes {
 				// Priority can be any number in range [0,1000].
 				// We're setting it to 2 as default, to allow
 				// users to configure external nodes with lower

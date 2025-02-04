@@ -87,7 +87,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		},
 		{
 			Name:  "DB_PORT",
-			Value: strconv.Itoa(int(api.DefaultMongodPort)),
+			Value: strconv.Itoa(int(api.DefaultMongoPort)),
 		},
 		{
 			Name:  "DB_PORT_MIN",
@@ -330,7 +330,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
+func AddPMMContainer(_ context.Context, cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
 	if !cr.Spec.PMM.Enabled {
 		return nil
 	}
