@@ -5,6 +5,7 @@ tests=[]
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
+            NODES_NUM=3
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
@@ -12,7 +13,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
-                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.28 --machine-type=n1-standard-4 --preemptible --num-nodes=3 --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
+                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.28 --machine-type=n1-standard-4 --preemptible --disk-size 30 --num-nodes=\$NODES_NUM --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -71,19 +72,6 @@ void deleteOldClusters(String FILTER) {
    }
 }
 
-void pushArtifactFile(String FILE_NAME) {
-    echo "Push $FILE_NAME file to S3!"
-
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-        sh """
-            touch ${FILE_NAME}
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 ls \$S3_PATH/${FILE_NAME} || :
-            aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
-        """
-    }
-}
-
 void pushLogFile(String FILE_NAME) {
     def LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
     def LOG_FILE_NAME="${FILE_NAME}.log"
@@ -97,13 +85,15 @@ void pushLogFile(String FILE_NAME) {
     }
 }
 
-void popArtifactFile(String FILE_NAME) {
-    echo "Try to get $FILE_NAME file from S3!"
+void pushArtifactFile(String FILE_NAME) {
+    echo "Push $FILE_NAME file to S3!"
 
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
+            touch ${FILE_NAME}
             S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 cp --quiet \$S3_PATH/${FILE_NAME} ${FILE_NAME} || :
+            aws s3 ls \$S3_PATH/${FILE_NAME} || :
+            aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
         """
     }
 }
@@ -140,6 +130,25 @@ void markPassedTests() {
     }
 }
 
+void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
+    sh """
+        export KUBECONFIG=/tmp/$CLUSTER_NAME-$CLUSTER_SUFFIX
+        echo "========== KUBERNETES STATUS $LOCATION TEST =========="
+        gcloud container clusters list|grep -E "NAME|$CLUSTER_NAME-$CLUSTER_SUFFIX "
+        echo
+        kubectl get nodes
+        echo
+        kubectl top nodes
+        echo
+        kubectl get pods --all-namespaces
+        echo
+        kubectl top pod --all-namespaces
+        echo
+        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
+        echo "======================================================"
+    """
+}
+
 TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
 TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
@@ -161,6 +170,10 @@ void makeReport() {
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
+
+    sh """
+        echo "${TestsReportXML}" > TestsReport.xml
+    """
 }
 
 void clusterRunner(String cluster) {
@@ -202,15 +215,16 @@ void runTest(Integer TEST_ID) {
                         export DEBUG_TESTS=1
                     fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
-                    ./e2e-tests/$testName/run
+                    time ./e2e-tests/$testName/run
                 """
             }
-
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
             tests[TEST_ID]["result"] = "passed"
             return true
         }
         catch (exc) {
+            printKubernetesStatus("AFTER","$clusterSuffix")
+            echo "Test $testName has failed!"
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
                 return true
@@ -228,9 +242,108 @@ void runTest(Integer TEST_ID) {
     }
 }
 
-def skipBranchBuilds = true
+void prepareNode() {
+    sh """
+        sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
+        kubectl version --client --output=yaml
+
+        curl -fsSL https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
+
+        sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
+        sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
+
+        sudo tee /etc/yum.repos.d/google-cloud-sdk.repo << EOF
+[google-cloud-cli]
+name=Google Cloud CLI
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+        sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+
+        curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+    """
+}
+
+boolean isManualBuild() {
+    def causes = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+    return !causes.isEmpty()
+}
+
+needToRunTests = true
+void checkE2EIgnoreFiles() {
+    if (isManualBuild()) {
+        echo "This is a manual rebuild. Forcing pipeline execution."
+        return
+    }
+
+    def e2eignoreFile = ".e2eignore"
+    if ( ! fileExists(e2eignoreFile) ) {
+        echo "No $e2eignoreFile file found. Proceeding with execution."
+        return
+    }
+
+    def excludedFiles = readFile(e2eignoreFile).split('\n').collect{it.trim()}
+    def lastProcessedCommitFile = "last-processed-commit.txt"
+    def lastProcessedCommitHash = ""
+
+    def build = currentBuild.previousBuild
+    while (build != null) {
+        try {
+            echo "Checking previous build: #$build.number"
+            copyArtifacts(projectName: env.JOB_NAME, selector: specific("$build.number"), filter: lastProcessedCommitFile)
+            lastProcessedCommitHash = readFile(lastProcessedCommitFile).trim()
+            echo "Last processed commit hash: $lastProcessedCommitHash"
+            break
+        } catch (Exception e) {
+            echo "No $lastProcessedCommitFile found in build $build.number. Checking earlier builds."
+        }
+        build = build.previousBuild
+    }
+
+    if (lastProcessedCommitHash == "") {
+        echo "This is the first run. Using merge base as the starting point for the diff."
+        changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
+    } else {
+        def commitExists = sh(script: "git cat-file -e $lastProcessedCommitHash 2>/dev/null", returnStatus: true) == 0
+        if (commitExists) {
+            echo "Processing changes since last processed commit: $lastProcessedCommitHash"
+            changedFiles = sh(script: "git diff --name-only $lastProcessedCommitHash HEAD", returnStdout: true).trim().split('\n').findAll{it}
+        } else {
+            echo "Commit hash $lastProcessedCommitHash does not exist in the current repository. Using merge base as the starting point for the diff."
+            changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
+        }
+    }
+
+    echo "Excluded files: $excludedFiles"
+    echo "Changed files: $changedFiles"
+
+    def excludedFilesRegex = excludedFiles.collect{it.replace("**", ".*").replace("*", "[^/]*")}
+    needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
+
+    if (needToRunTests) {
+        echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
+    } else {
+        if (currentBuild.previousBuild?.result != 'SUCCESS') {
+            echo "All changed files are e2eignore files, and previous build was unsuccessful. Propagating previous state."
+            currentBuild.result = currentBuild.previousBuild?.result
+            error "Skipping execution as non-significant changes detected and previous build was unsuccessful."
+        } else {
+            echo "All changed files are e2eignore files. Aborting pipeline execution."
+        }
+    }
+
+    sh """
+        echo \$(git rev-parse HEAD) > $lastProcessedCommitFile
+    """
+    archiveArtifacts "$lastProcessedCommitFile"
+}
+
+def isPRJob = false
 if (env.CHANGE_URL) {
-    skipBranchBuilds = false
+    isPRJob = true
 }
 
 pipeline {
@@ -249,16 +362,28 @@ pipeline {
     }
     options {
         disableConcurrentBuilds(abortPrevious: true)
+        copyArtifactPermission("$JOB_NAME/PR-*")
     }
     stages {
+        stage('Check Ignore Files') {
+            when {
+                expression {
+                    isPRJob
+                }
+            }
+            steps {
+                checkE2EIgnoreFiles()
+            }
+        }
         stage('Prepare') {
             when {
                 expression {
-                    !skipBranchBuilds
+                    isPRJob && needToRunTests
                 }
             }
             steps {
                 initTests()
+                prepareNode()
                 script {
                     if (AUTHOR_NAME == 'null') {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
@@ -271,29 +396,6 @@ pipeline {
                         }
                     }
                 }
-                sh """
-                    sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
-                    kubectl version --client --output=yaml
-
-                    curl -fsSL https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
-
-                    sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
-                    sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
-
-                    sudo tee /etc/yum.repos.d/google-cloud-sdk.repo << EOF
-[google-cloud-cli]
-name=Google Cloud CLI
-baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
-enabled=1
-gpgcheck=1
-repo_gpgcheck=0
-gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-EOF
-                    sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
-
-                    curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
-                """
-
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
                         cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml
@@ -305,7 +407,7 @@ EOF
         stage('Build docker image') {
             when {
                 expression {
-                    !skipBranchBuilds
+                    isPRJob && needToRunTests
                 }
             }
             steps {
@@ -316,11 +418,9 @@ EOF
                         mkdir -p $(dirname ${docker_tag_file})
                         echo ${DOCKER_TAG} > "${docker_tag_file}"
                             sg docker -c "
-                                set -ex
                                 docker login -u '${USER}' -p '${PASS}'
                                 export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
-                                docker buildx create --use
                                 ./e2e-tests/build
                                 docker logout
                             "
@@ -334,7 +434,7 @@ EOF
         stage('GoLicenseDetector test') {
             when {
                 expression {
-                    !skipBranchBuilds
+                    isPRJob && needToRunTests
                 }
             }
             steps {
@@ -362,7 +462,7 @@ EOF
         stage('GoLicense test') {
             when {
                 expression {
-                    !skipBranchBuilds
+                    isPRJob && needToRunTests
                 }
             }
             steps {
@@ -387,7 +487,6 @@ EOF
                             | sort \
                             | uniq \
                             > golicense-new || true
-
                         diff -u e2e-tests/license/compare/golicense golicense-new
                     """
                 }
@@ -396,7 +495,7 @@ EOF
         stage('Run tests for operator') {
             when {
                 expression {
-                    !skipBranchBuilds
+                    isPRJob && needToRunTests
                 }
             }
             options {
@@ -406,7 +505,7 @@ EOF
                 stage('cluster1') {
                     steps {
                         clusterRunner('cluster1')
-                   }
+                    }
                 }
                 stage('cluster2') {
                     steps {
@@ -468,36 +567,32 @@ EOF
                     catch (exc) {
                         slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
-
                 }
-
-                if (env.CHANGE_URL && currentBuild.nextBuild == null) {
-                    for (comment in pullRequest.comments) {
-                        println("Author: ${comment.user}, Comment: ${comment.body}")
-                        if (comment.user.equals('JNKPercona')) {
-                            println("delete comment")
-                            comment.delete()
+                if (needToRunTests) {
+                    if (isPRJob && currentBuild.nextBuild == null) {
+                        for (comment in pullRequest.comments) {
+                            println("Author: ${comment.user}, Comment: ${comment.body}")
+                            if (comment.user.equals('JNKPercona')) {
+                                println("delete comment")
+                                comment.delete()
+                            }
                         }
-                    }
-                    makeReport()
-                    sh """
-                        echo "${TestsReportXML}" > TestsReport.xml
-                    """
-                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
-                    archiveArtifacts '*.xml'
+                        makeReport()
+                        step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                        archiveArtifacts '*.xml'
 
-                    unstash 'IMAGE'
-                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
-                    pullRequest.comment(TestsReport)
+                        unstash 'IMAGE'
+                        def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                        pullRequest.comment(TestsReport)
+                    }
+                    deleteOldClusters("$CLUSTER_NAME")
+                    sh """
+                        sudo docker system prune --volumes -af
+                    """
                 }
+                deleteDir()
             }
-            deleteOldClusters("$CLUSTER_NAME")
-            sh """
-                sudo docker system prune --volumes -af
-                sudo rm -rf *
-            """
-            deleteDir()
         }
     }
 }

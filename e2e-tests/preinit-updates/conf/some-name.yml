@@ -3,12 +3,11 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.18.0
   #platform: openshift
   image:
   imagePullPolicy: Always
-  initImage: -init
   allowUnsafeConfigurations: false
+  updateStrategy: SmartUpdate
   backup:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:0.4.0-backup
@@ -25,17 +24,12 @@ spec:
       requests:
         cpu: 100m
         memory: 0.1G
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1Gi
-    size: 3
     configuration: |
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
       security:
+        enableEncryption: true
         redactClientLogData: false
       setParameter:
         ttlMonitorSleepSecs: 60
@@ -51,5 +45,11 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
   secrets:
     users: some-users
