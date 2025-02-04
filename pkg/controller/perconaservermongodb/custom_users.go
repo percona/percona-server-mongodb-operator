@@ -74,8 +74,9 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 	uniqueUserNames := make(map[string]struct{}, len(cr.Spec.Users))
 
 	for _, user := range cr.Spec.Users {
-		err := validateUser(ctx, &user, systemUserNames, uniqueUserNames)
+		err := validateUser(&user, systemUserNames, uniqueUserNames)
 		if err != nil {
+			log.Error(err, "invalid user", "user", user)
 			continue
 		}
 
@@ -130,28 +131,22 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 	return nil
 }
 
-func validateUser(ctx context.Context, user *api.User, sysUserNames, uniqueUserNames map[string]struct{}) error {
-	log := logf.FromContext(ctx)
-
+func validateUser(user *api.User, sysUserNames, uniqueUserNames map[string]struct{}) error {
 	if sysUserNames == nil || uniqueUserNames == nil {
-		log.Error(nil, "sys or unique usernames are nil")
 		return errors.New("invalid sys or unique usernames config")
 	}
 
 	if _, reserved := sysUserNames[user.Name]; reserved {
-		log.Error(nil, "creating user with reserved user name is forbidden", "user", user.Name)
-		return errors.New("sys reserved username")
+		return fmt.Errorf("creating user with reserved user name %s is forbidden", user.Name)
 	}
 
 	if _, exists := uniqueUserNames[user.Name]; exists {
-		log.Error(nil, "username should be unique", "user", user.Name)
-		return errors.New("username should be unique")
+		return fmt.Errorf("username %s should be unique", user.Name)
 	}
 	uniqueUserNames[user.Name] = struct{}{}
 
 	if len(user.Roles) == 0 {
-		log.Error(nil, "user must have at least one role", "user", user.Name)
-		return errors.New("user must have at least one role")
+		return fmt.Errorf("user %s must have at least one role", user.Name)
 	}
 
 	if user.DB == "" {

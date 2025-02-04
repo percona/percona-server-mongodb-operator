@@ -1,7 +1,6 @@
 package perconaservermongodb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -239,7 +238,6 @@ func TestRolesChanged(t *testing.T) {
 }
 
 func TestValidateUser(t *testing.T) {
-	ctx := context.Background()
 
 	tests := map[string]struct {
 		user            *api.User
@@ -273,25 +271,25 @@ func TestValidateUser(t *testing.T) {
 			user:            &api.User{Name: "root", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
 			sysUserNames:    map[string]struct{}{"root": {}},
 			uniqueUserNames: map[string]struct{}{},
-			expectedErr:     errors.New("sys reserved username"),
+			expectedErr:     errors.New("creating user with reserved user name root is forbidden"),
 		},
 		"not unique username": {
 			user:            &api.User{Name: "useradmin", Roles: []api.UserRole{{Name: "rolename", DB: "testdb"}}, DB: "testdb"},
 			sysUserNames:    map[string]struct{}{},
 			uniqueUserNames: map[string]struct{}{"useradmin": {}},
-			expectedErr:     errors.New("username should be unique"),
+			expectedErr:     errors.New("username useradmin should be unique"),
 		},
 		"no roles defined": {
 			user:            &api.User{Name: "john", Roles: []api.UserRole{}, DB: "testdb"},
 			sysUserNames:    map[string]struct{}{},
 			uniqueUserNames: map[string]struct{}{},
-			expectedErr:     errors.New("user must have at least one role"),
+			expectedErr:     errors.New("user john must have at least one role"),
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := validateUser(ctx, tt.user, tt.sysUserNames, tt.uniqueUserNames)
+			err := validateUser(tt.user, tt.sysUserNames, tt.uniqueUserNames)
 			if tt.expectedErr != nil {
 				assert.EqualError(t, err, tt.expectedErr.Error())
 			} else {
