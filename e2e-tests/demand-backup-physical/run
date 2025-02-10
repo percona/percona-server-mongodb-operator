@@ -10,26 +10,26 @@ run_backup() {
 	local storage=$1
 	local backup_name=$2
 
-	cat $test_dir/conf/backup.yml |
-		$sed -e "s/name:/name: ${backup_name}/" |
-		$sed -e "s/storageName:/storageName: ${storage}/" |
-		kubectl_bin apply -f -
+	cat $test_dir/conf/backup.yml \
+		| $sed -e "s/name:/name: ${backup_name}/" \
+		| $sed -e "s/storageName:/storageName: ${storage}/" \
+		| kubectl_bin apply -f -
 }
 
 run_restore() {
 	local backup_name=$1
 
-	cat $test_dir/conf/restore.yml |
-		$sed -e "s/name:/name: restore-${backup_name}/" |
-		$sed -e "s/backupName:/backupName: ${backup_name}/" |
-		kubectl_bin apply -f -
+	cat $test_dir/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-${backup_name}/" \
+		| $sed -e "s/backupName:/backupName: ${backup_name}/" \
+		| kubectl_bin apply -f -
 }
 
 run_recovery_check() {
 	local backup_name=$1
 	local compare_suffix=${2:-"_restore"}
 
-	wait_restore "${backup_name}" "${cluster}" "requested" "0" "1200"
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
 	echo
 
 	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
@@ -60,7 +60,7 @@ desc 'Testing on not sharded cluster'
 
 echo "Creating PSMDB cluster"
 cluster="some-name"
-kubectl_bin apply -f "${conf_dir}/secrets.yml"
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}.yml"
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 

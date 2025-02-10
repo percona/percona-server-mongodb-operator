@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -239,7 +238,7 @@ func TestConnectionEndpoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr
-			if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+			if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 				t.Fatal(err)
 			}
 			obj := []client.Object{cr}

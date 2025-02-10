@@ -14,20 +14,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
-
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -67,29 +65,20 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
+
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("psmdbbackup-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), &psmdbv1.PerconaServerMongoDBBackup{}, &handler.TypedEnqueueRequestForObject[*psmdbv1.PerconaServerMongoDBBackup]{}))
-	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner PerconaServerMongoDBBackup
-	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Pod{}, handler.TypedEnqueueRequestForOwner[*corev1.Pod](
-		mgr.GetScheme(), mgr.GetRESTMapper(), &psmdbv1.PerconaServerMongoDBBackup{}, handler.OnlyControllerOwner(),
-	)))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return builder.ControllerManagedBy(mgr).
+		Named("psmdbbackup-controller").
+		For(&psmdbv1.PerconaServerMongoDBBackup{}).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(), mgr.GetRESTMapper(),
+				&psmdbv1.PerconaServerMongoDBBackup{},
+				handler.OnlyControllerOwner(),
+			),
+		).
+		Complete(r)
 }
 
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}
@@ -132,7 +121,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
 		cr.ObjectMeta.DeletionTimestamp == nil {
-		return rr, nil
+		return reconcile.Result{}, nil
 	}
 
 	status := cr.Status
@@ -144,6 +133,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -173,18 +163,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
 
-		err = cluster.CheckNSetDefaults(svr.Platform, log)
+		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
 			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
-		}
-		// TODO: Remove after 1.15
-		if cluster.CompareVersion("1.12.0") >= 0 && cr.Spec.ClusterName == "" {
-			cr.Spec.ClusterName = cr.Spec.PSMDBCluster
-			cr.Spec.PSMDBCluster = ""
-			err = r.client.Update(ctx, cr)
-			if err != nil {
-				return rr, errors.Wrap(err, "failed to update clusterName")
-			}
 		}
 	}
 
@@ -269,7 +250,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
 			},
 		}
-		return azure.New(azureConf, nil)
+		return azure.New(azureConf, "", nil)
 	case cr.Status.S3 != nil:
 		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
@@ -336,7 +317,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		return s3.New(s3Conf, nil)
+		return s3.New(s3Conf, "", nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
 	}
@@ -404,7 +385,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "pbmName", cr.Status.PBMname)
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "namespace", cr.Namespace, "pbmName", cr.Status.PBMname)
 
 	var meta *backup.BackupMeta
 	var err error
@@ -472,7 +453,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", bcp.Name, "namespace", bcp.Namespace, "pbmName", bcp.Status.PBMname)
 
 	rsName := bcp.Status.ReplsetNames[0]
 	rsPods, err := psmdb.GetRSPods(ctx, r.client, cluster, rsName)
@@ -497,6 +478,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	if err != nil {
 		return errors.Wrap(err, "exec delete-backup")
 	}
+
+	log.Info("Backup deleted")
 
 	return nil
 }

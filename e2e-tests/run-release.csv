@@ -32,6 +32,7 @@ operator-self-healing-chaos
 pitr
 pitr-sharded
 pitr-physical
+preinit-updates
 pvc-resize
 recover-no-primary
 replset-overrides
@@ -44,6 +45,7 @@ service-per-pod
 serviceless-external-nodes
 smart-update
 split-horizon
+stable-resource-version
 storage
 tls-issue-cert-manager
 upgrade

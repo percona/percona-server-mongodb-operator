@@ -43,7 +43,27 @@ function start_cluster() {
 }
 
 function main() {
-	create_infra "$namespace"
+	delete_crd
+	check_crd_for_deletion "${GIT_BRANCH}"
+	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml
+
+	if [ -n "$OPERATOR_NS" ]; then
+		create_namespace $OPERATOR_NS
+		create_namespace ${namespace}
+		apply_rbac cw-rbac
+		yq eval '
+			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
+			| kubectl_bin apply -n ${OPERATOR_NS} -f -
+	else
+		create_namespace ${namespace}
+		apply_rbac rbac
+		yq eval '
+			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
+			| kubectl_bin apply -f -
+	fi
+
 	cluster="my-cluster-name"
 
 	desc 'create secrets and start client'
@@ -51,16 +71,6 @@ function main() {
 	kubectl_bin apply -f $conf_dir/client.yml
 
 	desc "create first PSMDB cluster $cluster"
-	kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} --server-side --force-conflicts -f $deploy_dir/crd.yaml
-	if [ -n "$OPERATOR_NS" ]; then
-		apply_rbac cw-rbac
-		kubectl_bin apply -n ${OPERATOR_NS} -f $deploy_dir/cw-operator.yaml
-	else
-		apply_rbac rbac
-		yq eval '((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true")' "$deploy_dir/operator.yaml" \
-			| kubectl_bin apply -f -
-	fi
-
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com" |
 		.spec.replsets[].affinity.antiAffinityTopologyKey = "none" |
 		.spec.replsets[].nonvoting.affinity.antiAffinityTopologyKey = "none" |

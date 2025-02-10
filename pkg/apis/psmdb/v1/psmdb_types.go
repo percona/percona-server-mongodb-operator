@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
@@ -27,6 +28,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -108,14 +110,18 @@ type SecretKeySelector struct {
 }
 
 type User struct {
-	Name              string            `json:"name"`
-	DB                string            `json:"db,omitempty"`
-	PasswordSecretRef SecretKeySelector `json:"passwordSecretRef"`
-	Roles             []UserRole        `json:"roles"`
+	Name              string             `json:"name"`
+	DB                string             `json:"db,omitempty"`
+	PasswordSecretRef *SecretKeySelector `json:"passwordSecretRef,omitempty"`
+	Roles             []UserRole         `json:"roles"`
 }
 
 func (u *User) UserID() string {
 	return u.DB + "." + u.Name
+}
+
+func (u *User) IsExternalDB() bool {
+	return u.DB == "$external"
 }
 
 type RoleAuthenticationRestriction struct {
@@ -217,6 +223,10 @@ type BalancerSpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+func (b *BalancerSpec) IsEnabled() bool {
+	return b.Enabled == nil || *b.Enabled
+}
+
 type UpgradeOptions struct {
 	VersionServiceEndpoint string          `json:"versionServiceEndpoint,omitempty"`
 	Apply                  UpgradeStrategy `json:"apply,omitempty"`
@@ -225,8 +235,9 @@ type UpgradeOptions struct {
 }
 
 type ReplsetMemberStatus struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	State    mongo.MemberState `json:"state,omitempty"`
+	StateStr string            `json:"stateStr,omitempty"`
 }
 
 type MongosStatus struct {
@@ -237,8 +248,8 @@ type MongosStatus struct {
 }
 
 type ReplsetStatus struct {
-	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
-	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
+	Members     map[string]ReplsetMemberStatus `json:"members,omitempty"`
+	ClusterRole ClusterRole                    `json:"clusterRole,omitempty"`
 
 	Initialized  bool     `json:"initialized,omitempty"`
 	AddedAsShard *bool    `json:"added_as_shard,omitempty"`
@@ -262,6 +273,8 @@ const (
 	AppStatePaused   AppState = "paused"
 	AppStateReady    AppState = "ready"
 	AppStateError    AppState = "error"
+
+	AppStateSharding AppState = "sharding"
 )
 
 type UpgradeStrategy string
@@ -329,6 +342,16 @@ type ClusterCondition struct {
 	LastTransitionTime metav1.Time     `json:"lastTransitionTime,omitempty"`
 	Reason             string          `json:"reason,omitempty"`
 	Message            string          `json:"message,omitempty"`
+}
+
+// FindCondition finds the conditionType in conditions.
+func (s *PerconaServerMongoDBStatus) FindCondition(conditionType AppState) *ClusterCondition {
+	for i, c := range s.Conditions {
+		if c.Type == conditionType {
+			return &s.Conditions[i]
+		}
+	}
+	return nil
 }
 
 type PMMSpec struct {
@@ -1193,20 +1216,30 @@ func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
 	return nil
 }
 
-const maxStatusesQuantity = 20
-
 func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	if len(s.Conditions) == 0 {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
 		s.Conditions = append(s.Conditions, c)
 		return
 	}
 
-	if s.Conditions[len(s.Conditions)-1].Type != c.Type {
-		s.Conditions = append(s.Conditions, c)
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
 	}
 
-	if len(s.Conditions) > maxStatusesQuantity {
-		s.Conditions = s.Conditions[len(s.Conditions)-maxStatusesQuantity:]
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
 	}
 }
 

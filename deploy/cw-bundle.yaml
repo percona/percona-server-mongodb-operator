@@ -898,6 +898,8 @@ spec:
                       runAsUser:
                         format: int64
                         type: integer
+                      seLinuxChangePolicy:
+                        type: string
                       seLinuxOptions:
                         properties:
                           level:
@@ -4920,6 +4922,8 @@ spec:
                             runAsUser:
                               format: int64
                               type: integer
+                            seLinuxChangePolicy:
+                              type: string
                             seLinuxOptions:
                               properties:
                                 level:
@@ -6956,6 +6960,8 @@ spec:
                         runAsUser:
                           format: int64
                           type: integer
+                        seLinuxChangePolicy:
+                          type: string
                         seLinuxOptions:
                           properties:
                             level:
@@ -12680,6 +12686,8 @@ spec:
                               runAsUser:
                                 format: int64
                                 type: integer
+                              seLinuxChangePolicy:
+                                type: string
                               seLinuxOptions:
                                 properties:
                                   level:
@@ -14716,6 +14724,8 @@ spec:
                           runAsUser:
                             format: int64
                             type: integer
+                          seLinuxChangePolicy:
+                            type: string
                           seLinuxOptions:
                             properties:
                               level:
@@ -17494,6 +17504,8 @@ spec:
                           runAsUser:
                             format: int64
                             type: integer
+                          seLinuxChangePolicy:
+                            type: string
                           seLinuxOptions:
                             properties:
                               level:
@@ -19460,7 +19472,6 @@ spec:
                       type: array
                   required:
                   - name
-                  - passwordSecretRef
                   - roles
                   type: object
                 type: array
@@ -19534,14 +19545,16 @@ spec:
                     initialized:
                       type: boolean
                     members:
-                      items:
+                      additionalProperties:
                         properties:
                           name:
                             type: string
-                          version:
+                          state:
+                            type: integer
+                          stateStr:
                             type: string
                         type: object
-                      type: array
+                      type: object
                     message:
                       type: string
                     ready:

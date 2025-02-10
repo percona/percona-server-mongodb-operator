@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -21,6 +22,16 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
+
+func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
+	m := secret.DeepCopy().Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		for k, v := range secret.Data {
+			m[k+"_ESCAPED"] = []byte(url.QueryEscape(string(v)))
+		}
+	}
+	return m
+}
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	log := logf.FromContext(ctx)
@@ -68,6 +79,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		if cr.CompareVersion("1.17.0") < 0 {
 			internalSysUsersSecret.Labels = nil
 		}
+		if cr.CompareVersion("1.19.0") >= 0 {
+			internalSysUsersSecret.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+		}
 		err = r.client.Create(ctx, internalSysUsersSecret)
 		if err != nil {
 			return errors.Wrap(err, "create internal sys users secret")
@@ -80,13 +94,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	}
 
-	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
-	if err != nil {
-		return errors.Wrap(err, "marshal sys secret data")
-	}
-
-	newSecretDataHash := sha256Hash(newSysData)
-	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
+	dataChanged, err := sysUsersSecretDataChanged(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "check sys users data changes")
 	}
@@ -135,6 +143,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+	}
 	err = r.client.Update(ctx, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret")
@@ -341,12 +352,19 @@ func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 
-func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool, error) {
-	secretData, err := json.Marshal(usersSecret.Data)
+func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret, internalSecret *corev1.Secret) (bool, error) {
+	newData := getInternalSecretData(cr, usersSecret)
+	newDataJSON, err := json.Marshal(newData)
 	if err != nil {
 		return false, err
 	}
-	oldHash := sha256Hash(secretData)
+	newHash := sha256Hash(newDataJSON)
+
+	oldDataJSON, err := json.Marshal(internalSecret.Data)
+	if err != nil {
+		return false, err
+	}
+	oldHash := sha256Hash(oldDataJSON)
 
 	return oldHash != newHash, nil
 }

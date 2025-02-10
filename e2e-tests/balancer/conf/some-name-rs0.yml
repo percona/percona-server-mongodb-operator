@@ -7,7 +7,17 @@ spec:
   image:
   imagePullPolicy: Always
   backup:
-    enabled: false
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
   sharding:
     enabled: true
     configsvrReplSet:

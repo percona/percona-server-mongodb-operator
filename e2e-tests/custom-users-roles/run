@@ -8,13 +8,54 @@ compare() {
 	local uri="$3"
 	local target="$4"
 
+	if [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$target-50.json ]; then
+		target=$target-50
+	fi
+
 	run_mongo "use ${database}\n ${command}" "$uri" "mongodb" \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxxesvc/' \
 		| sed '/"userId"/d' \
 			>$tmp_dir/${target}
 
-	diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
+    diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
+}
+
+get_user_cmd() {
+	local user="$1"
+
+	cmd="(function() {
+	var user = db.getUser(${user});
+	var roles = user.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	user.roles = roles;
+	printjson(user);
+	})();"
+
+	echo "$cmd"
+}
+
+
+get_role_cmd() {
+	local role="$1"
+
+	cmd="(function() {
+	var role = db.getRole(${role}, {showPrivileges: true, showAuthenticationRestrictions: true});
+	var roles = role.roles;
+	roles.sort((a, b) => {
+		if (a.role < b.role) return -1;
+		if (a.role > b.role) return 1;
+		return 0;
+	});
+	role.roles = roles;
+	printjson(role);
+	})();"
+
+	echo "$cmd"
 }
 
 test_dir=$(realpath $(dirname $0))
@@ -43,10 +84,19 @@ desc 'check user created on cluster creation'
 
 userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
-compare 'admin' 'db.getUser("user-one")' "$mongoUri" "user-one"
+compare 'admin' "$(get_user_cmd \"user-one\")" "$mongoUri" "user-one"
 check_mongo_auth "$userOne:$userOnePass@$cluster-0.$cluster.$namespace"
 
-desc 'delete initial user from CR and create a new one'
+generatedUserSecret="$psmdb-custom-user-secret"
+generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
+compare 'admin' "$(get_user_cmd \"user-gen\")" "$mongoUri" "user-gen"
+check_mongo_auth "user-gen:$generatedPass@$cluster-0.$cluster.$namespace"
+
+# Only check if $external.user-external user exists, as the password is not known
+# since we don't have a external provider set in this test
+compare '$external' "$(get_user_cmd \"user-external\")" "$mongoUri" "user-external"
+
+desc 'delete initial users from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		"spec": {"users":[
 			{
@@ -65,7 +115,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}'
 wait_for_running $cluster 3
 
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongoUri" "user-two"
 
 userTwo="user-two"
 userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
@@ -98,7 +148,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongoUri" "user-two-update-roles"
 
 desc 'check user roles update from DB'
 
@@ -106,14 +156,14 @@ run_mongo \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
 	"$mongoUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongoUri" "user-two-update-roles"
 
 desc 'check user recreated after deleted from DB'
 run_mongo \
 	'use admin\n db.dropUser("user-two")' \
 	"$mongoUri"
 sleep 15
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongoUri" "user-two-update-roles"
 
 desc 'check new user created after updated user name via CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -133,8 +183,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 	}'
 wait_for_running $cluster 3
 
-compare 'admin' 'db.getUser("user-three")' "$mongoUri" "user-three-admin-db"
-compare 'admin' 'db.getUser("user-two")' "$mongoUri" "user-two-update-roles"
+compare 'admin' "$(get_user_cmd \"user-three\")" "$mongoUri" "user-three-admin-db"
+compare 'admin' "$(get_user_cmd \"user-two\")" "$mongoUri" "user-two-update-roles"
 
 # user-three and user-two should be in the DB
 check_mongo_auth "$userTwo:$userTwoNewPass@$cluster-0.$cluster.$namespace"
@@ -157,8 +207,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'newDb' 'db.getUser("user-three")' "$mongoUri" "user-three-newDb-db"
-compare 'admin' 'db.getUser("user-three")' "$mongoUri" "user-three-admin-db"
+compare 'newDb' "$(get_user_cmd \"user-three\")" "$mongoUri" "user-three-newDb-db"
+compare 'admin' "$(get_user_cmd \"user-three\")" "$mongoUri" "user-three-admin-db"
 
 desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -175,21 +225,19 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]}
 	}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getUser("user-four")' "$mongoUri" "user-four"
+compare 'admin' "$(get_user_cmd \"user-four\")" "$mongoUri" "user-four"
 
 # ======================== Roles ========================
 
 desc 'check user role on cluster initialization'
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-one\")" "$mongoUri" "role-one"
 
 desc 'check role recreated after deleted from DB'
 run_mongo \
 	'use admin\n db.dropRole("role-one")' \
 	"$mongoUri"
 sleep 15
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-one\")" "$mongoUri" "role-one"
 
 desc 'delete initial role from CR and create a new one'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -218,10 +266,8 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]
 	}}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-one"
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two"
+compare 'admin' "$(get_role_cmd \"role-one\")" "$mongoUri" "role-one"
+compare 'admin' "$(get_role_cmd \"role-two\")" "$mongoUri" "role-two"
 
 desc 'check role update from CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -244,16 +290,14 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]
 	}}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two-updated"
+compare 'admin' "$(get_role_cmd \"role-two\")" "$mongoUri" "role-two-updated"
 
 desc 'check role update from DB'
 run_mongo \
 	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
 	"$mongoUri"
 sleep 15
-compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-two-updated"
+compare 'admin' "$(get_role_cmd \"role-two\")" "$mongoUri" "role-two-updated"
 
 desc 'check new role created after updated role name via CR'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -276,8 +320,7 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 		]
 	}}'
 wait_for_running $cluster 3
-compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-three"
+compare 'admin' "$(get_role_cmd \"role-three\")" "$mongoUri" "role-three"
 
 desc 'check creating multiple roles and the users in a single CR apply'
 kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
@@ -394,12 +437,10 @@ kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
 			]
 	}}'
 wait_for_running $cluster 3
-compare 'testAdmin1' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-four"
-compare 'testAdmin2' 'db.getRole("role-five", {showPrivileges: true, showAuthenticationRestrictions: true})' \
-	"$mongoUri" "role-five"
-compare 'testAdmin' 'db.getUser("user-five")' "$mongoUri" "user-five"
-compare 'testAdmin' 'db.getUser("user-six")' "$mongoUri" "user-six"
+compare 'testAdmin1' "$(get_role_cmd \"role-four\")" "$mongoUri" "role-four"
+compare 'testAdmin2' "$(get_role_cmd \"role-five\")" "$mongoUri" "role-five"
+compare 'testAdmin' "$(get_user_cmd \"user-five\")" "$mongoUri" "user-five"
+compare 'testAdmin' "$(get_user_cmd \"user-six\")" "$mongoUri" "user-six"
 
 destroy $namespace
 
