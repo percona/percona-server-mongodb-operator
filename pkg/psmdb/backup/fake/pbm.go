@@ -53,7 +53,19 @@ func (p *fakePBM) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.St
 	return nil, nil
 }
 
-func (p *fakePBM) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
+func (p *fakePBM) ResyncMainStorage(ctx context.Context) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncProfile(ctx context.Context, name string) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
 	return nil
 }
 
@@ -81,7 +93,19 @@ func (p *fakePBM) DeleteBackup(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (p *fakePBM) GetProfile(ctx context.Context, name string) (*config.Config, error) {
+	return nil, nil
+}
+
+func (p *fakePBM) RemoveProfile(ctx context.Context, name string) error {
+	return nil
+}
+
+func (p *fakePBM) AddProfile(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, name string, stg api.BackupStorageSpec) error {
+	return nil
+}
+
+func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error {
 	return nil
 }
 
@@ -109,7 +133,7 @@ func (p *fakePBM) Node(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+func (p *fakePBM) ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
 	return nil
 }
 
