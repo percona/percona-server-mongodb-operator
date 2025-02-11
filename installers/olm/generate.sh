@@ -247,9 +247,9 @@ yq eval '
   .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )] |
   .spec.minKubeVersion = env(minKubeVer)' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
-if [ ${DISTRIBUTION} == "community" ]; then
+if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
-elif [ ${DISTRIBUTION} == "redhat" ]; then
+elif [ "${DISTRIBUTION}" == "redhat" ]; then
 
 	yq eval --inplace '
         .spec.relatedImages = env(relatedImages) |
