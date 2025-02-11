@@ -321,6 +321,7 @@ type PerconaServerMongoDBStatus struct {
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
 	Host               string                   `json:"host,omitempty"`
@@ -958,6 +959,7 @@ const (
 
 type BackupStorageSpec struct {
 	Type       BackupStorageType           `json:"type"`
+	Main       bool                        `json:"main,omitempty"`
 	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
@@ -1018,7 +1020,7 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
-func (b BackupSpec) IsEnabledPITR() bool {
+func (b BackupSpec) IsPITREnabled() bool {
 	if !b.Enabled {
 		return false
 	}
@@ -1026,6 +1028,27 @@ func (b BackupSpec) IsEnabledPITR() bool {
 		return false
 	}
 	return b.PITR.Enabled
+}
+
+func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
+	var name string
+	var stg BackupStorageSpec
+
+	if len(b.Storages) == 1 {
+		for name, stg := range b.Storages {
+			return name, stg, nil
+		}
+	}
+
+	for name, stg := range b.Storages {
+		if !stg.Main {
+			continue
+		}
+
+		return name, stg, nil
+	}
+
+	return name, stg, errors.New("main storage not found")
 }
 
 type Arbiter struct {
@@ -1281,5 +1304,16 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 
 const (
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
+	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
 )
+
+func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
+	_, ok := cr.Annotations[AnnotationResyncPBM]
+	return ok
+}
+
+func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
+	_, ok := cr.Annotations[AnnotationResyncInProgress]
+	return ok
+}

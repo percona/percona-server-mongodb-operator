@@ -1,10 +1,10 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBRestore
 metadata:
-  name: restore1
+  name: restore-physical-3
 spec:
-  clusterName: my-cluster-name
-  backupName: backup1
+  clusterName: cluster1
+  backupName: backup-physical-3
 #  selective:
 #    withUsersAndRoles: true
 #    namespaces:

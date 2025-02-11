@@ -430,10 +430,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	err = b.pbm.GetNSetConfig(ctx, r.client, cluster, storage)
-	if err != nil {
-		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
-	}
+	// TODO:: We need check if backup is in main storage before deleting PITR chunks.
+	// We shouldn't call this for backups in external storages.
 
 	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
 	// as it's not possible to delete backup if it is a base for the PITR timeline

@@ -325,7 +325,7 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size == status.Ready:
+	case status.Ready > 0 && status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
