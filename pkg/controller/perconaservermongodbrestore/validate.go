@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
@@ -13,12 +12,10 @@ import (
 )
 
 var (
-	errWaitingPBM     = errors.New("waiting for pbm-agent")
-	errWaitingRestore = errors.New("waiting for restore to finish")
+	errWaitingPBM = errors.New("waiting for pbm-agent")
 )
 
 func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
 	if cluster.Spec.Unmanaged {
 		return errors.New("cluster is unmanaged")
 	}
@@ -39,7 +36,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 
 	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
-		log.Info("Waiting for pbm-agent.")
 		return errWaitingPBM
 	}
 	defer pbmc.Close(ctx)
@@ -49,8 +45,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get pbm config")
 	}
 
-	if err := pbmc.ValidateBackup(ctx, bcp, cfg); err != nil {
+	if err := pbmc.ValidateBackup(ctx, &cfg, bcp); err != nil {
 		return errors.Wrap(err, "failed to validate backup")
 	}
+
 	return nil
 }
