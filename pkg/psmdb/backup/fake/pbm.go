@@ -109,7 +109,7 @@ func (p *fakePBM) Node(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+func (p *fakePBM) ValidateBackup(ctx context.Context, cfg config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
 	return nil
 }
 
