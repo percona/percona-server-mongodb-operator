@@ -52,10 +52,13 @@ check_backup_and_restore() {
 
 	log "running restore: restore-${backup_name}"
 	run_restore "${backup_name}"
-	log "checking if balancer status is not changed"
-	check_balancer ${cluster} "${balancer_end_state}" 4
 
-	wait_restore ${backup_name} ${cluster} "ready"
+	wait_restore ${backup_name} ${cluster} "requested" 0
+
+	log "checking if balancer is disabled"
+	check_balancer ${cluster} "false"
+
+	wait_restore ${backup_name} ${cluster} "ready" 1
 
 	log "checking if balancer is ${balancer_end_state} after restore"
 	check_balancer ${cluster} ${balancer_end_state} 10
