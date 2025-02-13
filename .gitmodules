@@ -1,5 +1,0 @@
-[submodule "cmd/mongodb-healthcheck/logger/lumberjack"]
-    path = cmd/mongodb-healthcheck/logger/lumberjack
-    url = git@github.com:SimonRichardson/lumberjack.git
-    branch = fix-mill-once-goroutune-leak
-
