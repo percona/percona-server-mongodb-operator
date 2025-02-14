@@ -250,6 +250,7 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 	if err != nil {
 		return VersionMeta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
 	}
+	log := logf.FromContext(ctx)
 	vm := VersionMeta{
 		Apply:                  string(cr.Spec.UpgradeOptions.Apply),
 		CRUID:                  string(cr.GetUID()),
@@ -264,12 +265,13 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		BackupVersion:          cr.Status.BackupVersion,
 		BackupsEnabled:         cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0,
 		ShardingEnabled:        cr.Spec.Sharding.Enabled,
-		ClusterWideEnabled:     len(strings.Split(watchNs, ",")) != 1,
+		ClusterWideEnabled:     len(watchNs) == 0 || len(strings.Split(watchNs, ",")) > 1,
 		HashicorpVaultEnabled:  len(cr.Spec.Secrets.Vault) > 0,
 		RoleManagementEnabled:  len(cr.Spec.Roles) > 0,
 		UserManagementEnabled:  len(cr.Spec.Users) > 0,
 		VolumeExpansionEnabled: cr.Spec.VolumeExpansionEnabled,
 	}
+	log.Info("ClusterWideEnabled test", "ClusterWideEnabled", vm.ClusterWideEnabled)
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
 	}
