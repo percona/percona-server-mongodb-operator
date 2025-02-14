@@ -3,10 +3,10 @@
 # Install
 # brew install gawk coreutils
 for command in gawk gcsplit; do
-    if ! command -v $command &> /dev/null; then
-        echo "Error: $command is not installed. Please install it: brew install $command" >&2
-        exit 1
-    fi
+	if ! command -v $command &>/dev/null; then
+		echo "Error: $command is not installed. Please install it: brew install $command" >&2
+		exit 1
+	fi
 done
 
 set -eu
@@ -38,18 +38,18 @@ NS_RESOURCE_OPERATOR="../manager/namespace"
 CLUSTER_RESOURCE_OPERATOR="../manager/cluster"
 KUSTOMIZATION_FILE="../../config/bundle/kustomization.yaml"
 
-if [ ${MODE} == "cluster" ]; then
+if [ "${MODE}" == "cluster" ]; then
 	suffix="-cw"
 	mode="Cluster"
 	rulesLevel="ClusterPermissions"
 	sed -i '' "s|$NS_RESOURCE_RBAC|$CLUSTER_RESOURCE_RBAC|g" "$KUSTOMIZATION_FILE"
 	sed -i '' "s|$NS_RESOURCE_OPERATOR|$CLUSTER_RESOURCE_OPERATOR|g" "$KUSTOMIZATION_FILE"
-elif [ ${MODE} == "namespace" ]; then
+elif [ "${MODE}" == "namespace" ]; then
 	suffix=""
 	mode=""
 	rulesLevel="permissions"
-    sed -i '' "s|$CLUSTER_RESOURCE_RBAC|$NS_RESOURCE_RBAC|g" "$KUSTOMIZATION_FILE"
-    sed -i '' "s|$CLUSTER_RESOURCE_OPERATOR|$NS_RESOURCE_OPERATOR|g" "$KUSTOMIZATION_FILE"
+	sed -i '' "s|$CLUSTER_RESOURCE_RBAC|$NS_RESOURCE_RBAC|g" "$KUSTOMIZATION_FILE"
+	sed -i '' "s|$CLUSTER_RESOURCE_OPERATOR|$NS_RESOURCE_OPERATOR|g" "$KUSTOMIZATION_FILE"
 else
 	echo "Please add MODE variable. It could be either namespace or cluster"
 	exit 1
@@ -77,20 +77,20 @@ kubectl kustomize "../../config/${DISTRIBUTION}" >operator_yamls.yaml
 export role="${mode}Role"
 
 update_yaml_images() {
-    local yaml_file="$1"
+	local yaml_file="$1"
 
-    if [ ! -f "$yaml_file" ]; then
-        echo "Error: File '$yaml_file' does not exist."
-        return 1
-    fi
+	if [ ! -f "$yaml_file" ]; then
+		echo "Error: File '$yaml_file' does not exist."
+		return 1
+	fi
 
     local temp_file
     temp_file=$(mktemp)
 
-    sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" > "$temp_file"
-    mv "$temp_file" "$yaml_file"
+	sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
+	mv "$temp_file" "$yaml_file"
 
-    echo "File '$yaml_file' updated successfully."
+	echo "File '$yaml_file' updated successfully."
 }
 
 yq eval '. | select(.kind == "CustomResourceDefinition")' operator_yamls.yaml >operator_crds.yaml
@@ -136,23 +136,23 @@ yq eval '.annotations["operators.operatorframework.io.bundle.channels.v1"] = env
          .annotations["com.redhat.openshift.versions"] = env(openshift_supported_versions)' \
 	bundle.annotations.yaml >"${bundle_directory}/metadata/annotations.yaml"
 
-if [ ${DISTRIBUTION} == 'community' ]; then
+if [ "${DISTRIBUTION}" == 'community' ]; then
 	# community-operators
 	yq eval --inplace '
 	     .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mongodb-operator" |
          .annotations["org.opencontainers.image.authors"] = "info@percona.com" |
          .annotations["org.opencontainers.image.url"] = "https://percona.com" |
          .annotations["org.opencontainers.image.vendor"] = "Percona"' \
-		    "${bundle_directory}/metadata/annotations.yaml"
+		"${bundle_directory}/metadata/annotations.yaml"
 
 # certified-operators
-elif [ ${DISTRIBUTION} == 'redhat' ]; then
+elif [ "${DISTRIBUTION}" == 'redhat' ]; then
 	yq eval --inplace '
     .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mongodb-operator-certified" ' \
 		"${bundle_directory}/metadata/annotations.yaml"
 
 # redhat-marketplace
-elif [ ${DISTRIBUTION} == 'marketplace' ]; then
+elif [ "${DISTRIBUTION}" == 'marketplace' ]; then
 	yq eval --inplace '
     .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mongodb-operator-certified-rhmp" ' \
 		"${bundle_directory}/metadata/annotations.yaml"
@@ -161,17 +161,17 @@ fi
 # Copy annotations into Dockerfile LABELs.
 
 labels=$(yq eval -r '.annotations | to_entries | map("LABEL " + .key + "=" + (.value | tojson)) | join("\n")' \
-    "${bundle_directory}/metadata/annotations.yaml")
+	"${bundle_directory}/metadata/annotations.yaml")
 
 labels="${labels}
 LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true"
 
-echo $labels
+echo "$labels"
 
 LABELS="${labels}" envsubst <bundle.Dockerfile >"${bundle_directory}/Dockerfile"
 
-awk '{gsub(/^[ \t]+/, "    "); print}' "${bundle_directory}/Dockerfile" > "${bundle_directory}/Dockerfile.new" && mv "${bundle_directory}/Dockerfile.new" "${bundle_directory}/Dockerfile"
+awk '{gsub(/^[ \t]+/, "    "); print}' "${bundle_directory}/Dockerfile" >"${bundle_directory}/Dockerfile.new" && mv "${bundle_directory}/Dockerfile.new" "${bundle_directory}/Dockerfile"
 
 # Include CRDs as manifests.
 crd_names=$(yq eval -o=tsv '.metadata.name' ../../deploy/crd.yaml)
@@ -216,7 +216,6 @@ yq eval -i '[.]' operator_roles${suffix}.yaml && yq eval 'length == 1' operator_
 # Render bundle CSV and strip comments.
 csv_stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
 
-
 cr_example=$(yq eval -o=json ../../deploy/cr.yaml)
 backup_example=$(yq eval -o=json ../../deploy/backup/backup.yaml)
 restore_example=$(yq eval -o=json ../../deploy/backup/restore.yaml)
@@ -256,9 +255,9 @@ yq eval '
   .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )] |
   .spec.minKubeVersion = env(minKubeVer)' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
-if [ ${DISTRIBUTION} == "community" ]; then
-    update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
-elif [ ${DISTRIBUTION} == "redhat" ]; then
+if [ "${DISTRIBUTION}" == "community" ]; then
+	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"
+elif [ "${DISTRIBUTION}" == "redhat" ]; then
 
 	yq eval --inplace '
         .spec.relatedImages = env(relatedImages) |
@@ -267,7 +266,7 @@ elif [ ${DISTRIBUTION} == "redhat" ]; then
         .metadata.name = strenv(name_certified)' \
 		"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
-elif [ ${DISTRIBUTION} == "marketplace" ]; then
+elif [ "${DISTRIBUTION}" == "marketplace" ]; then
 	# Annotations needed when targeting Red Hat Marketplace
 	export package_url="https://marketplace.redhat.com/en-us/operators/${file_name}"
 	yq --inplace '
@@ -286,4 +285,4 @@ sed -i '' '/^$/d' "${bundle_directory}/manifests/${file_name}.clusterservicevers
 
 if >/dev/null command -v tree; then tree -C "${bundle_directory}"; fi
 
-yamllint -d '{extends: default, rules: {line-length: disable, indentation: disable}}' bundles/$DISTRIBUTION
+yamllint -d '{extends: default, rules: {line-length: disable, indentation: disable}}' bundles/"$DISTRIBUTION"
