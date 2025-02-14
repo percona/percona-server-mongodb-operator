@@ -84,7 +84,8 @@ update_yaml_images() {
         return 1
     fi
 
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
 
     sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" > "$temp_file"
     mv "$temp_file" "$yaml_file"
@@ -220,21 +221,28 @@ cr_example=$(yq eval -o=json ../../deploy/cr.yaml)
 backup_example=$(yq eval -o=json ../../deploy/backup/backup.yaml)
 restore_example=$(yq eval -o=json ../../deploy/backup/restore.yaml)
 full_example=$(jq -n "[${cr_example}, ${backup_example}, ${restore_example}]")
+deployment=$(yq eval operator_deployments.yaml)
+account=$(yq eval '.[] | .metadata.name' operator_accounts.yaml)
+rules=$(yq eval '.[] | .rules' operator_roles${suffix}.yaml)
+version="${VERSION}${suffix}"
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3Z")
+containerImage="$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)"
+relatedImages=$(yq eval bundle.relatedImages.yaml)
 
 export examples="${full_example}"
-export deployment=$(yq eval operator_deployments.yaml)
-export account=$(yq eval '.[] | .metadata.name' operator_accounts.yaml)
-export rules=$(yq eval '.[] | .rules' operator_roles${suffix}.yaml)
-export version="${VERSION}${suffix}"
+export deployment=$deployment
+export account=$account
+export rules=$rules
+export version="${version}"
 export minKubeVer="${MIN_KUBE_VERSION}"
 export stem="${csv_stem}"
-export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3Z")
+export timestamp=$timestamp
 export name="${csv_stem}.v${VERSION}${suffix}"
 export name_certified="${csv_stem}-certified.v${VERSION}${suffix}"
 export name_certified_rhmp="${csv_stem}-certified-rhmp.v${VERSION}${suffix}"
 export skip_range="<${VERSION}"
-export containerImage="$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)"
-export relatedImages=$(yq eval bundle.relatedImages.yaml)
+export containerImage="$containerImage"
+export relatedImages=$relatedImages
 export rulesLevel=${rulesLevel}
 
 yq eval '
