@@ -118,46 +118,45 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return "", errors.Wrap(err, "get ssl secret")
 	}
 
+	isCertFileOutdated := func(certData []byte, certFilePath string) (bool, error) {
+		_, err := os.Stat(certFilePath)
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+
+		fileData, err := os.ReadFile(certFilePath)
+		if err != nil {
+			return true, err
+		}
+
+		return !bytes.Equal(fileData, certData), nil
+	}
+
+	writeCertFileIfOutdated := func(certData []byte, filePath string) error {
+		if isCertOutdated, err := isCertFileOutdated(certData, filePath); err != nil {
+			return err
+		} else if isCertOutdated {
+			return os.WriteFile(filePath, certData, 0o600)
+		}
+		return nil
+	}
+
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	tlsPem := append(tlsKey, tlsCert...)
 
-	isTlsPemFileOutdated := true
-	_, err = os.Stat(tlsPemFile)
-	if !os.IsNotExist(err) {
-		// File with tls pem exists, read and compare data from file with secret
-		tlsPemFileData, err := os.ReadFile(tlsPemFile)
-		if err == nil && bytes.Equal(tlsPem, tlsPemFileData) {
-			isTlsPemFileOutdated = false
-		}
-	}
-
-	if isTlsPemFileOutdated {
-		err = os.WriteFile(tlsPemFile, tlsPem, 0o600)
-		if err != nil {
-			return "", errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
-		}
+	err = writeCertFileIfOutdated(tlsPem, tlsPemFile)
+	if err != nil {
+		return "", errors.Wrapf(err, "error checking and writing TLS key and certificate to file %s", tlsPemFile)
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
 	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
 
-	isCaCertFileOutdated := true
-	_, err = os.Stat(caCertFile)
-	if !os.IsNotExist(err) {
-		// File with ca cert exists, read and compare data from file with secret
-		caCertFileData, err := os.ReadFile(caCertFile)
-		if err == nil && bytes.Equal(caCert, caCertFileData) {
-			isCaCertFileOutdated = false
-		}
-	}
-
-	if isCaCertFileOutdated {
-		err = os.WriteFile(caCertFile, caCert, 0o600)
-		if err != nil {
-			return "", errors.Wrapf(err, "write CA certificate to %s", caCertFile)
-		}
+	err = writeCertFileIfOutdated(caCert, caCertFile)
+	if err != nil {
+		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
 	murl += fmt.Sprintf(
