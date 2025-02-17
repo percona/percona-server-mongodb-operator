@@ -1309,7 +1309,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 	}
-	pmmC := psmdb.AddPMMContainer(ctx, cr, secret, cr.Spec.PMM.MongosParams)
+	pmmC := psmdb.AddPMMContainer(cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,

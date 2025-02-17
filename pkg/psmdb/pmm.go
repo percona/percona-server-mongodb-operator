@@ -1,7 +1,6 @@
 package psmdb
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +12,7 @@ import (
 )
 
 // PMMContainer returns a pmm container from given spec
-func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) corev1.Container {
+func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) corev1.Container {
 	_, oka := secret.Data[api.PMMAPIKey]
 	_, okl := secret.Data[api.PMMUserKey]
 	_, okp := secret.Data[api.PMMPasswordKey]
@@ -50,7 +49,8 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 			},
 		},
 		{
-			Name:  "DB_ARGS",
+			Name: "DB_ARGS",
+			// no need to change the port here since these arguments are used only if cr.CompareVersion("1.2.0") < 0
 			Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
 		},
 	}
@@ -87,7 +87,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdm
 		},
 		{
 			Name:  "DB_PORT",
-			Value: strconv.Itoa(int(api.DefaultMongoPort)),
+			Value: strconv.Itoa(int(dbPort)),
 		},
 		{
 			Name:  "DB_PORT_MIN",
@@ -330,7 +330,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 }
 
 // AddPMMContainer creates the container object for a pmm-client
-func AddPMMContainer(_ context.Context, cr *api.PerconaServerMongoDB, secret *corev1.Secret, customAdminParams string) *corev1.Container {
+func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) *corev1.Container {
 	if !cr.Spec.PMM.Enabled {
 		return nil
 	}
@@ -339,7 +339,7 @@ func AddPMMContainer(_ context.Context, cr *api.PerconaServerMongoDB, secret *co
 		return nil
 	}
 
-	pmmC := PMMContainer(cr, secret, customAdminParams)
+	pmmC := PMMContainer(cr, secret, dbPort, customAdminParams)
 	if cr.CompareVersion("1.2.0") >= 0 {
 		pmmC.Resources = cr.Spec.PMM.Resources
 	}

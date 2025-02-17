@@ -262,7 +262,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			containers = append(containers, backupAgentContainer(cr, rsName, replset.GetPort(), cr.TLSEnabled()))
 		}
 
-		pmmC := AddPMMContainer(ctx, cr, usersSecret, cr.Spec.PMM.MongodParams)
+		pmmC := AddPMMContainer(cr, usersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
 		}
