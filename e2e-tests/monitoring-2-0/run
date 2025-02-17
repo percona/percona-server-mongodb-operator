@@ -61,20 +61,21 @@ desc 'check if pmm-client container is not enabled'
 compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
 sleep 10
 
+custom_port='27019'
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 run_mongos \
 	'sh.enableSharding("myApp")' \
 	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "" "" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 insert_data_mongos "100500" "myApp" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 insert_data_mongos "100600" "myApp" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 insert_data_mongos "100700" "myApp" \
-	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls"
+	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 
 desc 'add PMM_SERVER_API_KEY for secret some-users'
 API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)

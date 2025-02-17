@@ -56,7 +56,7 @@ spec:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
-            - --port=27017
+            - --port=27019
             - --replSet=cfg
             - --storageEngine=wiredTiger
             - --relaxPermChecks
@@ -74,7 +74,7 @@ spec:
             - name: SERVICE_NAME
               value: monitoring
             - name: MONGODB_PORT
-              value: "27017"
+              value: "27019"
             - name: MONGODB_REPLSET
               value: cfg
           envFrom:
@@ -103,7 +103,7 @@ spec:
             timeoutSeconds: 10
           name: mongod
           ports:
-            - containerPort: 27017
+            - containerPort: 27019
               name: mongodb
               protocol: TCP
           readinessProbe:
@@ -164,7 +164,7 @@ spec:
             - name: DB_CLUSTER
               value: monitoring
             - name: DB_PORT
-              value: "27017"
+              value: "27019"
             - name: DB_PORT_MIN
               value: "30100"
             - name: DB_PORT_MAX

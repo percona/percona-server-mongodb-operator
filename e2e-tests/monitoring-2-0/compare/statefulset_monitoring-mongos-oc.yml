@@ -51,10 +51,10 @@ spec:
         - args:
             - mongos
             - --bind_ip_all
-            - --port=27017
+            - --port=27019
             - --sslAllowInvalidCertificates
             - --configdb
-            - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27017
+            - cfg/monitoring-cfg-0.monitoring-cfg.NAME_SPACE.svc.cluster.local:27019,monitoring-cfg-1.monitoring-cfg.NAME_SPACE.svc.cluster.local:27019,monitoring-cfg-2.monitoring-cfg.NAME_SPACE.svc.cluster.local:27019
             - --relaxPermChecks
             - --clusterAuthMode=x509
             - --tlsMode=requireTLS
@@ -62,7 +62,7 @@ spec:
             - /opt/percona/ps-entry.sh
           env:
             - name: MONGODB_PORT
-              value: "27017"
+              value: "27019"
           envFrom:
             - secretRef:
                 name: some-users
@@ -94,7 +94,7 @@ spec:
             timeoutSeconds: 10
           name: mongos
           ports:
-            - containerPort: 27017
+            - containerPort: 27019
               name: mongos
               protocol: TCP
           readinessProbe:
@@ -165,7 +165,7 @@ spec:
             - name: DB_CLUSTER
               value: monitoring
             - name: DB_PORT
-              value: "27017"
+              value: "27019"
             - name: DB_PORT_MIN
               value: "30100"
             - name: DB_PORT_MAX

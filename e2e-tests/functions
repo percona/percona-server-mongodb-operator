@@ -741,11 +741,12 @@ run_mongosh() {
 	local driver=${3:-"mongodb+srv"}
 	local suffix=${4:-".svc.cluster.local"}
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
 
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix:$port/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
 
 
@@ -769,9 +770,10 @@ run_mongos() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix:$port/admin $mongo_flag"
 }
 
 run_script_mongos() {
@@ -1420,11 +1422,12 @@ insert_data_mongos() {
 	local data=$1
 	local db_name=$2
 	local flags=$3
+	local port=${4:-"27017"}
 
 	run_mongos \
 		"use ${db_name}\n db.test.insert({ x: ${data} })" \
 		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
-		"$flags"
+		"$flags" "$port"
 }
 
 deploy_pmm_server() {
