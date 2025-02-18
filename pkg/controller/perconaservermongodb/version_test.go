@@ -539,11 +539,10 @@ func TestVersionMeta(t *testing.T) {
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
 			},
-			clusterWide:        true,
-			helmDeploy:         true,
-			namespace:          "test-namespace",
-			watchNamespaces:    "",
-			expectedNamespaces: []string{"test-namespace", "another-namespace"},
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "",
 		},
 	}
 	size := int32(1)
