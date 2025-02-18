@@ -335,6 +335,7 @@ func TestVersionMeta(t *testing.T) {
 		want        VersionMeta
 		clusterWide bool
 		helmDeploy  bool
+		currentNs   string
 	}{
 		{
 			name: "Minimal CR",
@@ -361,6 +362,7 @@ func TestVersionMeta(t *testing.T) {
 				Version:     version.Version,
 				ClusterSize: 3,
 			},
+			currentNs: "test-namespace",
 		},
 		{
 			name: "Full CR with old Version deployed with Helm",
@@ -436,6 +438,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 			clusterWide: false,
 			helmDeploy:  false,
+			currentNs:   "test-namespace",
 		},
 		{
 			name: "Disabled Backup with storage",
@@ -469,6 +472,7 @@ func TestVersionMeta(t *testing.T) {
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
+			currentNs: "test-namespace",
 		},
 		{
 			name: "Cluster-wide and operator helm deploy",
@@ -499,15 +503,16 @@ func TestVersionMeta(t *testing.T) {
 			},
 			clusterWide: true,
 			helmDeploy:  true,
+			currentNs:   "test-namespace",
 		},
 	}
-	currentNs := "test-namespace"
+
 	size := int32(1)
 	operatorName := "percona-server-mongodb-operator"
 	operatorDepl := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      operatorName,
-			Namespace: currentNs,
+			Namespace: "",
 			Labels:    make(map[string]string),
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -537,7 +542,7 @@ func TestVersionMeta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(k8s.WatchNamespaceEnvVar, currentNs)
+			t.Setenv(k8s.WatchNamespaceEnvVar, tt.currentNs)
 			if tt.clusterWide {
 				t.Setenv(k8s.WatchNamespaceEnvVar, "")
 			}
