@@ -330,14 +330,13 @@ func Test_majorUpgradeRequested(t *testing.T) {
 
 func TestVersionMeta(t *testing.T) {
 	tests := []struct {
-		name               string
-		cr                 api.PerconaServerMongoDB
-		want               VersionMeta
-		clusterWide        bool
-		helmDeploy         bool
-		namespace          string
-		watchNamespaces    string
-		expectedNamespaces []string
+		name            string
+		cr              api.PerconaServerMongoDB
+		want            VersionMeta
+		clusterWide     bool
+		helmDeploy      bool
+		namespace       string
+		watchNamespaces string
 	}{
 		{
 			name: "Minimal CR",
@@ -364,8 +363,7 @@ func TestVersionMeta(t *testing.T) {
 				Version:     version.Version,
 				ClusterSize: 3,
 			},
-			namespace:          "test-namespace",
-			expectedNamespaces: []string{"test-namespace"},
+			namespace: "test-namespace",
 		},
 		{
 			name: "Full CR with old Version deployed with Helm",
@@ -440,10 +438,9 @@ func TestVersionMeta(t *testing.T) {
 				PhysicalBackupScheduled: true,
 				ClusterWideEnabled:      false,
 			},
-			clusterWide:        false,
-			helmDeploy:         false,
-			namespace:          "test-namespace",
-			expectedNamespaces: []string{"test-namespace"},
+			clusterWide: false,
+			helmDeploy:  false,
+			namespace:   "test-namespace",
 		},
 		{
 			name: "Disabled Backup with storage",
@@ -477,8 +474,7 @@ func TestVersionMeta(t *testing.T) {
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
-			namespace:          "test-namespace",
-			expectedNamespaces: []string{"test-namespace"},
+			namespace: "test-namespace",
 		},
 		{
 			name: "Cluster-wide with specified namespaces and operator helm deploy",
@@ -507,11 +503,10 @@ func TestVersionMeta(t *testing.T) {
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
 			},
-			clusterWide:        true,
-			helmDeploy:         true,
-			namespace:          "test-namespace",
-			watchNamespaces:    "test-namespace,another-namespace",
-			expectedNamespaces: []string{"test-namespace", "another-namespace"},
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "test-namespace,another-namespace",
 		},
 		{
 			name: "Cluster-wide and operator helm deploy",
