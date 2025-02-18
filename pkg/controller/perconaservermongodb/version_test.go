@@ -438,6 +438,7 @@ func TestVersionMeta(t *testing.T) {
 				PITREnabled:             true,
 				HelmDeployCR:            true,
 				PhysicalBackupScheduled: true,
+				ClusterWideEnabled:      false,
 			},
 			clusterWide:        false,
 			helmDeploy:         false,
@@ -513,7 +514,7 @@ func TestVersionMeta(t *testing.T) {
 			expectedNamespaces: []string{"test-namespace", "another-namespace"},
 		},
 		{
-			name: "Cluster-wide with specified namespaces and operator helm deploy",
+			name: "Cluster-wide and operator helm deploy",
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "some-name",
