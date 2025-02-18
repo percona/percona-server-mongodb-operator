@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: false
   crVersion: 1.19.1
-  image: percona/percona-server-mongodb:8.0.4-1-multi
+  image: percona/percona-server-mongodb:7.0.15-9-multi
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
