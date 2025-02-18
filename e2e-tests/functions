@@ -758,9 +758,14 @@ run_mongo_tls() {
 	local mongo_flag="$5"
 	local port=${6:-"27017"}
 
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix:$port/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffixt/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -773,8 +778,13 @@ run_mongos() {
 	local mongo_flag="$5"
 	local port=${6:-"27017"}
 
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix:$port/admin $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_script_mongos() {
