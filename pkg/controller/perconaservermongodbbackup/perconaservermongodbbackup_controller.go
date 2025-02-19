@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +27,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -209,26 +211,40 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
-	if err != nil {
-		return status, errors.Wrap(err, "check for concurrent jobs")
-	}
-
-	if cjobs {
-		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
-		}
-		status.State = psmdbv1.BackupStateWaiting
-		return status, nil
-	}
-
-	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+	switch cr.Status.State {
+	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
 		time.Sleep(10 * time.Second)
 		return bcp.Start(ctx, r.client, cluster, cr)
+	case psmdbv1.BackupStateRunning:
+	default:
+		cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
+		if err != nil {
+			return status, errors.Wrap(err, "check for concurrent jobs")
+		}
+
+		if cjobs {
+			if cr.Status.State != psmdbv1.BackupStateWaiting {
+				log.Info("Waiting to finish another backup/restore.")
+			}
+			status.State = psmdbv1.BackupStateWaiting
+			return status, nil
+		}
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
+
+	err := retry.OnError(wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2.0,
+		Cap:      time.Minute * 5,
+		Steps:    6,
+	}, func(err error) bool { return err != nil }, func() error {
+		var err error
+		status, err = bcp.Status(ctx, cr)
+		return err
+	})
+
+	return status, err
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
