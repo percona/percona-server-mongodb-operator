@@ -804,6 +804,14 @@ func getComponentPortFromSTS(sts appsv1.StatefulSet, componentName string) (int3
 			return 0, fmt.Errorf("no ports found for container %s", componentName)
 		}
 	}
+
+	// With this check we are catching cases like arbiter and non-voting
+	// where the container name is different from the component name. For now,
+	// we don't modify the ports of these components.
+	if componentName != "mongod" {
+		return api.DefaultMongoPort, nil
+	}
+
 	return 0, fmt.Errorf("container not found: %s", componentName)
 }
 
