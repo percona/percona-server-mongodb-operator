@@ -612,7 +612,7 @@ func (conf MongoConfiguration) GetPort() (int32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("error unmarshalling configuration %v", err)
 	}
-	return cfg.Net.Port, errors.Wrap(err, "unmarshal configuration")
+	return cfg.Net.Port, nil
 }
 
 // SetPort to set the mongo port in the MongoConfiguration according to the following documentation:
