@@ -111,8 +111,6 @@ echo 'waiting 60 seconds for stable timestamp in wiredtiger'
 sleep 80
 
 echo 'running backups'
-backup_name_minio="backup-minio-sharded"
-run_backup minio ${backup_name_minio}
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws="backup-aws-s3-sharded"
 	backup_name_gcp="backup-gcp-cs-sharded"
@@ -126,6 +124,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "${backup_name_gcp}"
 	wait_backup "${backup_name_azure}"
 fi
+
+backup_name_minio="backup-minio-sharded"
+run_backup minio ${backup_name_minio}
 wait_backup "${backup_name_minio}"
 
 run_mongos \
