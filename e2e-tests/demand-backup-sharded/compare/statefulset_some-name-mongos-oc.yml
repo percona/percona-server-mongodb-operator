@@ -54,7 +54,7 @@ spec:
             - --port=27019
             - --sslAllowInvalidCertificates
             - --configdb
-            - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27019,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27019,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27019
+            - cfg/some-name-cfg-0.some-name-cfg.NAME_SPACE.svc.cluster.local:27018,some-name-cfg-1.some-name-cfg.NAME_SPACE.svc.cluster.local:27018,some-name-cfg-2.some-name-cfg.NAME_SPACE.svc.cluster.local:27018
             - --relaxPermChecks
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
