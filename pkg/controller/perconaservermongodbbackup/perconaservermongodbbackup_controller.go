@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -171,9 +170,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
-	bcp, err := r.newBackup(ctx, cluster)
-	if err != nil {
-		return rr, errors.Wrap(err, "create backup object")
+	var bcp *Backup
+	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+		var err error
+		bcp, err = r.newBackup(ctx, cluster)
+		if err != nil {
+			return errors.Wrap(err, "create backup object")
+		}
+		return nil
+	}); err != nil {
+		return rr, err
 	}
 	defer bcp.Close(ctx)
 
@@ -233,12 +239,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 
 	time.Sleep(5 * time.Second)
 
-	err := retry.OnError(wait.Backoff{
-		Duration: 5 * time.Second,
-		Factor:   2.0,
-		Cap:      time.Minute * 5,
-		Steps:    6,
-	}, func(err error) bool { return err != nil }, func() error {
+	err := retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		var err error
 		status, err = bcp.Status(ctx, cr)
 		return err
