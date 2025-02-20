@@ -15,7 +15,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.16.2"
+CERT_MANAGER_VER="1.16.3"
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -347,7 +347,7 @@ wait_restore() {
 	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
 	local current_state=
 	until [[ ${current_state} == ${target_state} ]]; do
-		sleep 1
+		sleep 0.5
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
@@ -756,9 +756,16 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffixt/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -769,6 +776,12 @@ run_mongos() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
@@ -846,8 +859,9 @@ compare_mongos_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local port="${7:-27017}"
 
-	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
+	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
@@ -1339,7 +1353,7 @@ function run_simple_cli_inside_image() {
 	local pod_name=${RANDOM}
 	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
-	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
+	local output=$(kubectl_bin -n default exec ${pod_name} -- bash -c "${cli} 2>&1")
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
 	echo ${output}
 }
@@ -1420,11 +1434,12 @@ insert_data_mongos() {
 	local data=$1
 	local db_name=$2
 	local flags=$3
+	local port=${4:-"27017"}
 
 	run_mongos \
 		"use ${db_name}\n db.test.insert({ x: ${data} })" \
 		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
-		"$flags"
+		"$flags" "$port"
 }
 
 deploy_pmm_server() {
