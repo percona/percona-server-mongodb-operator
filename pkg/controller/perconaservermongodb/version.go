@@ -264,12 +264,13 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		BackupVersion:          cr.Status.BackupVersion,
 		BackupsEnabled:         cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0,
 		ShardingEnabled:        cr.Spec.Sharding.Enabled,
-		ClusterWideEnabled:     len(watchNs) == 0,
+		ClusterWideEnabled:     len(watchNs) == 0 || len(strings.Split(watchNs, ",")) > 1,
 		HashicorpVaultEnabled:  len(cr.Spec.Secrets.Vault) > 0,
 		RoleManagementEnabled:  len(cr.Spec.Roles) > 0,
 		UserManagementEnabled:  len(cr.Spec.Users) > 0,
 		VolumeExpansionEnabled: cr.Spec.VolumeExpansionEnabled,
 	}
+
 	if cr.Spec.Platform != nil {
 		vm.Platform = string(*cr.Spec.Platform)
 	}

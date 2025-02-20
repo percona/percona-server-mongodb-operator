@@ -330,11 +330,13 @@ func Test_majorUpgradeRequested(t *testing.T) {
 
 func TestVersionMeta(t *testing.T) {
 	tests := []struct {
-		name        string
-		cr          api.PerconaServerMongoDB
-		want        VersionMeta
-		clusterWide bool
-		helmDeploy  bool
+		name            string
+		cr              api.PerconaServerMongoDB
+		want            VersionMeta
+		clusterWide     bool
+		helmDeploy      bool
+		namespace       string
+		watchNamespaces string
 	}{
 		{
 			name: "Minimal CR",
@@ -361,6 +363,7 @@ func TestVersionMeta(t *testing.T) {
 				Version:     version.Version,
 				ClusterSize: 3,
 			},
+			namespace: "test-namespace",
 		},
 		{
 			name: "Full CR with old Version deployed with Helm",
@@ -433,9 +436,11 @@ func TestVersionMeta(t *testing.T) {
 				PITREnabled:             true,
 				HelmDeployCR:            true,
 				PhysicalBackupScheduled: true,
+				ClusterWideEnabled:      false,
 			},
 			clusterWide: false,
 			helmDeploy:  false,
+			namespace:   "test-namespace",
 		},
 		{
 			name: "Disabled Backup with storage",
@@ -469,6 +474,39 @@ func TestVersionMeta(t *testing.T) {
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
+			namespace: "test-namespace",
+		},
+		{
+			name: "Cluster-wide with specified namespaces and operator helm deploy",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 4,
+				},
+			},
+			want: VersionMeta{
+				Apply:              "disabled",
+				Version:            version.Version,
+				HelmDeployOperator: true,
+				ClusterWideEnabled: true,
+				ClusterSize:        4,
+			},
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "test-namespace,another-namespace",
 		},
 		{
 			name: "Cluster-wide and operator helm deploy",
@@ -497,17 +535,18 @@ func TestVersionMeta(t *testing.T) {
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
 			},
-			clusterWide: true,
-			helmDeploy:  true,
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "",
 		},
 	}
-	currentNs := "test-namespace"
 	size := int32(1)
 	operatorName := "percona-server-mongodb-operator"
 	operatorDepl := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      operatorName,
-			Namespace: currentNs,
+			Namespace: "",
 			Labels:    make(map[string]string),
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -537,9 +576,9 @@ func TestVersionMeta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(k8s.WatchNamespaceEnvVar, currentNs)
+			t.Setenv(k8s.WatchNamespaceEnvVar, tt.namespace)
 			if tt.clusterWide {
-				t.Setenv(k8s.WatchNamespaceEnvVar, "")
+				t.Setenv(k8s.WatchNamespaceEnvVar, tt.watchNamespaces)
 			}
 			if tt.helmDeploy {
 				operatorDepl.Labels["helm.sh/chart"] = operatorName

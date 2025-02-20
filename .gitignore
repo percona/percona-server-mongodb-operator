@@ -185,3 +185,7 @@ bin/
 ### VisualStudioCode ###
 .vscode/*
 .history
+
+projects/
+installers/olm/operator_*.yaml
+installers/olm/bundles
