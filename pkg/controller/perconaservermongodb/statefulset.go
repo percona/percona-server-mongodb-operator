@@ -106,13 +106,19 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
 
-	secret := new(corev1.Secret)
-	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
+	usersSecret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, usersSecret)
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "check pmm secrets")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, rs, ls, r.initImage, customConfig, secret)
+	sslSecret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cr), Namespace: cr.Namespace}, sslSecret)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, errors.Wrap(err, "check ssl secrets")
+	}
+
+	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, rs, ls, r.initImage, customConfig, psmdb.StatefulSpecSecretParams{UsersSecret: usersSecret, SSLSecret: sslSecret})
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
