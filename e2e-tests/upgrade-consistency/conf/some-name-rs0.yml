@@ -6,8 +6,8 @@ spec:
   crVersion: 1.18.0
   #platform: openshift
   image:
-  imagePullPolicy: Always
   initImage: -init
+  imagePullPolicy: Always
   allowUnsafeConfigurations: false
   backup:
     enabled: false

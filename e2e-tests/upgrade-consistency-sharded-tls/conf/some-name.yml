@@ -6,11 +6,11 @@ metadata:
     - percona.com/delete-psmdb-pods-in-order
     - percona.com/delete-psmdb-pvc
 spec:
-  crVersion: 1.16.2
+  crVersion: 1.18.0
   #platform: openshift
   image:
-  imagePullPolicy: Always
   initImage: -init
+  imagePullPolicy: Always
   allowUnsafeConfigurations: false
   updateStrategy: SmartUpdate
   secrets:
