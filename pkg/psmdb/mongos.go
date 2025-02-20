@@ -180,13 +180,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			{
 				Name:          mongosPortName,
 				HostPort:      cr.Spec.Sharding.Mongos.HostPort,
-				ContainerPort: cr.Spec.Sharding.Mongos.Port,
+				ContainerPort: cr.Spec.Sharding.Mongos.GetPort(),
 			},
 		},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.Port)),
+				Value: strconv.Itoa(int(cr.Spec.Sharding.Mongos.GetPort())),
 			},
 		},
 		EnvFrom: []corev1.EnvFromSource{
@@ -244,7 +244,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	args := []string{
 		"mongos",
 		"--bind_ip_all",
-		"--port=" + strconv.Itoa(int(msSpec.Port)),
+		"--port=" + strconv.Itoa(int(msSpec.GetPort())),
 	}
 	if !cr.TLSEnabled() || *cr.Spec.TLS.AllowInvalidCertificates {
 		args = append(args, "--sslAllowInvalidCertificates")
@@ -438,8 +438,8 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongosPortName,
-				Port:       cr.Spec.Sharding.Mongos.Port,
-				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.Port)),
+				Port:       cr.Spec.Sharding.Mongos.GetPort(),
+				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
 			},
 		},
 		Selector:              ls,
