@@ -17,8 +17,9 @@ type PerconaServerMongoDBBackupSpec struct {
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical}
-	Type defs.BackupType `json:"type,omitempty"`
+	// +kubebuilder:validation:Enum={logical,physical,incremental}
+	Type     defs.BackupType `json:"type,omitempty"`
+	IncrBase bool            `json:"base,omitempty"`
 }
 
 type BackupState string
