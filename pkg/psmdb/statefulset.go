@@ -458,7 +458,7 @@ func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Sec
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
 			uri += fmt.Sprintf(
-				"?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
+				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
 				SSLDir,
 			)
 		}
