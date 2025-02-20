@@ -1353,7 +1353,7 @@ function run_simple_cli_inside_image() {
 	local pod_name=${RANDOM}
 	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
-	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
+	local output=$(kubectl_bin -n default exec ${pod_name} -- bash -c "${cli} 2>&1")
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
 	echo ${output}
 }
