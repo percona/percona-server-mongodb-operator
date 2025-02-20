@@ -453,12 +453,12 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 }
 
 func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
-	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)/?replicaSet=$(PBM_MONGODB_REPLSET)"
+	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
 			uri += fmt.Sprintf(
-				"&tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
+				"?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
 				SSLDir,
 			)
 		}
