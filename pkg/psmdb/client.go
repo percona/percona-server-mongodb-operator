@@ -11,8 +11,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
-func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials) (mongo.Client, error) {
-	pods, err := GetRSPods(ctx, k8sclient, cr, rs.Name)
+func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials) (mongo.Client, error) {
+	pods, err := GetRSPods(ctx, k8sClient, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
@@ -21,13 +21,13 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	// If `rs.Size` is 0 or replicaset doesn't exist in the cr the list of pods will be empty.
 	// If there is empty pod list we should use `GetOutdatedRSPods` which returns list of pods without truncating it.
 	if len(pods.Items) == 0 {
-		pods, err = GetOutdatedRSPods(ctx, k8sclient, cr, rs.Name)
+		pods, err = GetOutdatedRSPods(ctx, k8sClient, cr, rs.Name)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get outdated pods list for replset %s", rs.Name)
 		}
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, k8sClient, cr, cr.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
@@ -46,7 +46,7 @@ func MongoClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 	}
 
 	if cr.TLSEnabled() {
-		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, k8sClient, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
