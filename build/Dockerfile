@@ -1,9 +1,6 @@
 FROM --platform=${BUILDPLATFORM} golang:1.23 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
-COPY go.mod go.sum ./
-RUN go mod download
-
 ARG GIT_COMMIT
 ARG GIT_BRANCH
 ARG GO_LDFLAGS
@@ -12,6 +9,7 @@ ARG TARGETARCH
 ARG CGO_ENABLED=0
 
 COPY . .
+RUN go mod download
 
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
