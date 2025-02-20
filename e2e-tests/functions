@@ -347,7 +347,7 @@ wait_restore() {
 	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
 	local current_state=
 	until [[ ${current_state} == ${target_state} ]]; do
-		sleep 1
+		sleep 0.5
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
