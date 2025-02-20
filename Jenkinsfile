@@ -13,7 +13,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
-                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.28 --machine-type=n1-standard-4 --preemptible --disk-size 30 --num-nodes=\$NODES_NUM --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
+                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.29 --machine-type=n1-standard-4 --preemptible --disk-size 30 --num-nodes=\$NODES_NUM --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -280,58 +280,65 @@ void checkE2EIgnoreFiles() {
     }
 
     def e2eignoreFile = ".e2eignore"
-    if (fileExists(e2eignoreFile)) {
-        def excludedFiles = readFile(e2eignoreFile).split('\n').collect{it.trim()}
-        def lastProcessedCommitFile="last-processed-commit.txt"
-        def lastProcessedCommitHash = ""
+    if ( ! fileExists(e2eignoreFile) ) {
+        echo "No $e2eignoreFile file found. Proceeding with execution."
+        return
+    }
 
-        def build = currentBuild.previousBuild
-        while (build != null) {
-            try {
-                echo "Checking previous build: #$build.number"
-                copyArtifacts(projectName: env.JOB_NAME, selector: specific("$build.number"), filter: lastProcessedCommitFile)
-                lastProcessedCommitHash = readFile(lastProcessedCommitFile).trim()
-                echo "Last processed commit hash: $lastProcessedCommitHash"
-                break
-            } catch (Exception e) {
-                echo "No $lastProcessedCommitFile found in build $build.number. Checking earlier builds."
-            }
-            build = build.previousBuild
+    def excludedFiles = readFile(e2eignoreFile).split('\n').collect{it.trim()}
+    def lastProcessedCommitFile = "last-processed-commit.txt"
+    def lastProcessedCommitHash = ""
+
+    def build = currentBuild.previousBuild
+    while (build != null) {
+        try {
+            echo "Checking previous build: #$build.number"
+            copyArtifacts(projectName: env.JOB_NAME, selector: specific("$build.number"), filter: lastProcessedCommitFile)
+            lastProcessedCommitHash = readFile(lastProcessedCommitFile).trim()
+            echo "Last processed commit hash: $lastProcessedCommitHash"
+            break
+        } catch (Exception e) {
+            echo "No $lastProcessedCommitFile found in build $build.number. Checking earlier builds."
         }
+        build = build.previousBuild
+    }
 
-        if (lastProcessedCommitHash == "") {
-            echo "This is the first run. Using merge base as the starting point for the diff."
-            changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
-        } else {
+    if (lastProcessedCommitHash == "") {
+        echo "This is the first run. Using merge base as the starting point for the diff."
+        changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
+    } else {
+        def commitExists = sh(script: "git cat-file -e $lastProcessedCommitHash 2>/dev/null", returnStatus: true) == 0
+        if (commitExists) {
             echo "Processing changes since last processed commit: $lastProcessedCommitHash"
             changedFiles = sh(script: "git diff --name-only $lastProcessedCommitHash HEAD", returnStdout: true).trim().split('\n').findAll{it}
-        }
-
-        echo "Excluded files: $excludedFiles"
-        echo "Changed files: $changedFiles"
-
-        def excludedFilesRegex = excludedFiles.collect{it.replace("**", ".*").replace("*", "[^/]*")}
-        needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
-
-        if (needToRunTests) {
-            echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
         } else {
-            if (currentBuild.previousBuild?.result in ['FAILURE', 'ABORTED', 'UNSTABLE']) {
-                echo "All changed files are e2eignore files, and previous build was unsuccessful. Propagating previous state."
-                currentBuild.result = currentBuild.previousBuild?.result
-                error "Skipping execution as non-significant changes detected and previous build was unsuccessful."
-            } else {
-                echo "All changed files are e2eignore files. Aborting pipeline execution."
-            }
+            echo "Commit hash $lastProcessedCommitHash does not exist in the current repository. Using merge base as the starting point for the diff."
+            changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
         }
-
-        sh """
-            echo \$(git rev-parse HEAD) > $lastProcessedCommitFile
-        """
-        archiveArtifacts "$lastProcessedCommitFile"
-    } else {
-        echo "No $e2eignoreFile file found. Proceeding with execution."
     }
+
+    echo "Excluded files: $excludedFiles"
+    echo "Changed files: $changedFiles"
+
+    def excludedFilesRegex = excludedFiles.collect{it.replace("**", ".*").replace("*", "[^/]*")}
+    needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
+
+    if (needToRunTests) {
+        echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
+    } else {
+        if (currentBuild.previousBuild?.result != 'SUCCESS') {
+            echo "All changed files are e2eignore files, and previous build was unsuccessful. Propagating previous state."
+            currentBuild.result = currentBuild.previousBuild?.result
+            error "Skipping execution as non-significant changes detected and previous build was unsuccessful."
+        } else {
+            echo "All changed files are e2eignore files. Aborting pipeline execution."
+        }
+    }
+
+    sh """
+        echo \$(git rev-parse HEAD) > $lastProcessedCommitFile
+    """
+    archiveArtifacts "$lastProcessedCommitFile"
 }
 
 def isPRJob = false

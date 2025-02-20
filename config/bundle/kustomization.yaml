@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../crd
+- ../rbac/namespace
+- ../manager/namespace
+images:
+- name: percona-server-mongodb-operator
+  newName: perconalab/percona-server-mongodb-operator
+  newTag: main

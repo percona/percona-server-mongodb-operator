@@ -83,7 +83,7 @@ spec:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: percona/percona-server-mongodb:8.0.4-1-multi
+        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -184,7 +184,7 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        image: percona/percona-backup-mongodb:2.8.0-multi
+        image: perconalab/percona-server-mongodb-operator:main-backup
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
