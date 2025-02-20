@@ -284,14 +284,14 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 	for h, domain := range rs.Horizons[pod.Name] {
 		d := domain
 		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
 		}
 		horizons[h] = d
 	}
 	for h, domain := range overrides.Horizons {
 		d := domain
 		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
 		}
 		horizons[h] = d
 	}
@@ -357,7 +357,7 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	for h, domain := range extNode.Horizons {
 		d := domain
 		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, api.DefaultMongodPort)
+			d = fmt.Sprintf("%s:%d", d, api.DefaultMongoPort)
 		}
 		horizons[h] = d
 	}
@@ -686,6 +686,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		if cr.TLSEnabled() {
 			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
 		}
+
+		mongoCmd += fmt.Sprintf(" --port %d", replset.GetPort())
 
 		cmd := []string{
 			"sh", "-c",
