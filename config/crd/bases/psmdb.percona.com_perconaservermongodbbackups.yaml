@@ -57,6 +57,8 @@ spec:
             type: object
           spec:
             properties:
+              base:
+                type: boolean
               clusterName:
                 type: string
               compressionLevel:
@@ -71,6 +73,7 @@ spec:
                 enum:
                 - logical
                 - physical
+                - incremental
                 type: string
             type: object
           status:

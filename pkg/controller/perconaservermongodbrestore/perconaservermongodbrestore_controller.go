@@ -56,8 +56,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}, nil
 }
 
-//add adds a new Controller to mgr with r as the reconcile.Reconciler
-
+// add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
 		Named("psmdbrestore-controller").
@@ -240,7 +239,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile logical restore")
 		}
-	case defs.PhysicalBackup:
+	case defs.PhysicalBackup, defs.IncrementalBackup:
 		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
