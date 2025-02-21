@@ -305,13 +305,18 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		done
 	fi
 
+	MONGO_PORT="$(_mongod_hack_get_arg_val --port "$@")"
+	MONGO_PORT="${MONGO_PORT:-${MONGODB_PORT:-27017}}"
+	export MONGO_PORT
+
 	if [ -n "$shouldPerformInitdb" ]; then
 		mongodHackedArgs=("$@")
 		if _parse_config "$@"; then
 			_mongod_hack_ensure_arg_val --config "$tempConfigFile" "${mongodHackedArgs[@]}"
 		fi
+
 		_mongod_hack_ensure_arg_val --bind_ip 127.0.0.1 "${mongodHackedArgs[@]}"
-		_mongod_hack_ensure_arg_val --port 27017 "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg_val --port "$MONGO_PORT" "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_no_arg --bind_ip_all "${mongodHackedArgs[@]}"
 
 		# remove "--auth" and "--replSet" for our initial startup (see https://docs.mongodb.com/manual/tutorial/enable-authentication/#start-mongodb-without-access-control)
@@ -338,7 +343,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=("$mongo_shell" --host 127.0.0.1 --port 27017 --quiet)
+		mongo=("$mongo_shell" --host 127.0.0.1 --port "$MONGO_PORT" --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
