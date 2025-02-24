@@ -1,19 +1,27 @@
 documentation:
-  - "README"
+  - changed-files:
+    - any-glob-to-any-file: 'README*'
 
 tests:
-  - "e2e-tests/**"
-  - "Jenkinsfile"
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'e2e-tests/**'
+      - 'Jenkinsfile*'
 
-ci/cd:
-  - ".github/workflows/**"
+ci-cd:
+  - changed-files:
+     - any-glob-to-any-file: '.github/workflows/**'
 
 dockerfile:
-  - "build/Dockerfile"
+  - changed-files:
+    - any-glob-to-any-file: 'build/Dockerfile'
 
 olm:
-  - "installers/olm/**"
+  - changed-files:
+    - any-glob-to-any-file: 'installers/olm/**'
 
 dependencies:
-  - "go.mod"
-  - "go.sum"
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'go.mod'
+      - 'go.sum'
