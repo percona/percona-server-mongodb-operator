@@ -110,7 +110,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			{
 				Name:          mongodPortName,
 				HostPort:      int32(0),
-				ContainerPort: api.DefaultMongodPort,
+				ContainerPort: replset.GetPort(),
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -124,7 +124,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			},
 			{
 				Name:  "MONGODB_PORT",
-				Value: strconv.Itoa(int(api.DefaultMongodPort)),
+				Value: strconv.Itoa(int(replset.GetPort())),
 			},
 			{
 				Name:  "MONGODB_REPLSET",
@@ -177,7 +177,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--bind_ip_all",
 		"--auth",
 		"--dbpath=" + MongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(api.DefaultMongodPort)),
+		"--port=" + strconv.Itoa(int(replset.GetPort())),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
 		"--relaxPermChecks",
