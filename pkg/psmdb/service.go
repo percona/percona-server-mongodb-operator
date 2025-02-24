@@ -38,8 +38,8 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			Ports: []corev1.ServicePort{
 				{
 					Name:       mongodPortName,
-					Port:       api.DefaultMongodPort,
-					TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
+					Port:       replset.GetPort(),
+					TargetPort: intstr.FromInt(int(replset.GetPort())),
 				},
 			},
 			ClusterIP: "None",
@@ -86,8 +86,8 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		Ports: []corev1.ServicePort{
 			{
 				Name:       mongodPortName,
-				Port:       api.DefaultMongodPort,
-				TargetPort: intstr.FromInt(int(api.DefaultMongodPort)),
+				Port:       replset.GetPort(),
+				TargetPort: intstr.FromInt(int(replset.GetPort())),
 			},
 		},
 		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -276,12 +276,12 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			return overrides.Host, nil
 		}
 
-		return fmt.Sprintf("%s:%d", overrides.Host, api.DefaultMongodPort), nil
+		return fmt.Sprintf("%s:%d", overrides.Host, replset.GetPort()), nil
 	}
 
 	switch dnsMode {
 	case api.DNSModeServiceMesh:
-		return GetServiceMeshAddr(cr, pod.Name, cr.Namespace), nil
+		return GetServiceMeshAddr(cr, pod.Name, replset.GetPort()), nil
 	case api.DNSModeInternal:
 		if rsExposed && cr.MCSEnabled() {
 			imported, err := IsServiceImported(ctx, cl, cr, pod.Name)
@@ -290,13 +290,13 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			}
 
 			if !imported {
-				return GetAddr(cr, pod.Name, replset.Name), nil
+				return GetAddr(cr, pod.Name, replset.Name, replset.GetPort()), nil
 			}
 
-			return GetMCSAddr(cr, pod.Name), nil
+			return GetMCSAddr(cr, pod.Name, replset.GetPort()), nil
 		}
 
-		return GetAddr(cr, pod.Name, replset.Name), nil
+		return GetAddr(cr, pod.Name, replset.Name, replset.GetPort()), nil
 	case api.DNSModeExternal:
 		if rsExposed {
 			if cr.MCSEnabled() {
@@ -309,15 +309,15 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 					return getExtAddr(ctx, cl, cr.Namespace, pod)
 				}
 
-				return GetMCSAddr(cr, pod.Name), nil
+				return GetMCSAddr(cr, pod.Name, replset.GetPort()), nil
 			}
 
 			return getExtAddr(ctx, cl, cr.Namespace, pod)
 		}
 
-		return GetAddr(cr, pod.Name, replset.Name), nil
+		return GetAddr(cr, pod.Name, replset.Name, replset.GetPort()), nil
 	default:
-		return GetAddr(cr, pod.Name, replset.Name), nil
+		return GetAddr(cr, pod.Name, replset.Name, replset.GetPort()), nil
 	}
 }
 
@@ -343,6 +343,17 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 		return "", errors.Wrap(err, "failed to get mongos service")
 	}
 
+	var mongosPort int32
+	for _, port := range svc.Spec.Ports {
+		if port.Name == "mongos" {
+			mongosPort = port.Port
+			break
+		}
+	}
+	if mongosPort == 0 {
+		return "", errors.New("mongos port not found in service")
+	}
+
 	mongos := cr.Spec.Sharding.Mongos
 	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		var host string
@@ -360,7 +371,7 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 		return host, nil
 	}
 
-	return svc.Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+	return fmt.Sprintf("%s.%s.%s:%d", svc.Name, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, mongosPort), nil
 }
 
 func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod corev1.Pod) (string, error) {
@@ -378,20 +389,20 @@ func getExtAddr(ctx context.Context, cl client.Client, namespace string, pod cor
 }
 
 // GetAddr returns replicaSet pod address in cluster
-func GetAddr(cr *api.PerconaServerMongoDB, pod, replset string) string {
+func GetAddr(cr *api.PerconaServerMongoDB, pod, replset string, port int32) string {
 	return strings.Join([]string{pod, cr.Name + "-" + replset, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(api.DefaultMongodPort))
+		":" + strconv.Itoa(int(port))
 }
 
-// GetAddr returns replicaSet pod address in a service mesh
-func GetServiceMeshAddr(cr *api.PerconaServerMongoDB, pod, replset string) string {
+// GetServiceMeshAddr returns replicaSet pod address in a service mesh
+func GetServiceMeshAddr(cr *api.PerconaServerMongoDB, pod string, port int32) string {
 	return strings.Join([]string{pod, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix}, ".") +
-		":" + strconv.Itoa(int(api.DefaultMongodPort))
+		":" + strconv.Itoa(int(port))
 }
 
 // GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN
-func GetMCSAddr(cr *api.PerconaServerMongoDB, pod string) string {
-	return fmt.Sprintf("%s.%s.%s:%d", pod, cr.Namespace, cr.Spec.MultiCluster.DNSSuffix, api.DefaultMongodPort)
+func GetMCSAddr(cr *api.PerconaServerMongoDB, pod string, port int32) string {
+	return fmt.Sprintf("%s.%s.%s:%d", pod, cr.Namespace, cr.Spec.MultiCluster.DNSSuffix, port)
 }
 
 var ErrServiceNotExists = errors.New("service doesn't exist")

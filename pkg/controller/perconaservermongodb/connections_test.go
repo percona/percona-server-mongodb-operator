@@ -112,8 +112,8 @@ func TestConnectionLeaks(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		cr := tt.cr
 		t.Run(tt.name, func(t *testing.T) {
+			cr := tt.cr
 			updatedRevision := "some-revision"
 
 			obj := []client.Object{}
@@ -353,6 +353,19 @@ func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 27017,
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			UpdateRevision: updateRevision,
@@ -432,7 +445,7 @@ func (c *fakeMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
 	}
 	members := []*mongo.Member{}
 	for key, pod := range c.pods {
-		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name)
+		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].GetPort())
 		state := mongo.MemberStateSecondary
 		if key == 0 {
 			state = mongo.MemberStatePrimary
@@ -459,7 +472,7 @@ func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error
 	}
 	members := []mongo.ConfigMember{}
 	for key, pod := range c.pods {
-		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name)
+		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].GetPort())
 
 		member := mongo.ConfigMember{
 			ID:           key,
@@ -507,7 +520,7 @@ func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, er
 	if err := c.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return nil, err
 	}
-	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name) {
+	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name, c.cr.Spec.Replsets[0].GetPort()) {
 		isMaster = true
 	}
 	return &mongo.IsMasterResp{

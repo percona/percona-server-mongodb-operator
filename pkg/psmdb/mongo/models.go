@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	MinVotingMembers    = 1
 	MaxVotingMembers    = 7
 	MaxMembers          = 50
 	DefaultPriority     = 2
