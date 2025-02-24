@@ -1,0 +1,19 @@
+documentation:
+  - "README"
+
+tests:
+  - "e2e-tests/**"
+  - "Jenkinsfile"
+
+ci/cd:
+  - ".github/workflows/**"
+
+dockerfile:
+  - "build/Dockerfile"
+
+olm:
+  - "installers/olm/**"
+
+dependencies:
+  - "go.mod"
+  - "go.sum"

@@ -1,0 +1,24 @@
+name: "PR Labeler"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Label PR"
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
+  label-community:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check if PR is from a fork"
+        if: github.event.pull_request.head.repo.fork == true
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "community"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
