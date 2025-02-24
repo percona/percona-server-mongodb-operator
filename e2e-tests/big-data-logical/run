@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+ACTUAL_MONGOD_VERSION=$(get_mongod_ver_from_image "${IMAGE_MONGOD}")
+if [[ ! ${ACTUAL_MONGOD_VERSION} =~ '7.0' ]]; then
+	echo "big-data backup is only compatible with MongoDB 7.0, it won't work with ${ACTUAL_MONGOD_VERSION}"
+	exit 0
+fi
+
+cluster="some-name"
+
+create_infra $namespace
+
+log 'create secrets and start client'
+kubectl_bin apply \
+	-f "${test_dir}/conf/secrets.yml" \
+	-f "${conf_dir}/client.yml"
+
+apply_s3_storage_secrets
+
+log "create PSMDB cluster: ${cluster}"
+apply_cluster ${test_dir}/conf/${cluster}.yml
+
+log 'check if all Pods are started'
+wait_for_running ${cluster}-rs0 3 false
+wait_for_running ${cluster}-cfg 3 false
+wait_for_running ${cluster}-mongos 3 false
+
+wait_cluster_consistency "${cluster}"
+
+log 'starting restore'
+kubectl_bin apply -f ${test_dir}/conf/restore.yml
+
+log 'waiting for restore up to 3 hours'
+wait_restore "big-data" ${cluster} "ready" 1 43200
+
+wait_for_running ${cluster}-rs0 3 false
+wait_for_running ${cluster}-cfg 3 false
+wait_for_running ${cluster}-mongos 3 false
+
+wait_cluster_consistency "${cluster}"
+
+log "delete pvc and pod for ${cluster}-rs0-2"
+kubectl_bin delete "pvc/mongod-data-${cluster}-rs0-2" "pod/${cluster}-rs0-2"
+
+wait_for_running ${cluster}-rs0 3 false
+
+wait_cluster_consistency "${cluster}"
+
+desc "test passed"

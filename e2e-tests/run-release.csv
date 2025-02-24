@@ -1,5 +1,7 @@
 arbiter
 balancer
+big-data-physical
+big-data-logical
 custom-replset-name
 custom-tls
 custom-users-roles

@@ -1,0 +1,14 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  name: restore-big-data
+spec:
+  clusterName: some-name
+  backupSource:
+    type: logical
+    destination: s3://operator-testing-big-data/2025-02-28T17:28:48Z
+    s3:
+      credentialsSecret: aws-s3-secret
+      region: us-east-1
+      bucket: operator-testing-big-data
+      endpointUrl: https://s3.us-east-1.amazonaws.com/

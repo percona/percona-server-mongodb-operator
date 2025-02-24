@@ -1,0 +1,57 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  image:
+  imagePullPolicy: Always
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    storages:
+      aws-s3:
+        type: s3
+        s3:
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          bucket: operator-testing-big-data
+          insecureSkipTLSVerify: false
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      configuration: |
+        security:
+          enableEncryption: false
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 50Gi
+    mongos:
+      size: 3
+  replsets:
+  - name: rs0
+    configuration: |
+      security:
+        enableEncryption: false
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        memory: 8G
+      requests:
+        memory: 2G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 750Gi
+    expose:
+      enabled: true
+      type: ClusterIP
+    size: 3
+  secrets:
+    users: big-data-secrets
+    encryptionKey: big-data-encryption-key
