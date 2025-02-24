@@ -259,10 +259,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
 			}
-			containers = append(containers, backupAgentContainer(cr, rsName, cr.TLSEnabled()))
+			containers = append(containers, backupAgentContainer(cr, rsName, replset.GetPort(), cr.TLSEnabled()))
 		}
 
-		pmmC := AddPMMContainer(ctx, cr, usersSecret, cr.Spec.PMM.MongodParams)
+		pmmC := AddPMMContainer(cr, usersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
 		}
@@ -323,7 +323,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 }
 
 // backupAgentContainer creates the container object for a backup agent
-func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsEnabled bool) corev1.Container {
+func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, port int32, tlsEnabled bool) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
@@ -362,7 +362,7 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 			},
 			{
 				Name:  "PBM_MONGODB_PORT",
-				Value: strconv.Itoa(int(api.DefaultMongodPort)),
+				Value: strconv.Itoa(int(port)),
 			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,

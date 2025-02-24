@@ -44,11 +44,11 @@ var (
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
-	DefaultMongodPort               int32 = 27017
 	defaultWiredTigerCacheSizeRatio       = numstr.MustParse("0.5")
 	defaultInMemorySizeRatio              = numstr.MustParse("0.9")
-	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
 	defaultImagePullPolicy                = corev1.PullAlways
+
+	DefaultMongoPort int32 = 27017
 )
 
 const (
@@ -203,10 +203,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
-
-		if cr.Spec.Sharding.Mongos.Port == 0 {
-			cr.Spec.Sharding.Mongos.Port = 27017
-		}
 
 		for i := range cr.Spec.Replsets {
 			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
@@ -474,7 +470,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.15.0") < 0 {
 				replset.ReadinessProbe.Exec = nil
 				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(DefaultMongodPort)),
+					Port: intstr.FromInt(int(replset.GetPort())),
 				}
 			}
 		}
@@ -791,7 +787,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.CompareVersion("1.15.0") < 0 {
 			nv.ReadinessProbe.Exec = nil
 			nv.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+				Port: intstr.FromInt(int(rs.GetPort())),
 			}
 		}
 	}
