@@ -153,10 +153,12 @@ spec:
         timeouts:
           startingStatus: 33
         oplogSpanMin: 20
+        numParallelCollections: 2
       restoreOptions:
         batchSize: 500
         numInsertionWorkers: 10
         numDownloadWorkers: 4
+        numParallelCollections: 2
         maxDownloadBufferMb: 0
         downloadChunkMb: 32
         mongodLocation: /usr/bin/mongo
