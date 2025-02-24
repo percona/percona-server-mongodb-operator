@@ -18,6 +18,8 @@ spec:
             storage: 1Gi
     size: 3
     configuration: |
+      net:
+        port: 27019
       operationProfiling:
         mode: all
         slowOpThresholdMs: 100
@@ -29,6 +31,9 @@ spec:
     enabled: true
     configsvrReplSet:
       size: 3
+      configuration: |
+        net:
+          port: 27019
       volumeSpec:
         persistentVolumeClaim:
           resources:
@@ -37,6 +42,9 @@ spec:
 
     mongos:
       size: 3
+      configuration: |
+        net:
+          port: 27019
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
       podDisruptionBudget:

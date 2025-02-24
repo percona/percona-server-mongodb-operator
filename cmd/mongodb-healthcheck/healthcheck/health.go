@@ -28,7 +28,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-var ErrNoReplsetConfigStr string = "(NotYetInitialized) no replset config has been received"
+var ErrNoReplsetConfigStr = "(NotYetInitialized) no replset config has been received"
 
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongosLiveness")
