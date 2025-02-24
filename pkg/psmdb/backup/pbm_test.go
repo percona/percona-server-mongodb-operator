@@ -53,6 +53,10 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 		t.Errorf("expected %d, got %d", expectedBackupOptions.Timeouts.Starting, config.Backup.Timeouts.Starting)
 	}
 
+	if expectedBackupOptions.NumParallelCollections != config.Backup.NumParallelCollections {
+		t.Errorf("expected %d, got %d", expectedBackupOptions.NumParallelCollections, config.Backup.NumParallelCollections)
+	}
+
 	expectedRestoreOptions := cr.Spec.Backup.Configuration.RestoreOptions
 	if expectedRestoreOptions.BatchSize != config.Restore.BatchSize {
 		t.Errorf("expected %d, got %d", expectedRestoreOptions.BatchSize, config.Restore.BatchSize)
@@ -63,6 +67,11 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 	if expectedRestoreOptions.NumDownloadWorkers != config.Restore.NumDownloadWorkers {
 		t.Errorf("expected %d, got %d", expectedRestoreOptions.NumDownloadWorkers, config.Restore.NumDownloadWorkers)
 	}
+
+	if expectedRestoreOptions.NumParallelCollections != config.Restore.NumParallelCollections {
+		t.Errorf("expected %d, got %d", expectedRestoreOptions.NumParallelCollections, config.Restore.NumParallelCollections)
+	}
+
 	if expectedRestoreOptions.MaxDownloadBufferMb != config.Restore.MaxDownloadBufferMb {
 		t.Errorf("expected %d, got %d", expectedRestoreOptions.MaxDownloadBufferMb, config.Restore.MaxDownloadBufferMb)
 	}
