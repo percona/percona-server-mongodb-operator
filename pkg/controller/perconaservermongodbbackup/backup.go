@@ -28,7 +28,7 @@ const (
 )
 
 var defaultBackoff = wait.Backoff{
-	Duration: 5 * time.Second,
+	Duration: 10 * time.Second,
 	Factor:   2.0,
 	Cap:      time.Minute * 5,
 	Steps:    6,

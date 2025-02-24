@@ -240,8 +240,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	time.Sleep(5 * time.Second)
 
 	err := retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
-		var err error
-		status, err = bcp.Status(ctx, cr)
+		updatedStatus, err := bcp.Status(ctx, cr)
+		if err == nil {
+			status = updatedStatus
+		}
 		return err
 	})
 
