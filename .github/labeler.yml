@@ -1,6 +1,8 @@
 documentation:
   - changed-files:
-    - any-glob-to-any-file: 'README*'
+    - any-glob-to-any-file:
+      - 'README*'
+      - 'CONTRIBUTING*'
 
 tests:
   - changed-files:
