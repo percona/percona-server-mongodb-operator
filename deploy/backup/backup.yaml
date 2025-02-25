@@ -8,5 +8,7 @@ spec:
   clusterName: my-cluster-name
   storageName: s3-us-west
 #  type: physical
+#  type: incremental
+#  type: incremental-base
 #  compressionType: gzip
 #  compressionLevel: 6
