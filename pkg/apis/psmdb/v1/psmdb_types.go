@@ -1003,19 +1003,21 @@ type BackupTimeouts struct {
 }
 
 type BackupOptions struct {
-	OplogSpanMin float64            `json:"oplogSpanMin"`
-	Priority     map[string]float64 `json:"priority,omitempty"`
-	Timeouts     *BackupTimeouts    `json:"timeouts,omitempty"`
+	OplogSpanMin           float64            `json:"oplogSpanMin"`
+	NumParallelCollections int                `json:"numParallelCollections,omitempty"`
+	Priority               map[string]float64 `json:"priority,omitempty"`
+	Timeouts               *BackupTimeouts    `json:"timeouts,omitempty"`
 }
 
 type RestoreOptions struct {
-	BatchSize           int               `json:"batchSize,omitempty"`
-	NumInsertionWorkers int               `json:"numInsertionWorkers,omitempty"`
-	NumDownloadWorkers  int               `json:"numDownloadWorkers,omitempty"`
-	MaxDownloadBufferMb int               `json:"maxDownloadBufferMb,omitempty"`
-	DownloadChunkMb     int               `json:"downloadChunkMb,omitempty"`
-	MongodLocation      string            `json:"mongodLocation,omitempty"`
-	MongodLocationMap   map[string]string `json:"mongodLocationMap,omitempty"`
+	BatchSize              int               `json:"batchSize,omitempty"`
+	NumInsertionWorkers    int               `json:"numInsertionWorkers,omitempty"`
+	NumDownloadWorkers     int               `json:"numDownloadWorkers,omitempty"`
+	NumParallelCollections int               `json:"numParallelCollections,omitempty"`
+	MaxDownloadBufferMb    int               `json:"maxDownloadBufferMb,omitempty"`
+	DownloadChunkMb        int               `json:"downloadChunkMb,omitempty"`
+	MongodLocation         string            `json:"mongodLocation,omitempty"`
+	MongodLocationMap      map[string]string `json:"mongodLocationMap,omitempty"`
 }
 
 type BackupConfig struct {
