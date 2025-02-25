@@ -95,6 +95,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl",
 					Namespace: tt.cr.Namespace,
 				},
+				Data: map[string][]byte{
+					"ca.crt":  []byte("fake-ca-cert"),
+					"tls.crt": []byte("fake-tls-cert"),
+					"tls.key": []byte("fake-tls-key"),
+				},
 			}, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      crName + "-ssl-internal",
