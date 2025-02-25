@@ -3,6 +3,7 @@ documentation:
     - any-glob-to-any-file:
       - 'README*'
       - 'CONTRIBUTING*'
+      - 'code-of-conduct*'
 
 tests:
   - changed-files:
