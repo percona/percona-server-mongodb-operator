@@ -50,6 +50,8 @@ spec:
                     properties:
                       backupOptions:
                         properties:
+                          numParallelCollections:
+                            type: integer
                           oplogSpanMin:
                             type: number
                           priority:
@@ -82,6 +84,8 @@ spec:
                           numDownloadWorkers:
                             type: integer
                           numInsertionWorkers:
+                            type: integer
+                          numParallelCollections:
                             type: integer
                         type: object
                     type: object
