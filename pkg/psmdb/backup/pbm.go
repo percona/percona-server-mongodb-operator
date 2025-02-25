@@ -251,7 +251,8 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 
 	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
 		conf.Backup = &config.BackupConf{
-			OplogSpanMin: cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
+			OplogSpanMin:           cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
+			NumParallelCollections: cluster.Spec.Backup.Configuration.BackupOptions.NumParallelCollections,
 			Timeouts: &config.BackupTimeouts{
 				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
 			},
@@ -270,13 +271,14 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 
 	if cluster.Spec.Backup.Configuration.RestoreOptions != nil {
 		conf.Restore = &config.RestoreConf{
-			BatchSize:           cluster.Spec.Backup.Configuration.RestoreOptions.BatchSize,
-			NumInsertionWorkers: cluster.Spec.Backup.Configuration.RestoreOptions.NumInsertionWorkers,
-			NumDownloadWorkers:  cluster.Spec.Backup.Configuration.RestoreOptions.NumDownloadWorkers,
-			MaxDownloadBufferMb: cluster.Spec.Backup.Configuration.RestoreOptions.MaxDownloadBufferMb,
-			DownloadChunkMb:     cluster.Spec.Backup.Configuration.RestoreOptions.DownloadChunkMb,
-			MongodLocation:      cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocation,
-			MongodLocationMap:   cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocationMap,
+			BatchSize:              cluster.Spec.Backup.Configuration.RestoreOptions.BatchSize,
+			NumInsertionWorkers:    cluster.Spec.Backup.Configuration.RestoreOptions.NumInsertionWorkers,
+			NumDownloadWorkers:     cluster.Spec.Backup.Configuration.RestoreOptions.NumDownloadWorkers,
+			NumParallelCollections: cluster.Spec.Backup.Configuration.RestoreOptions.NumParallelCollections,
+			MaxDownloadBufferMb:    cluster.Spec.Backup.Configuration.RestoreOptions.MaxDownloadBufferMb,
+			DownloadChunkMb:        cluster.Spec.Backup.Configuration.RestoreOptions.DownloadChunkMb,
+			MongodLocation:         cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocation,
+			MongodLocationMap:      cluster.Spec.Backup.Configuration.RestoreOptions.MongodLocationMap,
 		}
 	}
 
