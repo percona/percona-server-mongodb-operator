@@ -186,39 +186,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			}
 
 			if err == nil {
-				provider := psmdb.NewClientProvider(r.client)
-				mongos, err := provider.Mongos(ctx, cluster, psmdbv1.RoleClusterAdmin)
-				if err != nil {
-					return rr, errors.Wrap(err, "get mongos session")
-				}
-				defer func() {
-					err := mongos.Disconnect(ctx)
-					if err != nil {
-						log.Error(err, "disconnect from mongos")
-					}
-				}()
-
-				log.Info("Stopping balancer")
-				if err := mongos.StopBalancer(ctx); err != nil {
-					return rr, errors.Wrap(err, "stop balancer")
-				}
-
 				log.Info("Terminating mongos pods")
 				err = r.client.Delete(ctx, psmdb.MongosStatefulset(cluster))
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return rr, errors.Wrap(err, "failed to delete mongos statefulset")
 				}
 
-				return rr, nil
-			}
-
-			mongosPods, err := psmdb.GetMongosPods(ctx, r.client, cluster)
-			if err != nil {
-				return rr, errors.Wrap(err, "get mongos pods")
-			}
-
-			if len(mongosPods.Items) > 0 {
-				log.Info("Waiting for mongos pods to terminate")
 				return rr, nil
 			}
 		}

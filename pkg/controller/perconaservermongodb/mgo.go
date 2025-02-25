@@ -116,6 +116,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
 		if err != nil {
+			if errors.Is(err, errNoRunningMongodContainers) {
+				return api.AppStateInit, nil, nil
+			}
 			return api.AppStateInit, nil, errors.Wrap(err, "handleReplsetInit")
 		}
 
@@ -715,7 +718,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		time.Sleep(time.Second * 5)
 
 		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
-		userAdmin, err := psmdb.GetInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
+		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -985,7 +988,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	for _, role := range users {
-		creds, err := psmdb.GetInternalCredentials(ctx, r.client, cr, role)
+		creds, err := getInternalCredentials(ctx, r.client, cr, role)
 		if err != nil {
 			log.Error(err, "failed to get credentials", "role", role)
 			continue

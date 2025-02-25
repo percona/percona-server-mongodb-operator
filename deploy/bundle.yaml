@@ -749,6 +749,8 @@ spec:
                     properties:
                       backupOptions:
                         properties:
+                          numParallelCollections:
+                            type: integer
                           oplogSpanMin:
                             type: number
                           priority:
@@ -781,6 +783,8 @@ spec:
                           numDownloadWorkers:
                             type: integer
                           numInsertionWorkers:
+                            type: integer
+                          numParallelCollections:
                             type: integer
                         type: object
                     type: object
@@ -19757,7 +19761,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.19.1
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
