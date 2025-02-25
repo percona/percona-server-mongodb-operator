@@ -1,4 +1,4 @@
-documentation:
+doc:
   - changed-files:
     - any-glob-to-any-file:
       - 'README*'
@@ -11,13 +11,13 @@ tests:
       - 'e2e-tests/**'
       - 'Jenkinsfile*'
 
-ci-cd:
+ci:
   - changed-files:
      - any-glob-to-any-file: '.github/workflows/**'
 
-dockerfile:
+build:
   - changed-files:
-    - any-glob-to-any-file: 'build/Dockerfile'
+    - any-glob-to-any-file: 'build/**'
 
 olm:
   - changed-files:
