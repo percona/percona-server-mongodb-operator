@@ -26,6 +26,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -169,9 +170,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
-	bcp, err := r.newBackup(ctx, cluster)
-	if err != nil {
-		return rr, errors.Wrap(err, "create backup object")
+	var bcp *Backup
+	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+		var err error
+		bcp, err = r.newBackup(ctx, cluster)
+		if err != nil {
+			return errors.Wrap(err, "create backup object")
+		}
+		return nil
+	}); err != nil {
+		return rr, err
 	}
 	defer bcp.Close(ctx)
 
@@ -209,26 +217,37 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
-	if err != nil {
-		return status, errors.Wrap(err, "check for concurrent jobs")
-	}
-
-	if cjobs {
-		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
-		}
-		status.State = psmdbv1.BackupStateWaiting
-		return status, nil
-	}
-
-	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
+	switch cr.Status.State {
+	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
 		time.Sleep(10 * time.Second)
 		return bcp.Start(ctx, r.client, cluster, cr)
+	case psmdbv1.BackupStateRunning:
+	default:
+		cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
+		if err != nil {
+			return status, errors.Wrap(err, "check for concurrent jobs")
+		}
+
+		if cjobs {
+			if cr.Status.State != psmdbv1.BackupStateWaiting {
+				log.Info("Waiting to finish another backup/restore.")
+			}
+			status.State = psmdbv1.BackupStateWaiting
+			return status, nil
+		}
 	}
 
 	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
+
+	err := retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+		updatedStatus, err := bcp.Status(ctx, cr)
+		if err == nil {
+			status = updatedStatus
+		}
+		return err
+	})
+
+	return status, err
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
