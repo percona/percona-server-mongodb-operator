@@ -29,7 +29,6 @@ spec:
               storage: 3Gi
       expose:
         enabled: false
-      runtimeClassName: container-rc
 
     mongos:
       size: 3
@@ -38,7 +37,6 @@ spec:
           localPingThresholdMs: 15
       expose:
         type: ClusterIP
-      runtimeClassName: container-rc
 
   replsets:
   - name: rs0
@@ -58,7 +56,42 @@ spec:
         resources:
           requests:
             storage: 1Gi
-    runtimeClassName: container-rc
+    size: 3
+  - name: rs1
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  - name: rs2
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
     size: 3
   secrets:
     users: some-users

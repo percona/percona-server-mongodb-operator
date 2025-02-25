@@ -6,10 +6,6 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-log() {
-	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
-}
-
 check_balancer() {
 	local cluster=$1
 	local expected=$2 # should be "true" (enabled) or "false" (disabled)
@@ -64,43 +60,73 @@ check_backup_and_restore() {
 	check_balancer ${cluster} ${balancer_end_state} 10
 }
 
+write_data() {
+	local cluster=$1
+
+	log 'create user'
+	run_mongos \
+		'db.createUser({user:"user",pwd:"pass",roles:[{db:"app",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace" \
+		"mongodb" ".svc.cluster.local" "--quiet" "27017" "mongosh"
+	sleep 2
+
+	log 'enable sharding'
+	run_mongos \
+		'sh.enableSharding("app")' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
+		"mongodb" ".svc.cluster.local" "--quiet" "27017" "mongosh"
+	sleep 2
+
+	log 'shard collection'
+	run_mongos \
+		'sh.shardCollection("app.city", { _id: 1 } )' \
+		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
+		"mongodb" ".svc.cluster.local" "--quiet" "27017" "mongosh"
+
+	log 'write data'
+	run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" \
+		"mongodb" ".svc.cluster.local" "--quiet" "mongosh"
+
+}
+
 main() {
 	create_infra "$namespace"
 
 	deploy_minio
 	apply_s3_storage_secrets
 
-	desc 'create first PSMDB cluster'
+	log 'create PSMDB cluster'
 	cluster="some-name"
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client-70.yml"
 
-	if version_gt "1.19" && [ $EKS -ne 1 ]; then
-		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
-	elif version_gt "1.24" && [ $EKS -eq 1 ]; then
-		$sed 's/docker/runc/g' "$conf_dir/container-rc.yaml" | kubectl_bin apply -f -
-	else
-		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
-	fi
-
 	apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 
-	desc 'check if all 3 Pods started'
-	wait_for_running $cluster-rs0 3 "false"
+	log 'check if cfg pods started'
 	wait_for_running $cluster-cfg 3 "false"
+
+	log 'check if all shards started'
+	wait_for_running $cluster-rs0 3 "false"
+	wait_for_running $cluster-rs1 3 "false"
+	wait_for_running $cluster-rs2 3 "false"
+
+	log 'check if mongos pods started'
 	wait_for_running $cluster-mongos 3
+
 	check_balancer ${cluster} "true" 10
+
+	write_data ${cluster}
 
 	check_backup_and_restore ${cluster} "0" "true"
 
-	desc 'disabling balancer'
+	log 'disabling balancer'
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":false}}}}'
 	check_balancer ${cluster} "false" 10
 
 	check_backup_and_restore ${cluster} "1" "false"
 
-	desc 'enabling balancer'
+	log 'enabling balancer'
 	kubectl patch psmdb some-name --type=merge -p '{"spec":{"sharding":{"balancer":{"enabled":true}}}}'
 	check_balancer ${cluster} "true" 10
 
