@@ -10,7 +10,7 @@ IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:pbm-290"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
@@ -774,17 +774,19 @@ run_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
 	local port=${6:-"27017"}
+	local mongo_bin=${7:-mongo}
 
 	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
 	if [[ -z $suffix_port ]]; then
 		suffix="$suffix:$port"
 	fi
 
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_script_mongos() {
@@ -792,13 +794,15 @@ run_script_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local mongo_bin=${6:-mongo}
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "${mongo_bin} $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_pmm_service_ip() {
