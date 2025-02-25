@@ -1,4 +1,4 @@
-region="us-central1-b"
+region="us-central1-a"
 testUrlPrefix="https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator"
 tests=[]
 
