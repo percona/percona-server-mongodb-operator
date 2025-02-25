@@ -71,6 +71,7 @@ spec:
                 enum:
                 - logical
                 - physical
+                - incremental
                 type: string
             type: object
           status:

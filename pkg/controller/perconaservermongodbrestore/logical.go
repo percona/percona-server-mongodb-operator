@@ -6,8 +6,6 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	appsv1 "k8s.io/api/apps/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -30,21 +28,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 		backupName  = bcp.Status.PBMname
 		storageName = bcp.Spec.StorageName
 	)
-
-	if cluster.Spec.Sharding.Enabled {
-		mongos := appsv1.Deployment{}
-		err = r.client.Get(ctx, cluster.MongosNamespacedName(), &mongos)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return status, errors.Wrapf(err, "failed to get mongos")
-		}
-
-		if err == nil {
-			log.Info("waiting for mongos termination")
-
-			status.State = psmdbv1.RestoreStateWaiting
-			return status, nil
-		}
-	}
 
 	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
