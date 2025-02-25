@@ -69,12 +69,17 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
+	t := cr.Spec.Type
+	if t == backup.BackupTypeIncrementalBase {
+		t = defs.IncrementalBackup
+	}
+
 	cmd := ctrl.Cmd{
 		Cmd: ctrl.CmdBackup,
 		Backup: &ctrl.BackupCmd{
 			Name:             name,
 			Type:             cr.Spec.Type,
-			IncrBase:         cr.Spec.IncrBase,
+			IncrBase:         cr.Spec.Type == backup.BackupTypeIncrementalBase,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},
@@ -166,7 +171,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
 
-		if cr.Spec.Type == defs.IncrementalBackup && !cr.Spec.IncrBase && meta.Error().Error() == "define source backup: not found" {
+		if cr.Spec.Type == defs.IncrementalBackup && meta.Error().Error() == "define source backup: not found" {
 			status.Error = "incremental base backup not found"
 		}
 	case defs.StatusDone:

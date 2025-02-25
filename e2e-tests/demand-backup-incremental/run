@@ -11,10 +11,16 @@ run_backup() {
 	local backup_name=$2
 	local base=${3:-true}
 
+	local backup_type="incremental"
+
+	if [[ $base == "true" ]]; then
+		backup_type="incremental-base"
+	fi
+
 	yq "$test_dir/conf/backup.yml" \
 		| $sed -e "s/name:/name: ${backup_name}/" \
 		| $sed -e "s/storageName:/storageName: ${storage}/" \
-		| yq ".spec.base=${base}" \
+		| yq ".spec.type=${backup_type}" \
 		| kubectl_bin apply -f -
 }
 

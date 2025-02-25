@@ -6,6 +6,5 @@ metadata:
   name:
 spec:
   type: incremental
-  base: true
   clusterName: some-name
   storageName:
