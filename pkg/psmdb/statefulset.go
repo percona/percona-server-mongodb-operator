@@ -423,11 +423,17 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 					},
 				},
 			},
-			{
-				Name:  "PBM_MONGODB_URI",
-				Value: buildMongoDBURI(ctx, tlsEnabled, sslSecret),
-			},
 		}...)
+
+		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+		if cr.CompareVersion("1.20.0") >= 0 {
+			mongoDBURI = buildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		}
+
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "PBM_MONGODB_URI",
+			Value: mongoDBURI,
+		})
 
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
