@@ -78,7 +78,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		Cmd: ctrl.CmdBackup,
 		Backup: &ctrl.BackupCmd{
 			Name:             name,
-			Type:             cr.Spec.Type,
+			Type:             t,
 			IncrBase:         cr.Spec.Type == backup.BackupTypeIncrementalBase,
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
