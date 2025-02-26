@@ -1330,11 +1330,11 @@ const (
 )
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
-	_, ok := cr.Annotations[AnnotationResyncPBM]
-	return ok
+	v, ok := cr.Annotations[AnnotationResyncPBM]
+	return ok && v != ""
 }
 
 func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
-	_, ok := cr.Annotations[AnnotationResyncInProgress]
-	return ok
+	v, ok := cr.Annotations[AnnotationResyncInProgress]
+	return ok && v != ""
 }
