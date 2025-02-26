@@ -1055,9 +1055,6 @@ func (b BackupSpec) IsPITREnabled() bool {
 }
 
 func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
-	var name string
-	var stg BackupStorageSpec
-
 	if len(b.Storages) == 1 {
 		for name, stg := range b.Storages {
 			return name, stg, nil
@@ -1072,7 +1069,7 @@ func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
 		return name, stg, nil
 	}
 
-	return name, stg, errors.New("main storage not found")
+	return "", BackupStorageSpec{}, errors.New("main storage not found")
 }
 
 type Arbiter struct {
