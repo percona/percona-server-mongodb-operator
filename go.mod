@@ -139,4 +139,5 @@ require (
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 => ./cmd/mongodb-healthcheck/logger/lumberjack/ // https://github.com/natefinch/lumberjack/pull/211
 )

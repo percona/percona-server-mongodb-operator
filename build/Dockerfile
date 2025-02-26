@@ -2,6 +2,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.23 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
 COPY go.mod go.sum ./
+COPY cmd/mongodb-healthcheck/logger/lumberjack ./cmd/mongodb-healthcheck/logger/lumberjack
 RUN go mod download
 
 ARG GIT_COMMIT
