@@ -299,7 +299,7 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 	}
 
 	for _, pod := range list.Items {
-		if pod.DeletionTimestamp != nil {
+		if !pod.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -363,7 +363,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	status.Size = len(list.Items)
 
 	for _, pod := range list.Items {
-		if pod.DeletionTimestamp != nil {
+		if !pod.DeletionTimestamp.IsZero() {
 			continue
 		}
 
@@ -380,7 +380,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
-				if cond.Status == corev1.ConditionTrue && pod.DeletionTimestamp == nil {
+				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
 				}
 			case corev1.PodScheduled:
