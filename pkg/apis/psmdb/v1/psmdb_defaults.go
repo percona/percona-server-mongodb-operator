@@ -551,15 +551,19 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 
 		if len(cr.Spec.Backup.Storages) > 1 {
-			mainFound := false
+			main := 0
 			for _, stg := range cr.Spec.Backup.Storages {
 				if stg.Main {
-					mainFound = true
+					main += 1
 				}
 			}
 
-			if !mainFound {
+			if main == 0 {
 				return errors.New("main backup storage is not specified")
+			}
+
+			if main > 1 {
+				return errors.New("multiple main backup storages are specified")
 			}
 		}
 
