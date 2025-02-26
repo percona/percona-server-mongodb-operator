@@ -1,0 +1,21 @@
+name: "Close Stale PRs"
+on:
+  schedule:
+    - cron: "0 3 * * *" # Runs daily at 03:00 UTC
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          any-of-labels: 'community'
+          exempt-all-pr-milestones: true
+          days-before-stale: 30 # Mark as stale after 30 days
+          days-before-close: 14 # Close after 14 more days
+          stale-pr-label: "stale"
+          exempt-pr-labels: "work-in-progress,blocked"
+          operations-per-run: 30
+          remove-stale-when-updated: true
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
