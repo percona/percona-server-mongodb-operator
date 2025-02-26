@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -117,27 +118,45 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *api.PerconaSe
 		return "", errors.Wrap(err, "get ssl secret")
 	}
 
+	isCertFileOutdated := func(certData []byte, certFilePath string) (bool, error) {
+		_, err := os.Stat(certFilePath)
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+
+		fileData, err := os.ReadFile(certFilePath)
+		if err != nil {
+			return true, err
+		}
+
+		return !bytes.Equal(fileData, certData), nil
+	}
+
+	writeCertFileIfOutdated := func(certData []byte, filePath string) error {
+		if isCertOutdated, err := isCertFileOutdated(certData, filePath); err != nil {
+			return err
+		} else if isCertOutdated {
+			return os.WriteFile(filePath, certData, 0o600)
+		}
+		return nil
+	}
+
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
-	f, err := os.OpenFile(tlsPemFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
+	tlsPem := append(tlsKey, tlsCert...)
+
+	err = writeCertFileIfOutdated(tlsPem, tlsPemFile)
 	if err != nil {
-		return "", errors.Wrapf(err, "open %s", tlsPemFile)
-	}
-	defer f.Close()
-	if _, err := f.Write(append(tlsKey, tlsCert...)); err != nil {
-		return "", errors.Wrapf(err, "write TLS key and certificate to %s", tlsPemFile)
+		return "", errors.Wrapf(err, "error checking and writing TLS key and certificate to file %s", tlsPemFile)
 	}
 
 	caCert := sslSecret.Data["ca.crt"]
 	caCertFile := fmt.Sprintf("/tmp/%s-%s-ca.crt", cr.Namespace, cr.Name)
-	f, err = os.OpenFile(caCertFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0o600)
+
+	err = writeCertFileIfOutdated(caCert, caCertFile)
 	if err != nil {
-		return "", errors.Wrapf(err, "open %s", caCertFile)
-	}
-	defer f.Close()
-	if _, err := f.Write(caCert); err != nil {
-		return "", errors.Wrapf(err, "write CA certificate to %s", caCertFile)
+		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
 	murl += fmt.Sprintf(
