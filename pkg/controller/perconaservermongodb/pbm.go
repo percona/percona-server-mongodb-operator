@@ -170,12 +170,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 		return nil
 	}
 
-	pbm, err := backup.NewPBM(ctx, r.client, cr)
-	if err != nil {
-		return errors.Wrap(err, "create pbm object")
-	}
-	defer pbm.Close(ctx)
-
 	if cr.Spec.Backup.PITR.Enabled && !cr.Spec.Backup.PITR.OplogOnly {
 		hasFullBackup, err := r.hasFullBackup(ctx, cr, stgName)
 		if err != nil {
@@ -189,6 +183,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 			return nil
 		}
 	}
+
+	pbm, err := backup.NewPBM(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "create pbm object")
+	}
+	defer pbm.Close(ctx)
 
 	if err := enablePiTRIfNeeded(ctx, pbm, cr); err != nil {
 		return errors.Wrap(err, "enable pitr if needed")
