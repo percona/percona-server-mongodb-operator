@@ -57,6 +57,22 @@ func (p *fakePBM) ResyncStorage(ctx context.Context, stg *config.StorageConf) er
 	return nil
 }
 
+func (p *fakePBM) ResyncMainStorage(ctx context.Context) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncProfile(ctx context.Context, name string) error {
+	return nil
+}
+
+func (p *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
+	return nil
+}
+
 func (p *fakePBM) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {
 	return nil
 }
@@ -81,7 +97,11 @@ func (p *fakePBM) DeleteBackup(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (p *fakePBM) AddProfile(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, name string, stg api.BackupStorageSpec) error {
+	return nil
+}
+
+func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error {
 	return nil
 }
 
@@ -109,7 +129,7 @@ func (p *fakePBM) Node(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func (p *fakePBM) ValidateBackup(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup, cfg config.Config) error {
+func (p *fakePBM) ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
 	return nil
 }
 

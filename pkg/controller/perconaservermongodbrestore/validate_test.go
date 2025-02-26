@@ -100,7 +100,7 @@ func TestValidate(t *testing.T) {
 			cr.DeepCopy(),
 			cluster.DeepCopy(),
 			[]client.Object{bcp.DeepCopy()},
-			"get pbm config: get s3 credentials secret: secrets \"validate-secret\" not found",
+			"get pbm config: get storage config: get s3 config: get s3 credentials secret: secrets \"validate-secret\" not found",
 		},
 		{
 			"azure no secret",
@@ -119,7 +119,7 @@ func TestValidate(t *testing.T) {
 				}
 			}),
 			[]client.Object{bcp.DeepCopy()},
-			"get pbm config: get azure credentials secret: secrets \"validate-secret\" not found",
+			"get pbm config: get storage config: get azure config: get azure credentials secret: secrets \"validate-secret\" not found",
 		},
 		{
 			"no backup",

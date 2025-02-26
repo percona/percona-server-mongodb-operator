@@ -35,6 +35,7 @@ import (
 var (
 	GitCommit string
 	GitBranch string
+	BuildTime string
 	scheme    = k8sruntime.NewScheme()
 	setupLog  = ctrl.Log.WithName("setup")
 )
@@ -69,7 +70,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	setupLog.Info("Manager starting up", "gitCommit", GitCommit, "gitBranch", GitBranch,
-		"goVersion", runtime.Version(), "os", runtime.GOOS, "arch", runtime.GOARCH)
+		"buildTime", BuildTime, "goVersion", runtime.Version(), "os", runtime.GOOS, "arch", runtime.GOARCH)
 
 	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {

@@ -22,6 +22,7 @@ spec:
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret
