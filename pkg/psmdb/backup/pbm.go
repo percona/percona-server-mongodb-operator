@@ -815,12 +815,7 @@ func (b *pbmC) ResyncStorage(ctx context.Context, stg *config.StorageConf) error
 }
 
 func (b *pbmC) ResyncMainStorage(ctx context.Context) error {
-	cfg, err := b.GetConfig(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get config")
-	}
-
-	return resync.Resync(ctx, b.Client, &cfg.Storage, "")
+	return b.SendCmd(ctx, ctrl.Cmd{Cmd: ctrl.CmdResync})
 }
 
 func (b *pbmC) ResyncMainStorageAndWait(ctx context.Context) error {

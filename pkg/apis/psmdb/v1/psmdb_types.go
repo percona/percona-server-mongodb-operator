@@ -1216,6 +1216,10 @@ func UserSecretName(cr *PerconaServerMongoDB) string {
 	return name
 }
 
+func (cr *PerconaServerMongoDB) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+}
+
 func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
 }

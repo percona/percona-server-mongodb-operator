@@ -205,6 +205,7 @@ func newLockStore() lockStore {
 func (l lockStore) LoadOrCreate(key string) lock {
 	val, _ := l.store.LoadOrStore(key, lock{
 		statusMutex: new(sync.Mutex),
+		resyncMutex: new(sync.Mutex),
 		updateSync:  new(int32),
 	})
 
@@ -213,6 +214,7 @@ func (l lockStore) LoadOrCreate(key string) lock {
 
 type lock struct {
 	statusMutex *sync.Mutex
+	resyncMutex *sync.Mutex
 	updateSync  *int32
 }
 

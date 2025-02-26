@@ -8,19 +8,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
@@ -423,80 +419,54 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 		return nil
 	}
 
+	l := r.lockers.LoadOrCreate(cr.NamespacedName().String())
+	if !l.resyncMutex.TryLock() {
+		return nil
+	}
+
 	log.Info("resync is needed for all storages")
 
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		c := &psmdbv1.PerconaServerMongoDB{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-		if err != nil {
-			return err
-		}
-
-		orig := c.DeepCopy()
-		delete(c.Annotations, psmdbv1.AnnotationResyncPBM)
-		c.Annotations[psmdbv1.AnnotationResyncInProgress] = "true"
-
-		return r.client.Patch(ctx, c, client.MergeFrom(orig))
-	})
+	err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationResyncInProgress: "true"})
 	if err != nil {
-		return errors.Wrap(err, "delete annotation")
+		return errors.Wrapf(err, "annotate %s", psmdbv1.AnnotationResyncInProgress)
+	}
+
+	if err := k8s.DeannotateObject(ctx, r.client, cr, psmdbv1.AnnotationResyncPBM); err != nil {
+		return errors.Wrapf(err, "delete annotation %s", psmdbv1.AnnotationResyncPBM)
 	}
 
 	// running in separate goroutine to not block reconciliation
 	// until all resync operations finished
 	go func() {
-		podName := cr.Spec.Replsets[0].PodName(cr, 0)
+		defer l.resyncMutex.Unlock()
 
-		pod := &corev1.Pod{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		pbm, err := backup.NewPBM(ctx, r.client, cr)
 		if err != nil {
-			log.Error(err, "failed to get pod")
+			log.Error(err, "failed to open PBM connection")
 			return
 		}
 
-		if err := backup.ResyncConfigExec(ctx, r.clientcmd, pod); err != nil {
-			log.Error(err, "failed to start resync")
+		log.Info("starting resync for main storage")
+
+		if err := pbm.ResyncMainStorageAndWait(ctx); err != nil {
+			log.Error(err, "failed to resync main storage")
 			return
 		}
 
-		// give some time for pbm-agents to start resync
-		time.Sleep(5 * time.Second)
+		log.Info("starting resync for all profiles")
 
-		if err := backup.WaitForPBMOperationExec(ctx, r.clientcmd, pod); err != nil {
-			log.Error(err, "failed to wait for PBM operations to finish")
+		if err := pbm.ResyncProfileAndWait(ctx, "all"); err != nil {
+			log.Error(err, "failed to resync profiles")
 			return
 		}
 
-		if err := backup.ResyncProfileExec(ctx, r.clientcmd, pod, "--all"); err != nil {
-			log.Error(err, "failed to start profile sync")
-			return
-		}
-
-		// give some time for pbm-agents to start resync
-		time.Sleep(5 * time.Second)
-
-		if err := backup.WaitForPBMOperationExec(ctx, r.clientcmd, pod); err != nil {
-			log.Error(err, "failed to wait for PBM operations to finish")
-		}
-
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			c := &psmdbv1.PerconaServerMongoDB{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-			if err != nil {
-				return err
-			}
-
-			orig := c.DeepCopy()
-			delete(c.Annotations, psmdbv1.AnnotationResyncInProgress)
-
-			return r.client.Patch(ctx, c, client.MergeFrom(orig))
-		})
+		err = k8s.DeannotateObject(ctx, r.client, cr, psmdbv1.AnnotationResyncInProgress)
 		if err != nil {
 			log.Error(err, "failed to delete annotation")
 			return
 		}
 
-		log.V(1).Info("deleted annotation", "annotation", psmdbv1.AnnotationResyncPBM)
+		log.Info("resync is finished")
 	}()
 
 	return nil
