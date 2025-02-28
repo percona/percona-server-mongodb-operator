@@ -17,7 +17,7 @@ type PerconaServerMongoDBBackupSpec struct {
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental}
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -100,6 +100,21 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		p.Spec.Compression = compress.CompressionTypeGZIP
 	}
 	return nil
+}
+
+const (
+	BackupTypeIncrementalBase defs.BackupType = defs.IncrementalBackup + "-base"
+)
+
+func (p *PerconaServerMongoDBBackup) PBMBackupType() defs.BackupType {
+	if p.Spec.Type == BackupTypeIncrementalBase {
+		return defs.IncrementalBackup
+	}
+	return p.Spec.Type
+}
+
+func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
+	return p.Spec.Type == BackupTypeIncrementalBase
 }
 
 // GetClusterName returns ClusterName if it's not empty. Otherwise, it will return PSMDBCluster.

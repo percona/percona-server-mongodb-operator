@@ -69,17 +69,12 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		compLevel = &l
 	}
 
-	t := cr.Spec.Type
-	if t == backup.BackupTypeIncrementalBase {
-		t = defs.IncrementalBackup
-	}
-
 	cmd := ctrl.Cmd{
 		Cmd: ctrl.CmdBackup,
 		Backup: &ctrl.BackupCmd{
 			Name:             name,
-			Type:             t,
-			IncrBase:         cr.Spec.Type == backup.BackupTypeIncrementalBase,
+			Type:             cr.PBMBackupType(),
+			IncrBase:         cr.IsBackupTypeIncrementalBase(),
 			Compression:      cr.Spec.Compression,
 			CompressionLevel: compLevel,
 		},

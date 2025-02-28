@@ -27,9 +27,9 @@ run_backup() {
 run_restore() {
 	local backup_name=$1
 
-	echo "drop collection"
+	log "drop collection"
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
-	echo "check backup and restore -- $backup_name"
+	log "check backup and restore -- $backup_name"
 
 	yq "$test_dir/conf/restore.yml" \
 		| $sed -e "s/name:/name: restore-${backup_name}/" \
@@ -43,7 +43,7 @@ run_recovery_check() {
 	local base=${3:-true}
 
 	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
-	echo
+	log ""
 
 	compare_kubectl "statefulset/${cluster}-rs0" "${compare_suffix}"
 
@@ -51,10 +51,10 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "1800"
 
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
-		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
+		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
 		exit 1
 	fi
-	echo
+	log ""
 
 	wait_cluster_consistency ${cluster}
 	wait_for_pbm_operations ${cluster}
@@ -77,17 +77,17 @@ apply_s3_storage_secrets
 
 desc 'Testing on not sharded cluster'
 
-echo "Creating PSMDB cluster"
+log "Creating PSMDB cluster"
 cluster="some-name"
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}.yml"
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 
-echo "check if all pods started"
+log "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_cluster_consistency ${cluster}
 
-echo 'writing test data'
+log 'writing test data'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
@@ -100,7 +100,7 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespa
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
 
-echo 'running backups'
+log 'running backups'
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws="backup-aws-s3"
 	backup_name_gcp="backup-gcp-cs"
@@ -152,11 +152,11 @@ run_recovery_check "${backup_name_minio}"
 desc 'Testing with arbiter and non-voting nodes'
 
 apply_cluster "${test_dir}/conf/${cluster}-arbiter-nv.yml"
-echo "check if all pods started"
+log "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_cluster_consistency ${cluster}
 
-echo 'running backups'
+log 'running backups'
 backup_name_minio="backup-minio-arbiter-nv"
 run_backup minio ${backup_name_minio}
 wait_backup "${backup_name_minio}"

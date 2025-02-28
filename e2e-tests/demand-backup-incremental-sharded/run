@@ -27,9 +27,9 @@ run_backup() {
 run_restore() {
 	local backup_name=$1
 
-	echo "drop collection"
+	log "drop collection"
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-	echo "check backup and restore -- $backup_name"
+	log "check backup and restore -- $backup_name"
 
 	yq "$test_dir/conf/restore.yml" \
 		| $sed -e "s/name:/name: restore-${backup_name}/" \
@@ -43,7 +43,7 @@ run_recovery_check() {
 	local base=${3:-true}
 
 	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
-	echo
+	log ""
 
 	compare_kubectl "statefulset/${cluster}-rs0" "${compare_suffix}"
 
@@ -51,10 +51,10 @@ run_recovery_check() {
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 	kubectl_bin get psmdb ${cluster} -o yaml
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
-		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
+		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
 		exit 1
 	fi
-	echo
+	log ""
 
 	wait_cluster_consistency ${cluster} 42
 	wait_for_pbm_operations ${cluster}
@@ -70,7 +70,7 @@ check_exported_mongos_service_endpoint() {
 	local host=$1
 
 	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
-		echo "Exported host is not correct after the restore"
+		log "Exported host is not correct after the restore"
 		exit 1
 	fi
 }
@@ -83,13 +83,13 @@ apply_s3_storage_secrets
 ### Case 1: Backup and restore on sharded cluster
 desc 'Testing on sharded cluster'
 
-echo "Creating PSMDB cluster"
+log "Creating PSMDB cluster"
 cluster="some-name"
 kubectl_bin apply -f "${conf_dir}/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}-sharded.yml"
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 
-echo "check if all pods started"
+log "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_for_running ${cluster}-cfg 3
 wait_for_running ${cluster}-mongos 3
@@ -98,7 +98,7 @@ wait_cluster_consistency ${cluster}
 lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' \
 	| jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0] | if .ip then .ip else .hostname end')
 if [ -z "$lbEndpoint" ]; then
-	echo "mongos service not exported correctly"
+	log "mongos service not exported correctly"
 	exit 1
 fi
 
@@ -113,10 +113,10 @@ sleep 5
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
 
 # wait for stable timestamp in wiredtiger
-echo 'waiting 60 seconds for stable timestamp in wiredtiger'
+log 'waiting 60 seconds for stable timestamp in wiredtiger'
 sleep 80
 
-echo 'running backups'
+log 'running backups'
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws="backup-aws-s3-sharded"
 	backup_name_gcp="backup-gcp-cs-sharded"

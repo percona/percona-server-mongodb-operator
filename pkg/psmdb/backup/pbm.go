@@ -22,7 +22,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -47,10 +46,6 @@ const (
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
 	KMSKeyID                         = "KMS_KEY_ID"
-)
-
-const (
-	BackupTypeIncrementalBase defs.BackupType = defs.IncrementalBackup + "-base"
 )
 
 type pbmC struct {
