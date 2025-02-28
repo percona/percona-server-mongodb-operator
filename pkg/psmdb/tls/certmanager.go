@@ -2,6 +2,7 @@ package tls
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -118,7 +119,12 @@ func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Conte
 
 func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
 	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
-		return "", errors.Wrap(err, "set controller reference")
+		switch errors.Cause(err).(type) {
+		case *controllerutil.AlreadyOwnedError:
+			fmt.Sprintf("%s", err)
+		default:
+			return "", errors.Wrap(err, "set controller reference")
+		}
 	}
 
 	status, err := util.Apply(ctx, c.cl, obj)
@@ -314,7 +320,12 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 						continue
 					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
-						return errors.Wrap(err, "set controller reference")
+						switch errors.Cause(err).(type) {
+						case *controllerutil.AlreadyOwnedError:
+							fmt.Sprintf("%s", err)
+						default:
+							return errors.Wrap(err, "set controller reference")
+						}
 					}
 					if err = c.cl.Update(ctx, secret); err != nil {
 						return errors.Wrap(err, "failed to update secret")
