@@ -22,7 +22,7 @@ jobs:
       - name: "Check if PR is from a fork"
         if: github.event.pull_request.head.repo.fork == true
         run: |
-          gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --add-label "community
+          gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --add-label "community"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
