@@ -19,6 +19,9 @@ jobs:
   label-community:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: "Check if PR is from a fork"
         if: github.event.pull_request.head.repo.fork == true
         run: |
