@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -26,6 +27,13 @@ const (
 	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
 )
 
+var defaultBackoff = wait.Backoff{
+	Duration: 10 * time.Second,
+	Factor:   2.0,
+	Cap:      time.Minute * 5,
+	Steps:    6,
+}
+
 type Backup struct {
 	pbm  backup.PBM
 	spec api.BackupSpec
@@ -35,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 	if cluster == nil {
 		return new(Backup), nil
 	}
-	cn, err := backup.NewPBM(ctx, r.client, cluster)
+	cn, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
 	}
