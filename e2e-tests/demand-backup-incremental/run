@@ -43,7 +43,7 @@ run_recovery_check() {
 	local base=${3:-true}
 
 	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
-	log ""
+	echo
 
 	compare_kubectl "statefulset/${cluster}-rs0" "${compare_suffix}"
 
@@ -54,7 +54,7 @@ run_recovery_check() {
 		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
 		exit 1
 	fi
-	log ""
+	echo
 
 	wait_cluster_consistency ${cluster}
 	wait_for_pbm_operations ${cluster}
