@@ -72,6 +72,7 @@ spec:
                 - logical
                 - physical
                 - incremental
+                - incremental-base
                 type: string
             type: object
           status:
