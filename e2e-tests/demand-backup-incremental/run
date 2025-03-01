@@ -20,7 +20,7 @@ run_backup() {
 	yq "$test_dir/conf/backup.yml" \
 		| $sed -e "s/name:/name: ${backup_name}/" \
 		| $sed -e "s/storageName:/storageName: ${storage}/" \
-		| yq ".spec.type=${backup_type}" \
+		| yq ".spec.type=\"${backup_type}\"" \
 		| kubectl_bin apply -f -
 }
 
