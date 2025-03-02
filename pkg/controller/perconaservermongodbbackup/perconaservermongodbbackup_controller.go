@@ -103,6 +103,9 @@ type ReconcilePerconaServerMongoDBBackup struct {
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := logf.FromContext(ctx)
 
+	log.V(1).Info("Reconciling")
+	defer log.V(1).Info("Reconcile finished")
+
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -208,6 +211,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	bcp *Backup,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx)
+
 	status := cr.Status
 	if cluster == nil {
 		return status, errors.New("cluster not found")
@@ -217,29 +221,25 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	switch cr.Status.State {
-	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
-		time.Sleep(10 * time.Second)
-		return bcp.Start(ctx, r.client, cluster, cr)
-	case psmdbv1.BackupStateRunning:
-	default:
-		cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
-		if err != nil {
-			return status, errors.Wrap(err, "check for concurrent jobs")
-		}
-
-		if cjobs {
-			if cr.Status.State != psmdbv1.BackupStateWaiting {
-				log.Info("Waiting to finish another backup/restore.")
-			}
-			status.State = psmdbv1.BackupStateWaiting
-			return status, nil
-		}
+	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
+	if err != nil {
+		return status, errors.Wrap(err, "check for concurrent jobs")
 	}
 
-	time.Sleep(5 * time.Second)
+	if cjobs {
+		if cr.Status.State != psmdbv1.BackupStateWaiting {
+			log.Info("Waiting to finish another backup/restore.")
+		}
+		status.State = psmdbv1.BackupStateWaiting
+		return status, nil
+	}
 
-	err := retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+	switch cr.Status.State {
+	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
+		return bcp.Start(ctx, r.client, cluster, cr)
+	}
+
+	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		updatedStatus, err := bcp.Status(ctx, cr)
 		if err == nil {
 			status = updatedStatus
