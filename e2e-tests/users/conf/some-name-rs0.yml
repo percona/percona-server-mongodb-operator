@@ -34,7 +34,7 @@ spec:
       enabled: true
       schedule: "0 0 * * 0"
       compressionType: gzip
-      storageName: aws-s3
+      storageName: minio
   replsets:
   - name: rs0
     affinity:
