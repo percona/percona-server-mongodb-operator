@@ -1017,6 +1017,8 @@ spec:
                           required:
                           - path
                           type: object
+                        main:
+                          type: boolean
                         s3:
                           properties:
                             bucket:
@@ -19485,6 +19487,8 @@ spec:
           status:
             properties:
               backup:
+                type: string
+              backupConfigHash:
                 type: string
               backupVersion:
                 type: string

@@ -25,6 +25,7 @@ mongod-major-upgrade
 mongod-major-upgrade-sharded
 monitoring-2-0
 multi-cluster-service
+multi-storage
 non-voting
 one-pod
 operator-self-healing-chaos
