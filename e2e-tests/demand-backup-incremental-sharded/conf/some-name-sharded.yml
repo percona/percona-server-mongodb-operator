@@ -20,6 +20,7 @@ spec:
           insecureSkipTLSVerify: false
       minio:
         type: s3
+        main: true
         s3:
           credentialsSecret: minio-secret
           region: us-east-1
