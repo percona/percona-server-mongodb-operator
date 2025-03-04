@@ -550,6 +550,23 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
+		if len(cr.Spec.Backup.Storages) > 1 {
+			main := 0
+			for _, stg := range cr.Spec.Backup.Storages {
+				if stg.Main {
+					main += 1
+				}
+			}
+
+			if main == 0 {
+				return errors.New("main backup storage is not specified")
+			}
+
+			if main > 1 {
+				return errors.New("multiple main backup storages are specified")
+			}
+		}
+
 		for _, stg := range cr.Spec.Backup.Storages {
 			if stg.Type != BackupStorageS3 {
 				continue
@@ -566,15 +583,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Backup.PITR.Enabled = false
 	}
 
-	if cr.Spec.Backup.PITR.Enabled {
-		if len(cr.Spec.Backup.Storages) != 1 {
-			cr.Spec.Backup.PITR.Enabled = false
-			log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
-		}
-
-		if cr.Spec.Backup.PITR.OplogSpanMin.Float64() == 0 {
-			cr.Spec.Backup.PITR.OplogSpanMin = numstr.MustParse("10")
-		}
+	if cr.Spec.Backup.PITR.Enabled && cr.Spec.Backup.PITR.OplogSpanMin.Float64() == 0 {
+		cr.Spec.Backup.PITR.OplogSpanMin = numstr.MustParse("10")
 	}
 
 	if cr.Status.Replsets == nil {

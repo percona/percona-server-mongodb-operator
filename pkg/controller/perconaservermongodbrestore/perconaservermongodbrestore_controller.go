@@ -2,6 +2,7 @@ package perconaservermongodbrestore
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -21,9 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -155,6 +158,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.Wrap(err, "can cluster restore")
 	}
 
+	if cluster.PBMResyncNeeded() || cluster.PBMResyncInProgress() {
+		log.V(1).Info("waiting for resync operation to finish")
+
+		return rr, nil
+	}
+
 	bcp, err := r.getBackup(ctx, cr)
 	if err != nil {
 		return rr, errors.Wrap(err, "get backup")
@@ -180,6 +189,30 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
+		err := r.validate(ctx, cr, cluster)
+		if err != nil {
+			if errors.Is(err, errWaitingPBM) {
+				err = nil
+				log.Info("waiting for pbm-agent")
+				return rr, nil
+			}
+
+			if errors.Is(err, pbmErrors.ErrNotFound) {
+				log.Info("backup not found in PBM metadata. we need to resync...",
+					"backup", bcp.Name,
+					"pbmName", bcp.Status.PBMname,
+					"storage", bcp.Status.StorageName)
+
+				if err := r.resyncStorage(ctx, cluster, cr); err != nil {
+					return reconcile.Result{}, errors.Wrap(err, "resync storage")
+				}
+
+				return rr, nil
+			}
+
+			return rr, errors.Wrap(err, "failed to validate restore")
+		}
+
 		if cluster.Spec.Sharding.Enabled {
 			_, err := psmdb.GetMongosSts(ctx, r.client, cluster)
 			if client.IgnoreNotFound(err) != nil {
@@ -195,15 +228,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 				return rr, nil
 			}
-		}
 
-		err = r.validate(ctx, cr, cluster)
-		if err != nil {
-			if errors.Is(err, errWaitingPBM) || errors.Is(err, errWaitingRestore) {
-				err = nil
+			mongosPods, err := psmdb.GetMongosPods(ctx, r.client, cluster)
+			if err != nil {
+				return rr, errors.Wrap(err, "get mongos pods")
+			}
+
+			if len(mongosPods.Items) > 0 {
+				log.Info("Waiting for mongos pods to terminate")
 				return rr, nil
 			}
-			return rr, errors.Wrap(err, "failed to validate restore")
 		}
 	}
 
@@ -223,7 +257,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getStorage(cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, storageName string) (psmdbv1.BackupStorageSpec, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	storageName string,
+) (psmdbv1.BackupStorageSpec, error) {
 	if len(storageName) > 0 {
 		storage, ok := cluster.Spec.Backup.Storages[storageName]
 		if !ok {
@@ -339,4 +377,81 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatus(ctx context.Context,
 func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdate(ctx context.Context, obj client.Object) error {
 	_, err := util.Apply(ctx, r.client, obj)
 	return err
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+) error {
+	log := logf.FromContext(ctx)
+
+	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
+	if err != nil {
+		return errors.Wrap(err, "new PBM connection")
+	}
+
+	// restore: backupSource
+	if len(cr.Spec.BackupName) == 0 {
+		stg, err := r.getStorage(cr, cluster, "")
+		if err != nil {
+			return errors.Wrap(err, "get storage")
+		}
+
+		profileName := naming.BackupSourceProfileName(cr)
+
+		_, err = pbmC.GetConfig(ctx)
+		if err == nil {
+			if err := pbmC.AddProfile(ctx, r.client, cluster, profileName, stg); err != nil {
+				return errors.Wrap(err, "add backup source as profile")
+			}
+
+			if err := pbmC.ResyncProfileAndWait(ctx, profileName); err != nil {
+				return errors.Wrap(err, "start profile resync")
+			}
+
+			return nil
+		}
+
+		if backup.IsErrNoDocuments(err) {
+			log.Info(fmt.Sprintf("PBM config not found, configuring %s as main storage", profileName))
+
+			cfg, err := backup.GetPBMConfig(ctx, r.client, cluster, stg)
+			if err != nil {
+				return errors.Wrap(err, "get PBM config")
+			}
+
+			if err := pbmC.SetConfig(ctx, &cfg); err != nil {
+				return errors.Wrap(err, "set PBM config")
+			}
+
+			if err := pbmC.ResyncMainStorageAndWait(ctx); err != nil {
+				return errors.Wrap(err, "start resync")
+			}
+		}
+
+		return nil
+	}
+
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get backup")
+	}
+
+	mainStgName, _, err := cluster.Spec.Backup.MainStorage()
+	if err != nil {
+		return errors.Wrap(err, "get main storage")
+	}
+
+	if bcp.Status.StorageName == mainStgName {
+		if err := pbmC.ResyncMainStorageAndWait(ctx); err != nil {
+			return errors.Wrap(err, "start config resync")
+		}
+	} else {
+		if err := pbmC.ResyncProfileAndWait(ctx, bcp.Status.StorageName); err != nil {
+			return errors.Wrap(err, "start profile resync")
+		}
+	}
+
+	return nil
 }
