@@ -100,13 +100,13 @@ format_pitr_target() {
 datetime_to_timestamp() {
 	local datetime=$1
 
-	TZ='UTC' date -d"${datetime}" '+%s'
+	TZ='UTC' $date -d"${datetime}" '+%s'
 }
 
 timestamp_to_datetime() {
 	local ts=$1
 
-	TZ='UTC' date -d"@${ts}" '+%Y-%m-%dT%H:%M:%S%Z'
+	TZ='UTC' $date -d"@${ts}" '+%Y-%m-%dT%H:%M:%S%Z'
 }
 
 get_latest_restorable_time() {

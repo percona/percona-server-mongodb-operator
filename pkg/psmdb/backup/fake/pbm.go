@@ -53,19 +53,19 @@ func (p *fakePBM) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.St
 	return nil, nil
 }
 
-func (p *fakePBM) ResyncMainStorage(ctx context.Context) error {
+func (_ *fakePBM) ResyncMainStorage(ctx context.Context) error {
 	return nil
 }
 
-func (p *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
+func (_ *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
 	return nil
 }
 
-func (p *fakePBM) ResyncProfile(ctx context.Context, name string) error {
+func (_ *fakePBM) ResyncProfile(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
+func (_ *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
 	return nil
 }
 

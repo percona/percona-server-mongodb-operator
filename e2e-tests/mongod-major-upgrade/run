@@ -19,6 +19,8 @@ function main() {
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml"
 
+	apply_s3_storage_secrets
+
 	desc 'install version service'
 
 	cp $test_dir/conf/operator.main.psmdb-operator.dep.json ${tmp_dir}/operator.${OPERATOR_VERSION}.psmdb-operator.dep.json

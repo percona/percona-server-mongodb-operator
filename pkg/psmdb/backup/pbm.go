@@ -3,7 +3,6 @@ package backup
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -17,8 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -552,7 +549,7 @@ func (b *pbmC) SetConfig(ctx context.Context, cfg *config.Config) error {
 }
 
 func (b *pbmC) ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
-	if err := b.ValidateBackupInMetadata(ctx, cfg, bcp); err != nil {
+	if err := b.ValidateBackupInMetadata(ctx, bcp); err != nil {
 		return errors.Wrap(err, "validate backup in metadata")
 	}
 
@@ -563,7 +560,7 @@ func (b *pbmC) ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmd
 	return nil
 }
 
-func (b *pbmC) ValidateBackupInMetadata(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
+func (b *pbmC) ValidateBackupInMetadata(ctx context.Context, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
 	_, err := b.GetBackupMeta(ctx, bcp.Status.PBMname)
 	if err != nil {
 		return errors.Wrap(err, "get backup meta")
@@ -993,84 +990,6 @@ func (b *pbmC) ResyncProfileAndWait(ctx context.Context, name string) error {
 
 	if err := b.WaitForResync(ctx); err != nil {
 		return errors.Wrap(err, "wait for resync")
-	}
-
-	return nil
-}
-
-func ResyncProfileExec(ctx context.Context, cl *clientcmd.Client, pod *corev1.Pod, profile string) error {
-	log := logf.FromContext(ctx)
-
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	command := []string{"pbm", "profile", "sync", profile}
-
-	log.Info("starting profile resync", "pod", pod.Name, "storage", profile, "command", command)
-
-	err := cl.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		return errors.Wrapf(err, "start profile sync: run %v stderr: %s stdout: %s", command, stderrBuffer.String(), stdoutBuffer.String())
-	}
-
-	return nil
-}
-
-type pbmRunningOp struct {
-	Type string `json:"type,omitempty"`
-	OpId string `json:"opID,omitempty"`
-}
-
-func GetRunningPBMOperationExec(ctx context.Context, cl *clientcmd.Client, pod *corev1.Pod) (*pbmRunningOp, error) {
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	command := []string{"pbm", "status", "-s", "running", "--out", "json"}
-	err := cl.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get status: run %v", command)
-	}
-
-	var pbmStatus struct {
-		Running pbmRunningOp `json:"running"`
-	}
-
-	if err := json.Unmarshal(stdoutBuffer.Bytes(), &pbmStatus); err != nil {
-		return nil, errors.Wrap(err, "unmarshal PBM status output")
-	}
-
-	return &pbmStatus.Running, nil
-}
-
-func WaitForPBMOperationExec(ctx context.Context, cl *clientcmd.Client, pod *corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	waitErr := errors.New("waiting for operation to finish")
-	backoff := wait.Backoff{
-		Cap:      2 * time.Hour,
-		Steps:    12,
-		Factor:   2.0,
-		Duration: 5 * time.Second,
-	}
-
-	err := retry.OnError(backoff, func(err error) bool { return errors.Is(err, waitErr) }, func() error {
-		running, err := GetRunningPBMOperationExec(ctx, cl, pod)
-		if err != nil {
-			return errors.Wrap(err, "get running operation")
-		}
-
-		if len(running.OpId) == 0 {
-			log.Info("no running operations")
-			return nil
-		}
-
-		log.Info("waiting for operation to finish", "type", running.Type, "opID", running.OpId)
-
-		return waitErr
-	})
-
-	if err != nil {
-		return errors.Wrap(err, "wait for operation to finish")
 	}
 
 	return nil

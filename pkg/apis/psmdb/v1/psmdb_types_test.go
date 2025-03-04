@@ -158,7 +158,7 @@ func TestBackupSpec_MainStorage(t *testing.T) {
 		"single storage": {
 			spec: BackupSpec{
 				Storages: map[string]BackupStorageSpec{
-					"storage-1": BackupStorageSpec{
+					"storage-1": {
 						Type: BackupStorageS3,
 						S3:   BackupStorageS3Spec{},
 					},
@@ -169,16 +169,16 @@ func TestBackupSpec_MainStorage(t *testing.T) {
 		"multiple storages": {
 			spec: BackupSpec{
 				Storages: map[string]BackupStorageSpec{
-					"storage-1": BackupStorageSpec{
+					"storage-1": {
 						Type: BackupStorageS3,
 						S3:   BackupStorageS3Spec{},
 					},
-					"storage-2": BackupStorageSpec{
+					"storage-2": {
 						Main: true,
 						Type: BackupStorageS3,
 						S3:   BackupStorageS3Spec{},
 					},
-					"storage-3": BackupStorageSpec{
+					"storage-3": {
 						Type: BackupStorageS3,
 						S3:   BackupStorageS3Spec{},
 					},
