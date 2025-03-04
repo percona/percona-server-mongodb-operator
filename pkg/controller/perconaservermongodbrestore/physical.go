@@ -38,7 +38,12 @@ var anotherOpBackoff = wait.Backoff{
 }
 
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
-func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
 	var err error
 
@@ -125,31 +130,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(ctx cont
 		pod := corev1.Pod{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: rs.PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
 			return status, errors.Wrap(err, "get pod")
-		}
-
-		log.V(1).Info("Checking PBM operations for replset", "replset", rs.Name, "pod", rs.PodName(cluster, 0))
-
-		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
-			stdoutBuf.Reset()
-			stderrBuf.Reset()
-
-			command := []string{"/opt/percona/pbm", "config", "--file", "/etc/pbm/pbm_config.yaml"}
-			log.Info("Set PBM configuration", "command", command, "pod", pod.Name)
-
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false)
-			if err != nil {
-				log.Error(err, "failed to set PBM configuration")
-			}
-
-			return err
-		})
-		if err != nil {
-			return status, errors.Wrapf(err, "resync config stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-		}
-
-		time.Sleep(5 * time.Second) // wait until pbm will start resync
-		if err := r.waitForPBMOperationsToFinish(ctx, &pod); err != nil {
-			return status, err
 		}
 
 		var restoreCommand []string
@@ -716,21 +696,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
-	log := logf.FromContext(ctx)
-
+func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+) error {
 	secret := corev1.Secret{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: r.pbmConfigName(cluster), Namespace: cluster.Namespace}, &secret)
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get PBM config secret")
 	}
 
-	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
+	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
-		return errors.Wrap(err, "get storage")
+		return errors.Wrap(err, "new PBM connection")
 	}
 
-	pbmConfig, err := backup.GetPBMConfig(ctx, r.client, cluster, storage)
+	// PBM uses main storage to store restore metadata
+	// regardless of backup storage. See PBM-1503.
+	pbmConfig, err := pbmC.GetConfig(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get PBM config")
 	}
@@ -745,8 +730,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(ctx context
 	if bytes.Equal(confBytes, secret.Data["pbm_config.yaml"]) {
 		return nil
 	}
-
-	log.V(1).Info("Configuring PBM", "storage", bcp.Spec.StorageName)
 
 	secret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

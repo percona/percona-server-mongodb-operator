@@ -205,6 +205,7 @@ func newLockStore() lockStore {
 func (l lockStore) LoadOrCreate(key string) lock {
 	val, _ := l.store.LoadOrStore(key, lock{
 		statusMutex: new(sync.Mutex),
+		resyncMutex: new(sync.Mutex),
 		updateSync:  new(int32),
 	})
 
@@ -213,6 +214,7 @@ func (l lockStore) LoadOrCreate(key string) lock {
 
 type lock struct {
 	statusMutex *sync.Mutex
+	resyncMutex *sync.Mutex
 	updateSync  *int32
 }
 
@@ -455,13 +457,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "schedule telemetry job")
 	}
 
-	if err = r.updatePITR(ctx, cr); err != nil {
-		return rr, err
-	}
-
-	err = r.resyncPBMIfNeeded(ctx, cr)
+	err = r.reconcilePBM(ctx, cr)
 	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "resync PBM if needed")
+		return reconcile.Result{}, errors.Wrap(err, "reconcile PBM")
 	}
 
 	return rr, nil
@@ -568,7 +566,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			for pod, member := range members {
 				rs.Members[pod] = member
 			}
-			log.V(1).Info("Replset members", "rs", replset.Name, "initialized", rs.Initialized, "members", rs.Members)
 			cr.Status.Replsets[replset.Name] = rs
 		}
 	}

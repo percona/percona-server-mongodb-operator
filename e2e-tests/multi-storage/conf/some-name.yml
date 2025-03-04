@@ -1,8 +1,6 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  finalizers:
-  - percona.com/delete-psmdb-pvc
   name: some-name
 spec:
   #platform: openshift
@@ -10,18 +8,10 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    image: perconalab/percona-server-mongodb-operator:main-backup
     storages:
-      aws-s3:
+      minio-1:
         main: true
-        type: s3
-        s3:
-          credentialsSecret: aws-s3-secret
-          region: us-east-1
-          bucket: operator-testing
-          prefix: psmdb-demand-backup-physical
-          insecureSkipTLSVerify: false
-      minio:
         type: s3
         s3:
           credentialsSecret: minio-secret
@@ -29,28 +19,28 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
-      gcp-cs:
+      minio-2:
         type: s3
         s3:
-          credentialsSecret: gcp-cs-secret
+          credentialsSecret: minio-secret
           region: us-east-1
-          bucket: operator-testing
-          prefix: psmdb-demand-backup-physical
-          endpointUrl: https://storage.googleapis.com
+          bucket: operator-testing-2
+          endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
-      azure-blob:
-        type: azure
-        azure:
-          container: operator-testing
-          prefix: psmdb-demand-backup-physical
-          credentialsSecret: azure-secret
-
-    tasks:
-    - name: weekly
+      minio-3:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing-3
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+    pitr:
       enabled: true
-      schedule: "0 0 * * 0"
+      oplogSpanMin: 1
+      oplogOnly: false
       compressionType: gzip
-      storageName: aws-s3
+      compressionLevel: 6
   replsets:
   - name: rs0
     affinity:
@@ -66,10 +56,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 3Gi
-    expose:
-      enabled: false
-      type: ClusterIP
+            storage: 1Gi
     size: 3
     configuration: |
       operationProfiling:

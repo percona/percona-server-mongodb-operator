@@ -1,0 +1,322 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="some-name"
+
+check_backup_deletion() {
+	local initial_chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
+		| jq '.backups.pitrChunks.pitrChunks[0].range.start')
+
+	log "deleting psmdb-backup/backup-minio-3"
+	kubectl_bin delete psmdb-backup backup-minio-3
+
+	log "checking if chunks are deleted"
+	local chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
+		| jq '.backups.pitrChunks.pitrChunks[0].range.start')
+
+	if [[ ${initial_chunk_start} != ${chunk_start} ]]; then
+		echo "Oplog chunks are deleted after deleting a backup in external storage"
+		exit 1
+	fi
+	log "chunks are not deleted, OK."
+
+	log "deleting psmdb-backup/backup-minio-2-1"
+	kubectl_bin delete psmdb-backup backup-minio-2-1
+
+	log "checking if chunks are deleted"
+	chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
+		| jq '.backups.pitrChunks.pitrChunks[0].range.start')
+
+	if [[ ${initial_chunk_start} == ${chunk_start} ]]; then
+		echo "Oplog chunks are not deleted after deleting a backup in main storage"
+		exit 1
+	fi
+	log "chunks are deleted, OK."
+}
+
+drop_metadata_and_resync() {
+	local psmdb_backup_count=$(kubectl get psmdb-backup --no-headers | wc -l)
+	log "there are ${initial_backup_count} psmdb-backups in ${namespace}"
+
+	drop_collection admin pbmBackups backup backup123456
+	kubectl_bin annotate psmdb ${cluster} percona.com/resync-pbm=true
+
+	sleep 10 # wait for resync to start
+
+	local retries=0
+
+	echo -n "waiting for resync to finish"
+	local resync_running=$(kubectl_bin get psmdb ${cluster} -o yaml \
+		| yq '.metadata.annotations."percona.com/resync-in-progress"')
+	until [[ ${resync_running} == "null" ]]; do
+		sleep 1
+		echo -n .
+		resync_running=$(kubectl_bin get psmdb ${cluster} -o yaml \
+			| yq '.metadata.annotations."percona.com/resync-in-progress"')
+		let retries+=1
+		if [[ $retries -ge 360 ]]; then
+			echo "resync didn't finish in 6 minutes!"
+			exit 1
+		fi
+	done
+	echo ".OK"
+
+	local backup_count=$(kubectl exec ${cluster}-rs0-0 -c backup-agent -- pbm list -o json | jq '.snapshots | length')
+	log "there are ${backup_count} backups in pbmBackups collection after resync"
+
+	if [[ ${psmdb_backup_count} != ${backup_count} ]]; then
+		echo "expected ${psmdb_backup_count}, got ${backup_count}"
+		exit 1
+	fi
+
+	log "resync finished successfully"
+}
+
+run_backup() {
+	local storage=$1
+	local name=${2:-"backup-${storage}"}
+	local type=${3:-"logical"}
+
+	log "creating backup: ${name} (${type})"
+
+	yq eval '.metadata.name = "'${name}'"
+			| .spec.storageName = "'${storage}'"
+			| .spec.type = "'${type}'"' \
+		${test_dir}/conf/backup.yml \
+		| kubectl_bin apply -f -
+}
+
+format_pitr_target() {
+	local target=$1
+
+	echo ${target} | sed 's/T/ /' | sed 's/Z//'
+}
+
+datetime_to_timestamp() {
+	local datetime=$1
+
+	TZ='UTC' $date -d"${datetime}" '+%s'
+}
+
+timestamp_to_datetime() {
+	local ts=$1
+
+	TZ='UTC' $date -d"@${ts}" '+%Y-%m-%dT%H:%M:%S%Z'
+}
+
+get_latest_restorable_time() {
+	local backup_name=$1
+
+	local time=$(kubectl_bin get psmdb-backup ${backup_name} -o yaml | yq '.status.latestRestorableTime')
+
+	if [[ ${time} == "null" ]]; then
+		echo >&2
+		echo "latestRestorableTime does not exist in psmdb-backup/${backup_name}" >&2
+	fi
+
+	echo -n ${time}
+}
+
+get_backup_last_write() {
+	local backup_name=$1
+	local pbm_name=$(kubectl_bin get psmdb-backup ${backup_name} -o yaml | yq '.status.pbmName')
+
+	kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm list -o json \
+		| jq --arg v "${pbm_name}" '.snapshots[] | select(.name==$v) | .restoreTo'
+}
+
+wait_for_restorable_time() {
+	local backup_name=$1
+
+	local latest_restorable_time=$(get_latest_restorable_time ${backup_name})
+
+	local retries=0
+	echo -n "waiting for psmdb-backup/${backup_name}'s latest restorable time"
+	until [[ ${latest_restorable_time} != "null" ]]; do
+		latest_restorable_time=$(get_latest_restorable_time ${backup_name})
+		if [[ $retries -gt 5 ]]; then
+			echo "Operator didn't set latestRestorableTime to psmdb-backup/${backup_name} for ~6 minutes"
+			exit 1
+		fi
+		let retries+=1
+		echo -n .
+		sleep 70 # wait for oplog span min + 10 sec
+	done
+	echo ".OK latestRestorableTime: ${latest_restorable_time}"
+}
+
+wait_for_advanced_restorable_time() {
+	local backup_name=$1
+
+	local latest_restorable_time=$(datetime_to_timestamp $(get_latest_restorable_time ${backup_name}))
+	local latest_write=$(get_backup_last_write ${backup_name})
+
+	local retries=0
+	echo -n "waiting for psmdb-backup/${backup_name}'s latest restorable time to advance its latest write ($(timestamp_to_datetime ${latest_write}))"
+	until [[ ${latest_restorable_time} -gt ${latest_write} ]]; do
+		latest_restorable_time=$(datetime_to_timestamp $(get_latest_restorable_time ${backup_name}))
+		if [[ $retries -gt 5 ]]; then
+			echo -n "Latest restorable time ($(timestamp_to_datetime ${latest_restorable_time}))"
+			echo -n "is not greater than backup's latest write ($(timestamp_to_datetime ${latest_write}))"
+			echo "after ~6 minutes"
+			exit 1
+		fi
+		let retries+=1
+		echo -n .
+		sleep 70 # wait for oplog span min + 10 sec
+	done
+	echo ".OK latestRestorableTime: $(timestamp_to_datetime ${latest_restorable_time})"
+}
+
+check_recovery() {
+	local backup_name=$1
+	local restore_time=$2
+	local cmp_postfix=$3
+
+	drop_collection myApp test myApp myPass
+
+	log "creating restore: restore-${backup_name} restore_to: ${restore_time}"
+	cat $test_dir/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-${backup_name}/" \
+		| $sed -e "s/backupName:/backupName: ${backup_name}/" \
+		| $sed -e "s/date:/date: ${restore_time}/" \
+		| kubectl_bin apply -f -
+
+	# fail faster if we don't reach requested status until some time
+	wait_restore "$backup_name" "$cluster" "requested" "0" "900" 1
+	wait_restore "$backup_name" "$cluster" "ready" "0" "1600"
+
+	wait_for_running ${cluster}-rs0 3
+
+	compare_mongo_cmd \
+		"find" \
+		"myApp:myPass@${cluster}-rs0.${namespace}" \
+		"${cmp_postfix}" \
+		".svc.cluster.local" \
+		myApp \
+		test \
+		'sort( { x: 1 } )'
+}
+
+drop_collection() {
+	local db=$1
+	local collection=$2
+	local user=$3
+	local pass=$4
+
+	log "dropping collection: ${db}.${collection}"
+	run_mongo \
+		"use ${db}\n db.${collection}.drop()" \
+		"${user}:${pass}@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+write_document() {
+	local x=$1
+	local cmp_postfix=$2
+
+	log "write document: ${x}"
+	run_mongo \
+		"use myApp\n db.test.insert({ x: ${x} })" \
+		"myApp:myPass@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+create_user() {
+	log 'create user myApp'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+create_infra ${namespace}
+deploy_minio
+
+create_minio_bucket operator-testing-2
+create_minio_bucket operator-testing-3
+
+log 'create secrets and start client'
+kubectl_bin apply \
+	-f ${conf_dir}/secrets.yml \
+	-f ${conf_dir}/client.yml \
+	-f ${conf_dir}/minio-secret.yml
+
+log "create PSMDB cluster: ${cluster}"
+apply_cluster ${test_dir}/conf/${cluster}.yml
+
+log 'check if all 3 Pods started'
+wait_for_running ${cluster}-rs0 3
+
+wait_backup_agent ${cluster}-rs0-0
+wait_backup_agent ${cluster}-rs0-1
+wait_backup_agent ${cluster}-rs0-2
+
+create_user
+
+write_document 100500
+
+run_backup minio-1 backup-minio-1 logical
+wait_backup backup-minio-1
+
+run_backup minio-2 backup-minio-2 logical
+wait_backup backup-minio-2
+
+run_backup minio-3 backup-minio-3 physical
+wait_backup backup-minio-3
+
+write_document 100501
+write_document 100502
+write_document 100503
+write_document 100504
+write_document 100505
+
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}"
+
+wait_for_restorable_time backup-minio-3
+wait_for_advanced_restorable_time backup-minio-3
+restore_time=$(get_latest_restorable_time backup-minio-3)
+check_recovery backup-minio-3 "$(format_pitr_target ${restore_time})"
+
+log "changing main storage from minio-1 to minio-2"
+kubectl patch psmdb ${cluster} --type=json -p='[
+  {"op": "remove", "path": "/spec/backup/storages/minio-1/main"},
+  {"op": "add", "path": "/spec/backup/storages/minio-2/main", "value": true}
+]'
+
+run_backup minio-2 backup-minio-2-1 logical
+wait_backup backup-minio-2-1
+
+write_document 100506
+write_document 100507
+write_document 100508
+write_document 100509
+write_document 100510
+
+compare_mongo_cmd "find" \
+	"myApp:myPass@${cluster}-rs0.${namespace}" \
+	"-2nd" \
+	".svc.cluster.local" \
+	myApp \
+	test \
+	'sort( { x: 1 } )'
+
+wait_for_restorable_time backup-minio-2-1
+wait_for_advanced_restorable_time backup-minio-2-1
+restore_time=$(get_latest_restorable_time backup-minio-2-1)
+check_recovery backup-minio-2-1 "$(format_pitr_target ${restore_time})" "-2nd"
+
+log "dropping pbmBackups collection and starting resync"
+drop_metadata_and_resync
+
+log "checking backup deletion"
+check_backup_deletion
+
+destroy $namespace
+log "test passed"
+

@@ -12,22 +12,23 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, bcp *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	log := logf.FromContext(ctx)
 	var err error
 
 	status := cr.Status
 
-	var (
-		backupName  = bcp.Status.PBMname
-		storageName = bcp.Spec.StorageName
-	)
+	backupName := bcp.Status.PBMname
 
 	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
@@ -38,16 +39,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 	defer pbmc.Close(ctx)
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
-		storage, err := r.getStorage(cr, cluster, storageName)
-		if err != nil {
-			return status, errors.Wrap(err, "get storage")
-		}
-
 		// Disable PITR before restore
-		cluster.Spec.Backup.PITR.Enabled = false
-		err = pbmc.GetNSetConfig(ctx, r.client, cluster, storage)
-		if err != nil {
-			return status, errors.Wrap(err, "set pbm config")
+		if err := pbmc.SetConfigVar(ctx, "pitr.enabled", "false"); err != nil {
+			return status, errors.Wrap(err, "disable pitr")
 		}
 
 		isBlockedByPITR, err := pbmc.HasLocks(ctx, backup.IsPITRLock)
@@ -100,7 +94,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(ctx conte
 }
 
 func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec) (err error) {
-	if !backup.IsEnabledPITR() {
+	if !backup.IsPITREnabled() {
 		return
 	}
 
@@ -115,17 +109,6 @@ func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec
 func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec, selective *psmdbv1.SelectiveRestoreOpts) (string, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Starting logical restore", "backup", backup)
-
-	cfg, err := pbmc.GetConfig(ctx)
-	if err != nil {
-		return "", errors.Wrap(err, "get PBM config")
-	}
-
-	if cfg.Storage.Type != storage.Filesystem {
-		if err := pbmc.ResyncStorage(ctx, &cfg.Storage); err != nil {
-			return "", errors.Wrap(err, "resync storage")
-		}
-	}
 
 	var (
 		cmd   ctrl.Cmd
@@ -179,7 +162,7 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 	}
 
 	log.Info("Sending restore command", "restoreCmd", cmd.Restore)
-	if err = pbmc.SendCmd(ctx, cmd); err != nil {
+	if err := pbmc.SendCmd(ctx, cmd); err != nil {
 		return "", errors.Wrap(err, "send restore cmd")
 	}
 

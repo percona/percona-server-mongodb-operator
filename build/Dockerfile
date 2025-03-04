@@ -7,6 +7,7 @@ RUN go mod download
 
 ARG GIT_COMMIT
 ARG GIT_BRANCH
+ARG BUILD_TIME
 ARG GO_LDFLAGS
 ARG GOOS=linux
 ARG TARGETARCH
@@ -16,7 +17,7 @@ COPY . .
 
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-       go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
+       go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
            -o build/_output/bin/percona-server-mongodb-operator \
                cmd/manager/main.go \
     && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator

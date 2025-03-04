@@ -145,3 +145,58 @@ func TestReplsetSpec_GetPort(t *testing.T) {
 		})
 	}
 }
+
+func TestBackupSpec_MainStorage(t *testing.T) {
+	tests := map[string]struct {
+		spec        BackupSpec
+		expected    string
+		expectedErr error
+	}{
+		"no storages": {
+			spec:        BackupSpec{},
+			expected:    "",
+			expectedErr: ErrNoMainStorage,
+		},
+		"single storage": {
+			spec: BackupSpec{
+				Storages: map[string]BackupStorageSpec{
+					"storage-1": {
+						Type: BackupStorageS3,
+						S3:   BackupStorageS3Spec{},
+					},
+				},
+			},
+			expected:    "storage-1",
+			expectedErr: nil,
+		},
+		"multiple storages": {
+			spec: BackupSpec{
+				Storages: map[string]BackupStorageSpec{
+					"storage-1": {
+						Type: BackupStorageS3,
+						S3:   BackupStorageS3Spec{},
+					},
+					"storage-2": {
+						Main: true,
+						Type: BackupStorageS3,
+						S3:   BackupStorageS3Spec{},
+					},
+					"storage-3": {
+						Type: BackupStorageS3,
+						S3:   BackupStorageS3Spec{},
+					},
+				},
+			},
+			expected:    "storage-2",
+			expectedErr: nil,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			stgName, _, err := tt.spec.MainStorage()
+			assert.Equal(t, tt.expected, stgName)
+			assert.Equal(t, tt.expectedErr, err)
+		})
+	}
+}
