@@ -1054,6 +1054,8 @@ func (b BackupSpec) IsPITREnabled() bool {
 	return b.PITR.Enabled
 }
 
+var ErrNoMainStorage = errors.New("main storage not found")
+
 func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
 	if len(b.Storages) == 1 {
 		for name, stg := range b.Storages {
@@ -1069,7 +1071,7 @@ func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
 		return name, stg, nil
 	}
 
-	return "", BackupStorageSpec{}, errors.New("main storage not found")
+	return "", BackupStorageSpec{}, ErrNoMainStorage
 }
 
 type Arbiter struct {
