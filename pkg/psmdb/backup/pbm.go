@@ -853,48 +853,57 @@ func (b *pbmC) WaitForResync(ctx context.Context) error {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
-	log.Info("waiting for resync to start")
-start:
-	for {
-		select {
-		case <-startCtx.Done():
-			return errors.New("resync is not started until deadline")
-		case <-ticker.C:
-			resyncRunning, err := b.HasLocks(startCtx, IsResync)
-			if err != nil {
-				return errors.Wrap(err, "check PBM locks")
-			}
+	wait_resync_start := func() error {
+		for {
+			select {
+			case <-startCtx.Done():
+				return errors.New("resync is not started until deadline")
+			case <-ticker.C:
+				resyncRunning, err := b.HasLocks(startCtx, IsResync)
+				if err != nil {
+					return errors.Wrap(err, "check PBM locks")
+				}
 
-			if resyncRunning {
-				break start
+				if resyncRunning {
+					return nil
+				}
 			}
 		}
 	}
 
-	log.Info("waiting for resync to finish")
+	log.Info("waiting for resync to start (up to 30 seconds)")
+	if err := wait_resync_start(); err != nil {
+		return errors.Wrap(err, "wait for resync to start")
+	}
 
 	ticker.Reset(1 * time.Second)
 
 	finishCtx, finishCancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer finishCancel()
 
-finish:
-	for {
-		select {
-		case <-finishCtx.Done():
-			return errors.New("resync is not finished until deadline")
-		case <-ticker.C:
-			resyncRunning, err := b.HasLocks(finishCtx, IsResync)
-			if err != nil {
-				return errors.Wrap(err, "check PBM locks")
-			}
+	wait_resync_finish := func() error {
+		for {
+			select {
+			case <-finishCtx.Done():
+				return errors.New("resync is not finished until deadline")
+			case <-ticker.C:
+				resyncRunning, err := b.HasLocks(finishCtx, IsResync)
+				if err != nil {
+					return errors.Wrap(err, "check PBM locks")
+				}
 
-			if !resyncRunning {
-				break finish
-			}
+				if !resyncRunning {
+					return nil
+				}
 
-			log.V(1).Info("resync is running")
+				log.V(1).Info("resync is running")
+			}
 		}
+	}
+
+	log.Info("waiting for resync to finish (up to 2 hours)")
+	if err := wait_resync_finish(); err != nil {
+		return errors.Wrap(err, "wait for resync to finish")
 	}
 
 	log.Info("resync finished")
