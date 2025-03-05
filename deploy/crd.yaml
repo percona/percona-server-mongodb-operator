@@ -1095,6 +1095,8 @@ spec:
                           enum:
                           - logical
                           - physical
+                          - incremental
+                          - incremental-base
                           type: string
                       required:
                       - enabled

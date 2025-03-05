@@ -19,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -113,6 +115,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 		for _, t := range tasksList.Items {
 			if spec, ok := ctasks[t.Name]; ok {
+				// TODO: make .keep to work with incremental backups
+				if spec.Type == defs.IncrementalBackup || spec.Type == api.BackupTypeIncrementalBase {
+					continue
+				}
 				if spec.Keep > 0 {
 					oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
 					if err != nil {
@@ -196,7 +202,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteBackupTask(cr *api.PerconaServerMo
 	r.crons.crons.Remove(job.(BackupScheduleJob).JobID)
 }
 
-// oldScheduledBackups returns list of the most old psmdb-bakups that execeed `keep` limit
+// oldScheduledBackups returns list of the most old psmdb-backups that execeed `keep` limit
 func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context, cr *api.PerconaServerMongoDB,
 	ancestor string, keep int,
 ) ([]api.PerconaServerMongoDBBackup, error) {
