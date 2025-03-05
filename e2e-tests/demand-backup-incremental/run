@@ -1,0 +1,167 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+run_backup() {
+	local storage=$1
+	local backup_name=$2
+	local base=${3:-true}
+
+	local backup_type="incremental"
+
+	if [[ $base == "true" ]]; then
+		backup_type="incremental-base"
+	fi
+
+	yq "$test_dir/conf/backup.yml" \
+		| $sed -e "s/name:/name: ${backup_name}/" \
+		| $sed -e "s/storageName:/storageName: ${storage}/" \
+		| yq ".spec.type=\"${backup_type}\"" \
+		| kubectl_bin apply -f -
+}
+
+run_restore() {
+	local backup_name=$1
+
+	log "drop collection"
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+	log "check backup and restore -- $backup_name"
+
+	yq "$test_dir/conf/restore.yml" \
+		| $sed -e "s/name:/name: restore-${backup_name}/" \
+		| $sed -e "s/backupName:/backupName: ${backup_name}/" \
+		| kubectl_bin apply -f -
+}
+
+run_recovery_check() {
+	local backup_name=$1
+	local compare_suffix=${2:-"_restore"}
+	local base=${3:-true}
+
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
+	echo
+
+	compare_kubectl "statefulset/${cluster}-rs0" "${compare_suffix}"
+
+	# we don't wait for cluster readiness here because the annotation gets removed then
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "1800"
+
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
+		exit 1
+	fi
+	echo
+
+	wait_cluster_consistency ${cluster}
+	wait_for_pbm_operations ${cluster}
+
+	if [[ $base == true ]]; then
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+	else
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "-not-base"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "-not-base"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "-not-base"
+	fi
+}
+
+create_infra "${namespace}"
+
+deploy_minio
+apply_s3_storage_secrets
+
+desc 'Testing on not sharded cluster'
+
+log "Creating PSMDB cluster"
+cluster="some-name"
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+log "check if all pods started"
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency ${cluster}
+
+log 'writing test data'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+
+log 'running backups'
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	backup_name_aws="backup-aws-s3"
+	backup_name_gcp="backup-gcp-cs"
+	backup_name_azure="backup-azure-blob"
+
+	run_backup aws-s3 ${backup_name_aws}
+	run_backup gcp-cs ${backup_name_gcp}
+	run_backup azure-blob ${backup_name_azure}
+
+	wait_backup "${backup_name_aws}"
+	wait_backup "${backup_name_gcp}"
+	wait_backup "${backup_name_azure}"
+fi
+
+backup_name_minio="backup-minio"
+run_backup minio ${backup_name_minio}
+wait_backup "${backup_name_minio}"
+
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100501 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "-not-base"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "-not-base"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "-not-base"
+
+backup_name_minio_not_base="backup-minio-not-base"
+run_backup minio "${backup_name_minio_not_base}" false
+wait_backup "${backup_name_minio_not_base}"
+
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	run_restore "${backup_name_aws}"
+	run_recovery_check "${backup_name_aws}"
+
+	run_restore "${backup_name_gcp}"
+	run_recovery_check "${backup_name_gcp}"
+
+	run_restore "${backup_name_azure}"
+	run_recovery_check "${backup_name_azure}"
+fi
+
+run_restore "${backup_name_minio_not_base}"
+run_recovery_check "${backup_name_minio_not_base}" "" false
+
+run_restore "${backup_name_minio}"
+run_recovery_check "${backup_name_minio}"
+
+desc 'Testing with arbiter and non-voting nodes'
+
+apply_cluster "${test_dir}/conf/${cluster}-arbiter-nv.yml"
+log "check if all pods started"
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency ${cluster}
+
+log 'running backups'
+backup_name_minio="backup-minio-arbiter-nv"
+run_backup minio ${backup_name_minio}
+wait_backup "${backup_name_minio}"
+
+run_restore ${backup_name_minio}
+run_recovery_check ${backup_name_minio} "_restore-arbiter-nv"
+
+destroy "$namespace"
