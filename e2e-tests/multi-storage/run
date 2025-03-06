@@ -69,7 +69,7 @@ drop_metadata_and_resync() {
 	local backup_count=$(kubectl exec ${cluster}-rs0-0 -c backup-agent -- pbm list -o json | jq '.snapshots | length')
 	log "there are ${backup_count} backups in pbmBackups collection after resync"
 
-	if [[ ${psmdb_backup_count} != ${backup_count} ]]; then
+	if [[ $(echo "${psmdb_backup_count}" | xargs) != $(echo "${backup_count}" | xargs) ]]; then # xargs is used to trim spaces
 		echo "expected ${psmdb_backup_count}, got ${backup_count}"
 		exit 1
 	fi
@@ -319,4 +319,3 @@ check_backup_deletion
 
 destroy $namespace
 log "test passed"
-
