@@ -88,6 +88,10 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 			return errors.Wrapf(err, "can't parse cronjob schedule for backup %s with schedule %s", task.Name, task.Schedule)
 		}
 
+		if !ok && t.Type == defs.IncrementalBackup {
+			logf.FromContext(ctx).Info(".keep option does not work with incremental backups", "name", task.Name, "namespace", cr.Namespace)
+		}
+
 		r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
 			BackupTaskSpec: task,
 			JobID:          jobID,
@@ -116,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 		for _, t := range tasksList.Items {
 			if spec, ok := ctasks[t.Name]; ok {
 				// TODO: make .keep to work with incremental backups
-				if spec.Type == defs.IncrementalBackup || spec.Type == api.BackupTypeIncrementalBase {
+				if spec.Type == defs.IncrementalBackup {
 					continue
 				}
 				if spec.Keep > 0 {

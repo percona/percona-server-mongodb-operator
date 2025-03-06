@@ -412,7 +412,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		"storage", cr.Status.StorageName,
 	)
 
-	if cr.Spec.Type == defs.IncrementalBackup || cr.Spec.Type == psmdbv1.BackupTypeIncrementalBase {
+	if cr.Spec.Type == defs.IncrementalBackup {
 		log.Info("Skipping " + naming.FinalizerDeleteBackup + " finalizer. It's not supported for incremental backups")
 		return nil
 	}
