@@ -550,7 +550,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
-		if len(cr.Spec.Backup.Storages) > 1 {
+		if cr.CompareVersion("1.20.0") >= 0 && len(cr.Spec.Backup.Storages) > 1 {
 			main := 0
 			for _, stg := range cr.Spec.Backup.Storages {
 				if stg.Main {
