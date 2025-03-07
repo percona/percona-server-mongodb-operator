@@ -632,6 +632,7 @@ spec:
 #      privileged: false
 #    storages:
 #      s3-us-west:
+#        main: true
 #        type: s3
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
