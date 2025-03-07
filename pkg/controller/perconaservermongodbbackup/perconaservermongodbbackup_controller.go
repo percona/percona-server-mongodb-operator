@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
@@ -410,6 +411,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		"pbmName", cr.Status.PBMname,
 		"storage", cr.Status.StorageName,
 	)
+
+	if cr.Spec.Type == defs.IncrementalBackup {
+		log.Info("Skipping " + naming.FinalizerDeleteBackup + " finalizer. It's not supported for incremental backups")
+		return nil
+	}
 
 	var meta *backup.BackupMeta
 	var err error
