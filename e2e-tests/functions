@@ -1164,6 +1164,7 @@ cat_config() {
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '(.spec | select(.updateStrategy == null)).updateStrategy= "SmartUpdate"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
