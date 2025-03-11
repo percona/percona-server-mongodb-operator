@@ -281,17 +281,20 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		},
 	}
 
-	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
+	if opts := cluster.Spec.Backup.Configuration.BackupOptions; opts != nil {
 		conf.Backup = &config.BackupConf{
-			OplogSpanMin:           cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
-			NumParallelCollections: cluster.Spec.Backup.Configuration.BackupOptions.NumParallelCollections,
-			Timeouts: &config.BackupTimeouts{
-				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
-			},
+			OplogSpanMin:           opts.OplogSpanMin,
+			NumParallelCollections: opts.NumParallelCollections,
 		}
 
-		if cluster.Spec.Backup.Configuration.BackupOptions.Priority != nil {
-			conf.Backup.Priority = cluster.Spec.Backup.Configuration.BackupOptions.Priority
+		if opts.Timeouts != nil {
+			conf.Backup.Timeouts = &config.BackupTimeouts{
+				Starting: opts.Timeouts.Starting,
+			}
+		}
+
+		if opts.Priority != nil {
+			conf.Backup.Priority = opts.Priority
 		} else {
 			priority, err := GetPriorities(ctx, k8sclient, cluster)
 			if err != nil {
