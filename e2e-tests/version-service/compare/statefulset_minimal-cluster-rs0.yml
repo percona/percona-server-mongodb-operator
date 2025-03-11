@@ -193,9 +193,7 @@ spec:
             defaultMode: 420
             secretName: internal-minimal-cluster-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

@@ -330,9 +330,7 @@ spec:
             defaultMode: 420
             secretName: internal-monitoring-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

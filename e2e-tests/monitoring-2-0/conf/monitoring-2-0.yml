@@ -64,6 +64,7 @@ spec:
 
 
               if [[ $EUID != 1000 ]]; then
+
                   # logrotate requires UID in /etc/passwd
                   sed -e "s^x:1000:^x:$EUID:^" /etc/passwd > /tmp/passwd
                   cat /tmp/passwd > /etc/passwd
@@ -71,6 +72,7 @@ spec:
               fi
 
               if [ ! -f /pmmdata/app-init ]; then
+
                   # the PV hasn't been initialized, so copy over default
                   # pmm-server directories before symlinking
                   mkdir -p /pmmdata
@@ -114,8 +116,7 @@ spec:
               ln -s /pmmdata/clickhouse       /srv/
 
 
-              sed -ri "s/(^log_directory = ).*/\1\'\/srv\/logs\'/g"
-              /pmmdata/postgres/postgresql.conf
+              sed -ri "s/(^log_directory = ).*/\1\'\/srv\/logs\'/g" /pmmdata/postgres/postgresql.conf
 
               chmod 700 /pmmdata/postgres
 
@@ -134,13 +135,12 @@ spec:
 
               ln -s /srv/grafana /usr/share/grafana/data
 
-              grafana-cli --homepath=/usr/share/grafana
-              --config=/etc/grafana/grafana.ini admin reset-admin-password
-              "$ADMIN_PASSWORD"
+              grafana-cli --homepath=/usr/share/grafana --config=/etc/grafana/grafana.ini admin reset-admin-password "$ADMIN_PASSWORD"
 
 
 
               bash -x /opt/entrypoint.sh
+
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       dnsPolicy: ClusterFirst
@@ -169,7 +169,7 @@ spec:
   serviceName: monitoring
   podManagementPolicy: OrderedReady
   updateStrategy:
-    type: RollingUpdate
+    type: OnDelete
   revisionHistoryLimit: 10
 ---
 kind: Service

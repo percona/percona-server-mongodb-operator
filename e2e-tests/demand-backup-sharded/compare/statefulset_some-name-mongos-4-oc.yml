@@ -203,6 +203,4 @@ spec:
         - emptyDir: {}
           name: bin
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
