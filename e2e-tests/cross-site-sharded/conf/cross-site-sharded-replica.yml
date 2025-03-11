@@ -7,12 +7,12 @@ spec:
   unmanaged: true
   image:
   imagePullPolicy: Always
+  updateStrategy: RollingUpdate
   secrets:
     users: cross-site-sharded-replica-secrets
     ssl: cross-site-sharded-replica-ssl
     sslInternal: cross-site-sharded-replica-ssl-internal
   replsets:
-
   - name: rs0
     size: 3
     affinity:

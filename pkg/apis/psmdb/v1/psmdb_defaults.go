@@ -599,6 +599,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.ClusterServiceDNSMode = DNSModeInternal
 	}
 
+	if len(cr.Spec.UpdateStrategy) == 0 {
+		cr.Spec.UpdateStrategy = SmartUpdateStatefulSetStrategyType
+	}
+
 	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
 		return errors.New("SmartUpdate is not allowed on unmanaged clusters, set updateStrategy to RollingUpdate or OnDelete")
 	}

@@ -12,6 +12,7 @@ spec:
   clusterServiceDNSMode: "Internal"
   image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
+  updateStrategy: RollingUpdate
   secrets:
     users: mydb-custom-users
     ssl: mydb-custom-ssl
@@ -19,7 +20,6 @@ spec:
     encryptionKey: mydb-custom-encryption-key
     keyFile: mydb-custom-mongodb-keyfile
   replsets:
-
   - name: rs0
     size: 2
     affinity:
