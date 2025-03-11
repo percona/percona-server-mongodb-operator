@@ -5,6 +5,7 @@ metadata:
 spec:
   clusterServiceDNSMode: External
   unmanaged: true
+  updateStrategy: RollingUpdate
   image:
   imagePullPolicy: Always
   updateStrategy: RollingUpdate

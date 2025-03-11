@@ -3,6 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: mydb
 spec:
+  updateStrategy: RollingUpdate
   tls:
     mode: allowTLS
   unmanaged: true
