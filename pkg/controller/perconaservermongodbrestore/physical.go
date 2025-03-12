@@ -127,6 +127,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	if cr.Status.State == psmdbv1.RestoreStateWaiting {
 		rs := replsets[0]
 
+		pbmAgentsReady, err := r.checkIfPBMAgentsReadyForPhysicalRestore(ctx, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "check if pbm agents are ready")
+		}
+
+		if !pbmAgentsReady {
+			log.Info("Waiting for pbm-agents to be ready before restore", "ready", pbmAgentsReady)
+			return status, nil
+		}
+
 		pod := corev1.Pod{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: rs.PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
 			return status, errors.Wrap(err, "get pod")
@@ -140,7 +150,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
-			return strings.Contains(err.Error(), "another operation")
+			return (strings.Contains(err.Error(), "another operation") ||
+				strings.Contains(err.Error(), "unable to upgrade connection"))
 		}, func() error {
 			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
 
@@ -405,6 +416,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 					Optional: &f,
 				},
 			},
+		},
+		{
+			Name:  "PBM_AGENT_SIDECAR",
+			Value: "true",
+		},
+		{
+			Name:  "PBM_AGENT_SIDECAR_SLEEP",
+			Value: "5",
 		},
 	}
 	if cluster.CompareVersion("1.19.0") < 0 {
@@ -948,4 +967,74 @@ func (r *ReconcilePerconaServerMongoDBRestore) waitForPBMOperationsToFinish(ctx 
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) checkIfPBMAgentsReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	err := retry.OnError(anotherOpBackoff, func(err error) bool {
+		return strings.Contains(err.Error(), "unable to upgrade connection")
+	}, func() error {
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+
+		pod := corev1.Pod{}
+		nn := types.NamespacedName{Name: cluster.Spec.Replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}
+		if err := r.client.Get(ctx, nn, &pod); err != nil {
+			return errors.Wrap(err, "get pod")
+		}
+
+		container := "mongod"
+		pbmBinary := "/opt/percona/pbm"
+		for _, c := range pod.Spec.Containers {
+			if c.Name == naming.ContainerBackupAgent {
+				container = c.Name
+				pbmBinary = "pbm"
+			}
+		}
+
+		command := []string{pbmBinary, "status", "-s", "cluster", "--out", "json"}
+		err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
+		if err != nil {
+			return errors.Wrap(err, "get pbm status")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	var pbmStatus struct {
+		Cluster []struct {
+			Name  string `json:"rs"`
+			Nodes []struct {
+				Host string `json:"host"`
+				Role string `json:"role"`
+				Ok   bool   `json:"ok"`
+			}
+		} `json:"cluster"`
+	}
+
+	if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
+		return false, errors.Wrap(err, "unmarshal PBM status output")
+	}
+
+	for _, replset := range pbmStatus.Cluster {
+		for _, node := range replset.Nodes {
+			if node.Role == "A" { // arbiter
+				continue
+			}
+
+			if !node.Ok {
+				log.Info("pbm-agent is not ready", "replset", replset.Name, "host", node.Host)
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
 }
