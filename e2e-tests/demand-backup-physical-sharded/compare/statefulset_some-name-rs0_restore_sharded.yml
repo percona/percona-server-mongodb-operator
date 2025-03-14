@@ -80,6 +80,10 @@ spec:
                   key: MONGODB_BACKUP_PASSWORD_ESCAPED
                   name: internal-some-name-users
                   optional: false
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -244,9 +248,7 @@ spec:
             defaultMode: 420
             secretName: some-name-pbm-config
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

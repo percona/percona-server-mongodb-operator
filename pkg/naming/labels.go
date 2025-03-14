@@ -44,25 +44,25 @@ func ExternalServiceLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpe
 
 func MongodLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
 	ls := RSLabels(cr, replset)
-	ls[LabelKubernetesComponent] = "mongod"
+	ls[LabelKubernetesComponent] = ComponentMongod
 	return ls
 }
 
 func ArbiterLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
 	ls := RSLabels(cr, replset)
-	ls[LabelKubernetesComponent] = "arbiter"
+	ls[LabelKubernetesComponent] = ComponentArbiter
 	return ls
 }
 
 func NonVotingLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
 	ls := RSLabels(cr, replset)
-	ls[LabelKubernetesComponent] = "nonVoting"
+	ls[LabelKubernetesComponent] = ComponentNonVoting
 	return ls
 }
 
 func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	ls := ClusterLabels(cr)
-	ls[LabelKubernetesComponent] = "mongos"
+	ls[LabelKubernetesComponent] = ComponentMongos
 	return ls
 }
 
