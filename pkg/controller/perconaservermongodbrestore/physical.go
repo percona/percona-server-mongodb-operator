@@ -1062,7 +1062,7 @@ func getPBMBinaryAndContainerForExec(pod *corev1.Pod) (string, string) {
 
 	for _, c := range pod.Spec.Containers {
 		if c.Name == naming.ContainerBackupAgent {
-			return c.Name, pbmBinary
+			return naming.ContainerBackupAgent, "pbm"
 		}
 	}
 
