@@ -516,8 +516,6 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			log.Error(err, "failed to delete annotation")
 			return
 		}
-
-		log.Info("resync is finished")
 	}()
 
 	return nil
