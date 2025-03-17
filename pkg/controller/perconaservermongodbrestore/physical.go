@@ -882,14 +882,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	container := "mongod"
-	pbmBinary := "/opt/percona/pbm"
-	for _, c := range pod.Spec.Containers {
-		if c.Name == naming.ContainerBackupAgent {
-			container = c.Name
-			pbmBinary = "pbm"
-		}
-	}
+	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
 	command := []string{pbmBinary, "status", "--out", "json"}
 	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
@@ -923,14 +916,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) disablePITR(ctx context.Context, 
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	container := "mongod"
-	pbmBinary := "/opt/percona/pbm"
-	for _, c := range pod.Spec.Containers {
-		if c.Name == naming.ContainerBackupAgent {
-			container = c.Name
-			pbmBinary = "pbm"
-		}
-	}
+	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
 	command := []string{pbmBinary, "config", "--set", "pitr.enabled=false"}
 	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
@@ -953,14 +939,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) waitForPBMOperationsToFinish(ctx 
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	container := "mongod"
-	pbmBinary := "/opt/percona/pbm"
-	for _, c := range pod.Spec.Containers {
-		if c.Name == naming.ContainerBackupAgent {
-			container = c.Name
-			pbmBinary = "pbm"
-		}
-	}
+	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
 	waitErr := errors.New("waiting for PBM operation to finish")
 	err := retry.OnError(wait.Backoff{
@@ -1032,14 +1011,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfPBMAgentsReadyForPhysicalR
 			return errors.Wrap(err, "get pod")
 		}
 
-		container := "mongod"
-		pbmBinary := "/opt/percona/pbm"
-		for _, c := range pod.Spec.Containers {
-			if c.Name == naming.ContainerBackupAgent {
-				container = c.Name
-				pbmBinary = "pbm"
-			}
-		}
+		container, pbmBinary := getPBMBinaryAndContainerForExec(&pod)
 
 		command := []string{pbmBinary, "status", "-s", "cluster", "--out", "json"}
 		err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
@@ -1082,4 +1054,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfPBMAgentsReadyForPhysicalR
 	}
 
 	return true, nil
+}
+
+func getPBMBinaryAndContainerForExec(pod *corev1.Pod) (string, string) {
+	container := "mongod"
+	pbmBinary := "/opt/percona/pbm"
+
+	for _, c := range pod.Spec.Containers {
+		if c.Name == naming.ContainerBackupAgent {
+			return c.Name, pbmBinary
+		}
+	}
+
+	return container, pbmBinary
 }

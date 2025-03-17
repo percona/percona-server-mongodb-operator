@@ -30,10 +30,6 @@ func MongodStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Replset
 	return fmt.Sprintf("%s-%s", cr.Name, rs.Name)
 }
 
-func MongosStatefulSetName(cr *psmdbv1.PerconaServerMongoDB) string {
-	return fmt.Sprintf("%s-mongos", cr.Name)
-}
-
 func NonVotingStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-nv", cr.Name, rs.Name)
 }
