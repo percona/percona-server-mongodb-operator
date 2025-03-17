@@ -119,8 +119,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		return errors.Wrap(err, "set config")
 	}
 
-	if !reflect.DeepEqual(currentCfg.Storage, main.Storage) {
+	if isResyncNeeded(currentCfg, &main) {
 		log.Info("resync storage", "storage", mainStgName)
+		log.V(1).Info("main storage changed", "old", currentCfg.Storage, "new", main.Storage)
 
 		if err := pbm.ResyncMainStorage(ctx); err != nil {
 			return errors.Wrap(err, "resync")
@@ -139,6 +140,52 @@ func hashPBMConfiguration(c []config.Config) (string, error) {
 	}
 
 	return sha256Hash(v), nil
+}
+
+func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
+	if currentCfg.Storage.Type != newCfg.Storage.Type {
+		return true
+	}
+
+	if currentCfg.Storage.S3 != nil && newCfg.Storage.S3 != nil {
+		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region {
+			return true
+		}
+
+		if currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
+			return true
+		}
+	}
+
+	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
+		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
+			return true
+		}
+	}
+
+	if currentCfg.Storage.Filesystem != nil && newCfg.Storage.Filesystem != nil {
+		if currentCfg.Storage.Filesystem.Path != newCfg.Storage.Filesystem.Path {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
@@ -469,8 +516,6 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			log.Error(err, "failed to delete annotation")
 			return
 		}
-
-		log.Info("resync is finished")
 	}()
 
 	return nil
