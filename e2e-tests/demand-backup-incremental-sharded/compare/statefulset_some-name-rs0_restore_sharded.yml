@@ -248,9 +248,7 @@ spec:
             defaultMode: 420
             secretName: some-name-pbm-config
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
