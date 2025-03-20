@@ -579,8 +579,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 	stderrBuf := &bytes.Buffer{}
 
 	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
-		log.V(1).Info("Cmd failed", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
-		return stdoutBuf, stderrBuf, errors.Wrap(err, "cmd failed")
+		return stdoutBuf, stderrBuf, errors.Wrapf(err, "cmd failed (stdout: %s, stderr: %s)", stdoutBuf.String(), stderrBuf.String())
 	}
 	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
 
