@@ -7,7 +7,6 @@ metadata:
     app.kubernetes.io/instance: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb-operator
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: "v1.18.0"
 spec:
   replicas: 1
   selector:
@@ -16,7 +15,6 @@ spec:
       app.kubernetes.io/instance: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb-operator
       app.kubernetes.io/part-of: percona-server-mongodb-operator 
-      app.kubernetes.io/version: "v1.18.0"
   template:
     metadata:
       labels:
@@ -24,7 +22,6 @@ spec:
         app.kubernetes.io/instance: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb-operator
         app.kubernetes.io/part-of: percona-server-mongodb-operator
-        app.kubernetes.io/version: "v1.18.0"
     spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
