@@ -191,6 +191,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return (strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
+			strings.Contains(err.Error(), "unable to upgrade connection") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
 	}, func() error {
 		stdoutBuf.Reset()
