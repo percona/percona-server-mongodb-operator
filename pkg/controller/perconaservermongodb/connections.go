@@ -18,7 +18,7 @@ type MongoClientProvider interface {
 	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error)
 }
 
-func (r *ReconcilePerconaServerMongoDB) MongoClientProvider() MongoClientProvider {
+func (r *ReconcilePerconaServerMongoDB) getMongoClientProvider() MongoClientProvider {
 	if r.mongoClientProvider == nil {
 		return &mongoClientProvider{r.client}
 	}
@@ -57,11 +57,11 @@ func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaSer
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
-	return r.MongoClientProvider().Mongo(ctx, cr, rs, role)
+	return r.getMongoClientProvider().Mongo(ctx, cr, rs, role)
 }
 
 func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
-	return r.MongoClientProvider().Mongos(ctx, cr, role)
+	return r.getMongoClientProvider().Mongos(ctx, cr, role)
 }
 
 func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod) (mongo.Client, error) {
@@ -69,5 +69,5 @@ func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Con
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get mongo host")
 	}
-	return r.MongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled())
+	return r.getMongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled())
 }

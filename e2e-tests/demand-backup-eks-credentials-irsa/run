@@ -66,17 +66,17 @@ compare_kubectl statefulset/$cluster-rs0
 
 desc "update service accounts for operator and default (our cluster uses this one)"
 
-kubectl_bin annotate serviceaccount default \
+kubectl_bin annotate serviceaccount default  \
 	eks.amazonaws.com/role-arn="$role_arn" \
 	--overwrite
 
-kubectl_bin annotate serviceaccount percona-server-mongodb-operator \
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} annotate serviceaccount percona-server-mongodb-operator \
 	eks.amazonaws.com/role-arn="$role_arn" \
 	--overwrite
 
 desc "restart operator and cluster"
 operator_pod=$(get_operator_pod)
-kubectl_bin delete pod $operator_pod
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} delete pod $operator_pod
 
 kubectl_bin delete pod "$cluster-rs0-0"
 kubectl_bin delete pod "$cluster-rs0-1"

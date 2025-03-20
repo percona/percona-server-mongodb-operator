@@ -5,9 +5,8 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1"
 OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod7.0"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod5.0
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
@@ -16,7 +15,8 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.16.1"
+CERT_MANAGER_VER="1.16.3"
+UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -69,7 +69,9 @@ fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 log() {
+	set +o xtrace
 	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+	set_debug
 }
 
 set_debug() {
@@ -199,15 +201,14 @@ wait_backup_agent() {
 	local agent_pod=$1
 
 	set +o xtrace
-	retry=0
-	echo -n $agent_pod
-	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+	local retry=0
+	echo -n "waiting for pbm-agent to be ready in ${agent_pod}..."
+	until kubectl_bin logs $agent_pod -c backup-agent | grep "listening for the commands"; do
 		sleep 5
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
-			kubectl_bin logs $agent_pod -c backup-agent \
-				| tail -100
+			kubectl_bin logs $agent_pod -c backup-agent | tail -100
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -342,16 +343,21 @@ wait_restore() {
 	local target_state=${3:-"ready"}
 	local wait_cluster_consistency=${4:-1}
 	local wait_time=${5:-1780}
+	local ok_if_ready=${6:-0}
 
 	set +o xtrace
 	retry=0
 	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
 	local current_state=
 	until [[ ${current_state} == ${target_state} ]]; do
-		sleep 1
+		sleep 0.5
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
+			echo "OK"
+			break
+		fi
 		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
@@ -365,7 +371,7 @@ wait_restore() {
 			exit 1
 		fi
 	done
-	echo
+	echo "OK"
 	set_debug
 
 	if [ $wait_cluster_consistency -eq 1 ]; then
@@ -461,10 +467,17 @@ deploy_minio() {
 		kubectl_bin create svc -n ${OPERATOR_NS} externalname minio-service --external-name="minio-service.${namespace}.svc.cluster.local" --tcp="9000"
 	fi
 
-	# create bucket
+	create_minio_bucket operator-testing
+}
+
+create_minio_bucket() {
+	local bucket=$1
+
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
+		AWS_SECRET_ACCESS_KEY=some-secret-key \
+		AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://${bucket}"
 }
 
 deploy_vault() {
@@ -721,7 +734,12 @@ compare_kubectl() {
 	if [ -n "$skip_generation_check" ]; then
 		yq -i eval 'del(.metadata.generation)' ${new_result}
 	fi
-	diff -u "$expected_result" "$new_result"
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u "$expected_result" "$new_result"
+	else
+		cp ${new_result} ${expected_result}
+	fi
 }
 
 run_mongo() {
@@ -757,9 +775,16 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "printf '$command\n' | mongo $driver://$uri$suffixt/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -768,11 +793,19 @@ run_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+	local mongo_bin=${7:-mongo}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_script_mongos() {
@@ -780,13 +813,15 @@ run_script_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local mongo_bin=${6:-mongo}
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "${mongo_bin} $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_pmm_service_ip() {
@@ -832,11 +867,20 @@ compare_mongo_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local sort="$7"
 
-	run_mongo "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
+	local full_command="db.${collection}.${command}()"
+	if [[ ! -z ${sort} ]]; then
+		full_command="${full_command}.${sort}"
+	fi
+
+	log "running ${full_command} in ${database}"
+
+	run_mongo "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
+
 	diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
 }
 
@@ -847,8 +891,9 @@ compare_mongos_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local port="${7:-27017}"
 
-	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
+	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
@@ -1340,7 +1385,7 @@ function run_simple_cli_inside_image() {
 	local pod_name=${RANDOM}
 	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
-	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
+	local output=$(kubectl_bin -n default exec ${pod_name} -- bash -c "${cli} 2>&1")
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
 	echo ${output}
 }
@@ -1421,11 +1466,12 @@ insert_data_mongos() {
 	local data=$1
 	local db_name=$2
 	local flags=$3
+	local port=${4:-"27017"}
 
 	run_mongos \
 		"use ${db_name}\n db.test.insert({ x: ${data} })" \
 		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
-		"$flags"
+		"$flags" "$port"
 }
 
 deploy_pmm_server() {

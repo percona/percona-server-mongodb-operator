@@ -1633,13 +1633,9 @@ func (in *ReplsetStatus) DeepCopyInto(out *ReplsetStatus) {
 	*out = *in
 	if in.Members != nil {
 		in, out := &in.Members, &out.Members
-		*out = make([]*ReplsetMemberStatus, len(*in))
-		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(ReplsetMemberStatus)
-				**out = **in
-			}
+		*out = make(map[string]ReplsetMemberStatus, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
 		}
 	}
 	if in.AddedAsShard != nil {

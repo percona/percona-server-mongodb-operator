@@ -8,6 +8,8 @@ data-at-rest-encryption
 data-sharded
 default-cr
 demand-backup
+demand-backup-incremental
+demand-backup-incremental-sharded
 demand-backup-physical
 demand-backup-physical-sharded
 demand-backup-sharded
@@ -19,8 +21,8 @@ mongod-major-upgrade-sharded
 non-voting
 one-pod
 pitr
-pitr-sharded
 pitr-physical
+pitr-sharded
 recover-no-primary
 replset-overrides
 rs-shard-migration

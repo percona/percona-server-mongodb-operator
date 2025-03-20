@@ -22,10 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -102,6 +104,9 @@ type ReconcilePerconaServerMongoDBBackup struct {
 func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := logf.FromContext(ctx)
 
+	log.V(1).Info("Reconciling")
+	defer log.V(1).Info("Reconcile finished")
+
 	rr := reconcile.Result{
 		RequeueAfter: time.Second * 5,
 	}
@@ -169,9 +174,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
-	bcp, err := r.newBackup(ctx, cluster)
-	if err != nil {
-		return rr, errors.Wrap(err, "create backup object")
+	var bcp *Backup
+	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+		var err error
+		bcp, err = r.newBackup(ctx, cluster)
+		if err != nil {
+			return errors.Wrap(err, "create backup object")
+		}
+		return nil
+	}); err != nil {
+		return rr, err
 	}
 	defer bcp.Close(ctx)
 
@@ -200,6 +212,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	bcp *Backup,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx)
+
 	status := cr.Status
 	if cluster == nil {
 		return status, errors.New("cluster not found")
@@ -222,13 +235,20 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
-	if cr.Status.State == psmdbv1.BackupStateNew || cr.Status.State == psmdbv1.BackupStateWaiting {
-		time.Sleep(10 * time.Second)
+	switch cr.Status.State {
+	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
 		return bcp.Start(ctx, r.client, cluster, cr)
 	}
 
-	time.Sleep(5 * time.Second)
-	return bcp.Status(ctx, cr)
+	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
+		updatedStatus, err := bcp.Status(ctx, cr)
+		if err == nil {
+			status = updatedStatus
+		}
+		return err
+	})
+
+	return status, err
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
@@ -385,7 +405,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", cr.Name, "namespace", cr.Namespace, "pbmName", cr.Status.PBMname)
+	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues(
+		"backup", cr.Name,
+		"namespace", cr.Namespace,
+		"pbmName", cr.Status.PBMname,
+		"storage", cr.Status.StorageName,
+	)
+
+	if cr.Spec.Type == defs.IncrementalBackup {
+		log.Info("Skipping " + naming.FinalizerDeleteBackup + " finalizer. It's not supported for incremental backups")
+		return nil
+	}
 
 	var meta *backup.BackupMeta
 	var err error
@@ -430,23 +460,26 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
-	err = b.pbm.GetNSetConfig(ctx, r.client, cluster, storage)
+	mainStgName, _, err := cluster.Spec.Backup.MainStorage()
 	if err != nil {
-		return errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+		return errors.Wrap(err, "get main storage")
 	}
 
-	// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
-	// as it's not possible to delete backup if it is a base for the PITR timeline
-	err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete PITR")
+	if mainStgName == cr.Status.StorageName {
+		// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
+		// as it's not possible to delete backup if it is a base for the PITR timeline
+		err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete PITR")
+		}
+		log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
 	}
-	log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
 
 	err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete backup")
 	}
+
 	log.Info("Backup deleted")
 
 	return nil

@@ -31,10 +31,16 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 
 var secretFileMode int32 = 288
 
+// StatefulSpecSecretParams contains secrets params for the StatefulSpec.
+type StatefulSpecSecretParams struct {
+	UsersSecret *corev1.Secret
+	SSLSecret   *corev1.Secret
+}
+
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	ls map[string]string, initImage string, customConf CustomConfig, usersSecret *corev1.Secret,
+	ls map[string]string, initImage string, customConf CustomConfig, secrets StatefulSpecSecretParams,
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
 	size := replset.Size
@@ -259,10 +265,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
 			}
-			containers = append(containers, backupAgentContainer(cr, rsName, cr.TLSEnabled()))
+			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
 		}
 
-		pmmC := AddPMMContainer(ctx, cr, usersSecret, cr.Spec.PMM.MongodParams)
+		pmmC := AddPMMContainer(cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
 		}
@@ -323,7 +329,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 }
 
 // backupAgentContainer creates the container object for a backup agent
-func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsEnabled bool) corev1.Container {
+func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, replsetName string, port int32, tlsEnabled bool, sslSecret *corev1.Secret) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
@@ -362,7 +368,7 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 			},
 			{
 				Name:  "PBM_MONGODB_PORT",
-				Value: strconv.Itoa(int(api.DefaultMongodPort)),
+				Value: strconv.Itoa(int(port)),
 			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
@@ -417,11 +423,17 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 					},
 				},
 			},
-			{
-				Name:  "PBM_MONGODB_URI",
-				Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
-			},
 		}...)
+
+		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+		if cr.CompareVersion("1.20.0") >= 0 {
+			mongoDBURI = buildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		}
+
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "PBM_MONGODB_URI",
+			Value: mongoDBURI,
+		})
 
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
@@ -444,6 +456,45 @@ func backupAgentContainer(cr *api.PerconaServerMongoDB, replsetName string, tlsE
 	}
 
 	return c
+}
+
+func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+	if tlsEnabled {
+		if ok := sslSecretDataExist(ctx, sslSecret); ok {
+			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
+			uri += fmt.Sprintf(
+				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
+				SSLDir,
+			)
+		}
+	}
+	return uri
+}
+
+func sslSecretDataExist(ctx context.Context, secret *corev1.Secret) bool {
+	log := logf.FromContext(ctx)
+
+	requiredKeys := map[string]struct{}{
+		"ca.crt":  {},
+		"tls.crt": {},
+		"tls.key": {},
+	}
+
+	var missingKeys []string
+
+	for key := range requiredKeys {
+		if _, exists := secret.Data[key]; !exists {
+			missingKeys = append(missingKeys, key)
+		}
+	}
+
+	if len(missingKeys) > 0 {
+		log.Error(fmt.Errorf("SSL Secret is missing required keys: %v", missingKeys), "")
+		return false
+	}
+
+	return true
 }
 
 func MongodCustomConfigName(clusterName, replicaSetName string) string {

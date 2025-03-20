@@ -11,6 +11,7 @@ spec:
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret
@@ -54,6 +55,9 @@ spec:
 
     configsvrReplSet:
       size: 3
+      configuration: |
+        net:
+          port: 27018
       volumeSpec:
         persistentVolumeClaim:
           resources:
@@ -74,6 +78,8 @@ spec:
     mongos:
       size: 3
       configuration: |
+        net:
+          port: 27019
         replication:
           localPingThresholdMs: 15
       expose:
@@ -110,7 +116,7 @@ spec:
     size: 3
     configuration: |
       net:
-        port: 27017
+        port: 27016
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
@@ -152,7 +158,7 @@ spec:
     size: 3
     configuration: |
       net:
-        port: 27017
+        port: 27016
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
@@ -196,7 +202,7 @@ spec:
     size: 3
     configuration: |
       net:
-        port: 27017
+        port: 27016
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100

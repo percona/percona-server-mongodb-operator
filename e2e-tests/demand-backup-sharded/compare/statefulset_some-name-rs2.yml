@@ -44,7 +44,7 @@ spec:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
-            - --port=27017
+            - --port=27016
             - --replSet=rs2
             - --storageEngine=wiredTiger
             - --relaxPermChecks
@@ -64,7 +64,7 @@ spec:
             - name: SERVICE_NAME
               value: some-name
             - name: MONGODB_PORT
-              value: "27017"
+              value: "27016"
             - name: MONGODB_REPLSET
               value: rs2
           envFrom:
@@ -93,7 +93,7 @@ spec:
             timeoutSeconds: 10
           name: mongod
           ports:
-            - containerPort: 27017
+            - containerPort: 27016
               name: mongodb
               protocol: TCP
           readinessProbe:
@@ -173,7 +173,7 @@ spec:
             - name: PBM_MONGODB_REPLSET
               value: rs2
             - name: PBM_MONGODB_PORT
-              value: "27017"
+              value: "27016"
             - name: PBM_AGENT_SIDECAR
               value: "true"
             - name: PBM_AGENT_SIDECAR_SLEEP
@@ -186,7 +186,7 @@ spec:
                   apiVersion: v1
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
             - name: PBM_AGENT_TLS_ENABLED
               value: "true"
           imagePullPolicy: Always
@@ -266,9 +266,7 @@ spec:
             defaultMode: 420
             secretName: internal-some-name-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

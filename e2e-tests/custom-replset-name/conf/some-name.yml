@@ -3,7 +3,6 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.18.0
   backup:
     enabled: true
     image: percona/percona-backup-mongodb:2.0.4
@@ -12,6 +11,7 @@ spec:
     serviceAccountName: percona-server-mongodb-operator
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret

@@ -93,6 +93,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			currentRSstatus = api.ReplsetStatus{}
 		}
 
+		status.Members = currentRSstatus.Members
 		status.Initialized = currentRSstatus.Initialized
 		status.AddedAsShard = currentRSstatus.AddedAsShard
 
@@ -298,11 +299,20 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 	}
 
 	for _, pod := range list.Items {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+			continue
+		}
+
 		for _, cntr := range pod.Status.ContainerStatuses {
 			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
 				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
 			}
 		}
+
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
@@ -324,7 +334,7 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size == status.Ready:
+	case status.Ready > 0 && status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
@@ -353,6 +363,14 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	status.Size = len(list.Items)
 
 	for _, pod := range list.Items {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+			continue
+		}
+
 		for _, cntr := range pod.Status.ContainerStatuses {
 			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
 				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
@@ -362,7 +380,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
-				if cond.Status == corev1.ConditionTrue && pod.DeletionTimestamp == nil {
+				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
 				}
 			case corev1.PodScheduled:
@@ -379,7 +397,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size > 0 && status.Size == status.Ready && status.Size == int(cr.Spec.Sharding.Mongos.Size):
+	case status.Ready > 0 && status.Size == status.Ready && status.Size == int(cr.Spec.Sharding.Mongos.Size):
 		status.Status = api.AppStateReady
 	}
 

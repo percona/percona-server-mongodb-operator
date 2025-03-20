@@ -28,6 +28,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -234,8 +235,9 @@ type UpgradeOptions struct {
 }
 
 type ReplsetMemberStatus struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	State    mongo.MemberState `json:"state,omitempty"`
+	StateStr string            `json:"stateStr,omitempty"`
 }
 
 type MongosStatus struct {
@@ -246,8 +248,8 @@ type MongosStatus struct {
 }
 
 type ReplsetStatus struct {
-	Members     []*ReplsetMemberStatus `json:"members,omitempty"`
-	ClusterRole ClusterRole            `json:"clusterRole,omitempty"`
+	Members     map[string]ReplsetMemberStatus `json:"members,omitempty"`
+	ClusterRole ClusterRole                    `json:"clusterRole,omitempty"`
 
 	Initialized  bool     `json:"initialized,omitempty"`
 	AddedAsShard *bool    `json:"added_as_shard,omitempty"`
@@ -319,6 +321,7 @@ type PerconaServerMongoDBStatus struct {
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
 	Host               string                   `json:"host,omitempty"`
@@ -598,6 +601,48 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	return b
 }
 
+// GetPort returns the net.port of the mongo configuration.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port
+func (conf MongoConfiguration) GetPort() (int32, error) {
+	var cfg struct {
+		Net struct {
+			Port int32 `yaml:"port,omitempty"`
+		} `yaml:"net,omitempty"`
+	}
+	err := yaml.Unmarshal([]byte(conf), &cfg)
+	if err != nil {
+		return 0, fmt.Errorf("error unmarshalling configuration %v", err)
+	}
+	return cfg.Net.Port, nil
+}
+
+// SetPort to set the mongo port in the MongoConfiguration according to the following documentation:
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port.
+// Caution using this since it overwrites the MongoConfiguration.
+func (conf *MongoConfiguration) SetPort(port int32) error {
+	if *conf != "" {
+		return fmt.Errorf("configuration is not empty; refusing to overwrite")
+	}
+	var cfg struct {
+		Net struct {
+			Port int32 `yaml:"port,omitempty"`
+		} `yaml:"net,omitempty"`
+	}
+
+	err := yaml.Unmarshal([]byte(*conf), &cfg)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling configuration %v", err)
+	}
+
+	cfg.Net.Port = port
+
+	newConfig, _ := yaml.Marshal(cfg)
+
+	*conf = MongoConfiguration(newConfig)
+
+	return nil
+}
+
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
 	m := make(map[string]interface{})
@@ -682,22 +727,6 @@ func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
 	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
 
-func (r *ReplsetSpec) ServiceName(cr *PerconaServerMongoDB) string {
-	return cr.Name + "-" + r.Name
-}
-
-func (r *ReplsetSpec) PodFQDN(cr *PerconaServerMongoDB, podName string) string {
-	if r.Expose.Enabled {
-		return fmt.Sprintf("%s.%s.%s", podName, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
-	}
-
-	return fmt.Sprintf("%s.%s.%s.%s", podName, r.ServiceName(cr), cr.Namespace, cr.Spec.ClusterServiceDNSSuffix)
-}
-
-func (r *ReplsetSpec) PodFQDNWithPort(cr *PerconaServerMongoDB, podName string) string {
-	return fmt.Sprintf("%s:%d", r.PodFQDN(cr, podName), DefaultMongodPort)
-}
-
 func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	var cfg struct {
 		Replication struct {
@@ -715,6 +744,13 @@ func (r ReplsetSpec) CustomReplsetName() (string, error) {
 	}
 
 	return cfg.Replication.ReplSetName, nil
+}
+
+func (ms ReplsetSpec) GetPort() int32 {
+	if p, err := ms.Configuration.GetPort(); err == nil && p > 0 {
+		return p
+	}
+	return DefaultMongoPort
 }
 
 type LivenessProbeExtended struct {
@@ -802,6 +838,18 @@ type MongosSpec struct {
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
+func (ms MongosSpec) GetPort() int32 {
+	if p, err := ms.Configuration.GetPort(); err == nil && p > 0 {
+		return p
+	}
+
+	if ms.Port != 0 {
+		return ms.Port
+	}
+
+	return DefaultMongoPort
+}
+
 type MongosSpecSetParameter struct {
 	CursorTimeoutMillis int `json:"cursorTimeoutMillis,omitempty"`
 }
@@ -864,24 +912,6 @@ type MongodSpecInMemory struct {
 	EngineConfig *MongodSpecInMemoryEngineConfig `json:"engineConfig,omitempty"`
 }
 
-type AuditLogDestination string
-
-var AuditLogDestinationFile AuditLogDestination = "file"
-
-type AuditLogFormat string
-
-var (
-	AuditLogFormatBSON AuditLogFormat = "BSON"
-	AuditLogFormatJSON AuditLogFormat = "JSON"
-)
-
-type OperationProfilingMode string
-
-const (
-	OperationProfilingModeAll    OperationProfilingMode = "all"
-	OperationProfilingModeSlowOp OperationProfilingMode = "slowOp"
-)
-
 type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
 	Enabled          bool                     `json:"enabled"`
@@ -891,7 +921,7 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical}
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -956,6 +986,7 @@ const (
 
 type BackupStorageSpec struct {
 	Type       BackupStorageType           `json:"type"`
+	Main       bool                        `json:"main,omitempty"`
 	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
@@ -969,29 +1000,26 @@ type PITRSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 }
 
-func (p PITRSpec) Disabled() PITRSpec {
-	p.Enabled = false
-	return p
-}
-
 type BackupTimeouts struct {
 	Starting *uint32 `json:"startingStatus,omitempty"`
 }
 
 type BackupOptions struct {
-	OplogSpanMin float64            `json:"oplogSpanMin"`
-	Priority     map[string]float64 `json:"priority,omitempty"`
-	Timeouts     *BackupTimeouts    `json:"timeouts,omitempty"`
+	OplogSpanMin           float64            `json:"oplogSpanMin"`
+	NumParallelCollections int                `json:"numParallelCollections,omitempty"`
+	Priority               map[string]float64 `json:"priority,omitempty"`
+	Timeouts               *BackupTimeouts    `json:"timeouts,omitempty"`
 }
 
 type RestoreOptions struct {
-	BatchSize           int               `json:"batchSize,omitempty"`
-	NumInsertionWorkers int               `json:"numInsertionWorkers,omitempty"`
-	NumDownloadWorkers  int               `json:"numDownloadWorkers,omitempty"`
-	MaxDownloadBufferMb int               `json:"maxDownloadBufferMb,omitempty"`
-	DownloadChunkMb     int               `json:"downloadChunkMb,omitempty"`
-	MongodLocation      string            `json:"mongodLocation,omitempty"`
-	MongodLocationMap   map[string]string `json:"mongodLocationMap,omitempty"`
+	BatchSize              int               `json:"batchSize,omitempty"`
+	NumInsertionWorkers    int               `json:"numInsertionWorkers,omitempty"`
+	NumDownloadWorkers     int               `json:"numDownloadWorkers,omitempty"`
+	NumParallelCollections int               `json:"numParallelCollections,omitempty"`
+	MaxDownloadBufferMb    int               `json:"maxDownloadBufferMb,omitempty"`
+	DownloadChunkMb        int               `json:"downloadChunkMb,omitempty"`
+	MongodLocation         string            `json:"mongodLocation,omitempty"`
+	MongodLocationMap      map[string]string `json:"mongodLocationMap,omitempty"`
 }
 
 type BackupConfig struct {
@@ -1016,7 +1044,7 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
-func (b BackupSpec) IsEnabledPITR() bool {
+func (b BackupSpec) IsPITREnabled() bool {
 	if !b.Enabled {
 		return false
 	}
@@ -1024,6 +1052,26 @@ func (b BackupSpec) IsEnabledPITR() bool {
 		return false
 	}
 	return b.PITR.Enabled
+}
+
+var ErrNoMainStorage = errors.New("main storage not found")
+
+func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
+	if len(b.Storages) == 1 {
+		for name, stg := range b.Storages {
+			return name, stg, nil
+		}
+	}
+
+	for name, stg := range b.Storages {
+		if !stg.Main {
+			continue
+		}
+
+		return name, stg, nil
+	}
+
+	return "", BackupStorageSpec{}, ErrNoMainStorage
 }
 
 type Arbiter struct {
@@ -1170,6 +1218,10 @@ func UserSecretName(cr *PerconaServerMongoDB) string {
 	return name
 }
 
+func (cr *PerconaServerMongoDB) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+}
+
 func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
 }
@@ -1279,5 +1331,16 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 
 const (
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
+	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
 )
+
+func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
+	v, ok := cr.Annotations[AnnotationResyncPBM]
+	return ok && v != ""
+}
+
+func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
+	v, ok := cr.Annotations[AnnotationResyncInProgress]
+	return ok && v != ""
+}

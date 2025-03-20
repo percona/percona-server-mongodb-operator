@@ -13,8 +13,8 @@ spec:
 #  pause: true
 #  unmanaged: false
 #  enableVolumeExpansion: false
-  crVersion: 1.19.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+  crVersion: 1.20.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -632,6 +632,7 @@ spec:
 #      privileged: false
 #    storages:
 #      s3-us-west:
+#        main: true
 #        type: s3
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
@@ -688,10 +689,12 @@ spec:
 #        timeouts:
 #          startingStatus: 33
 #        oplogSpanMin: 10
+#        numParallelCollections: 2
 #      restoreOptions:
 #        batchSize: 500
 #        numInsertionWorkers: 10
 #        numDownloadWorkers: 4
+#        numParallelCollections: 2
 #        maxDownloadBufferMb: 0
 #        downloadChunkMb: 32
 #        mongodLocation: /usr/bin/mongo
@@ -718,6 +721,22 @@ spec:
 #        schedule: "0 5 * * 0"
 #        keep: 5
 #        type: physical
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+#      - name: weekly-s3-us-west-incremental
+#        enabled: false
+#        schedule: "0 1 * * *"
+#        keep: 5
+#        type: incremental
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+#      - name: weekly-s3-us-west-incremental-base
+#        enabled: false
+#        schedule: "0 5 * * 0"
+#        keep: 5
+#        type: incremental-base
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6

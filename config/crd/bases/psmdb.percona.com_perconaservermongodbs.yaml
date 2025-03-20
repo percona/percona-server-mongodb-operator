@@ -50,6 +50,8 @@ spec:
                     properties:
                       backupOptions:
                         properties:
+                          numParallelCollections:
+                            type: integer
                           oplogSpanMin:
                             type: number
                           priority:
@@ -82,6 +84,8 @@ spec:
                           numDownloadWorkers:
                             type: integer
                           numInsertionWorkers:
+                            type: integer
+                          numParallelCollections:
                             type: integer
                         type: object
                     type: object
@@ -317,6 +321,8 @@ spec:
                           required:
                           - path
                           type: object
+                        main:
+                          type: boolean
                         s3:
                           properties:
                             bucket:
@@ -391,6 +397,8 @@ spec:
                           enum:
                           - logical
                           - physical
+                          - incremental
+                          - incremental-base
                           type: string
                       required:
                       - enabled
@@ -18786,6 +18794,8 @@ spec:
             properties:
               backup:
                 type: string
+              backupConfigHash:
+                type: string
               backupVersion:
                 type: string
               conditions:
@@ -18849,14 +18859,16 @@ spec:
                     initialized:
                       type: boolean
                     members:
-                      items:
+                      additionalProperties:
                         properties:
                           name:
                             type: string
-                          version:
+                          state:
+                            type: integer
+                          stateStr:
                             type: string
                         type: object
-                      type: array
+                      type: object
                     message:
                       type: string
                     ready:

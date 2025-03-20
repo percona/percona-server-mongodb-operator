@@ -17,7 +17,6 @@ package tool
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/alecthomas/kingpin"
 	"github.com/pkg/errors"
@@ -26,18 +25,15 @@ import (
 )
 
 var (
-	DefaultMongoDBHost            = "localhost"
-	DefaultMongoDBPort            = "27017"
-	DefaultMongoDBAuthDB          = "admin"
-	DefaultMongoDBTimeout         = "5s"
-	DefaultMongoDBTimeoutDuration = time.Duration(5) * time.Second
+	defaultMongoDBHost = "localhost"
+	defaultMongoDBPort = "27017"
 )
 
 func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*db.Config, error) {
 	conf := &db.Config{}
 	app.Flag(
 		"address",
-		"mongodb server address (hostname:port), defaults to '$TASK_NAME.$FRAMEWORK_HOST:$MONGODB_PORT' if the env vars are available and SSL is used, if not the default is '"+DefaultMongoDBHost+":"+DefaultMongoDBPort+"'",
+		"mongodb server address (hostname:port), defaults to '$MONGODB_REPLSET:$MONGODB_PORT' if the env vars are available and SSL is used, if not the default is '"+defaultMongoDBHost+":"+defaultMongoDBPort+"'",
 	).Default(getDefaultMongoDBAddress()).StringsVar(&conf.Hosts)
 	app.Flag(
 		"replset",
@@ -102,11 +98,11 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*d
 }
 
 func getDefaultMongoDBAddress() string {
-	hostname := DefaultMongoDBHost
+	hostname := defaultMongoDBHost
 
 	mongodbPort := os.Getenv(EnvMongoDBPort)
 	if mongodbPort != "" {
 		return hostname + ":" + mongodbPort
 	}
-	return hostname + ":" + DefaultMongoDBPort
+	return hostname + ":" + defaultMongoDBPort
 }
