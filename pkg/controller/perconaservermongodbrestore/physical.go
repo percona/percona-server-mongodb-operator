@@ -319,6 +319,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			}
 
 			orig := c.DeepCopy()
+
+			if c.Annotations == nil {
+				c.Annotations = make(map[string]string)
+			}
 			c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
 
 			return r.client.Patch(ctx, c, client.MergeFrom(orig))
@@ -350,6 +354,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 
 	// Annotating statefulset to stop reconciliation in psmdb_controller
+	if sts.Annotations == nil {
+		sts.Annotations = make(map[string]string)
+	}
 	sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
 	cmd := []string{
@@ -477,6 +484,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		if err != nil {
 			return err
 		}
+
 		_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
 		if ok {
 			continue
@@ -528,6 +536,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 				zero := int32(0)
 
 				sts.Spec.Replicas = &zero
+
+				if sts.Annotations == nil {
+					sts.Annotations = make(map[string]string)
+				}
 				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
 				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
