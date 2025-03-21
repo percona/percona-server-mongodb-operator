@@ -191,6 +191,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return (strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
+			strings.Contains(err.Error(), "unable to upgrade connection") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
 	}, func() error {
 		stdoutBuf.Reset()
@@ -318,6 +319,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			}
 
 			orig := c.DeepCopy()
+
+			if c.Annotations == nil {
+				c.Annotations = make(map[string]string)
+			}
 			c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
 
 			return r.client.Patch(ctx, c, client.MergeFrom(orig))
@@ -349,6 +354,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 
 	// Annotating statefulset to stop reconciliation in psmdb_controller
+	if sts.Annotations == nil {
+		sts.Annotations = make(map[string]string)
+	}
 	sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
 	cmd := []string{
@@ -476,6 +484,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		if err != nil {
 			return err
 		}
+
 		_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
 		if ok {
 			continue
@@ -527,6 +536,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 				zero := int32(0)
 
 				sts.Spec.Replicas = &zero
+
+				if sts.Annotations == nil {
+					sts.Annotations = make(map[string]string)
+				}
 				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
 				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
@@ -579,8 +592,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, c
 	stderrBuf := &bytes.Buffer{}
 
 	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
-		log.V(1).Info("Cmd failed", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
-		return stdoutBuf, stderrBuf, errors.Wrap(err, "cmd failed")
+		return stdoutBuf, stderrBuf, errors.Wrapf(err, "cmd failed (stdout: %s, stderr: %s)", stdoutBuf.String(), stderrBuf.String())
 	}
 	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
 

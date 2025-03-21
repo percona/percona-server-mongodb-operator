@@ -304,6 +304,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				Namespace: cr.Namespace,
 			},
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
+				Type:        cr.Spec.BackupSource.Type,
 				ClusterName: cr.Spec.ClusterName,
 				StorageName: cr.Spec.StorageName,
 			},
