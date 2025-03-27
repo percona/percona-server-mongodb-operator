@@ -68,7 +68,7 @@ main() {
 	check_recovery "${backup_name_minio}-1" date "$time_now" "" "$cluster" backupSource
 
 	desc "delete PSMDB cluster $cluster"
-	kubectl_bin delete psmdb some-name
+	kubectl_bin delete psmdb $cluster
 	kubectl_bin delete pvc -l app.kubernetes.io/managed-by=percona-server-mongodb-operator
 	sleep 10
 
@@ -84,16 +84,15 @@ main() {
 	sleep 10
 
 	write_initial_data
-	write_document
 
 	desc 'restore pitr type latest using backupSource'
 	write_document "-2nd"
 	run_backup $backup_name_minio 2 physical
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-2"
-	check_recovery "${backup_name_minio}-2" latest "" "-2th" "$cluster" backupSource
+	check_recovery "${backup_name_minio}-2" latest "" "-2nd" "$cluster" backupSource
 
 	desc 'disable pitr'
-	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+	kubectl patch psmdb "$cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
 
 	desc 'delete all backups'

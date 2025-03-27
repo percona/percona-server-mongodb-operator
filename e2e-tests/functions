@@ -1728,7 +1728,7 @@ format_date() {
 }
 
 get_bucket_name() {
-	local bucket_name=$1
+	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.s3.bucket}'
 }
