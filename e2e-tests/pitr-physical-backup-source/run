@@ -99,7 +99,7 @@ main() {
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
 
-    desc 'delete all backups'
+	desc 'delete all backups'
 	kubectl_bin delete psmdb-backup --all
 
 	desc 'destroy cluster'
