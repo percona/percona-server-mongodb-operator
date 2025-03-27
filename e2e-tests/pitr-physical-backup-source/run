@@ -63,7 +63,7 @@ main() {
 	desc 'restore pitr type date using backupSource'
 	run_backup $backup_name_minio 1 physical
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-1"
-    reset_collection
+	reset_collection
 
 	time_now=$(run_mongos 'new Date().getTime() / 1000' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -d'.' -f1)
 
