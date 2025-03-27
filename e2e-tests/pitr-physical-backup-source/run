@@ -73,7 +73,6 @@ main() {
 	sleep 10
 
 	desc "recreate PSMDB cluster $cluster"
-#    second_cluster='some-name-second'
 	desc "create second PSMDB cluster $cluster"
 	apply_cluster $test_dir/conf/$cluster-rs0.yml
 
