@@ -102,7 +102,7 @@ main() {
     desc 'delete all backups'
 	kubectl_bin delete psmdb-backup --all
 
-    desc 'destroy cluster'
+	desc 'destroy cluster'
 	destroy $namespace
 	desc 'test passed'
 }
