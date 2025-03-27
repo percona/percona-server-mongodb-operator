@@ -20,7 +20,6 @@ run_backup() {
 	wait_backup "$name-$idx"
 }
 
-
 main() {
 	create_infra $namespace
 	deploy_minio
