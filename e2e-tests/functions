@@ -1813,7 +1813,6 @@ check_recovery() {
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "$cmp_postfix"
 }
 
-
 run_pitr_check() {
 	local backup=$1
 	local cluster=$2
