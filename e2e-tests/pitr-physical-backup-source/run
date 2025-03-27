@@ -6,7 +6,6 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-
 run_backup() {
 	local name=$1
 	local idx=$2
