@@ -6,5 +6,15 @@ spec:
   clusterName: some-name
   backupName:
   pitr:
-    type:
+    pitrType:
     date:
+  backupSource:
+    type: physical
+    destination: s3://DESTINATION
+    s3:
+      credentialsSecret: minio-secret
+      bucket: BUCKET-NAME
+      endpointUrl: http://minio-service:9000/
+      region: us-east-1
+      insecureSkipTLSVerify: false
+
