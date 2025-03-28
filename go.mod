@@ -1,7 +1,6 @@
 module github.com/percona/percona-server-mongodb-operator
 
 go 1.23.4
-
 toolchain go1.24.1
 
 require (
@@ -9,7 +8,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cert-manager/cert-manager v1.17.1
 	github.com/go-logr/logr v1.4.2
-	github.com/go-openapi/errors v0.22.0
+	github.com/go-openapi/errors v0.22.1
 	github.com/go-openapi/runtime v0.28.0
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/go-openapi/swag v0.23.1
