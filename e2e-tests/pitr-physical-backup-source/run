@@ -84,12 +84,13 @@ main() {
 	sleep 10
 
 	write_initial_data
+	write_document
 
 	desc 'restore pitr type latest using backupSource'
 	write_document "-2nd"
 	run_backup $backup_name_minio 2 physical
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-2"
-	check_recovery "${backup_name_minio}-2" latest "" "-2nd" "$cluster" backupSource
+	check_recovery "${backup_name_minio}-2" latest "" "-3rd" "$cluster" backupSource
 
 	desc 'disable pitr'
 	kubectl patch psmdb "$cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
