@@ -1,7 +1,6 @@
 module github.com/percona/percona-server-mongodb-operator
 
 go 1.23.4
-
 toolchain go1.24.1
 
 require (
@@ -30,7 +29,7 @@ require (
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.3
-	sigs.k8s.io/controller-runtime v0.20.3
+	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/mcs-api v0.1.0
 	sigs.k8s.io/yaml v1.4.0
 )
