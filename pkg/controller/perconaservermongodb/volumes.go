@@ -36,8 +36,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *a
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
-		return errors.Wrap(err, "resize volumes if needed")
+	// Skip volume resizing if external volume autoscaler is enabled
+	if !cr.Spec.ExternalVolumeAutoscaling {
+		if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
+			return errors.Wrap(err, "resize volumes if needed")
+		}
 	}
 
 	return nil
