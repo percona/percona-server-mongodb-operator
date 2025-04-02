@@ -439,6 +439,8 @@ spec:
                 type: string
               enableVolumeExpansion:
                 type: boolean
+              externalVolumeAutoscaling:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
