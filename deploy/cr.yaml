@@ -62,6 +62,7 @@ spec:
     image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
+#    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
   replsets:
