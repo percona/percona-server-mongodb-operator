@@ -4131,6 +4131,8 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        loadBalancerClass:
+                          type: string
                         loadBalancerSourceRanges:
                           items:
                             type: string
@@ -11895,6 +11897,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -17351,6 +17355,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
