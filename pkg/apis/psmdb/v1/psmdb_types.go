@@ -364,6 +364,9 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
+	CustomClusterName string `json:"customClusterName,omitempty"`
 }
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
