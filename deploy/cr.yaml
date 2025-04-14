@@ -225,6 +225,7 @@ spec:
     expose:
       enabled: false
       type: ClusterIP
+#      loadBalancerClass: "eks.amazonaws.com/nlb"
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      annotations:
@@ -438,6 +439,7 @@ spec:
       expose:
         enabled: false
         type: ClusterIP
+#        loadBalancerClass: "eks.amazonaws.com/nlb"
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        annotations:
@@ -549,6 +551,7 @@ spec:
       expose:
         type: ClusterIP
 #        servicePerPod: true
+#        loadBalancerClass: "eks.amazonaws.com/nlb"
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        annotations:
