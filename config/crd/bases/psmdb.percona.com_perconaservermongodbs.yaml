@@ -621,6 +621,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  customClusterName:
+                    type: string
                   enabled:
                     type: boolean
                   image:
@@ -3431,6 +3433,8 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        loadBalancerClass:
+                          type: string
                         loadBalancerSourceRanges:
                           items:
                             type: string
@@ -11195,6 +11199,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -16651,6 +16657,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
