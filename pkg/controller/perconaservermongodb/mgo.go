@@ -784,11 +784,12 @@ func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []map[strin
 			{"role": string(api.RoleClusterMonitor), "db": "admin"},
 		}
 	case api.RoleClusterMonitor:
-		if cr.CompareVersion("1.12.0") >= 0 {
-			roles = []map[string]interface{}{
-				{"db": "admin", "role": "explainRole"},
-				{"db": "local", "role": "read"},
-			}
+		roles = []map[string]interface{}{
+			{"db": "admin", "role": "explainRole"},
+			{"db": "local", "role": "read"},
+		}
+		if cr.CompareVersion("1.20.0") >= 0 {
+			roles = append(roles, map[string]interface{}{"db": "admin", "role": "directShardOperations"})
 		}
 	case api.RoleBackup:
 		roles = []map[string]interface{}{
@@ -796,6 +797,12 @@ func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []map[strin
 			{"db": "admin", "role": string(api.RoleClusterMonitor)},
 			{"db": "admin", "role": "restore"},
 			{"db": "admin", "role": "pbmAnyAction"},
+		}
+	case api.RoleClusterAdmin:
+		if cr.CompareVersion("1.20.0") >= 0 {
+			roles = []map[string]interface{}{
+				{"db": "admin", "role": "directShardOperations"},
+			}
 		}
 	}
 	roles = append(roles, map[string]interface{}{"db": "admin", "role": string(role)})
