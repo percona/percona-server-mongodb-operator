@@ -881,7 +881,11 @@ compare_mongo_cmd() {
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
-	diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 compare_mongos_cmd() {
@@ -897,7 +901,12 @@ compare_mongos_cmd() {
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 get_mongo_primary_endpoint() {
@@ -959,7 +968,12 @@ compare_mongo_user() {
 		| sed -e '$s/,$/}/' \
 		| jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
 			>$tmp_dir/$user.json
-	diff -u $expected_result $tmp_dir/$user.json
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u $expected_result $tmp_dir/$user.json
+	else
+		cp $tmp_dir/$user.json $expected_result
+	fi
 }
 
 start_gke() {
