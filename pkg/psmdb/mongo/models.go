@@ -116,9 +116,12 @@ type FCV struct {
 const ShardRemoveCompleted string = "completed"
 
 type ShardRemoveResp struct {
-	Msg       string `json:"msg" bson:"msg"`
-	State     string `json:"state" bson:"state"`
+	Msg       string   `json:"msg" bson:"msg"`
+	State     string   `json:"state" bson:"state"`
+	Note      string   `json:"note" bson:"note"`
+	DBsToMove []string `json:"dbsToMove" bson:"dbsToMove"`
 	Remaining struct {
+		DBs         int `json:"dbs" bson:"dbs"`
 		Chunks      int `json:"chunks" bson:"chunks"`
 		JumboChunks int `json:"jumboChunks" bson:"jumboChunks"`
 	} `json:"remaining" bson:"remaining"`

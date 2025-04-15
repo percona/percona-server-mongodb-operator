@@ -593,8 +593,13 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 			return nil
 		}
 
-		log.Info(resp.Msg, "shard", rsName,
-			"chunk remaining", resp.Remaining.Chunks, "jumbo chunks remaining", resp.Remaining.JumboChunks)
+		log.Info(resp.Msg,
+			"shard", rsName,
+			"note", resp.Note,
+			"dbsToMove", resp.DBsToMove,
+			"remaining dbs", resp.Remaining.DBs,
+			"remaining chunks", resp.Remaining.Chunks,
+			"remaining jumbo chunks", resp.Remaining.JumboChunks)
 
 		time.Sleep(10 * time.Second)
 	}
