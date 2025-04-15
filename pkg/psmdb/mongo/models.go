@@ -277,8 +277,8 @@ type RoleInfo struct {
 }
 
 type User struct {
-	DB    string                   `bson:"db" json:"db"`
-	Roles []map[string]interface{} `bson:"roles" json:"roles"`
+	DB    string `bson:"db" json:"db"`
+	Roles []Role `bson:"roles" json:"roles"`
 }
 
 type UsersInfo struct {

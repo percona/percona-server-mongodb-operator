@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -776,41 +777,41 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 	return errNoRunningMongodContainers
 }
 
-func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []map[string]interface{} {
-	roles := make([]map[string]interface{}, 0)
+func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Role {
+	roles := make([]mongo.Role, 0)
 	switch role {
 	case api.RoleDatabaseAdmin:
-		return []map[string]interface{}{
-			{"role": "readWriteAnyDatabase", "db": "admin"},
-			{"role": "readAnyDatabase", "db": "admin"},
-			{"role": "restore", "db": "admin"},
-			{"role": "backup", "db": "admin"},
-			{"role": "dbAdminAnyDatabase", "db": "admin"},
-			{"role": string(api.RoleClusterMonitor), "db": "admin"},
+		return []mongo.Role{
+			{DB: "admin", Role: "readWriteAnyDatabase"},
+			{DB: "admin", Role: "readAnyDatabase"},
+			{DB: "admin", Role: "restore"},
+			{DB: "admin", Role: "backup"},
+			{DB: "admin", Role: "dbAdminAnyDatabase"},
+			{DB: "admin", Role: string(api.RoleClusterMonitor)},
 		}
 	case api.RoleClusterMonitor:
-		roles = []map[string]interface{}{
-			{"db": "admin", "role": "explainRole"},
-			{"db": "local", "role": "read"},
+		roles = []mongo.Role{
+			{DB: "admin", Role: "explainRole"},
+			{DB: "local", Role: "read"},
 		}
 		if cr.CompareVersion("1.20.0") >= 0 {
-			roles = append(roles, map[string]interface{}{"db": "admin", "role": "directShardOperations"})
+			roles = append(roles, mongo.Role{DB: "admin", Role: "directShardOperations"})
 		}
 	case api.RoleBackup:
-		roles = []map[string]interface{}{
-			{"db": "admin", "role": "readWrite"},
-			{"db": "admin", "role": string(api.RoleClusterMonitor)},
-			{"db": "admin", "role": "restore"},
-			{"db": "admin", "role": "pbmAnyAction"},
+		roles = []mongo.Role{
+			{DB: "admin", Role: "readWrite"},
+			{DB: "admin", Role: string(api.RoleClusterMonitor)},
+			{DB: "admin", Role: "restore"},
+			{DB: "admin", Role: "pbmAnyAction"},
 		}
 	case api.RoleClusterAdmin:
 		if cr.CompareVersion("1.20.0") >= 0 {
-			roles = []map[string]interface{}{
-				{"db": "admin", "role": "directShardOperations"},
+			roles = []mongo.Role{
+				{DB: "admin", Role: "directShardOperations"},
 			}
 		}
 	}
-	roles = append(roles, map[string]interface{}{"db": "admin", "role": string(role)})
+	roles = append(roles, mongo.Role{DB: "admin", Role: string(role)})
 	return roles
 }
 
@@ -894,10 +895,22 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemRoles(ctx context.Co
 }
 
 // compareRoles compares 2 role arrays and returns true if they are equal
-func compareRoles(x []map[string]interface{}, y []map[string]interface{}) bool {
+func compareRoles(x []mongo.Role, y []mongo.Role) bool {
 	if len(x) != len(y) {
 		return false
 	}
+
+	sortFunc := func(a mongo.Role, b mongo.Role) int {
+		if a.DB < b.DB || a.Role < b.Role {
+			return -1
+		}
+
+		return 0
+	}
+
+	slices.SortFunc(x, sortFunc)
+	slices.SortFunc(y, sortFunc)
+
 	for i := range x {
 		if !reflect.DeepEqual(x[i], y[i]) {
 			return false
@@ -1010,6 +1023,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			return errors.Wrap(err, "get user info")
 		}
 		if user == nil {
+			log.Info("Creating user", "database", "admin", "user", creds.Username)
 			err = cli.CreateUser(ctx, "admin", creds.Username, creds.Password, getRoles(cr, role)...)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
@@ -1017,6 +1031,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 			continue
 		}
 		if !compareRoles(user.Roles, getRoles(cr, role)) {
+			log.Info("Updating user roles", "database", "admin", "user", creds.Username, "currentRoles", user.Roles, "newRoles", getRoles(cr, role))
 			err = cli.UpdateUserRoles(ctx, "admin", creds.Username, getRoles(cr, role))
 			if err != nil {
 				return errors.Wrapf(err, "failed to create user %s", role)
