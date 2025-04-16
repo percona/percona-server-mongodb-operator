@@ -130,3 +130,59 @@ func TestGetRoles(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareRoles(t *testing.T) {
+	tests := map[string]struct {
+		x        []mongo.Role
+		y        []mongo.Role
+		expected bool
+	}{
+		"length is different": {
+			x: []mongo.Role{
+				{DB: "admin", Role: string(api.RoleClusterAdmin)},
+			},
+			y: []mongo.Role{
+				{DB: "admin", Role: "directShardOperations"},
+				{DB: "admin", Role: string(api.RoleClusterAdmin)},
+			},
+			expected: false,
+		},
+		"order is different": {
+			x: []mongo.Role{
+				{DB: "admin", Role: string(api.RoleClusterAdmin)},
+				{DB: "admin", Role: "directShardOperations"},
+			},
+			y: []mongo.Role{
+				{DB: "admin", Role: "directShardOperations"},
+				{DB: "admin", Role: string(api.RoleClusterAdmin)},
+			},
+			expected: true,
+		},
+		"one role is different": {
+			x: []mongo.Role{
+				{DB: "admin", Role: "readWriteAnyDatabase"},
+				{DB: "admin", Role: "readAnyDatabase"},
+				{DB: "admin", Role: "restore"},
+				{DB: "admin", Role: "backup"},
+				{DB: "admin", Role: "dbAdminAnyDatabase"},
+				{DB: "admin", Role: string(api.RoleClusterMonitor)},
+			},
+			y: []mongo.Role{
+				{DB: "admin", Role: "readWriteAnyDatabase"},
+				{DB: "admin", Role: "readAnyDatabase"},
+				{DB: "admin", Role: "restore"},
+				{DB: "admin", Role: "backup"},
+				{DB: "admin", Role: "dbAdminAnyDatabase2"},
+				{DB: "admin", Role: string(api.RoleClusterMonitor)},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual := compareRoles(tt.x, tt.y)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
