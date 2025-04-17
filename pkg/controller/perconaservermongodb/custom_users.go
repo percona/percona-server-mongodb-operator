@@ -492,6 +492,8 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to update user secret")
 		}
+		// given that the secret was updated, the password now exists
+		hasPass = true
 	}
 
 	// pass key should be present in the user provided secret
