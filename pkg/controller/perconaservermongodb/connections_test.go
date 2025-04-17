@@ -425,7 +425,7 @@ func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.
 
 func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username, db string) (*mongo.User, error) {
 	return &mongo.User{
-		Roles: []map[string]interface{}{},
+		Roles: []mongo.Role{},
 	}, nil
 }
 

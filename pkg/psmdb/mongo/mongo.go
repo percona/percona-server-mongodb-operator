@@ -37,7 +37,7 @@ type Client interface {
 	CreateRole(ctx context.Context, db string, role Role) error
 	UpdateRole(ctx context.Context, db string, role Role) error
 	GetRole(ctx context.Context, db, role string) (*Role, error)
-	CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error
+	CreateUser(ctx context.Context, db, user, pwd string, roles ...Role) error
 	AddShard(ctx context.Context, rsName, host string) error
 	WriteConfig(ctx context.Context, cfg RSConfig, force bool) error
 	RSStatus(ctx context.Context) (Status, error)
@@ -54,7 +54,7 @@ type Client interface {
 	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
 	GetUserInfo(ctx context.Context, username, db string) (*User, error)
-	UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error
+	UpdateUserRoles(ctx context.Context, db, username string, roles []Role) error
 	UpdateUserPass(ctx context.Context, db, name, pass string) error
 	UpdateUser(ctx context.Context, currName, newName, pass string) error
 }
@@ -300,7 +300,7 @@ func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role,
 	return r, nil
 }
 
-func (client *mongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error {
+func (client *mongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...Role) error {
 	resp := OKResponse{}
 
 	d := bson.D{
@@ -641,7 +641,7 @@ func (client *mongoClient) GetUserInfo(ctx context.Context, username, db string)
 	return &resp.Users[0], nil
 }
 
-func (client *mongoClient) UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error {
+func (client *mongoClient) UpdateUserRoles(ctx context.Context, db, username string, roles []Role) error {
 	return client.Database(db).RunCommand(ctx, bson.D{{Key: "updateUser", Value: username}, {Key: "roles", Value: roles}}).Err()
 }
 

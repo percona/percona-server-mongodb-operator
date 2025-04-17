@@ -345,23 +345,16 @@ func updatePass(
 	return nil
 }
 
-func updateRoles(
-	ctx context.Context,
-	mongoCli mongo.Client,
-	user *api.User,
-	userInfo *mongo.User) error {
+func updateRoles(ctx context.Context, mongoCli mongo.Client, user *api.User, userInfo *mongo.User) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil {
 		return nil
 	}
 
-	roles := make([]map[string]interface{}, 0)
+	roles := make([]mongo.Role, 0)
 	for _, role := range user.Roles {
-		roles = append(roles, map[string]interface{}{
-			"role": role.Name,
-			"db":   role.DB,
-		})
+		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
 	}
 
 	if reflect.DeepEqual(userInfo.Roles, roles) {
@@ -381,12 +374,9 @@ func updateRoles(
 func createExternalUser(ctx context.Context, mongoCli mongo.Client, user *api.User) error {
 	log := logf.FromContext(ctx)
 
-	roles := make([]map[string]interface{}, 0)
+	roles := make([]mongo.Role, 0)
 	for _, role := range user.Roles {
-		roles = append(roles, map[string]interface{}{
-			"role": role.Name,
-			"db":   role.DB,
-		})
+		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
 	}
 
 	log.Info("Creating user", "user", user.UserID())
@@ -408,12 +398,9 @@ func createUser(
 	annotationKey, passKey string) error {
 	log := logf.FromContext(ctx)
 
-	roles := make([]map[string]interface{}, 0)
+	roles := make([]mongo.Role, 0)
 	for _, role := range user.Roles {
-		roles = append(roles, map[string]interface{}{
-			"role": role.Name,
-			"db":   role.DB,
-		})
+		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
 	}
 
 	log.Info("Creating user", "user", user.UserID())
