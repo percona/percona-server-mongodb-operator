@@ -160,7 +160,7 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pa
 wait_for_running $cluster-rs0 3
 
 # get services list from pmm server
-curl -s -k -XPOST -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" > ${tmp_dir}/pmm_service_list.json
+curl -s -k -XPOST -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-mongos-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-rs0-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-cfg-0 ${tmp_dir}/pmm_service_list.json
