@@ -70,7 +70,7 @@ func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.
 	return nil, nil
 }
 
-func (c *fakeMongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...map[string]interface{}) error {
+func (c *fakeMongoClient) CreateUser(ctx context.Context, db, user, pwd string, roles ...mongo.Role) error {
 	return nil
 }
 
@@ -138,7 +138,7 @@ func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string, db s
 	return nil, nil
 }
 
-func (c *fakeMongoClient) UpdateUserRoles(ctx context.Context, db, username string, roles []map[string]interface{}) error {
+func (c *fakeMongoClient) UpdateUserRoles(ctx context.Context, db, username string, roles []mongo.Role) error {
 	return nil
 }
 
