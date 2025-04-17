@@ -1,10 +1,16 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -296,6 +302,112 @@ func TestValidateUser(t *testing.T) {
 				assert.Equal(t, tt.user, tt.actualUser)
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestGetCustomUserSecret(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	err := corev1.AddToScheme(scheme)
+	assert.NoError(t, err)
+	err = api.SchemeBuilder.AddToScheme(scheme)
+	assert.NoError(t, err)
+
+	ns := "test-ns"
+	passKey := "password"
+
+	tests := map[string]struct {
+		crName            string
+		client            func() client.Client
+		user              *api.User
+		hasExistingSecret bool
+		errMsg            string
+	}{
+		"create default secret if not exists": {
+			crName: "my-cluster-create-default-secret",
+			client: func() client.Client {
+				return fake.NewClientBuilder().WithScheme(scheme).Build()
+			},
+			user: &api.User{},
+		},
+		"user has custom secret reference that exists": {
+			crName: "my-cluster-user-has-secret",
+			client: func() client.Client {
+				existingSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "custom-secret",
+						Namespace: ns,
+					},
+					Data: map[string][]byte{
+						passKey: []byte("existing-password"),
+					},
+				}
+
+				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingSecret).Build()
+			},
+			user: &api.User{
+				PasswordSecretRef: &api.SecretKeySelector{
+					Name: "custom-secret",
+				},
+			},
+			hasExistingSecret: true,
+		},
+		"user has custom secret reference but secret does not exist": {
+			crName: "my-cluster-has-missing-secret",
+			client: func() client.Client {
+				return fake.NewClientBuilder().WithScheme(scheme).Build()
+			},
+			user: &api.User{
+				PasswordSecretRef: &api.SecretKeySelector{
+					Name: "missing-secret",
+				},
+			},
+			errMsg: "failed to get user secret",
+		},
+		"existing default secret missing password key, create new": {
+			crName: "my-cluster-existing-secret-missing-password",
+			client: func() client.Client {
+				defaultSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-cluster-existing-secret-missing-password-custom-user-secret",
+						Namespace: ns,
+					},
+					Data: map[string][]byte{},
+				}
+
+				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(defaultSecret).Build()
+			},
+			user: &api.User{},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.crName,
+					Namespace: ns,
+				},
+			}
+
+			secret, err := getCustomUserSecret(ctx, tt.client(), cr, tt.user, passKey)
+			if tt.hasExistingSecret && tt.errMsg == "" {
+				assert.NoError(t, err)
+				assert.Equal(t, secret.Name, "custom-secret")
+				assert.Equal(t, string(secret.Data[passKey]), "existing-password")
+				return
+			}
+			if !tt.hasExistingSecret && tt.errMsg == "" {
+				assert.NoError(t, err)
+				assert.Equal(t, secret.Name, tt.crName+"-custom-user-secret")
+				assert.NotEmpty(t, string(secret.Data[passKey]))
+			}
+			if tt.errMsg != "" {
+				assert.Nil(t, secret)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			}
+
 		})
 	}
 }
