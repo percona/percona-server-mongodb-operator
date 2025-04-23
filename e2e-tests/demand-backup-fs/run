@@ -97,6 +97,8 @@ write_data 100500 ""
 wait_backup_agent ${cluster}-rs0-0
 wait_backup_agent ${cluster}-rs0-1
 wait_backup_agent ${cluster}-rs0-2
+# Given that PBM_AGENT_TLS_ENABLED=true, we are running the following to ensure that exec pbm status works with tls...
+wait_for_pbm_operations ${cluster}
 
 desc "CASE 1: Logical backup and restore"
 backup_name="backup-nfs-logical"
