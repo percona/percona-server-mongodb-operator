@@ -365,6 +365,9 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
+	CustomClusterName string `json:"customClusterName,omitempty"`
 }
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
@@ -1107,6 +1110,12 @@ type Expose struct {
 	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	// LoadBalancerClass is the class of the load balancer implementation the Service belongs to.
+	// This field can only be set when the Service type is 'LoadBalancer'.
+	// This field can only be set when creating or updating a Service to type 'LoadBalancer'.
+	// Once set, it can not be changed.
+	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
 
 	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
 	DeprecatedServiceAnnotations map[string]string `json:"serviceAnnotations,omitempty"`

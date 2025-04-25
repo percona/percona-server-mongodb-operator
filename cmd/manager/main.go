@@ -136,6 +136,9 @@ func main() {
 	}
 
 	if mcs.IsAvailable() {
+		setupLog.Info("Multi cluster services available",
+			"group", mcs.MCSSchemeGroupVersion.Group,
+			"version", mcs.MCSSchemeGroupVersion.Version)
 		if err := mcs.AddToScheme(mgr.GetScheme()); err != nil {
 			setupLog.Error(err, "")
 			os.Exit(1)
