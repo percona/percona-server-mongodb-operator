@@ -36,11 +36,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *a
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	// Skip volume resizing if external volume autoscaler is enabled
-	if !cr.Spec.ExternalVolumeAutoscaling {
-		if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
-			return errors.Wrap(err, "resize volumes if needed")
-		}
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
+		return errors.Wrap(err, "resize volumes if needed")
 	}
 
 	return nil
@@ -218,7 +215,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		}
 	}
 
-	if requested.Cmp(actual) < 0 {
+	if requested.Cmp(actual) < 0 && !cr.Spec.ExternalVolumeAutoscaling {
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
