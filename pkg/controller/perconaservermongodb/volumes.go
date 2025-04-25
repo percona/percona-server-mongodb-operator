@@ -215,8 +215,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		}
 	}
 
-	if requested.Cmp(actual) < 0 && !cr.Spec.ExternalVolumeAutoscaling {
-		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+	if requested.Cmp(actual) < 0 {
+		if !cr.Spec.ExternalVolumeAutoscaling {
+			return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+		} else {
+			return nil
+		}
 	}
 
 	if requested.Cmp(actual) == 0 {
