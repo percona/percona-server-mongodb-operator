@@ -731,7 +731,6 @@ spec:
 #      - name: weekly-s3-us-west-incremental
 #        enabled: false
 #        schedule: "0 1 * * *"
-#        keep: 5
 #        type: incremental
 #        storageName: s3-us-west
 #        compressionType: gzip
