@@ -83,7 +83,7 @@ spec:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+        image: percona/percona-server-mongodb:8.0.4-2
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -185,7 +185,7 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        image: perconalab/percona-server-mongodb-operator:main-backup
+        image: percona/percona-backup-mongodb:2.9.1
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
@@ -204,7 +204,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: perconalab/percona-server-mongodb-operator:main
+        image: percona/percona-server-mongodb-operator:1.20.0
         imagePullPolicy: Always
         name: mongo-init
         resources:
