@@ -48,6 +48,10 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
+	if cr.Spec.ExternalVolumeAutoscaling {
+		return nil
+	}
+
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
 
 	pvcSpec := volumeSpec.PersistentVolumeClaim
@@ -216,11 +220,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	if requested.Cmp(actual) < 0 {
-		if !cr.Spec.ExternalVolumeAutoscaling {
-			return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
-		} else {
-			return nil
-		}
+		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
 	if requested.Cmp(actual) == 0 {
