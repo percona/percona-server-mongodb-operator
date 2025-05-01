@@ -140,11 +140,9 @@ func yamlCompare(t *testing.T, ns string, filename string, compare any) {
 	}
 	expected, err := os.ReadFile(filepath.Join("testdata", ns, filename))
 	if err != nil {
-		os.WriteFile(filepath.Join("testdata", ns, "t_"+filename), data, 0644) // TODO: remove
 		t.Fatal(err)
 	}
 	if bytes.Compare(data, expected) != 0 {
-		os.WriteFile(filepath.Join("testdata", ns, "t_"+filename), data, 0644) // TODO: remove
 		t.Fatalf("yaml resources doesn't match:\nexpected:\n%s\ngot:\n%s", string(expected), string(data))
 	}
 }
