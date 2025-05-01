@@ -142,7 +142,7 @@ func yamlCompare(t *testing.T, ns string, filename string, compare any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Compare(data, expected) != 0 {
+	if !bytes.Equal(bytes.TrimSpace(data), bytes.TrimSpace(expected)) {
 		t.Fatalf("yaml resources doesn't match:\nexpected:\n%s\ngot:\n%s", string(expected), string(data))
 	}
 }
