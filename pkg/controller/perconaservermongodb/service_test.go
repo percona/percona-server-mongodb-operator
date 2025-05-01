@@ -64,6 +64,7 @@ func TestReconcileReplsetServices(t *testing.T) {
 			t.Fatal(err)
 		}
 		cr.Spec.Replsets[0].Expose.Enabled = false
+		cr.Spec.Sharding.Enabled = false
 		if err := cr.CheckNSetDefaults(ctx, ""); err != nil {
 			t.Fatal(err)
 		}
