@@ -135,6 +135,15 @@
       },
       {
         "resource": {
+          "db": "",
+          "collection": "system.views"
+        },
+        "actions": [
+          "dropCollection"
+        ]
+      },
+      {
+        "resource": {
           "db": "admin",
           "collection": ""
         },
@@ -241,15 +250,6 @@
           "find",
           "insert",
           "updateSearchIndex"
-        ]
-      },
-      {
-        "resource": {
-          "db": "admin",
-          "collection": "system.views"
-        },
-        "actions": [
-          "dropCollection"
         ]
       },
       {
