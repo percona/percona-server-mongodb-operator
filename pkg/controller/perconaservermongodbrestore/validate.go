@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
