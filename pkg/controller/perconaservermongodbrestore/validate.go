@@ -52,10 +52,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		switch {
 		case pitr.Type == psmdbv1.PITRestoreTypeDate && pitr.Date != nil:
 			if bcp.Status.LastWriteAt != nil {
-				if pitr.Date.Time.Equal(bcp.Status.LastWriteAt) {
+				if pitr.Date.Equal(bcp.Status.LastWriteAt) {
 					return errors.New("backup's last write is equal to target time")
 				}
-				if pitr.Date.Time.Before(bcp.Status.LastWriteAt) {
+				if pitr.Date.Before(bcp.Status.LastWriteAt) {
 					return errors.New("backup's last write is later than target time")
 				}
 			}
