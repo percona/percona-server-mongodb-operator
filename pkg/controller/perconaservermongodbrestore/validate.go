@@ -49,5 +49,28 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "failed to validate backup")
 	}
 
+	if pitr := cr.Spec.PITR; pitr != nil {
+		switch {
+		case pitr.Type == psmdbv1.PITRestoreTypeDate && pitr.Date != nil:
+			if bcp.Status.LastWriteAt != nil {
+				if pitr.Date.Time.Equal(bcp.Status.LastWriteAt) {
+					return errors.New("backup's last write is equal to target time")
+				}
+				if pitr.Date.Time.Before(bcp.Status.LastWriteAt) {
+					return errors.New("backup's last write is later than target time")
+				}
+			}
+			ts := pitr.Date.Unix()
+			if _, err := pbmc.GetPITRChunkContains(ctx, ts); err != nil {
+				return err
+			}
+		case pitr.Type == psmdbv1.PITRestoreTypeLatest:
+			_, err := pbmc.GetLatestTimelinePITR(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
