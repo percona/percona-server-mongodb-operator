@@ -36,7 +36,7 @@ run_recovery_check() {
 
 	# we don't wait for cluster readiness here because the annotation gets removed then
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
-	kubectl_bin get psmdb ${cluster} -o yaml
+
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1

@@ -306,6 +306,11 @@ func (in *Expose) DeepCopyInto(out *Expose) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.LoadBalancerClass != nil {
+		in, out := &in.LoadBalancerClass, &out.LoadBalancerClass
+		*out = new(string)
+		**out = **in
+	}
 	if in.ServiceAnnotations != nil {
 		in, out := &in.ServiceAnnotations, &out.ServiceAnnotations
 		*out = make(map[string]string, len(*in))

@@ -16,6 +16,7 @@ PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 CERT_MANAGER_VER="1.16.3"
+UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -68,7 +69,9 @@ fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 log() {
+	set +o xtrace
 	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+	set_debug
 }
 
 set_debug() {
@@ -198,15 +201,14 @@ wait_backup_agent() {
 	local agent_pod=$1
 
 	set +o xtrace
-	retry=0
-	echo -n $agent_pod
-	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+	local retry=0
+	echo -n "waiting for pbm-agent to be ready in ${agent_pod}..."
+	until kubectl_bin logs $agent_pod -c backup-agent | grep "listening for the commands"; do
 		sleep 5
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
-			kubectl_bin logs $agent_pod -c backup-agent \
-				| tail -100
+			kubectl_bin logs $agent_pod -c backup-agent | tail -100
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -341,6 +343,7 @@ wait_restore() {
 	local target_state=${3:-"ready"}
 	local wait_cluster_consistency=${4:-1}
 	local wait_time=${5:-1780}
+	local ok_if_ready=${6:-0}
 
 	set +o xtrace
 	retry=0
@@ -351,6 +354,10 @@ wait_restore() {
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
+			echo "OK"
+			break
+		fi
 		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
@@ -364,7 +371,7 @@ wait_restore() {
 			exit 1
 		fi
 	done
-	echo
+	echo "OK"
 	set_debug
 
 	if [ $wait_cluster_consistency -eq 1 ]; then
@@ -460,10 +467,17 @@ deploy_minio() {
 		kubectl_bin create svc -n ${OPERATOR_NS} externalname minio-service --external-name="minio-service.${namespace}.svc.cluster.local" --tcp="9000"
 	fi
 
-	# create bucket
+	create_minio_bucket operator-testing
+}
+
+create_minio_bucket() {
+	local bucket=$1
+
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
+		AWS_SECRET_ACCESS_KEY=some-secret-key \
+		AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://${bucket}"
 }
 
 deploy_vault() {
@@ -720,7 +734,12 @@ compare_kubectl() {
 	if [ -n "$skip_generation_check" ]; then
 		yq -i eval 'del(.metadata.generation)' ${new_result}
 	fi
-	diff -u "$expected_result" "$new_result"
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u "$expected_result" "$new_result"
+	else
+		cp ${new_result} ${expected_result}
+	fi
 }
 
 run_mongo() {
@@ -848,12 +867,25 @@ compare_mongo_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local sort="$7"
 
-	run_mongo "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
+	local full_command="db.${collection}.${command}()"
+	if [[ ! -z ${sort} ]]; then
+		full_command="${full_command}.${sort}"
+	fi
+
+	log "running ${full_command} in ${database}"
+
+	run_mongo "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 compare_mongos_cmd() {
@@ -869,7 +901,12 @@ compare_mongos_cmd() {
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 get_mongo_primary_endpoint() {
@@ -931,7 +968,12 @@ compare_mongo_user() {
 		| sed -e '$s/,$/}/' \
 		| jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
 			>$tmp_dir/$user.json
-	diff -u $expected_result $tmp_dir/$user.json
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u $expected_result $tmp_dir/$user.json
+	else
+		cp $tmp_dir/$user.json $expected_result
+	fi
 }
 
 start_gke() {
@@ -1143,6 +1185,11 @@ cat_config() {
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
+}
+
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
 }
 
 apply_cluster() {
@@ -1653,6 +1700,37 @@ getUserData() {
 	urlencode "$(getSecretData "$secretName" "$dataKey")"
 }
 
+write_document() {
+	local cmp_postfix="$1"
+	local sleep_value=${2:-0}
+
+	desc 'write initial data, read from all'
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep $sleep_value
+
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" ${cmp_postfix}
+}
+
+write_initial_data() {
+	desc 'create user myApp'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	sleep 2
+}
+
+reset_collection() {
+	desc 'reset data'
+
+	run_mongos \
+		'use myApp\n db.test.remove({})' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 2
+	write_document '' '120'
+}
+
 get_latest_oplog_chunk_ts() {
 	local cluster=$1
 	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
@@ -1661,6 +1739,92 @@ get_latest_oplog_chunk_ts() {
 format_date() {
 	local timestamp=$1
 	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+}
+
+get_bucket_name() {
+	local backup_name=$1
+
+	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.s3.bucket}'
+}
+
+check_recovery() {
+	local backup_name=$1
+	local restore_type=$2
+	local restore_date=$3
+	local cmp_postfix=$4
+	local cluster_name=$5
+	local backupSource=$6
+
+	local latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+
+	desc "write more data before restore by $restore_type"
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+
+	if [[ -n ${restore_date} ]]; then
+		desc "Restoring to time $(format_date ${restore_date})"
+		retries=0
+		until [[ ${latest_ts} -gt ${restore_date} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Last oplog chunk ($(format_date ${latest_ts})) is not greater than restore target ($(format_date ${restore_date}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be greater than restore target ($(format_date ${restore_date}))"
+			sleep 10
+		done
+	else
+		desc "Restoring to latest"
+		local current_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+		retries=0
+		until [[ ${latest_ts} -gt ${current_ts} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Timeout while waiting for last oplog chunk ($(format_date ${latest_ts}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be 120 seconds older than starting chunk ($(format_date ${current_ts}))"
+			sleep 10
+		done
+	fi
+
+	if [ -z "$backupSource" ]; then
+		desc "check restore by $restore_type"
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "s/backupName:/backupName: $backup_name/" \
+			| $sed -e "/backupSource/,+8d" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
+			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $(format_date ${restore_date})/"; fi \
+			| kubectl_bin apply -f -
+	else
+		desc "check restore by $restore_type $backupSource"
+		backup_dest=$(get_backup_dest "$backup_name")
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "/backupName/d" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
+			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $(format_date ${restore_date})"/; fi \
+			| $sed -e "s|DESTINATION|$backup_dest|" \
+			| $sed -e "s|BUCKET-NAME|$(get_bucket_name "$backup_name")|" \
+			| if [ -n "$selective_collection" ]; then yq eval '.spec.selective = {"namespaces": ["myApp.test"], "withUsersAndRoles": true}'; else yq; fi \
+			| kubectl_bin apply -f -
+	fi
+
+	# fail faster if we don't reach requested status until some time
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
+	echo
+	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
+	echo
+	set -o xtrace
+
+	wait_for_running $cluster-mongos 3
+	sleep 10
+
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "$cmp_postfix"
 }
 
 run_pitr_check() {

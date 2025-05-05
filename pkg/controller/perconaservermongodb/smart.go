@@ -128,10 +128,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && rsStatus.Members != nil {
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
-				log.Info("pod is not a member of replset, updating it", "pod", pod.Name)
+				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "members", rsStatus.Members)
 
 				if err := updatePod(&pod); err != nil {
 					return err

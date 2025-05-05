@@ -321,6 +321,7 @@ type PerconaServerMongoDBStatus struct {
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
 	Host               string                   `json:"host,omitempty"`
@@ -363,6 +364,9 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
+	CustomClusterName string `json:"customClusterName,omitempty"`
 }
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
@@ -920,7 +924,7 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical}
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -985,6 +989,7 @@ const (
 
 type BackupStorageSpec struct {
 	Type       BackupStorageType           `json:"type"`
+	Main       bool                        `json:"main,omitempty"`
 	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
@@ -1042,7 +1047,7 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 }
 
-func (b BackupSpec) IsEnabledPITR() bool {
+func (b BackupSpec) IsPITREnabled() bool {
 	if !b.Enabled {
 		return false
 	}
@@ -1050,6 +1055,26 @@ func (b BackupSpec) IsEnabledPITR() bool {
 		return false
 	}
 	return b.PITR.Enabled
+}
+
+var ErrNoMainStorage = errors.New("main storage not found")
+
+func (b BackupSpec) MainStorage() (string, BackupStorageSpec, error) {
+	if len(b.Storages) == 1 {
+		for name, stg := range b.Storages {
+			return name, stg, nil
+		}
+	}
+
+	for name, stg := range b.Storages {
+		if !stg.Main {
+			continue
+		}
+
+		return name, stg, nil
+	}
+
+	return "", BackupStorageSpec{}, ErrNoMainStorage
 }
 
 type Arbiter struct {
@@ -1084,6 +1109,12 @@ type Expose struct {
 	DeprecatedExposeType corev1.ServiceType `json:"exposeType,omitempty"`
 
 	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	// LoadBalancerClass is the class of the load balancer implementation the Service belongs to.
+	// This field can only be set when the Service type is 'LoadBalancer'.
+	// This field can only be set when creating or updating a Service to type 'LoadBalancer'.
+	// Once set, it can not be changed.
+	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
 
 	ServiceAnnotations           map[string]string `json:"annotations,omitempty"`
 	DeprecatedServiceAnnotations map[string]string `json:"serviceAnnotations,omitempty"`
@@ -1196,6 +1227,10 @@ func UserSecretName(cr *PerconaServerMongoDB) string {
 	return name
 }
 
+func (cr *PerconaServerMongoDB) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+}
+
 func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
 }
@@ -1305,5 +1340,16 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 
 const (
 	AnnotationResyncPBM           = "percona.com/resync-pbm"
+	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
 )
+
+func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
+	v, ok := cr.Annotations[AnnotationResyncPBM]
+	return ok && v != ""
+}
+
+func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
+	v, ok := cr.Annotations[AnnotationResyncInProgress]
+	return ok && v != ""
+}

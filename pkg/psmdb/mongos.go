@@ -476,6 +476,9 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 			spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
 		}
 		spec.LoadBalancerSourceRanges = cr.Spec.Sharding.Mongos.Expose.LoadBalancerSourceRanges
+		if cr.CompareVersion("1.20.0") >= 0 {
+			spec.LoadBalancerClass = cr.Spec.Sharding.Mongos.Expose.LoadBalancerClass
+		}
 	default:
 		spec.Type = corev1.ServiceTypeClusterIP
 	}

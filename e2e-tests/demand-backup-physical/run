@@ -68,6 +68,10 @@ echo "check if all pods started"
 wait_for_running ${cluster}-rs0 3
 wait_cluster_consistency ${cluster}
 
+sleep 60 # give time for resync to start
+
+wait_for_pbm_operations ${cluster}
+
 echo 'writing test data'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \

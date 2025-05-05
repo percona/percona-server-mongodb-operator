@@ -25,6 +25,18 @@ does_node_id_exists() {
 	echo "${nodeList_from_pmm[@]}"
 }
 
+check_custom_cluster_name() {
+	local pod_service_name=$1
+	local pmm_services_file=$2
+
+	echo "Checking $pod_service_name"
+	pmm_service_cluster=$(jq -r '.mongodb[] | select(.service_name=='\"$pod_service_name\"') | .cluster' $pmm_services_file)
+	if [[ $custom_name != $pmm_service_cluster ]]; then
+		echo "Not custom CLUSTER_NAME was used for pmm-client. Cluster in pmm: $pmm_service_cluster. customClusterName: $custom_name"
+		exit 1
+	fi
+}
+
 create_infra $namespace
 deploy_cert_manager
 
@@ -140,6 +152,17 @@ for instance in "${does_node_id_exists_in_pmm[@]}"; do
 		exit 1
 	fi
 done
+
+desc 'check customClusterName for pmm'
+custom_name="custom-cluster-name"
+kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":false}, {"op":"add","path":"/spec/pmm/customClusterName","value":'$custom_name'}]'
+wait_for_running $cluster-rs0 3
+
+# get services list from pmm server
+curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
+check_custom_cluster_name ${namespace}-${cluster}-mongos-0 ${tmp_dir}/pmm_service_list.json
+check_custom_cluster_name ${namespace}-${cluster}-rs0-0 ${tmp_dir}/pmm_service_list.json
+check_custom_cluster_name ${namespace}-${cluster}-cfg-0 ${tmp_dir}/pmm_service_list.json
 
 if [[ -n ${OPENSHIFT} ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server

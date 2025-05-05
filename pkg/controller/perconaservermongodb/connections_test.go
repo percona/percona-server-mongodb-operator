@@ -118,8 +118,8 @@ func TestConnectionLeaks(t *testing.T) {
 
 			obj := []client.Object{}
 			obj = append(obj, cr,
-				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, updatedRevision),
-				fakeStatefulset(cr, &api.ReplsetSpec{Name: "deleted-sts"}, 0, ""),
+				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, updatedRevision, ""),
+				fakeStatefulset(cr, &api.ReplsetSpec{Name: "deleted-sts"}, 0, "", ""),
 			)
 
 			rsPods := fakePodsForRS(cr, cr.Spec.Replsets[0])
@@ -136,7 +136,7 @@ func TestConnectionLeaks(t *testing.T) {
 				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
-				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision))
+				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision, ""))
 				allPods = append(allPods, fakePodsForRS(cr, cr.Spec.Sharding.ConfigsvrReplSet)...)
 			}
 
@@ -344,12 +344,14 @@ func fakePod(name, namespace string, ls map[string]string, containerName string)
 	}
 }
 
-func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int32, updateRevision string) client.Object {
+func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int32, updateRevision string, component string) client.Object {
+	ls := naming.RSLabels(cr, rs)
+	ls[naming.LabelKubernetesComponent] = component
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", cr.Name, rs.Name),
 			Namespace: cr.Namespace,
-			Labels:    naming.RSLabels(cr, rs),
+			Labels:    ls,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
@@ -425,7 +427,7 @@ func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.
 
 func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username, db string) (*mongo.User, error) {
 	return &mongo.User{
-		Roles: []map[string]interface{}{},
+		Roles: []mongo.Role{},
 	}, nil
 }
 

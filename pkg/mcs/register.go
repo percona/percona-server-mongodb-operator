@@ -1,8 +1,6 @@
 package mcs
 
 import (
-	"strings"
-
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +34,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 }
 
 func Register(dc *discovery.DiscoveryClient) error {
-	_, resources, err := dc.ServerGroupsAndResources()
+	resources, err := dc.ServerPreferredResources()
 	if err != nil {
 		return errors.Wrap(err, "get api groups and resources")
 	}
@@ -45,10 +43,8 @@ outer:
 	for _, r := range resources {
 		for _, resource := range r.APIResources {
 			if resource.Kind == "ServiceExport" {
-				gv := strings.Split(r.GroupVersion, "/")
-
-				MCSSchemeGroupVersion.Group = gv[0]
-				MCSSchemeGroupVersion.Version = gv[1]
+				MCSSchemeGroupVersion.Group = resource.Group
+				MCSSchemeGroupVersion.Version = resource.Version
 
 				break outer
 			}

@@ -3,15 +3,15 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.18.0
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.0.4
+    image:
     pitr:
       enabled: false
     serviceAccountName: percona-server-mongodb-operator
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret
@@ -33,7 +33,7 @@ spec:
           bucket: operator-testing
           prefix: psmdb
           endpointUrl: https://storage.googleapis.com
-  image: percona/percona-server-mongodb:4.4.10-11
+  image:
   imagePullPolicy: Always
   pmm:
     enabled: false

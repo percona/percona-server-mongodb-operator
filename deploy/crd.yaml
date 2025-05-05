@@ -70,6 +70,8 @@ spec:
                 enum:
                 - logical
                 - physical
+                - incremental
+                - incremental-base
                 type: string
             type: object
           status:
@@ -1017,6 +1019,8 @@ spec:
                           required:
                           - path
                           type: object
+                        main:
+                          type: boolean
                         s3:
                           properties:
                             bucket:
@@ -1091,6 +1095,8 @@ spec:
                           enum:
                           - logical
                           - physical
+                          - incremental
+                          - incremental-base
                           type: string
                       required:
                       - enabled
@@ -1313,6 +1319,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  customClusterName:
+                    type: string
                   enabled:
                     type: boolean
                   image:
@@ -3503,6 +3511,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -4123,6 +4133,8 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        loadBalancerClass:
+                          type: string
                         loadBalancerSourceRanges:
                           items:
                             type: string
@@ -6282,6 +6294,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -8341,6 +8355,8 @@ spec:
                                     - port
                                     type: object
                                 type: object
+                              stopSignal:
+                                type: string
                             type: object
                           livenessProbe:
                             properties:
@@ -11267,6 +11283,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -11887,6 +11905,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -14046,6 +14066,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -16105,6 +16127,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -17343,6 +17367,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -18872,6 +18898,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -19485,6 +19513,8 @@ spec:
           status:
             properties:
               backup:
+                type: string
+              backupConfigHash:
                 type: string
               backupVersion:
                 type: string
