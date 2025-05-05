@@ -1,0 +1,72 @@
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsiYXBwLmt1YmVybmV0ZXMuaW8vaW5zdGFuY2UiOiJycy1zdmMiLCJhcHAua3ViZXJuZXRlcy5pby9tYW5hZ2VkLWJ5IjoicGVyY29uYS1zZXJ2ZXItbW9uZ29kYi1vcGVyYXRvciIsImFwcC5rdWJlcm5ldGVzLmlvL25hbWUiOiJwZXJjb25hLXNlcnZlci1tb25nb2RiIiwiYXBwLmt1YmVybmV0ZXMuaW8vcGFydC1vZiI6InBlcmNvbmEtc2VydmVyLW1vbmdvZGIiLCJhcHAua3ViZXJuZXRlcy5pby9yZXBsc2V0IjoiY2ZnIn0sImNsdXN0ZXJJUCI6Ik5vbmUifQ==
+    creationTimestamp: null
+    labels:
+      app.kubernetes.io/instance: rs-svc
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: cfg
+    name: rs-svc-cfg
+    namespace: rs-svc
+    ownerReferences:
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: rs-svc
+      uid: ""
+    resourceVersion: "1"
+  spec:
+    clusterIP: None
+    ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+    selector:
+      app.kubernetes.io/instance: rs-svc
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: cfg
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsiYXBwLmt1YmVybmV0ZXMuaW8vaW5zdGFuY2UiOiJycy1zdmMiLCJhcHAua3ViZXJuZXRlcy5pby9tYW5hZ2VkLWJ5IjoicGVyY29uYS1zZXJ2ZXItbW9uZ29kYi1vcGVyYXRvciIsImFwcC5rdWJlcm5ldGVzLmlvL25hbWUiOiJwZXJjb25hLXNlcnZlci1tb25nb2RiIiwiYXBwLmt1YmVybmV0ZXMuaW8vcGFydC1vZiI6InBlcmNvbmEtc2VydmVyLW1vbmdvZGIiLCJhcHAua3ViZXJuZXRlcy5pby9yZXBsc2V0IjoicnMwIn0sImNsdXN0ZXJJUCI6Ik5vbmUifQ==
+    creationTimestamp: null
+    labels:
+      app.kubernetes.io/instance: rs-svc
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+    name: rs-svc-rs0
+    namespace: rs-svc
+    ownerReferences:
+    - apiVersion: psmdb.percona.com/v1
+      controller: true
+      kind: PerconaServerMongoDB
+      name: rs-svc
+      uid: ""
+    resourceVersion: "1"
+  spec:
+    clusterIP: None
+    ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+    selector:
+      app.kubernetes.io/instance: rs-svc
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  status:
+    loadBalancer: {}
+metadata: {}

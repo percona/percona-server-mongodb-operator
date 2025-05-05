@@ -1319,6 +1319,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  customClusterName:
+                    type: string
                   enabled:
                     type: boolean
                   image:
@@ -3509,6 +3511,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -4129,6 +4133,8 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        loadBalancerClass:
+                          type: string
                         loadBalancerSourceRanges:
                           items:
                             type: string
@@ -6288,6 +6294,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -8347,6 +8355,8 @@ spec:
                                     - port
                                     type: object
                                 type: object
+                              stopSignal:
+                                type: string
                             type: object
                           livenessProbe:
                             properties:
@@ -11273,6 +11283,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -11893,6 +11905,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -14052,6 +14066,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -16111,6 +16127,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -17349,6 +17367,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          loadBalancerClass:
+                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -18878,6 +18898,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:

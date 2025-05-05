@@ -102,6 +102,7 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort in
 		Name:            "pmm-client",
 		Image:           spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Resources:       cr.Spec.PMM.Resources,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PMM_SERVER",
@@ -340,27 +341,23 @@ func AddPMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort
 	}
 
 	pmmC := PMMContainer(cr, secret, dbPort, customAdminParams)
-	if cr.CompareVersion("1.2.0") >= 0 {
-		pmmC.Resources = cr.Spec.PMM.Resources
+
+	clusterName := cr.Name
+	if len(cr.Spec.PMM.CustomClusterName) > 0 {
+		clusterName = cr.Spec.PMM.CustomClusterName
+
 	}
-	if cr.CompareVersion("1.6.0") >= 0 {
-		pmmC.Lifecycle = &corev1.Lifecycle{
-			PreStop: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"bash", "-c", "pmm-admin inventory remove node --force $(pmm-admin status --json | python -c \"import sys, json; print(json.load(sys.stdin)['pmm_agent_status']['node_id'])\")"},
-				},
-			},
-		}
-		clusterPmmEnvs := []corev1.EnvVar{
-			{
-				Name:  "CLUSTER_NAME",
-				Value: cr.Name,
-			},
-		}
-		pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
-		pmmAgentScriptEnv := PMMAgentScript(cr)
-		pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
+	clusterPmmEnvs := []corev1.EnvVar{
+		{
+			Name:  "CLUSTER_NAME",
+			Value: clusterName,
+		},
 	}
+	pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
+
+	pmmAgentScriptEnv := PMMAgentScript(cr)
+	pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
+
 	if cr.CompareVersion("1.10.0") >= 0 {
 		// PMM team added these flags which allows us to avoid
 		// container crash, but just restart pmm-agent till it recovers
