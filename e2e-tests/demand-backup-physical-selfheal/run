@@ -1,0 +1,127 @@
+#!/bin/bash
+
+# This script tests pod failures during a physical restore on a sharded cluster.
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+cluster="some-name"
+namespace="demand-backup-physical-selfheal-19184"
+kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+
+function create_user() {
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+}
+
+function write_test_data() {
+	local host=$1
+	local start=$2
+	local rows=$3
+
+	local cmd=""
+	for ((i=0; i<rows; i++)); do
+		cmd+="db.test.insert({ x: $((start+i))});"
+	done
+
+	log "inserting ${rows} rows for pitr check"
+
+	run_mongos "use myApp\n ${cmd}" "${host}"
+}
+
+function drop_collection() {
+	local host=$1
+
+	run_mongos 'use myApp\n db.test.drop()' "${host}"
+}
+
+function run_backup() {
+	local storage=$1
+	local backup_name=$2
+
+	cat $test_dir/conf/backup.yml |
+		$sed -e "s/name:/name: ${backup_name}/" |
+		$sed -e "s/storageName:/storageName: ${storage}/" |
+		kubectl_bin apply -f -
+}
+
+function run_restore() {
+	local backup_name=$1
+
+	cat $test_dir/conf/restore.yml |
+		$sed -e "s/name:/name: restore-${backup_name}/" |
+		$sed -e "s/backupName:/backupName: ${backup_name}/" |
+		kubectl_bin apply -f -
+}
+
+
+function run_recovery_check() {
+	local backup_name=$1
+
+}
+
+create_infra "${namespace}"
+
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+apply_s3_storage_secrets
+deploy_minio
+
+desc "creating cluster"
+
+log "creating psmdb/${cluster}"
+kubectl_bin apply -f "${conf_dir}/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+log "check if all pods started"
+wait_for_running ${cluster}-cfg 3 "false"
+wait_for_running ${cluster}-rs0 3 "false"
+wait_for_running ${cluster}-mongos 3 "false"
+wait_cluster_consistency ${cluster}
+
+desc "PREPARE: psmdb/${cluster} is ready"
+
+log "creating user (myApp:myPass) to write data"
+create_user
+
+write_test_data "myApp:myPass@${cluster}-mongos.${namespace}" 100500 10
+compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+backup_name_minio="backup-minio"
+run_backup minio ${backup_name_minio}
+wait_backup "${backup_name_minio}"
+
+desc "PREPARE: psmdb-backup/${backup_name_minio} is ready"
+
+log "dropping collection: db.test"
+drop_collection "myApp:myPass@${cluster}-mongos.${namespace}"
+
+run_restore ${backup_name_minio}
+wait_restore "${backup_name_minio}" "${cluster}" "running" "0" "3000"
+
+desc "CASE 1: Killing a random pod after restore is started"
+
+component=$(shuf -n 1 -e cfg rs0)
+pod_name="${cluster}-${component}-$(shuf -n 1 -i 0-2)"
+log "killing pod/${pod_name}"
+kubectl_bin delete pod ${pod_name} --force
+
+# we don't wait for cluster readiness here because the annotation gets removed then
+wait_restore "${backup_name_minio}" "${cluster}" "ready" "0" "3600"
+
+desc "CASE 1: psmdb-restore/restore-${backup_name_minio} is ready"
+
+wait_cluster_consistency ${cluster} 60
+
+desc "CASE 1: psmdb/${cluster} is ready"
+
+compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+desc "CASE 1: data is restored"
+
+destroy ${namespace}
+
+desc "test passed"
