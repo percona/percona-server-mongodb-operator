@@ -1023,6 +1023,13 @@ delete_crd() {
 	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
+delete_backups() {
+	desc 'Delete psmdb-backup'
+	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
+		kubectl_bin delete psmdb-backup --all
+	fi
+}
+
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
@@ -1042,6 +1049,8 @@ destroy() {
 	fi
 	#TODO: maybe will be enabled later
 	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
+
+	delete_backups
 
 	delete_crd
 
