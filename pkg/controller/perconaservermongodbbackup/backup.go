@@ -64,6 +64,13 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
+	if cluster.CompareVersion("1.20.0") < 0 {
+		err := b.pbm.GetNSetConfigLegacy(ctx, k8sclient, cluster, stg)
+		if err != nil {
+			return status, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+		}
+	}
+
 	name := time.Now().UTC().Format(time.RFC3339)
 
 	var compLevel *int
@@ -83,13 +90,15 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		},
 	}
 
-	mainStgName, _, err := b.spec.MainStorage()
-	if err != nil {
-		return status, errors.Wrap(err, "get main storage")
-	}
+	if cluster.CompareVersion("1.20.0") > 0 {
+		mainStgName, _, err := b.spec.MainStorage()
+		if err != nil {
+			return status, errors.Wrap(err, "get main storage")
+		}
 
-	if cr.Spec.StorageName != mainStgName {
-		cmd.Backup.Profile = cr.Spec.StorageName
+		if cr.Spec.StorageName != mainStgName {
+			cmd.Backup.Profile = cr.Spec.StorageName
+		}
 	}
 
 	log.Info("Sending backup command", "backupCmd", cmd)
