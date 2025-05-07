@@ -232,7 +232,7 @@ wait_backup() {
 		echo -n .
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
+		if [[ $retry -ge 600 || ${current_status} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
