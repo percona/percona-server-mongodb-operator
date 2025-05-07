@@ -1026,6 +1026,7 @@ delete_crd() {
 delete_backups() {
 	desc 'Delete psmdb-backup'
 	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
+		kubectl_bin get psmdb-backup
 		kubectl_bin delete psmdb-backup --all
 	fi
 }
