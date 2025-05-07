@@ -393,7 +393,6 @@ wait_restore() {
 			exit 1
 		fi
 	done
-
 	echo "OK"
 	set_debug
 
