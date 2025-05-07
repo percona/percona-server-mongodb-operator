@@ -396,6 +396,7 @@ wait_restore() {
 
 	echo "OK"
 	set_debug
+
 	if [[ $wait_cluster_consistency -eq 1 ]]; then
 		wait_cluster_consistency "${cluster_name}"
 	fi
