@@ -348,35 +348,55 @@ wait_restore() {
 	local ok_if_ready=${6:-0}
 
 	set +o xtrace
+    # We need to run wait till object is created, otherwise wait fails at once
+    echo -n "Waiting for the psmdb-restore/restore-$backup_name object to be created"
+    retry_object=0
+	until [[ ${retry_object} == 60 ]]; do
+        echo -n .
+        if  kubectl_bin get psmdb-restore restore-$backup_name > /dev/null; then
+            echo "OK"
+			break
+		fi
+        let retry_object+=1
+        if [[ ${retry_object} == 60 ]]; then
+            echo "psmdb-restore/restore-$backup_name object was not created."
+            exit 1
+        fi
+		sleep 1
+	done
+
+	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
 	retry=0
-	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
-	local current_state=
-	until [[ ${current_state} == ${target_state} ]]; do
-		sleep 0.5
+	retry_count=$((wait_time / 60))
+	until [[ ${retry} == ${retry_count} ]]; do
 		echo -n .
 		let retry+=1
-		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
-		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
+		if kubectl_bin wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s 2>/dev/null; then
 			echo "OK"
 			break
 		fi
-		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
-			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
-			echo something went wrong with operator or kubernetes cluster
-			exit 1
+		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
+		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
+				echo "OK"
+				break
+		fi
+		if [[ ${retry} == ${retry_count} || ${current_state} == 'error' ]]; then
+				kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+					| grep -v 'level=info' \
+					| grep -v 'level=debug' \
+					| grep -v 'Getting tasks for pod' \
+					| grep -v 'Getting pods from source' \
+					| tail -100
+				kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
+				echo "Restore object restore-${backup_name} is in ${current_state} state."
+				echo something went wrong with operator or kubernetes cluster
+				exit 1
 		fi
 	done
+
 	echo "OK"
 	set_debug
-
-	if [ $wait_cluster_consistency -eq 1 ]; then
+	if [[ $wait_cluster_consistency -eq 1 ]]; then
 		wait_cluster_consistency "${cluster_name}"
 	fi
 }
