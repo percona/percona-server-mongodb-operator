@@ -366,7 +366,7 @@ wait_restore() {
 	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
 	retry=0
 	retry_count=$((wait_time / 60))
-	until kubectl_bin wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s >/dev/null 2>&1; do
+	until kubectl wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s >/dev/null 2>&1; do
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
@@ -382,6 +382,7 @@ wait_restore() {
 				| grep -v 'Getting pods from source' \
 				| tail -100
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
+			kubectl_bin describe psmdb-restore restore-${backup_name}
 			echo "Restore object restore-${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1

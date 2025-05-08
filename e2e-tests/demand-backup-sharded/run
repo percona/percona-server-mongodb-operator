@@ -156,7 +156,7 @@ until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never 
 	sleep 1
 	let retry+=1
 	if [ $retry -ge 60 ]; then
-		echo "max retry count $retry reached. something went wrong with writing backup"
+		echo "Max retry count $retry reached. Something went wrong with writing backup"
 		exit 1
 	fi
 done
