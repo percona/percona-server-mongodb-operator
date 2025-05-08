@@ -239,6 +239,7 @@ wait_backup() {
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+			kubectl_bin get psmdb-backup
 			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
