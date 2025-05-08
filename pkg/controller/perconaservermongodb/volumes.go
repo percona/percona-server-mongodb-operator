@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"math"
 	"slices"
 	"strings"
@@ -23,7 +24,6 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
@@ -44,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *a
 }
 
 func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-"+sts.Name)
+	return strings.HasPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"+sts.Name)
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
@@ -120,7 +120,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 
 	var volumeTemplate corev1.PersistentVolumeClaim
 	for _, vct := range sts.Spec.VolumeClaimTemplates {
-		if vct.Name == psmdb.MongodDataVolClaimName {
+		if vct.Name == psmdbconfig.MongodDataVolClaimName {
 			volumeTemplate = vct
 		}
 	}

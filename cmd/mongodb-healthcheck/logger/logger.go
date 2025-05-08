@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,8 +13,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 type Logger struct {
@@ -22,7 +21,7 @@ type Logger struct {
 }
 
 func New() *Logger {
-	logPath := filepath.Join(psmdb.MongodDataVolClaimName, "logs", "mongodb-healthcheck.log")
+	logPath := filepath.Join(psmdbconfig.MongodDataVolClaimName, "logs", "mongodb-healthcheck.log")
 
 	return newLogger(logPath)
 }

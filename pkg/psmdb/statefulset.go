@@ -3,6 +3,8 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -40,7 +42,7 @@ type StatefulSpecSecretParams struct {
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	ls map[string]string, initImage string, customConf CustomConfig, secrets StatefulSpecSecretParams,
+	ls map[string]string, initImage string, customConf psmdbconfig.CustomConfig, secrets StatefulSpecSecretParams,
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
 	size := replset.Size
@@ -101,7 +103,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if cr.CompareVersion("1.13.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: BinVolumeName,
+			Name: psmdbconfig.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -216,7 +218,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: LDAPTLSVolClaimName,
+				Name: psmdbconfig.LDAPTLSVolClaimName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  cr.Spec.Secrets.LDAPSecret,
@@ -226,7 +228,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			},
 			corev1.Volume{
-				Name: LDAPConfVolClaimName,
+				Name: psmdbconfig.LDAPConfVolClaimName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -237,7 +239,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: MongodDataVolClaimName,
+				Name: psmdbconfig.MongodDataVolClaimName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -246,12 +248,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	} else {
 		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 			volumeClaimTemplates = []corev1.PersistentVolumeClaim{
-				PersistentVolumeClaim(MongodDataVolClaimName, cr.Namespace, volumeSpec),
+				PersistentVolumeClaim(psmdbconfig.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
 			volumes = append(volumes,
 				corev1.Volume{
-					Name: MongodDataVolClaimName,
+					Name: psmdbconfig.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
 						HostPath: volumeSpec.HostPath,
 						EmptyDir: volumeSpec.EmptyDir,
@@ -268,7 +270,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
 		}
 
-		pmmC := AddPMMContainer(cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
+		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
 		}
@@ -380,7 +382,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}
 
 	if cr.CompareVersion("1.13.0") >= 0 {
-		c.Command = []string{BinMountPath + "/pbm-entry.sh"}
+		c.Command = []string{psmdbconfig.BinMountPath + "/pbm-entry.sh"}
 		c.Args = []string{"pbm-agent"}
 		if cr.CompareVersion("1.14.0") >= 0 {
 			c.Args = []string{"pbm-agent-entrypoint"}
@@ -398,12 +400,12 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
 				Name:      "ssl",
-				MountPath: SSLDir,
+				MountPath: psmdbconfig.SSLDir,
 				ReadOnly:  true,
 			},
 			{
-				Name:      BinVolumeName,
-				MountPath: BinMountPath,
+				Name:      psmdbconfig.BinVolumeName,
+				MountPath: psmdbconfig.BinMountPath,
 				ReadOnly:  true,
 			},
 		}...)
@@ -438,7 +440,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
 				Name:      "mongod-data",
-				MountPath: MongodContainerDataDir,
+				MountPath: psmdbconfig.MongodContainerDataDir,
 				ReadOnly:  false,
 			},
 		}...)
@@ -465,7 +467,7 @@ func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Sec
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
 			uri += fmt.Sprintf(
 				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
-				SSLDir,
+				psmdbconfig.SSLDir,
 			)
 		}
 	}
