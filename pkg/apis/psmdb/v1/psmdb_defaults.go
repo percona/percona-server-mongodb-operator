@@ -727,7 +727,7 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
-	if rs.Storage.Engine == StorageEngineInMemory {
+	if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
 		encryptionEnabled, err := rs.Configuration.IsEncryptionEnabled()
 		if err != nil {
 			return errors.Wrap(err, "failed to parse replset configuration")
