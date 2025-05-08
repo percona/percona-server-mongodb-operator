@@ -5,6 +5,8 @@ import (
 	"crypto/md5"
 	stderrors "errors"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"os"
 	"sort"
 	"strings"
@@ -933,8 +935,8 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				if strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-") {
-					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
+				if strings.HasPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-") {
+					podName := strings.TrimPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-")
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
 						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
@@ -1327,7 +1329,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 	}
-	pmmC := psmdb.AddPMMContainer(cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
+	pmmC := pmm.Container(ctx, cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
@@ -1599,23 +1601,23 @@ func OwnerRef(ro client.Object, scheme *runtime.Scheme) (metav1.OwnerReference, 
 	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdb.CustomConfig, error) {
+func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdbconfig.CustomConfig, error) {
 	n := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}
 
-	sources := []psmdb.VolumeSourceType{
-		psmdb.VolumeSourceSecret,
-		psmdb.VolumeSourceConfigMap,
+	sources := []psmdbconfig.VolumeSourceType{
+		psmdbconfig.VolumeSourceSecret,
+		psmdbconfig.VolumeSourceConfigMap,
 	}
 
 	for _, s := range sources {
-		obj := psmdb.VolumeSourceTypeToObj(s)
+		obj := psmdbconfig.VolumeSourceTypeToObj(s)
 
 		ok, err := getObjectByName(ctx, r.client, n, obj.GetRuntimeObject())
 		if err != nil {
-			return psmdb.CustomConfig{}, errors.Wrapf(err, "get %s", s)
+			return psmdbconfig.CustomConfig{}, errors.Wrapf(err, "get %s", s)
 		}
 		if !ok {
 			continue
@@ -1623,10 +1625,10 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, nam
 
 		hashHex, err := obj.GetHashHex()
 		if err != nil {
-			return psmdb.CustomConfig{}, errors.Wrapf(err, "failed to get hash of %s", s)
+			return psmdbconfig.CustomConfig{}, errors.Wrapf(err, "failed to get hash of %s", s)
 		}
 
-		conf := psmdb.CustomConfig{
+		conf := psmdbconfig.CustomConfig{
 			Type:    s,
 			HashHex: hashHex,
 		}
@@ -1634,7 +1636,7 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, nam
 		return conf, nil
 	}
 
-	return psmdb.CustomConfig{}, nil
+	return psmdbconfig.CustomConfig{}, nil
 }
 
 func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedName, obj client.Object) (bool, error) {

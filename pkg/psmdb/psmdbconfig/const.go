@@ -1,4 +1,4 @@
-package psmdb
+package psmdbconfig
 
 import (
 	"crypto/md5"
@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	gigaByte                 int64   = 1 << 30
-	minWiredTigerCacheSizeGB float64 = 0.25
+	GigaByte                 int64   = 1 << 30
+	MinWiredTigerCacheSizeGB float64 = 0.25
 
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
@@ -23,18 +23,18 @@ const (
 	BinMountPath  = "/opt/percona"
 
 	LDAPConfVolClaimName = "ldap"
-	ldapConfDir          = "/etc/openldap"
+	LDAPConfDir          = "/etc/openldap"
 	LDAPTLSVolClaimName  = "ldap-tls"
-	ldapTLSDir           = "/etc/openldap/certs"
+	LDAPTLSDir           = "/etc/openldap/certs"
 
 	SSLDir           = "/etc/mongodb-ssl"
-	sslInternalDir   = "/etc/mongodb-ssl-internal"
-	vaultDir         = "/etc/mongodb-vault"
-	mongodConfigDir  = "/etc/mongodb-config"
-	mongosConfigDir  = "/etc/mongos-config"
-	mongodSecretsDir = "/etc/mongodb-secrets"
-	mongodPortName   = "mongodb"
-	mongosPortName   = "mongos"
+	SSLInternalDir   = "/etc/mongodb-ssl-internal"
+	VaultDir         = "/etc/mongodb-vault"
+	MongodConfigDir  = "/etc/mongodb-config"
+	MongosConfigDir  = "/etc/mongos-config"
+	MongodSecretsDir = "/etc/mongodb-secrets"
+	MongodPortName   = "mongodb"
+	MongosPortName   = "mongos"
 )
 
 type CustomConfig struct {
