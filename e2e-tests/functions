@@ -353,7 +353,7 @@ wait_restore() {
 	retry_object=0
 	until kubectl_bin get psmdb-restore restore-$backup_name >/dev/null; do
 		let retry_object+=1
-		if [[ ${retry_object} == 60 ]]; then
+		if [[ ${retry_object} -ge 60 ]]; then
 			echo "psmdb-restore/restore-$backup_name object was not created."
 			exit 1
 		fi
@@ -371,7 +371,7 @@ wait_restore() {
 			echo "OK"
 			break
 		fi
-		if [[ ${retry} == ${retry_count} || ${current_state} == 'error' ]]; then
+		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
