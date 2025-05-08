@@ -303,6 +303,6 @@ fi
 desc 'check for passwords leak'
 check_passwords_leak
 
-# destroy $namespace
+destroy $namespace
 
-# desc 'test passed'
+desc 'test passed'
