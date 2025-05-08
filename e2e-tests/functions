@@ -351,7 +351,8 @@ wait_restore() {
 	# We need to run wait till object is created, otherwise wait fails at once
 	echo -n "Waiting for the psmdb-restore/restore-$backup_name object to be created"
 	retry_object=0
-	until kubectl_bin get psmdb-restore restore-$backup_name >/dev/null; do
+	until kubectl_bin get psmdb-restore restore-$backup_name >/dev/null 2>&1; do
+		echo -n .
 		let retry_object+=1
 		if [[ ${retry_object} -ge 60 ]]; then
 			echo "psmdb-restore/restore-$backup_name object was not created."
@@ -359,11 +360,12 @@ wait_restore() {
 		fi
 		sleep 1
 	done
+	echo "OK"
 
 	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
 	retry=0
 	retry_count=$((wait_time / 60))
-	until kubectl_bin wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s 2>/dev/null; do
+	until kubectl_bin wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s >/dev/null 2>&1; do
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
