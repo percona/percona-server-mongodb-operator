@@ -90,7 +90,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		},
 	}
 
-	if cluster.CompareVersion("1.20.0") > 0 {
+	if cluster.CompareVersion("1.20.0") >= 0 {
 		mainStgName, _, err := b.spec.MainStorage()
 		if err != nil {
 			return status, errors.Wrap(err, "get main storage")
@@ -101,7 +101,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		}
 	}
 
-	log.Info("Sending backup command", "backupCmd", cmd)
+	log.Info("Sending backup command", "backupCmd", cmd, "profile", cmd.Backup.Profile)
 
 	if err := b.pbm.SendCmd(ctx, cmd); err != nil {
 		return status, err
