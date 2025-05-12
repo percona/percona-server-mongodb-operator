@@ -20,6 +20,7 @@ func TestContainer(t *testing.T) {
 		secret            *corev1.Secret
 		pmmEnabled        bool
 		expectedContainer *corev1.Container
+		params            string
 	}{
 		"pmm disabled": {
 			pmmEnabled: false,
@@ -35,6 +36,7 @@ func TestContainer(t *testing.T) {
 				},
 			},
 			expectedContainer: buildExpectedPMMContainer(),
+			params:            "-param custom",
 		},
 	}
 	for name, tt := range tests {
@@ -60,17 +62,17 @@ func TestContainer(t *testing.T) {
 					},
 				},
 			}
-			container := Container(ctx, cr, tt.secret, 27017, "")
+			container := Container(ctx, cr, tt.secret, 27017, tt.params)
 			if tt.expectedContainer != nil {
 				assert.Equal(t, tt.expectedContainer.Name, container.Name)
 				assert.Equal(t, tt.expectedContainer.Image, container.Image)
 				assert.Equal(t, len(tt.expectedContainer.Env), len(container.Env))
 				for index, ev := range container.Env {
-					assert.Equal(t, tt.expectedContainer.Env[index].Name, ev.Name, "env var % name does not match", ev.Name)
-					assert.Equal(t, tt.expectedContainer.Env[index].Value, ev.Value, "env var % value does not match", ev.Value)
+					assert.Equal(t, tt.expectedContainer.Env[index].Name, ev.Name)
+					assert.Equal(t, tt.expectedContainer.Env[index].Value, ev.Value)
 				}
 				for i, port := range tt.expectedContainer.Ports {
-					assert.Equal(t, tt.expectedContainer.Ports[i].Name, port.Name, "port index %d", i)
+					assert.Equal(t, tt.expectedContainer.Ports[i].Name, port.Name)
 				}
 				assert.Equal(t, tt.expectedContainer.Resources, container.Resources)
 				assert.Equal(t, tt.expectedContainer.ImagePullPolicy, container.ImagePullPolicy)
@@ -126,7 +128,7 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "PMM_AGENT_SETUP_FORCE", Value: "1"},
 		{Name: "PMM_AGENT_SETUP_NODE_TYPE", Value: "container"},
 		{Name: "PMM_AGENT_SETUP_METRICS_MODE", Value: "push"},
-		{Name: "PMM_ADMIN_CUSTOM_PARAMS", Value: ""},
+		{Name: "PMM_ADMIN_CUSTOM_PARAMS", Value: "-param custom"},
 		{Name: "PMM_AGENT_SIDECAR", Value: "true"},
 		{Name: "PMM_AGENT_SIDECAR_SLEEP", Value: "5"},
 		{Name: "PMM_AGENT_PATHS_TEMPDIR", Value: tempDir},
