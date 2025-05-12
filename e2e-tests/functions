@@ -337,6 +337,36 @@ simple_data_check() {
 	fi
 }
 
+get_mongod_pods() {
+	local cluster=$1
+
+	kubectl_bin get pod \
+		--no-headers \
+		-l app.kubernetes.io/instance=${cluster} \
+		-l app.kubernetes.io/component=mongod
+
+}
+
+collect_physical_restore_logs() {
+	local cluster=$1
+	local restore=$2
+
+	for pod in $(get_mongod_pods ${cluster}); do
+		desc "pbm-agent logs from ${pod}"
+		kubectl_bin exec -it ${pod} -- cat /tmp/pbm-agent.log || true
+	done
+}
+
+is_physical_backup() {
+	local backup=$1
+
+	if [[ $(kubectl_bin get psmdb-backup ${backup} -o jsonpath={.status.type}) == "physical" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
 wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
@@ -359,15 +389,15 @@ wait_restore() {
 			break
 		fi
 		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
+			desc "operator logs:"
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | tail -100
+
+			if is_physical_backup ${backup_name}; then
+				collect_physical_restore_logs
+			fi
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
-			echo something went wrong with operator or kubernetes cluster
+			log "Restore object restore-${backup_name} is in ${current_state} state."
 			exit 1
 		fi
 	done
