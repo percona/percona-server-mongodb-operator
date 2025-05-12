@@ -55,6 +55,7 @@ func TestContainer(t *testing.T) {
 			if tt.expectedContainer != nil {
 				assert.Equal(t, tt.expectedContainer.Name, container.Name)
 				assert.Equal(t, tt.expectedContainer.Image, container.Image)
+				assert.Equal(t, len(tt.expectedContainer.Env), len(container.Env))
 				for index, ev := range container.Env {
 					assert.Equal(t, tt.expectedContainer.Env[index].Name, ev.Name, "env var % name does not match", ev.Name)
 					assert.Equal(t, tt.expectedContainer.Env[index].Value, ev.Value, "env var % value does not match", ev.Value)
