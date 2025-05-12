@@ -460,6 +460,23 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
+	if cluster.CompareVersion("1.20.0") < 0 {
+		err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete PITR")
+		}
+		log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
+
+		err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete backup")
+		}
+
+		log.Info("Backup deleted")
+
+		return nil
+	}
+
 	mainStgName, _, err := cluster.Spec.Backup.MainStorage()
 	if err != nil {
 		return errors.Wrap(err, "get main storage")
