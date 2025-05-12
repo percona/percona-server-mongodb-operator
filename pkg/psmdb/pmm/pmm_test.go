@@ -11,11 +11,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
 func TestContainer(t *testing.T) {
 	ctx := context.Background()
+	boolTrue := true
+
 	tests := map[string]struct {
 		secret            *corev1.Secret
 		pmmEnabled        bool
@@ -59,6 +62,9 @@ func TestContainer(t *testing.T) {
 							},
 						},
 						MongodParams: "-param custom-mongodb-param",
+						ContainerSecurityContext: &corev1.SecurityContext{
+							RunAsNonRoot: &boolTrue,
+						},
 					},
 				},
 			}
@@ -76,6 +82,13 @@ func TestContainer(t *testing.T) {
 				}
 				assert.Equal(t, tt.expectedContainer.Resources, container.Resources)
 				assert.Equal(t, tt.expectedContainer.ImagePullPolicy, container.ImagePullPolicy)
+				assert.Equal(t, tt.expectedContainer.SecurityContext, container.SecurityContext)
+				assert.Equal(t, len(tt.expectedContainer.VolumeMounts), len(container.VolumeMounts))
+				for i, volumeMount := range container.VolumeMounts {
+					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].Name, volumeMount.Name)
+					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].MountPath, volumeMount.MountPath)
+					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].ReadOnly, volumeMount.ReadOnly)
+				}
 			}
 		})
 	}
@@ -135,6 +148,8 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "PMM_AGENT_PRERUN_SCRIPT", Value: prerunScript},
 	}
 
+	boolTrue := true
+
 	return &corev1.Container{
 		Name:            name,
 		Image:           "pmm-image",
@@ -145,6 +160,16 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU: resource.MustParse("100m"),
 			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: psmdbconfig.SSLDir,
+				ReadOnly:  true,
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: &boolTrue,
 		},
 	}
 }
