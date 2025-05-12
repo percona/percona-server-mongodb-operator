@@ -36,7 +36,6 @@ func TestContainer(t *testing.T) {
 				},
 			},
 			expectedContainer: buildExpectedPMMContainer(),
-			params:            "-param custom",
 		},
 	}
 	for name, tt := range tests {
@@ -59,10 +58,11 @@ func TestContainer(t *testing.T) {
 								corev1.ResourceCPU: resource.MustParse("100m"),
 							},
 						},
+						MongodParams: "-param custom-mongodb-param",
 					},
 				},
 			}
-			container := Container(ctx, cr, tt.secret, 27017, tt.params)
+			container := Container(ctx, cr, tt.secret, 27017, cr.Spec.PMM.MongodParams)
 			if tt.expectedContainer != nil {
 				assert.Equal(t, tt.expectedContainer.Name, container.Name)
 				assert.Equal(t, tt.expectedContainer.Image, container.Image)
@@ -128,7 +128,7 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "PMM_AGENT_SETUP_FORCE", Value: "1"},
 		{Name: "PMM_AGENT_SETUP_NODE_TYPE", Value: "container"},
 		{Name: "PMM_AGENT_SETUP_METRICS_MODE", Value: "push"},
-		{Name: "PMM_ADMIN_CUSTOM_PARAMS", Value: "-param custom"},
+		{Name: "PMM_ADMIN_CUSTOM_PARAMS", Value: "-param custom-mongodb-param"},
 		{Name: "PMM_AGENT_SIDECAR", Value: "true"},
 		{Name: "PMM_AGENT_SIDECAR_SLEEP", Value: "5"},
 		{Name: "PMM_AGENT_PATHS_TEMPDIR", Value: tempDir},
