@@ -523,6 +523,13 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				},
 			},
 		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: psmdbconfig.SSLDir,
+				ReadOnly:  true,
+			},
+		},
 	}
 
 	pmmAgentScriptEnv := PMMAgentScript(cr)
