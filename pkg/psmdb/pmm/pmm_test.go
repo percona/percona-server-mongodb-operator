@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -44,11 +45,18 @@ func TestContainer(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion: version.Version,
+					CRVersion:       version.Version,
+					ImagePullPolicy: corev1.PullAlways,
 					PMM: api.PMMSpec{
-						Enabled:    tt.pmmEnabled,
-						Image:      "pmm-image",
-						ServerHost: "server-host",
+						Enabled:           tt.pmmEnabled,
+						Image:             "pmm-image",
+						ServerHost:        "server-host",
+						CustomClusterName: "custom-cluster",
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("100m"),
+							},
+						},
 					},
 				},
 			}
@@ -64,6 +72,8 @@ func TestContainer(t *testing.T) {
 				for i, port := range tt.expectedContainer.Ports {
 					assert.Equal(t, tt.expectedContainer.Ports[i].Name, port.Name, "port index %d", i)
 				}
+				assert.Equal(t, tt.expectedContainer.Resources, container.Resources)
+				assert.Equal(t, tt.expectedContainer.ImagePullPolicy, container.ImagePullPolicy)
 			}
 		})
 	}
@@ -99,7 +109,7 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "DB_PORT", Value: "27017"},
 		{Name: "DB_PORT_MIN", Value: strconv.Itoa(portStart)},
 		{Name: "DB_PORT_MAX", Value: strconv.Itoa(portEnd)},
-		{Name: "CLUSTER_NAME", Value: "test-cr"},
+		{Name: "CLUSTER_NAME", Value: "custom-cluster"},
 		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{}},
 		{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{}},
 		{Name: "PMM_AGENT_SERVER_ADDRESS", Value: "server-host"},
@@ -124,9 +134,15 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 	}
 
 	return &corev1.Container{
-		Name:  name,
-		Image: "pmm-image",
-		Ports: ports,
-		Env:   envVars,
+		Name:            name,
+		Image:           "pmm-image",
+		Ports:           ports,
+		ImagePullPolicy: corev1.PullAlways,
+		Env:             envVars,
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("100m"),
+			},
+		},
 	}
 }
