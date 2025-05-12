@@ -1,0 +1,359 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+get_node_id_from_pmm() {
+	local -a nodeList=()
+	for instance in $(kubectl_bin get pods --no-headers -l app.kubernetes.io/name=percona-server-mongodb --output=custom-columns='NAME:.metadata.name'); do
+		nodeList+=($(kubectl_bin exec -n "$namespace" $instance -c pmm-client -- pmm-admin status --json | jq -r '.pmm_agent_status.node_id'))
+	done
+
+	echo "${nodeList[@]}"
+}
+
+does_node_id_exists() {
+	local -a nodeList=("$@")
+	local -a nodeList_from_pmm=()
+	for node_id in "${nodeList[@]}"; do
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-0 -- pmm-admin --server-url=https://admin:admin@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
+	done
+
+	echo "${nodeList_from_pmm[@]}"
+}
+
+check_custom_cluster_name() {
+	local pod_service_name=$1
+	local pmm_services_file=$2
+
+	echo "Checking $pod_service_name"
+	pmm_service_cluster=$(jq -r '.mongodb[] | select(.service_name=='\"$pod_service_name\"') | .cluster' $pmm_services_file)
+	if [[ $custom_name != $pmm_service_cluster ]]; then
+		echo "Not custom CLUSTER_NAME was used for pmm-client. Cluster in pmm: $pmm_service_cluster. customClusterName: $custom_name"
+		exit 1
+	fi
+}
+
+deploy_pmm3_server() {
+  helm repo remove stable || :
+  helm repo add stable https://charts.helm.sh/stable
+	if [[ $OPENSHIFT ]]; then
+		oc create sa pmm-server
+		oc adm policy add-scc-to-user privileged -z pmm-server
+		if [[ $OPERATOR_NS ]]; then
+			timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-psmdb-operator-' | awk '{print $1}') || :
+			oc create clusterrolebinding pmm-psmdb-operator-cluster-wide --clusterrole=percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
+			oc patch clusterrole/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n $OPERATOR_NS
+		else
+			oc create rolebinding pmm-psmdb-operator-namespace-only --role percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
+			oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
+		fi
+		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
+	fi
+
+	helm uninstall monitoring || :
+	helm repo remove percona || :
+	kubectl delete clusterrole monitoring --ignore-not-found
+	kubectl delete clusterrolebinding monitoring --ignore-not-found
+	helm repo add percona https://percona.github.io/percona-helm-charts/
+	helm repo update
+
+	retry 10 60 helm install monitoring percona/pmm \
+		--set fullnameOverride=monitoring \
+		--set image.tag=${IMAGE_PMM3_SERVER#*:} \
+		--set image.repository=${IMAGE_PMM3_SERVER%:*} \
+		--set service.type=LoadBalancer \
+		$additional_params \
+		--force
+}
+
+get_pmm_server_token() {
+	local key_name=$1
+
+	if [[ -z $key_name ]]; then
+		key_name="operator"
+	fi
+
+	local ADMIN_PASSWORD
+	ADMIN_PASSWORD=$(kubectl get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+
+	if [[ -z $ADMIN_PASSWORD ]]; then
+		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
+		return 1
+	fi
+
+	local create_response create_status_code create_json_response
+	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
+		--user "admin:${ADMIN_PASSWORD}" \
+		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts" \
+		-w "\n%{http_code}")
+
+	create_status_code=$(echo "$create_response" | tail -n1)
+	create_json_response=$(echo "$create_response" | sed '$ d')
+
+	if [[ $create_status_code -ne 201 ]]; then
+		echo "Error: Failed to create PMM service account. HTTP Status: $create_status_code" >&2
+		echo "Response: $create_json_response" >&2
+		return 1
+	fi
+
+	local service_account_id
+	service_account_id=$(echo "$create_json_response" | jq -r '.id')
+
+	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+		echo "Error: Failed to extract service account ID!" >&2
+		return 1
+	fi
+
+	local token_response token_status_code token_json_response
+	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+		-d "{\"name\":\"${key_name}\"}" \
+		--user "admin:${ADMIN_PASSWORD}" \
+		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		-w "\n%{http_code}")
+
+	token_status_code=$(echo "$token_response" | tail -n1)
+	token_json_response=$(echo "$token_response" | sed '$ d')
+
+	if [[ $token_status_code -ne 200 ]]; then
+		echo "Error: Failed to create token. HTTP Status: $token_status_code" >&2
+		echo "Response: $token_json_response" >&2
+		return 1
+	fi
+
+	echo "$token_json_response" | jq -r '.key'
+}
+
+delete_pmm_server_token() {
+	local key_name=$1
+
+	if [[ -z $key_name ]]; then
+		key_name="operator"
+	fi
+
+	local ADMIN_PASSWORD
+	ADMIN_PASSWORD=$(kubectl get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+
+	if [[ -z $ADMIN_PASSWORD ]]; then
+		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
+		return 1
+	fi
+
+	local user_credentials="admin:${ADMIN_PASSWORD}"
+
+	local service_accounts_response service_accounts_status
+	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/search" \
+		-w "\n%{http_code}")
+
+	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
+	service_accounts_json=$(echo "$service_accounts_response" | sed '$ d')
+
+	if [[ $service_accounts_status -ne 200 ]]; then
+		echo "Error: Failed to fetch service accounts. HTTP Status: $service_accounts_status" >&2
+		echo "Response: $service_accounts_json" >&2
+		return 1
+	fi
+
+	local service_account_id
+	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+
+	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+		echo "Service account '${key_name}' not found."
+		return 1
+	fi
+
+	local tokens_response tokens_status tokens_json
+	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		-w "\n%{http_code}")
+
+	tokens_status=$(echo "$tokens_response" | tail -n1)
+	tokens_json=$(echo "$tokens_response" | sed '$ d')
+
+	if [[ $tokens_status -ne 200 ]]; then
+		echo "Error: Failed to fetch tokens. HTTP Status: $tokens_status" >&2
+		echo "Response: $tokens_json" >&2
+		return 1
+	fi
+
+	local token_id
+	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
+
+	if [[ -z $token_id || $token_id == "null" ]]; then
+		echo "Token for service account '${key_name}' not found."
+		return 1
+	fi
+
+	local delete_response delete_status
+	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
+		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
+		-w "\n%{http_code}")
+
+	delete_status=$(echo "$delete_response" | tail -n1)
+
+	if [[ $delete_status -ne 200 ]]; then
+		echo "Error: Failed to delete token. HTTP Status: $delete_status" >&2
+		echo "Response: $delete_response" >&2
+		return 1
+	fi
+}
+
+create_infra $namespace
+deploy_cert_manager
+
+desc 'install PMM Server'
+deploy_pmm3_server
+sleep 20
+until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
+	echo "Retry $retry"
+	sleep 5
+	let retry+=1
+	if [ $retry -ge 20 ]; then
+		echo "Max retry count $retry reached. Pmm-server can't start"
+		exit 1
+	fi
+done
+
+cluster="monitoring"
+
+desc 'create secrets and start client'
+kubectl_bin apply \
+	-f $conf_dir/secrets.yml \
+	-f $test_dir/conf/secrets.yml
+
+yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
+	"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
+sleep 90
+
+desc "create first PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster-rs0.yml"
+wait_for_running $cluster-rs0 3
+
+desc 'check if pmm-client container is not enabled'
+compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
+sleep 10
+
+#custom_port='27019'
+#run_mongos \
+#	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+#	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" \
+#	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
+#run_mongos \
+#	'sh.enableSharding("myApp")' \
+#	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "" "" \
+#	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
+#insert_data_mongos "100500" "myApp" \
+#	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
+#insert_data_mongos "100600" "myApp" \
+#	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
+#insert_data_mongos "100700" "myApp" \
+#	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
+#
+#desc 'add PMM3 token to secret'
+#TOKEN=$(get_pmm_server_token "operator")
+#kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_TOKEN": "'"$TOKEN"'"}}'
+#
+#desc 'check if all 3 Pods started'
+#wait_for_running $cluster-rs0 3
+## wait for prometheus
+#sleep 90
+#
+#desc 'check if pmm-client container enabled'
+#compare_kubectl statefulset/$cluster-rs0
+#compare_kubectl service/$cluster-rs0
+#compare_kubectl service/$cluster-mongos
+#compare_kubectl statefulset/$cluster-cfg
+#compare_kubectl statefulset/$cluster-mongos
+#
+#desc 'create new PMM token and add it to the secret'
+#NEW_TOKEN=$(get_pmm_server_token "operator_new")
+#kubectl_bin patch some-users --type merge --patch '{"stringData": {"PMM_SERVER_TOKEN": "'"$NEW_TOKEN"'"}}'
+#
+#desc 'delete old PMM token'
+#delete_pmm_server_token "operator"
+
+#desc 'check mongod metrics'
+#get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 admin:admin
+#get_metric_values mongodb_connections $namespace-$cluster-rs0-1 admin:admin
+#
+#desc 'check mongo config  metrics'
+#get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 admin:admin
+#get_metric_values mongodb_connections $namespace-$cluster-cfg-1 admin:admin
+#
+#desc 'check mongos metrics'
+#MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
+#get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME admin:admin
+##get_metric_values mongodb_mongos_connections ${cluster%%-rs0}-mongos-0
+#
+## wait for QAN
+#sleep 90
+#
+#desc 'check QAN data'
+#get_qan_values mongodb "dev-mongod" admin:admin
+#get_qan_values mongodb "dev-mongos" admin:admin
+#
+#nodeList=($(get_node_id_from_pmm))
+#nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
+#for node_id in "${nodeList_from_pmm[@]}"; do
+#	if [ -z "$node_id" ]; then
+#		echo "Can't get $node_id node_id from PMM server"
+#		exit 1
+#	fi
+#done
+#
+#kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
+#wait_for_delete "pod/${cluster}-mongos-0"
+#wait_for_delete "pod/${cluster}-rs0-0"
+#wait_for_delete "pod/${cluster}-cfg-0"
+#
+#desc 'check if services are not deleted'
+#
+#kubectl_bin get svc $cluster-rs0
+#kubectl_bin get svc $cluster-cfg
+#kubectl_bin get svc $cluster-mongos
+#
+#does_node_id_exists_in_pmm=($(does_node_id_exists "${nodeList[@]}"))
+#for instance in "${does_node_id_exists_in_pmm[@]}"; do
+#	if [ -n "$instance" ]; then
+#		echo "The $instance pod was not deleted from server inventory"
+#		exit 1
+#	fi
+#done
+#
+#desc 'check customClusterName for pmm'
+#custom_name="custom-cluster-name"
+#kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":false}, {"op":"add","path":"/spec/pmm/customClusterName","value":'$custom_name'}]'
+#wait_for_running $cluster-rs0 3
+#
+## get services list from pmm server
+#curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
+#check_custom_cluster_name ${namespace}-${cluster}-mongos-0 ${tmp_dir}/pmm_service_list.json
+#check_custom_cluster_name ${namespace}-${cluster}-rs0-0 ${tmp_dir}/pmm_service_list.json
+#check_custom_cluster_name ${namespace}-${cluster}-cfg-0 ${tmp_dir}/pmm_service_list.json
+#
+#if [[ -n ${OPENSHIFT} ]]; then
+#	oc adm policy remove-scc-from-user privileged -z pmm-server
+#	if [ -n "$OPERATOR_NS" ]; then
+#		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
+#	else
+#		oc delete rolebinding pmm-psmdb-operator-namespace-only
+#	fi
+#fi
+#
+#if [[ $(kubectl_bin logs monitoring-rs0-0 pmm-client | grep -c 'cannot auto discover databases and collections') != 0 ]]; then
+#	echo "error: cannot auto discover databases and collections"
+#	exit 1
+#fi
+#
+#desc 'check for passwords leak'
+#check_passwords_leak
+#
+#helm uninstall monitoring
+#destroy $namespace
+#
+#desc 'test passed'
