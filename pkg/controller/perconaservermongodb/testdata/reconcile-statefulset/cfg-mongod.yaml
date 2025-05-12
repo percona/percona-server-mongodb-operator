@@ -83,7 +83,7 @@ spec:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: percona/percona-server-mongodb:8.0.8-3
+        image: percona/percona-server-mongodb:7.0.18-11
         imagePullPolicy: Always
         livenessProbe:
           exec:
