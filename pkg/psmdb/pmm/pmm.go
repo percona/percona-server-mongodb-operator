@@ -544,7 +544,6 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 
 	if v, exists := secret.Data[api.PMMServerToken]; exists && len(v) != 0 {
-		log.Info("creating pmm3 container")
 		return containerForPMM3(cr, secret, dbPort, customAdminParams)
 	}
 
@@ -552,7 +551,6 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 		return nil
 	}
 
-	log.Info("creating pmm2 container")
 	pmmC := containerForPMM2(cr, secret, dbPort, customAdminParams)
 
 	clusterName := cr.Name
