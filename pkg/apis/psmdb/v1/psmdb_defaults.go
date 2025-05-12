@@ -466,6 +466,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					"--component", "mongod",
 				},
 			}
+			if cr.TLSEnabled() && cr.CompareVersion("1.21.0") >= 0 {
+				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
 
 			if cr.CompareVersion("1.15.0") < 0 {
 				replset.ReadinessProbe.Exec = nil
@@ -796,6 +802,12 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"k8s", "readiness",
 				"--component", "mongod",
 			},
+		}
+		if cr.TLSEnabled() && cr.CompareVersion("1.21.0") >= 0 {
+			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
 		}
 
 		if cr.CompareVersion("1.15.0") < 0 {

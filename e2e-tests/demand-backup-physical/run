@@ -149,4 +149,4 @@ backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio}
 run_recovery_check ${backup_name_minio} "_restore-arbiter-nv"
 
-destroy "$namespace"
+#destroy "$namespace"

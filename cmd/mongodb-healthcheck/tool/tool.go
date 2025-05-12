@@ -111,7 +111,7 @@ func (app *App) Run(ctx context.Context) error {
 		switch *component {
 
 		case "mongod":
-			err := healthcheck.MongodReadinessCheck(ctx, cnf.Hosts[0])
+			err := healthcheck.MongodReadinessCheck(ctx, cnf)
 			if err != nil {
 				return errors.Wrap(err, "member failed Kubernetes readiness check")
 			}
