@@ -3,7 +3,6 @@ package psmdb
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"math"
 	"strconv"
 
@@ -11,6 +10,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 )
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,

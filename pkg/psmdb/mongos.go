@@ -2,7 +2,6 @@ package psmdb
 
 import (
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {

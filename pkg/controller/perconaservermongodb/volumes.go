@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"math"
 	"slices"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
