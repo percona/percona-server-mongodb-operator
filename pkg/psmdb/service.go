@@ -3,7 +3,6 @@ package psmdb
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 )
 
 // Service returns a core/v1 API Service

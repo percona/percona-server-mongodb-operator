@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 )
 
 type Logger struct {

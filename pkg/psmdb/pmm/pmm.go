@@ -3,15 +3,15 @@ package pmm
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
 )
 
 // containerForPMM2 returns a pmm2 container from the given spec.
