@@ -46,8 +46,9 @@ func TestContainer(t *testing.T) {
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version,
 					PMM: api.PMMSpec{
-						Enabled: tt.pmmEnabled,
-						Image:   "pmm-image",
+						Enabled:    tt.pmmEnabled,
+						Image:      "pmm-image",
+						ServerHost: "server-host",
 					},
 				},
 			}
@@ -101,7 +102,7 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "CLUSTER_NAME", Value: "test-cr"},
 		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{}},
 		{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{}},
-		{Name: "PMM_AGENT_SERVER_ADDRESS", Value: ""},
+		{Name: "PMM_AGENT_SERVER_ADDRESS", Value: "server-host"},
 		{Name: "PMM_AGENT_SERVER_USERNAME", Value: "service_token"},
 		{Name: "PMM_AGENT_SERVER_PASSWORD", ValueFrom: &corev1.EnvVarSource{}},
 		{Name: "PMM_AGENT_LISTEN_PORT", Value: strconv.Itoa(listenPort)},
