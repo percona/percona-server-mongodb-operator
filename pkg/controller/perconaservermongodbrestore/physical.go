@@ -461,6 +461,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
 
+	log.Info("existing envs in the sts")
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil {
+			log.Info("EnvVar from FieldRef",
+				"Name", env.Name,
+				"FieldPath", env.ValueFrom.FieldRef.FieldPath,
+			)
+		} else {
+			log.Info("EnvVar with Value",
+				"Name", env.Name,
+				"Value", env.Value,
+			)
+		}
+	}
+
+	log.Info("preparing the new uri")
+
 	sslSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
 	if client.IgnoreNotFound(err) != nil {
@@ -471,6 +488,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	if cluster.CompareVersion("1.21.0") >= 0 {
 		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
 	}
+
+	log.Info("the new uri is ", "uri", mongoDBURI)
 
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
