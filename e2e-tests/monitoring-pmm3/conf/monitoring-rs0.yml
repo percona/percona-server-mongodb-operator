@@ -65,7 +65,7 @@ spec:
 
   pmm:
     enabled: true
-    image: -pmm
+    image: percona/pmm-server:3.1.0
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
