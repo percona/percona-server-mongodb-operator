@@ -30,6 +30,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -228,14 +229,28 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cjobs {
-		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
-		}
+		log.Info("Waiting to finish another backup/restore.")
 		status.State = psmdbv1.BackupStateWaiting
 		return status, nil
 	}
 
-	switch cr.Status.State {
+	log.Info("Acquiring the backup lock")
+	lease, err := k8s.AcquireLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
+	if err != nil {
+		return status, errors.Wrap(err, "acquire backup lock")
+	}
+
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != naming.BackupHolderId(cr) {
+		log.Info("Another backup is holding the lock", "holder", *lease.Spec.HolderIdentity)
+		status.State = psmdbv1.BackupStateWaiting
+		return status, nil
+	}
+
+	if err := r.ensureReleaseLockFinalizer(ctx, cluster, cr); err != nil {
+		return status, errors.Wrapf(err, "ensure %s finalizer", naming.FinalizerReleaseLock)
+	}
+
+	switch status.State {
 	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
 		return bcp.Start(ctx, r.client, cluster, cr)
 	}
@@ -248,7 +263,37 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return err
 	})
 
+	switch status.State {
+	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
+		log.Info("Releasing backup lock", "lease", naming.BackupLeaseName(cluster.Name))
+
+		err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
+		if err != nil {
+			log.Error(err, "failed to release the lock")
+		}
+	}
+
 	return status, err
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	cr *psmdbv1.PerconaServerMongoDBBackup,
+) error {
+	for _, f := range cr.GetFinalizers() {
+		if f == naming.FinalizerReleaseLock {
+			return nil
+		}
+	}
+
+	orig := cr.DeepCopy()
+	cr.SetFinalizers(append(cr.GetFinalizers(), naming.FinalizerReleaseLock))
+	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch finalizers")
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
@@ -390,6 +435,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
 				}
+			case naming.FinalizerReleaseLock:
+				err = r.runReleaseLockFinalizer(ctx, cr)
+				if err != nil {
+					log.Error(err, "failed to release backup lock")
+					finalizers = append(finalizers, f)
+				}
 			}
 		}
 	}
@@ -398,6 +449,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	err = r.client.Update(ctx, cr)
 
 	return err
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) runReleaseLockFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
+	err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cr.Spec.PSMDBCluster), cr.Namespace, naming.BackupHolderId(cr))
+	if k8serrors.IsNotFound(err) || errors.Is(err, k8s.ErrNotTheHolder) {
+		return nil
+	}
+	return errors.Wrap(err, "release backup lock")
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
