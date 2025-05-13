@@ -150,8 +150,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
-			return (strings.Contains(err.Error(), "another operation") ||
-				strings.Contains(err.Error(), "unable to upgrade connection"))
+			return strings.Contains(err.Error(), "another operation") ||
+				strings.Contains(err.Error(), "unable to upgrade connection")
 		}, func() error {
 			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
 
@@ -189,10 +189,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	meta := backup.BackupMeta{}
 
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return (strings.Contains(err.Error(), "container is not created or running") ||
+		return strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
+			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
 		stderrBuf.Reset()
@@ -471,6 +471,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	if cluster.CompareVersion("1.21.0") >= 0 {
 		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
 	}
+
+	log.Info("existing env vars")
+
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		log.Info("Env var", "name", env.Name, "value", env.Value)
+	}
+
+	log.Info("Setting up mongodb", "new uri", mongoDBURI)
 
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
