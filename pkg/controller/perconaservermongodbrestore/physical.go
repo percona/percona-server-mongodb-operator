@@ -460,6 +460,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+
+	sslSecret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "check ssl secrets")
+	}
+
+	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+	if cluster.CompareVersion("1.21.0") >= 0 {
+		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
+	}
+
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -471,7 +483,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		},
 		{
 			Name:  "PBM_MONGODB_URI",
-			Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
+			Value: mongoDBURI,
 		},
 	}...)
 
