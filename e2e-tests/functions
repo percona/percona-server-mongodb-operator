@@ -5,7 +5,7 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1"
 OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod7.0"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
@@ -15,9 +15,7 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.17.2"
-MINIO_VER="5.4.0"
-CHAOS_MESH_VER="2.7.1"
+CERT_MANAGER_VER="1.16.3"
 UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
@@ -232,15 +230,14 @@ wait_backup() {
 		echo -n .
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 600 || ${current_status} == 'error' ]]; then
+		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
-				| tail -200
-			kubectl_bin get psmdb-backup
-			echo "Backup object psmdb-backup/${backup_name} is in ${current_status} state."
+				| tail -100
+			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -349,24 +346,11 @@ wait_restore() {
 	local ok_if_ready=${6:-0}
 
 	set +o xtrace
-	# We need to run wait till object is created, otherwise wait fails at once
-	echo -n "Waiting for the psmdb-restore/restore-$backup_name object to be created"
-	retry_object=0
-	until kubectl_bin get psmdb-restore restore-$backup_name >/dev/null 2>&1; do
-		echo -n .
-		let retry_object+=1
-		if [[ ${retry_object} -ge 60 ]]; then
-			echo "psmdb-restore/restore-$backup_name object was not created."
-			exit 1
-		fi
-		sleep 1
-	done
-	echo "OK"
-
-	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
 	retry=0
-	retry_count=$((wait_time / 60))
-	until kubectl wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s >/dev/null 2>&1; do
+	echo -n "waiting psmdb-restore/restore-${backup_name} to reach ${target_state} state"
+	local current_state=
+	until [[ ${current_state} == ${target_state} ]]; do
+		sleep 0.5
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
@@ -374,7 +358,7 @@ wait_restore() {
 			echo "OK"
 			break
 		fi
-		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
+		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
 				| grep -v 'level=info' \
 				| grep -v 'level=debug' \
@@ -382,7 +366,6 @@ wait_restore() {
 				| grep -v 'Getting pods from source' \
 				| tail -100
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
-			kubectl_bin describe psmdb-restore restore-${backup_name}
 			echo "Restore object restore-${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
@@ -391,7 +374,7 @@ wait_restore() {
 	echo "OK"
 	set_debug
 
-	if [[ $wait_cluster_consistency -eq 1 ]]; then
+	if [ $wait_cluster_consistency -eq 1 ]; then
 		wait_cluster_consistency "${cluster_name}"
 	fi
 }
@@ -433,6 +416,8 @@ deploy_operator() {
 	fi
 	sleep 2
 	wait_pod $(get_operator_pod)
+	echo "Print started operator branch"
+	kubectl logs $(get_operator_pod)  | head -n 1
 }
 
 deploy_operator_gh() {
@@ -463,7 +448,7 @@ deploy_minio() {
 	helm repo add minio https://charts.min.io/
 	# kubectl_bin delete pvc minio-service --force
 	retry 10 60 helm install minio-service \
-		--version $MINIO_VER \
+		--version 5.0.14 \
 		--set replicas=1 \
 		--set mode=standalone \
 		--set resources.requests.memory=256Mi \
@@ -559,7 +544,7 @@ deploy_chaos_mesh() {
 
 	desc 'install chaos-mesh'
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version $CHAOS_MESH_VER
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
 	sleep 10
 }
 
@@ -1038,14 +1023,6 @@ delete_crd() {
 	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
-delete_backups() {
-	desc 'Delete psmdb-backup'
-	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
-		kubectl_bin get psmdb-backup
-		kubectl_bin delete psmdb-backup --all
-	fi
-}
-
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
@@ -1065,8 +1042,6 @@ destroy() {
 	fi
 	#TODO: maybe will be enabled later
 	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
-
-	delete_backups
 
 	delete_crd
 
