@@ -918,6 +918,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 		return "", errors.Wrap(err, "unmarshal PBM status output")
 	}
 
+	if len(pbmStatus.Backups.Chunks.Timelines) < 1 {
+		return "", errors.New("no oplog chunks")
+	}
+
 	latest := pbmStatus.Backups.Chunks.Timelines[len(pbmStatus.Backups.Chunks.Timelines)-1].Range.End
 	ts := time.Unix(int64(latest), 0).UTC()
 
