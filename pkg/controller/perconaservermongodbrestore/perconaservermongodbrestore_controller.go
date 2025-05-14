@@ -438,6 +438,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 		return errors.Wrap(err, "get backup")
 	}
 
+	if cluster.CompareVersion("1.20.0") < 0 {
+		if err := pbmC.ResyncMainStorageAndWait(ctx); err != nil {
+			return errors.Wrap(err, "start config resync")
+		}
+
+		return nil
+	}
+
 	mainStgName, _, err := cluster.Spec.Backup.MainStorage()
 	if err != nil {
 		return errors.Wrap(err, "get main storage")
