@@ -52,10 +52,7 @@ func ReleaseLease(ctx context.Context, c client.Client, name, namespace, holder 
 		return errors.Wrap(err, "get lease")
 	}
 
-	if lease.Spec.HolderIdentity == nil {
-		// TODO: What to do?
-	}
-
+	// HolderIdentity can be nil, we allow deleting the lease if that's the case
 	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != holder {
 		return ErrNotTheHolder
 	}
