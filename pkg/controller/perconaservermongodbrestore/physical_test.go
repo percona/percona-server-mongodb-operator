@@ -93,7 +93,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		Namespace: sts.Namespace,
 	}
 
-	err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName)
+	err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
 	assert.NoError(t, err)
 
 	updatedSTS := &appsv1.StatefulSet{}
@@ -101,7 +101,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "true", updatedSTS.Annotations[psmdbv1.AnnotationRestoreInProgress])
-	
+
 	for _, c := range updatedSTS.Spec.Template.Spec.Containers {
 		assert.NotEqual(t, naming.ContainerBackupAgent, c.Name)
 	}
