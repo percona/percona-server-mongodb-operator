@@ -26,6 +26,9 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		},
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			CRVersion: version.Version,
+			TLS: &psmdbv1.TLSSpec{
+				Mode: psmdbv1.TLSModeRequire,
+			},
 			Backup: psmdbv1.BackupSpec{
 				Image: "percona/percona-backup-mongodb:latest",
 				VolumeMounts: []corev1.VolumeMount{
@@ -38,6 +41,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Secrets: &psmdbv1.SecretsSpec{
 				Users: "users-secret",
+				SSL:   "ssl-secret",
 			},
 		},
 	}
@@ -60,12 +64,6 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 						{
 							Name:  "mongod",
 							Image: "percona/percona-server-mongodb:latest",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "PBM_MONGODB_URI",
-									Value: "random-uri",
-								},
-							},
 						},
 						{
 							Name:  naming.ContainerBackupAgent,
@@ -77,7 +75,19 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		},
 	}
 
-	r := fakeReconciler(cluster, sts)
+	secretTLS := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Spec.Secrets.SSL,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string][]byte{
+			"ca.crt":  {},
+			"tls.crt": {},
+			"tls.key": {},
+		},
+	}
+
+	r := fakeReconciler(cluster, sts, secretTLS)
 	namespacedName := types.NamespacedName{
 		Name:      sts.Name,
 		Namespace: sts.Namespace,
@@ -91,7 +101,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "true", updatedSTS.Annotations[psmdbv1.AnnotationRestoreInProgress])
-
+	
 	for _, c := range updatedSTS.Spec.Template.Spec.Containers {
 		assert.NotEqual(t, naming.ContainerBackupAgent, c.Name)
 	}
@@ -106,5 +116,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	assert.True(t,
 		slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
 			return c.MountPath == "/etc/pbm/"
+		}))
+
+	assert.True(t,
+		slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(c corev1.EnvVar) bool {
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
+			return c.Name == "PBM_MONGODB_URI" && c.Value == expectedURI
 		}))
 }
