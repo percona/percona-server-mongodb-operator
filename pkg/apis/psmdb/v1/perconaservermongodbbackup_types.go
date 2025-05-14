@@ -11,7 +11,6 @@ import (
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
-	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
 	ClusterName      string                   `json:"clusterName,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
@@ -120,8 +119,5 @@ func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
 // GetClusterName returns ClusterName if it's not empty. Otherwise, it will return PSMDBCluster.
 // TODO: Remove after v1.15
 func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
-	if len(p.ClusterName) > 0 {
-		return p.ClusterName
-	}
-	return p.PSMDBCluster
+	return p.ClusterName
 }
