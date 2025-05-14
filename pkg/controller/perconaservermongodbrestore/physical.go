@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -361,7 +362,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Appending a volume for backup configuration.
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
-func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName) error {
+func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
+	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32) error {
 	log := logf.FromContext(ctx)
 
 	sts := appsv1.StatefulSet{}
@@ -470,6 +472,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cluster.CompareVersion("1.20.0") >= 0 { // TODO: change this to 1.21
 		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
+
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+			Name:  "PBM_MONGODB_PORT",
+			Value: strconv.Itoa(int(port)),
+		})
 	}
 
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
@@ -482,6 +489,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			},
 		},
 		{
+			// This environment variable must be appended last because it may reference
+			// other variables using the $(VAR_NAME) syntax, which only resolves correctly
+			// if those variables are already defined above.
 			Name:  "PBM_MONGODB_URI",
 			Value: mongoDBURI,
 		},
@@ -522,7 +532,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}, rs.GetPort())
 		})
 		if err != nil {
 			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -535,7 +545,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn, rs.GetPort())
 			})
 			if err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
