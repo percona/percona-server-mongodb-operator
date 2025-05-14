@@ -434,7 +434,7 @@ deploy_operator() {
 	sleep 2
 	wait_pod $(get_operator_pod)
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod)  | grep 'Manager starting up'
+	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_operator_gh() {
@@ -457,7 +457,7 @@ deploy_operator_gh() {
 	sleep 2
 	wait_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod)  | grep 'Manager starting up'
+	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_minio() {
