@@ -376,14 +376,6 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Value: strconv.Itoa(int(dbPort)),
 			},
 			{
-				Name:  "DB_PORT_MIN",
-				Value: "30100",
-			},
-			{
-				Name:  "DB_PORT_MAX",
-				Value: "30105",
-			},
-			{
 				Name:  "CLUSTER_NAME",
 				Value: clusterName,
 			},

@@ -1,12 +1,10 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: monitoring
+  name: monitoring-pmm3
 spec:
   #platform: openshift
   image:
-  tls:
-    mode: requireTLS
   replsets:
   - name: rs0
     affinity:
@@ -59,13 +57,13 @@ spec:
       expose:
         type: ClusterIP
         labels:
-          test: monitoring
+          test: monitoring-pmm3
         annotations:
-          test: monitoring
+          test: monitoring-pmm3
 
   pmm:
     enabled: true
-    image: percona/pmm-server:3.1.0
+    image:
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
