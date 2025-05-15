@@ -26,9 +26,6 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		},
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			CRVersion: version.Version,
-			TLS: &psmdbv1.TLSSpec{
-				Mode: psmdbv1.TLSModeRequire,
-			},
 			Backup: psmdbv1.BackupSpec{
 				Image: "percona/percona-backup-mongodb:latest",
 				VolumeMounts: []corev1.VolumeMount{
@@ -118,9 +115,9 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			return c.MountPath == "/etc/pbm/"
 		}))
 
-	assert.True(t,
-		slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(c corev1.EnvVar) bool {
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
-			return c.Name == "PBM_MONGODB_URI" && c.Value == expectedURI
-		}))
+	lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
+	expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
+
+	assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
+	assert.Equal(t, expectedURI, lastEnvVar.Value)
 }
