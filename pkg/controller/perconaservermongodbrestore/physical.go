@@ -293,6 +293,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				}
 			}
 
+			if rs.Hidden.Enabled {
+				stsName := naming.HiddenStatefulSetName(cluster, rs)
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
+
 			if rs.Arbiter.Enabled {
 				stsName := naming.ArbiterStatefulSetName(cluster, rs)
 
@@ -501,6 +518,20 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 		if rs.NonVoting.Enabled {
 			stsName := naming.NonVotingStatefulSetName(cluster, rs)
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if rs.Hidden.Enabled {
+			stsName := naming.HiddenStatefulSetName(cluster, rs)
 			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
@@ -832,6 +863,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 				return false, nil
 			}
 		}
+
+		if rs.Hidden.Enabled {
+			ready, err := r.checkStatefulSetForPhysicalRestore(ctx, cluster, rs, naming.ComponentHidden)
+			if err != nil {
+				return false, errors.Wrapf(err, "check %s %s statefulset", rs.Name, naming.ComponentHidden)
+			}
+
+			if !ready {
+				return false, nil
+			}
+		}
 	}
 
 	return true, nil
@@ -845,9 +887,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 ) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	stsName := naming.MongodStatefulSetName(cluster, rs)
-	if component == naming.ComponentNonVoting {
+	var stsName string
+	switch component {
+	case naming.ComponentMongod:
+		stsName = naming.MongodStatefulSetName(cluster, rs)
+	case naming.ComponentNonVoting:
 		stsName = naming.NonVotingStatefulSetName(cluster, rs)
+	case naming.ComponentHidden:
+		stsName = naming.HiddenStatefulSetName(cluster, rs)
 	}
 
 	sts := appsv1.StatefulSet{}

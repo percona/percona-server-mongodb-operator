@@ -18,6 +18,7 @@ IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 CERT_MANAGER_VER="1.16.3"
 UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
+SKIP_DELETE=${SKIP_DELETE:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -104,6 +105,12 @@ apply_s3_storage_secrets() {
 	fi
 }
 
+set_kube_ctx() {
+	local namespace=$1
+
+	kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+}
+
 create_namespace() {
 	local namespace="$1"
 	local skip_clean_namespace="$2"
@@ -137,7 +144,7 @@ create_namespace() {
 
 		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
-		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+		set_kube_ctx ${namespace}
 	fi
 }
 
@@ -609,6 +616,12 @@ wait_for_running() {
 			wait_pod ${name}-nv-${i}
 		done
 	fi
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.size}') - 1))
+		for i in $(seq 0 $last_pod); do
+			wait_pod ${name}-hidden-${i}
+		done
+	fi
 	sleep 10
 	if [[ ${check_cluster_readyness} == "true" ]]; then
 		set +x
@@ -1025,6 +1038,11 @@ delete_crd() {
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
+
+	if [[ ${SKIP_DELETE} == 1 ]]; then
+		echo "SKIP_DELETE=1, not destroying ${namespace}"
+		return
+	fi
 
 	desc 'destroy cluster/operator and all other resources'
 	if [ ${ignore_logs} == "false" ] && [ "${DEBUG_TESTS}" == 1 ]; then

@@ -511,6 +511,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
+
+		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
+			return errors.Wrap(err, "set nonvoting defaults")
+		}
 	}
 
 	if cr.Spec.Backup.Enabled {
@@ -840,6 +844,103 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 
 	if err := nv.Configuration.SetDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set configuration defaults")
+	}
+
+	return nil
+}
+
+func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !h.Enabled {
+		return nil
+	}
+
+	if h.VolumeSpec != nil {
+		if err := h.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		h.VolumeSpec = rs.VolumeSpec
+	}
+
+	if h.LivenessProbe == nil {
+		h.LivenessProbe = new(LivenessProbeExtended)
+	}
+	if h.LivenessProbe.InitialDelaySeconds < 1 {
+		h.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
+	}
+	if h.LivenessProbe.TimeoutSeconds < 1 {
+		h.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
+	}
+	if h.LivenessProbe.PeriodSeconds < 1 {
+		h.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
+	}
+	if h.LivenessProbe.FailureThreshold < 1 {
+		h.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
+	}
+	if h.LivenessProbe.StartupDelaySeconds < 1 {
+		h.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
+	}
+	if h.LivenessProbe.ProbeHandler.Exec == nil {
+		h.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
+			Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		if cr.TLSEnabled() {
+			h.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
+				h.LivenessProbe.Probe.ProbeHandler.Exec.Command,
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+			)
+		}
+	}
+	startupDelaySecondsFlag := "--startupDelaySeconds"
+	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		h.LivenessProbe.ProbeHandler.Exec.Command = append(
+			h.LivenessProbe.ProbeHandler.Exec.Command,
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+	}
+
+	if h.ReadinessProbe == nil {
+		h.ReadinessProbe = &corev1.Probe{}
+	}
+
+	if h.ReadinessProbe.TCPSocket == nil && h.ReadinessProbe.Exec == nil {
+		h.ReadinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
+			},
+		}
+	}
+	if h.ReadinessProbe.InitialDelaySeconds < 1 {
+		h.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
+	}
+	if h.ReadinessProbe.TimeoutSeconds < 1 {
+		h.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
+	}
+	if h.ReadinessProbe.PeriodSeconds < 1 {
+		h.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
+	}
+	if h.ReadinessProbe.FailureThreshold < 1 {
+		h.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
+	}
+
+	if len(h.ServiceAccountName) == 0 {
+		h.ServiceAccountName = WorkloadSA
+	}
+
+	h.MultiAZ.reconcileOpts(cr)
+
+	if h.ContainerSecurityContext == nil {
+		h.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if h.PodSecurityContext == nil {
+		h.PodSecurityContext = rs.PodSecurityContext
+	}
+
+	if err := h.Configuration.SetDefaults(); err != nil {
 		return errors.Wrap(err, "failed to set configuration defaults")
 	}
 

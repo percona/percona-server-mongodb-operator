@@ -917,10 +917,6 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 	}
 
 	for i, member := range *m {
-		if member.Hidden {
-			continue
-		}
-
 		if _, ok := member.Tags["external"]; ok {
 			[]ConfigMember(*m)[i].Votes = member.Votes
 			[]ConfigMember(*m)[i].Priority = member.Priority
@@ -938,6 +934,17 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 
 			[]ConfigMember(*m)[i].Votes = 0
 			[]ConfigMember(*m)[i].Priority = 0
+
+			continue
+		}
+
+		if _, ok := member.Tags["hidden"]; ok {
+			// Hidden member is a voting ReplSet member
+			// but it is not listed in hello command.
+
+			[]ConfigMember(*m)[i].Votes = 1
+			[]ConfigMember(*m)[i].Priority = 0
+			votes++
 
 			continue
 		}

@@ -362,7 +362,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 	if cr.CompareVersion("1.9.0") >= 0 && configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
+			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 

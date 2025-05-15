@@ -60,6 +60,12 @@ func NonVotingLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map
 	return ls
 }
 
+func HiddenLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {
+	ls := RSLabels(cr, replset)
+	ls[LabelKubernetesComponent] = ComponentHidden
+	return ls
+}
+
 func MongosLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	ls := ClusterLabels(cr)
 	ls[LabelKubernetesComponent] = ComponentMongos

@@ -465,6 +465,68 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	return rr, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	matchLabels := naming.MongodLabels(cr, replset)
+
+	_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+	if err != nil {
+		err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
+		return err
+	}
+
+	if replset.Arbiter.Enabled {
+		matchLabels = naming.ArbiterLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	if replset.NonVoting.Enabled {
+		matchLabels = naming.NonVotingLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	if replset.Hidden.Enabled {
+		matchLabels = naming.HiddenLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	_, ok := cr.Status.Replsets[replset.Name]
+	if !ok {
+		cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
@@ -477,55 +539,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
-		matchLabels := naming.MongodLabels(cr, replset)
-
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
-			return "", err
-		}
-
-		if replset.Arbiter.Enabled {
-			matchLabels = naming.ArbiterLabels(cr, replset)
-			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-			if err != nil {
-				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
-				return "", err
-			}
-		} else {
-			err := r.client.Delete(ctx, psmdb.NewStatefulSet(
-				cr.Name+"-"+replset.Name+"-arbiter",
-				cr.Namespace,
-			))
-
-			if err != nil && !k8serrors.IsNotFound(err) {
-				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-				return "", err
-			}
-		}
-
-		if replset.NonVoting.Enabled {
-			matchLabels = naming.NonVotingLabels(cr, replset)
-			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-			if err != nil {
-				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
-				return "", err
-			}
-		} else {
-			err := r.client.Delete(ctx, psmdb.NewStatefulSet(
-				cr.Name+"-"+replset.Name+"-nv",
-				cr.Namespace,
-			))
-
-			if err != nil && !k8serrors.IsNotFound(err) {
-				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
-				return "", err
-			}
-		}
-
-		_, ok := cr.Status.Replsets[replset.Name]
-		if !ok {
-			cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
+		if err := r.reconcileReplset(ctx, cr, replset); err != nil {
+			return "", errors.Wrapf(err, "reconcile replset %s", replset.Name)
 		}
 
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
@@ -545,6 +560,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 			errs = append(errs, err)
+		}
+
+		switch replsetStatus {
+		case api.AppStateInit, api.AppStateError:
+			log.V(1).Info("Replset status is not healthy", "replset", replset.Name, "status", replsetStatus)
 		}
 
 		statusPriority := []api.AppState{
@@ -1061,7 +1081,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+		name := naming.MongodCustomConfigName(cr, rs)
 
 		if rs.Configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
@@ -1095,7 +1115,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			continue
 		}
 
-		name = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+		name = naming.NonVotingConfigMapName(cr, rs)
 		if rs.NonVoting.Configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
@@ -1126,7 +1146,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	name := psmdb.MongosCustomConfigName(cr.Name)
+	name := naming.MongosCustomConfigName(cr)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
 		err := deleteConfigMapIfExists(ctx, r.client, cr, name)
@@ -1273,7 +1293,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
+	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
 	if err != nil {
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}

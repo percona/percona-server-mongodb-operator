@@ -28,7 +28,7 @@ mongod-major-upgrade-sharded
 monitoring-2-0
 multi-cluster-service
 multi-storage
-non-voting
+non-voting-and-hidden
 one-pod
 operator-self-healing-chaos
 pitr

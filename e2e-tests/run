@@ -32,7 +32,7 @@ fail() {
 "$dir/mongod-major-upgrade/run" || fail "mongod-major-upgrade"
 "$dir/mongod-major-upgrade-sharded/run" || fail "mongod-major-upgrade-sharded"
 "$dir/monitoring-2-0/run" || fail "monitoring-2-0"
-"$dir/non-voting/run" || fail "non-voting"
+"$dir/non-voting-and-hidden/run" || fail "non-voting-and-hidden"
 "$dir/one-pod/run" || fail "one-pod"
 "$dir/operator-self-healing-chaos/run" || fail "operator-self-healing-chaos"
 "$dir/pitr-sharded/run" || fail "pitr-sharded"
