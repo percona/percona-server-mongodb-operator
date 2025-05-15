@@ -5,16 +5,16 @@ metadata:
   generation: 2
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: monitoring
+    app.kubernetes.io/instance: monitoring-pmm3
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: monitoring-rs0
+  name: monitoring-pmm3-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: monitoring
+      name: monitoring-pmm3
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -22,18 +22,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: monitoring
+      app.kubernetes.io/instance: monitoring-pmm3
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: monitoring-rs0
+  serviceName: monitoring-pmm3-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: monitoring
+        app.kubernetes.io/instance: monitoring-pmm3
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -61,14 +61,14 @@ spec:
             - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: monitoring
+              value: monitoring-pmm3
             - name: MONGODB_PORT
               value: "27019"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-monitoring-users
+                name: internal-monitoring-pmm3-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -118,7 +118,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: monitoring-mongodb-keyfile
+              name: monitoring-pmm3-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -131,55 +131,51 @@ spec:
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
-              name: monitoring-mongodb-encryption-key
+              name: monitoring-pmm3-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
         - env:
-            - name: PMM_SERVER
-              value: monitoring-service
             - name: DB_TYPE
               value: mongodb
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   key: MONGODB_CLUSTER_MONITOR_USER
-                  name: internal-monitoring-users
+                  name: internal-monitoring-pmm3-users
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: MONGODB_CLUSTER_MONITOR_PASSWORD
-                  name: internal-monitoring-users
+                  name: internal-monitoring-pmm3-users
             - name: DB_HOST
               value: localhost
             - name: DB_CLUSTER
-              value: monitoring
+              value: monitoring-pmm3
             - name: DB_PORT
               value: "27019"
-            - name: DB_PORT_MIN
-              value: "30100"
-            - name: DB_PORT_MAX
-              value: "30105"
-            - name: PMM_USER
-              value: api_key
-            - name: PMM_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: PMM_SERVER_API_KEY
-                  name: internal-monitoring-users
+            - name: CLUSTER_NAME
+              value: monitoring-pmm3
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.name
-            - name: POD_NAMESPASE
+            - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
             - name: PMM_AGENT_SERVER_ADDRESS
               value: monitoring-service
+            - name: PMM_AGENT_SERVER_USERNAME
+              value: service_token
+            - name: PMM_AGENT_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: PMM_SERVER_TOKEN
+                  name: internal-monitoring-pmm3-users
             - name: PMM_AGENT_LISTEN_PORT
               value: "7777"
             - name: PMM_AGENT_PORTS_MIN
@@ -187,13 +183,13 @@ spec:
             - name: PMM_AGENT_PORTS_MAX
               value: "30105"
             - name: PMM_AGENT_CONFIG_FILE
-              value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+              value: /usr/local/percona/pmm/config/pmm-agent.yaml
             - name: PMM_AGENT_SERVER_INSECURE_TLS
               value: "1"
             - name: PMM_AGENT_LISTEN_ADDRESS
               value: 0.0.0.0
             - name: PMM_AGENT_SETUP_NODE_NAME
-              value: $(POD_NAMESPASE)-$(POD_NAME)
+              value: $(POD_NAMESPACE)-$(POD_NAME)
             - name: PMM_AGENT_SETUP
               value: "1"
             - name: PMM_AGENT_SETUP_FORCE
@@ -204,27 +200,18 @@ spec:
               value: push
             - name: PMM_ADMIN_CUSTOM_PARAMS
               value: --enable-all-collectors --environment=dev-mongod
-            - name: PMM_AGENT_SERVER_USERNAME
-              value: api_key
-            - name: PMM_AGENT_SERVER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: PMM_SERVER_API_KEY
-                  name: internal-monitoring-users
-            - name: CLUSTER_NAME
-              value: monitoring
-            - name: PMM_AGENT_PRERUN_SCRIPT
-              value: |-
-                cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
-                pmm-admin status --wait=10s;
-                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;
-                pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
             - name: PMM_AGENT_SIDECAR
               value: "true"
             - name: PMM_AGENT_SIDECAR_SLEEP
               value: "5"
             - name: PMM_AGENT_PATHS_TEMPDIR
               value: /tmp
+            - name: PMM_AGENT_PRERUN_SCRIPT
+              value: |-
+                cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
+                pmm-admin status --wait=10s;
+                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;
+                pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
           imagePullPolicy: Always
           lifecycle:
             preStop:
@@ -288,37 +275,37 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: monitoring-mongodb-keyfile
+        - name: monitoring-pmm3-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: monitoring-mongodb-keyfile
+            secretName: monitoring-pmm3-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - configMap:
             defaultMode: 420
-            name: monitoring-rs0-mongod
+            name: monitoring-pmm3-rs0-mongod
             optional: true
           name: config
-        - name: monitoring-mongodb-encryption-key
+        - name: monitoring-pmm3-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: monitoring-mongodb-encryption-key
+            secretName: monitoring-pmm3-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: monitoring-ssl
+            secretName: monitoring-pmm3-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: monitoring-ssl-internal
+            secretName: monitoring-pmm3-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-monitoring-users
+            secretName: internal-monitoring-pmm3-users
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
