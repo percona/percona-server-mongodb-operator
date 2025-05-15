@@ -122,8 +122,6 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		{Name: "DB_HOST", Value: "localhost"},
 		{Name: "DB_CLUSTER", Value: "test-cr"},
 		{Name: "DB_PORT", Value: "27017"},
-		{Name: "DB_PORT_MIN", Value: strconv.Itoa(portStart)},
-		{Name: "DB_PORT_MAX", Value: strconv.Itoa(portEnd)},
 		{Name: "CLUSTER_NAME", Value: "custom-cluster"},
 		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{}},
 		{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{}},
