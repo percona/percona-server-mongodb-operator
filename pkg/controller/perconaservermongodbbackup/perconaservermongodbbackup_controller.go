@@ -145,6 +145,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			if uerr != nil {
 				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
 			}
+
+			switch cr.Status.State {
+			case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
+				log.Info("Releasing backup lock", "lease", naming.BackupLeaseName(cr.Spec.ClusterName))
+
+				err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cr.Spec.ClusterName), cr.Namespace, naming.BackupHolderId(cr))
+				if err != nil {
+					log.Error(err, "failed to release the lock")
+				}
+			}
 		}
 	}()
 
@@ -262,16 +272,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		}
 		return err
 	})
-
-	switch status.State {
-	case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
-		log.Info("Releasing backup lock", "lease", naming.BackupLeaseName(cluster.Name))
-
-		err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
-		if err != nil {
-			log.Error(err, "failed to release the lock")
-		}
-	}
 
 	return status, err
 }
