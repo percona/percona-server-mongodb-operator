@@ -5,6 +5,8 @@ metadata:
 spec:
   #platform: openshift
   image:
+  tls:
+    mode: requireTLS
   replsets:
   - name: rs0
     affinity:
@@ -67,5 +69,6 @@ spec:
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
+    #CustomClusterName: "super-custom"
   secrets:
     users: some-users

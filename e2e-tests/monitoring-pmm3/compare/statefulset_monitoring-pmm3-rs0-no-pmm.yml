@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: monitoring-rs0
+  name: monitoring-pmm3-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
@@ -61,7 +61,7 @@ spec:
             - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: monitoring
+              value: monitoring-pmm3
             - name: MONGODB_PORT
               value: "27019"
             - name: MONGODB_REPLSET
