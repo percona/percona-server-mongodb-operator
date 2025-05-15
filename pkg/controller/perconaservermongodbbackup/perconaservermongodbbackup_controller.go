@@ -119,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return rr, nil
+			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return rr, err
@@ -293,6 +293,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
 		return errors.Wrap(err, "patch finalizers")
 	}
 
+	logf.FromContext(ctx).V(1).Info("Added finalizer", "finalizer", naming.FinalizerReleaseLock)
+
 	return nil
 }
 
@@ -424,23 +426,23 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 
 	finalizers := []string{}
 
-	if cr.Status.State == psmdbv1.BackupStateReady {
-		for _, f := range cr.GetFinalizers() {
-			switch f {
-			case "delete-backup":
-				log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
-				fallthrough
-			case naming.FinalizerDeleteBackup:
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-backup":
+			log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
+			fallthrough
+		case naming.FinalizerDeleteBackup:
+			if cr.Status.State == psmdbv1.BackupStateReady {
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
 				}
-			case naming.FinalizerReleaseLock:
-				err = r.runReleaseLockFinalizer(ctx, cr)
-				if err != nil {
-					log.Error(err, "failed to release backup lock")
-					finalizers = append(finalizers, f)
-				}
+			}
+		case naming.FinalizerReleaseLock:
+			err = r.runReleaseLockFinalizer(ctx, cr)
+			if err != nil {
+				log.Error(err, "failed to release backup lock")
+				finalizers = append(finalizers, f)
 			}
 		}
 	}
@@ -452,8 +454,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) runReleaseLockFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cr.Spec.PSMDBCluster), cr.Namespace, naming.BackupHolderId(cr))
+	leaseName := naming.BackupLeaseName(cr.Spec.ClusterName)
+	holderId := naming.BackupHolderId(cr)
+	log := logf.FromContext(ctx).WithValues("lease", leaseName, "holder", holderId)
+
+	log.Info("releasing backup lock")
+	err := k8s.ReleaseLease(ctx, r.client, leaseName, cr.Namespace, holderId)
 	if k8serrors.IsNotFound(err) || errors.Is(err, k8s.ErrNotTheHolder) {
+		log.V(1).Info("failed to release backup lock", "error", err)
 		return nil
 	}
 	return errors.Wrap(err, "release backup lock")
