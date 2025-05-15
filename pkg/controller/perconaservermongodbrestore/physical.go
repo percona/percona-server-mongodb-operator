@@ -456,10 +456,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	if cluster.CompareVersion("1.20.0") >= 0 { // TODO: change this to 1.21
 		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
 
-		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
-			Name:  "PBM_MONGODB_PORT",
-			Value: strconv.Itoa(int(port)),
-		})
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
+			{
+				Name:  "PBM_AGENT_TLS_ENABLED",
+				Value: strconv.FormatBool(cluster.TLSEnabled()),
+			},
+			{
+				Name:  "PBM_MONGODB_PORT",
+				Value: strconv.Itoa(int(port)),
+			},
+		}...)
 	}
 
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
@@ -918,7 +924,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 
 	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
-	command := []string{pbmBinary, "status", "--out", "json"}
+	command := []string{pbmBinary}
 	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
 		return "", errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 	}
