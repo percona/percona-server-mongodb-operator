@@ -69,6 +69,6 @@ spec:
     serverHost: monitoring-service
     mongosParams: "--environment=dev-mongos"
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
-    customClusterName: "super-custom"
+    customClusterName:
   secrets:
     users: some-users
