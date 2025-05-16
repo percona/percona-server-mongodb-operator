@@ -16,7 +16,7 @@ const (
 
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
-	// MongodContainerDataDir is a mondo data path in container
+	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir = "/data/db"
 
 	BinVolumeName = "bin"
