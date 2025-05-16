@@ -167,6 +167,11 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 				MountPath: psmdbconfig.SSLDir,
 				ReadOnly:  true,
 			},
+			{
+				Name:      "mongod-data",
+				MountPath: psmdbconfig.MongodContainerDataDir,
+				ReadOnly:  true,
+			},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: &boolTrue,
