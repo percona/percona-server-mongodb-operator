@@ -156,7 +156,7 @@ spec:
             - name: DB_PORT
               value: "27019"
             - name: CLUSTER_NAME
-              value: monitoring-pmm3
+              value: super-custom
             - name: POD_NAME
               valueFrom:
                 fieldRef:

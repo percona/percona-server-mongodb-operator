@@ -25,16 +25,40 @@ does_node_id_exists() {
 	echo "${nodeList_from_pmm[@]}"
 }
 
-check_custom_cluster_name() {
-	local pod_service_name=$1
-	local pmm_services_file=$2
+verify_custom_cluster_name() {
+	local expected_cluster=$1
+	local token=$2
+	shift 2
+	local service_names=("$@")
 
-	echo "Checking $pod_service_name"
-	pmm_service_cluster=$(jq -r '.mongodb[] | select(.service_name=='\"$pod_service_name\"') | .cluster' $pmm_services_file)
-	if [[ $custom_name != $pmm_service_cluster ]]; then
-		echo "Not custom CLUSTER_NAME was used for pmm-client. Cluster in pmm: $pmm_service_cluster. customClusterName: $custom_name"
-		exit 1
-	fi
+	local endpoint
+	endpoint=$(get_service_endpoint monitoring-service)
+
+	local response
+	response=$(curl -s -k \
+		-H "Authorization: Bearer ${token}" \
+		"https://$endpoint/v1/inventory/services?service_type=SERVICE_TYPE_MONGODB_SERVICE")
+
+	local verified=0
+
+	for service_name in "${service_names[@]}"; do
+		local actual_cluster
+		actual_cluster=$(echo "$response" | jq -r --arg name "$service_name" '
+			.mongodb[] | select(.service_name == $name) | .cluster
+		')
+
+		if [[ -z $actual_cluster || $actual_cluster == "null" ]]; then
+			echo "Service '$service_name' not found in PMM."
+			verified=1
+		elif [[ $actual_cluster != "$expected_cluster" ]]; then
+			echo "$service_name: Cluster mismatch"
+			echo "PMM reports: $actual_cluster"
+			echo "Expected:    $expected_cluster"
+			verified=1
+		fi
+	done
+
+	return $verified
 }
 
 deploy_pmm3_server() {
@@ -393,6 +417,9 @@ sleep 90
 desc 'check QAN data'
 get_qan_values mongodb "dev-mongod" $NEW_TOKEN
 get_qan_values mongodb "dev-mongos" $NEW_TOKEN
+
+desc 'verify that the custom cluster name is configured'
+verify_custom_cluster_name "super-custom" $NEW_TOKEN ${namespace}-${cluster}-mongos-0 ${namespace}-${cluster}-cfg-0 ${namespace}-${cluster}-rs0-0
 
 nodeList=($(get_node_id_from_pmm))
 nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
