@@ -580,9 +580,13 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 	getShardingStatus := func(cr *api.PerconaServerMongoDB) api.ConditionStatus {
 		if cr.Spec.Sharding.Enabled {
 			return api.ConditionTrue
-		} else {
-			return api.ConditionFalse
 		}
+
+		return api.ConditionFalse
+	}
+
+	toggleShardingStatus := func(s api.ConditionStatus) bool {
+		return s != api.ConditionTrue
 	}
 
 	condition := cr.Status.FindCondition(api.AppStateSharding)
@@ -598,7 +602,14 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 		return nil
 	}
 
-	cr.Spec.Sharding.Enabled = !cr.Spec.Sharding.Enabled
+	log := logf.FromContext(ctx)
+	if toggleShardingStatus(condition.Status) {
+		log.Info("Sharding is enabled, pausing the cluster")
+	} else {
+		log.Info("Sharding is disabled, pausing the cluster")
+	}
+
+	cr.Spec.Sharding.Enabled = toggleShardingStatus(condition.Status)
 	cr.Spec.Pause = true
 	if err := cr.CheckNSetDefaults(ctx, r.serverVersion.Platform); err != nil {
 		return errors.Wrap(err, "check and set defaults")
@@ -616,8 +627,10 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 		return nil
 	}
 
-	cr.Spec.Sharding.Enabled = !cr.Spec.Sharding.Enabled
+	cr.Spec.Sharding.Enabled = toggleShardingStatus(condition.Status)
 	cr.Spec.Pause = false
+	// toggling sharding status removes all PBM collections, so we need to reconfigure
+	cr.Status.BackupConfigHash = ""
 	if err := cr.CheckNSetDefaults(ctx, r.serverVersion.Platform); err != nil {
 		return errors.Wrap(err, "check and set defaults")
 	}

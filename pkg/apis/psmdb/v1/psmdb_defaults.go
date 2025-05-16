@@ -556,6 +556,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
+		if cr.CompareVersion("1.20.0") < 0 && cr.Spec.Backup.PITR.Enabled {
+			if len(cr.Spec.Backup.Storages) != 1 {
+				cr.Spec.Backup.PITR.Enabled = false
+				log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
+			}
+		}
+
 		if cr.CompareVersion("1.20.0") >= 0 && len(cr.Spec.Backup.Storages) > 1 {
 			main := 0
 			for _, stg := range cr.Spec.Backup.Storages {
