@@ -6,13 +6,17 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-const perconaPrefix = "percona.com/"
+const (
+	perconaPrefix  = "percona.com/"
+	internalPrefix = "internal." + perconaPrefix
+)
 
 const (
 	FinalizerDeleteBackup           = perconaPrefix + "delete-backup"
 	FinalizerDeletePITR             = perconaPrefix + "delete-pitr-chunks"
 	FinalizerDeletePVC              = perconaPrefix + "delete-psmdb-pvc"
 	FinalizerDeletePSMDBPodsInOrder = perconaPrefix + "delete-psmdb-pods-in-order"
+	FinalizerReleaseLock            = internalPrefix + "release-lock"
 )
 
 const (

@@ -111,8 +111,13 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup azure-blob ${backup_name_azure}
 
 	wait_backup "${backup_name_aws}"
+	check_backup_in_storage ${backup_name_aws} s3 rs0
+
 	wait_backup "${backup_name_gcp}"
+	check_backup_in_storage ${backup_name_gcp} gcs rs0
+
 	wait_backup "${backup_name_azure}"
+	check_backup_in_storage ${backup_name_azure} azure rs0
 fi
 
 backup_name_minio="backup-minio"

@@ -11,6 +11,7 @@ import (
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
+	// Deprecated: Use ClusterName instead
 	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
 	ClusterName      string                   `json:"clusterName,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
