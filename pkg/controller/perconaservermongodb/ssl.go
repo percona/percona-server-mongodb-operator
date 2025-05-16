@@ -103,7 +103,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 }
 
 func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
-	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
+	c := r.newCertManagerCtrlFunc(r.client, r.Scheme(), true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
 		switch {
@@ -150,7 +150,7 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("createSSLByCertManager")
 
-	dryController := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
+	dryController := r.newCertManagerCtrlFunc(r.client, r.Scheme(), true)
 	// checking if certificates will be updated
 	applyStatus, err := r.applyCertManagerCertificates(ctx, cr, dryController)
 	if err != nil {
@@ -236,7 +236,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return errors.Wrap(err, "update cert mangager certs")
 	}
 
-	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
+	c := r.newCertManagerCtrlFunc(r.client, r.Scheme(), false)
 	if cr.CompareVersion("1.15.0") >= 0 {
 		if err := c.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
 			return errors.Wrap(err, "delete deprecated issuer")
@@ -293,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 		}
 	}
 
-	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
+	c := r.newCertManagerCtrlFunc(r.client, r.Scheme(), false)
 	log.Info("applying new certificates")
 	if _, err := r.applyCertManagerCertificates(ctx, cr, c); err != nil {
 		return errors.Wrap(err, "failed to apply cert-manager certificates")
@@ -309,7 +309,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 // mergeNewCA overwrites current ssl secrets with the old ones, but merges ca.crt from the current secret
 func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
-	c := tls.NewCertManagerController(r.client, r.scheme, false)
+	c := tls.NewCertManagerController(r.client, r.Scheme(), false)
 	// In versions 1.14.0 and below, these secrets contained different ca.crt
 	oldCA, err := c.GetMergedCA(ctx, cr, []string{
 		api.SSLInternalSecretName(cr) + "-old",
@@ -451,7 +451,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 	data["tls.crt"] = tlsCert
 	data["tls.key"] = key
 
-	owner, err := OwnerRef(cr, r.scheme)
+	owner, err := OwnerRef(cr, r.Scheme())
 	if err != nil {
 		return err
 	}

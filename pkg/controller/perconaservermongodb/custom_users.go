@@ -35,9 +35,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	var err error
 	var mongoCli mongo.Client
 	if cr.Spec.Sharding.Enabled {
-		mongoCli, err = r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)
+		mongoCli, err = r.MongosClientWithRole(ctx, cr, api.RoleUserAdmin)
 	} else {
-		mongoCli, err = r.mongoClientWithRole(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
+		mongoCli, err = r.MongoClientWithRole(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
 	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
@@ -310,7 +310,8 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil || user.IsExternalDB() {
@@ -395,7 +396,8 @@ func createUser(
 	mongoCli mongo.Client,
 	user *api.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	roles := make([]mongo.Role, 0)

@@ -11,9 +11,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
-var (
-	errWaitingPBM = errors.New("waiting for pbm-agent")
-)
+var errWaitingPBM = errors.New("waiting for pbm-agent")
 
 func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB) error {
 	if cluster.Spec.Unmanaged {
@@ -34,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get storage")
 	}
 
-	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
+	pbmc, err := r.NewPBM(ctx, cluster)
 	if err != nil {
 		return errWaitingPBM
 	}

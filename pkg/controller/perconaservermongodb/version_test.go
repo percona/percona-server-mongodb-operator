@@ -24,6 +24,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
@@ -597,9 +598,9 @@ func TestVersionMeta(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&tt.cr, &operatorDepl).Build()
 			sv := &version.ServerVersion{Platform: version.PlatformKubernetes}
 			r := &ReconcilePerconaServerMongoDB{
-				client:        cl,
-				scheme:        scheme,
-				serverVersion: sv,
+				CommonReconciler: common.New(cl, scheme, nil, nil),
+				client:           cl,
+				serverVersion:    sv,
 			}
 
 			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {

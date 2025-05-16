@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,6 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		}
 	}
 
-	mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	mongosSession, err := r.MongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -141,7 +141,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
-	mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	mongosSession, err := r.MongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}

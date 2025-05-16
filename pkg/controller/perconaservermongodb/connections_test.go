@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -158,7 +159,7 @@ func TestConnectionLeaks(t *testing.T) {
 			connectionCount := new(int)
 
 			r := buildFakeClient(obj...)
-			r.mongoClientProvider = &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount}
+			r.CommonReconciler = common.New(r.Client(), r.Scheme(), r.NewPBMFunc(), &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount})
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
 			r.crons = NewCronRegistry()
 

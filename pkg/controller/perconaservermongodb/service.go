@@ -31,7 +31,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Con
 	for _, rs := range repls {
 		// Create headless service
 		service := psmdb.Service(cr, rs)
-		if err := setControllerReference(cr, service, r.scheme); err != nil {
+		if err := setControllerReference(cr, service, r.Scheme()); err != nil {
 			return errors.Wrapf(err, "set owner ref for service %s", service.Name)
 		}
 		if err := r.createOrUpdateSvc(ctx, cr, service, true); err != nil {
@@ -84,7 +84,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosSvc(ctx context.Context, 
 func (r *ReconcilePerconaServerMongoDB) ensureExternalServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podList *corev1.PodList) error {
 	for _, pod := range podList.Items {
 		service := psmdb.ExternalService(cr, replset, pod.Name)
-		err := setControllerReference(cr, service, r.scheme)
+		err := setControllerReference(cr, service, r.Scheme())
 		if err != nil {
 			return errors.Wrapf(err, "set owner ref for Service %s", service.Name)
 		}
@@ -111,7 +111,7 @@ func (r *ReconcilePerconaServerMongoDB) exportService(ctx context.Context, cr *a
 		return nil
 	}
 	se := mcs.ServiceExport(cr.Namespace, svc.Name, ls)
-	if err := setControllerReference(cr, se, r.scheme); err != nil {
+	if err := setControllerReference(cr, se, r.Scheme()); err != nil {
 		return errors.Wrapf(err, "set owner ref for serviceexport %s", se.Name)
 	}
 	if err := r.createOrUpdate(ctx, se); err != nil {
@@ -261,7 +261,7 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(ctx context.Cont
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB, name string) error {
 	svc := psmdb.MongosService(cr, name)
-	err := setControllerReference(cr, &svc, r.scheme)
+	err := setControllerReference(cr, &svc, r.Scheme())
 	if err != nil {
 		return errors.Wrapf(err, "set owner ref for service %s", svc.Name)
 	}

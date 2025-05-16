@@ -151,7 +151,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.NewPBMFunc(), r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		if cr.Status.State == api.AppStateError {
 			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
@@ -201,7 +201,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 	if sfs.Labels[naming.LabelKubernetesComponent] != "nonVoting" && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+		client, err := r.MongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client: %v", err)
 		}
@@ -345,7 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.StandaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
 	if err != nil {
 		return errors.Wrap(err, "failed to create standalone client")
 	}
@@ -364,7 +364,7 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPod(ctx context.Context, cr *api
 func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod, seconds int) error {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.StandaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
 	if err != nil {
 		return errors.Wrap(err, "failed to create standalone client")
 	}
@@ -383,7 +383,7 @@ func (r *ReconcilePerconaServerMongoDB) freezePod(ctx context.Context, cr *api.P
 func (r *ReconcilePerconaServerMongoDB) isPodPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, pod corev1.Pod, rs *api.ReplsetSpec) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	mgoClient, err := r.StandaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create standalone client")
 	}
@@ -434,7 +434,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return nil
 	}
 
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.NewPBMFunc(), r.client, cr, backup.Job{}, backup.NotPITRLock)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active jobs")
 	}

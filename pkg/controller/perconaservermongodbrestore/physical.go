@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stdError "errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -91,33 +94,35 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		status.State = psmdbv1.RestoreStateWaiting
 	}
 
-	if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
-		return status, errors.Wrap(err, "prepare statefulsets for physical restore")
-	}
-
-	sfsReady, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
-	if err != nil {
-		return status, errors.Wrap(err, "check if statefulsets are ready for physical restore")
-	}
-
-	if (!sfsReady && cr.Status.State != psmdbv1.RestoreStateRunning) || cr.Status.State == psmdbv1.RestoreStateNew {
-		log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
-		return status, nil
-	}
-
-	if cr.Status.State == psmdbv1.RestoreStateWaiting && sfsReady && cr.Spec.PITR != nil {
-		rsReady, err := r.checkIfReplsetsAreReadyForPhysicalRestore(ctx, cluster)
-		if err != nil {
-			return status, errors.Wrap(err, "check if replsets are ready for physical restore")
+	if cr.Status.State == psmdbv1.RestoreStateWaiting || status.State == psmdbv1.RestoreStateWaiting {
+		if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
+			return status, errors.Wrap(err, "prepare statefulsets for physical restore")
 		}
 
-		if !rsReady {
-			if err := r.prepareReplsetsForPhysicalRestore(ctx, cluster); err != nil {
-				return status, errors.Wrap(err, "prepare replsets for physical restore")
+		sfsReady, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "check if statefulsets are ready for physical restore")
+		}
+
+		if (!sfsReady && cr.Status.State != psmdbv1.RestoreStateRunning) || cr.Status.State == psmdbv1.RestoreStateNew {
+			log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
+			return status, nil
+		}
+
+		if sfsReady && cr.Spec.PITR != nil {
+			rsReady, err := r.checkIfReplsetsAreReadyForPhysicalRestore(ctx, cluster)
+			if err != nil {
+				return status, errors.Wrap(err, "check if replsets are ready for physical restore")
 			}
 
-			log.Info("Waiting for replsets to be ready before restore", "ready", rsReady)
-			return status, nil
+			if !rsReady {
+				if err := r.prepareReplsetsForPhysicalRestore(ctx, cluster); err != nil {
+					return status, errors.Wrap(err, "prepare replsets for physical restore")
+				}
+
+				log.Info("Waiting for replsets to be ready before restore", "ready", rsReady)
+				return status, nil
+			}
 		}
 	}
 
@@ -186,154 +191,275 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		return status, nil
 	}
 
-	meta := backup.BackupMeta{}
-
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return (strings.Contains(err.Error(), "container is not created or running") ||
-			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
-			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
-	}, func() error {
-		stdoutBuf.Reset()
-		stderrBuf.Reset()
-
-		command := []string{
-			"/opt/percona/pbm", "describe-restore", cr.Status.PBMname,
-			"--config", "/etc/pbm/pbm_config.yaml",
-			"--out", "json",
+	pod := corev1.Pod{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return status, nil
 		}
-
-		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
-			return errors.Wrap(err, "get pod")
-		}
-
-		log.V(1).Info("Check restore status", "command", command, "pod", pod.Name)
-
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
-			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-		}
-
-		return nil
-	})
-	if err != nil {
-		return status, err
+		return status, errors.Wrap(err, "get pod")
 	}
 
-	if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
-		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
-	}
+	if pod.Spec.Containers[0].Name == naming.ContainerBackupAgent && pod.DeletionTimestamp == nil {
+		meta := backup.BackupMeta{}
+		notFound := false
 
-	log.V(1).Info("PBM restore status", "status", meta)
+		err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+			return (strings.Contains(err.Error(), "container is not created or running") ||
+				strings.Contains(err.Error(), "error dialing backend: No agent available") ||
+				strings.Contains(err.Error(), "unable to upgrade connection") ||
+				strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
+		}, func() error {
+			stdoutBuf.Reset()
+			stderrBuf.Reset()
 
-	switch meta.Status {
-	case defs.StatusStarting:
-		for _, rs := range meta.Replsets {
-			if rs.Status == defs.StatusRunning {
-				status.State = psmdbv1.RestoreStateRunning
-				return status, nil
+			command := []string{
+				"/opt/percona/pbm", "describe-restore", cr.Status.PBMname,
+				"--config", "/etc/pbm/pbm_config.yaml",
+				"--out", "json",
 			}
+
+			log.V(1).Info("Check restore status", "command", command, "pod", pod.Name)
+
+			if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+				return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+			}
+
+			return nil
+		})
+		if err != nil {
+			return status, err
 		}
-	case defs.StatusError:
-		status.State = psmdbv1.RestoreStateError
-		status.Error = meta.Err
-	case defs.StatusRunning:
-		status.State = psmdbv1.RestoreStateRunning
-	case defs.StatusDone:
-		for _, rs := range meta.Replsets {
-			if rs.Status == defs.StatusDone {
-				continue
-			}
 
-			log.Info("Waiting replset restore to finish", "replset", rs.Name, "status", rs.Status)
-
-			status.State = psmdbv1.RestoreStateRunning
+		if notFound {
 			return status, nil
 		}
 
-		status.State = psmdbv1.RestoreStateReady
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
+			return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
+		}
+
+		log.V(1).Info("PBM restore status", "status", meta)
+
+		restoreIsDone := false
+		switch meta.Status {
+		case defs.StatusStarting:
+			for _, rs := range meta.Replsets {
+				if rs.Status == defs.StatusRunning {
+					status.State = psmdbv1.RestoreStateRunning
+					return status, nil
+				}
+			}
+		case defs.StatusError:
+			status.State = psmdbv1.RestoreStateError
+			status.Error = meta.Err
+		case defs.StatusRunning:
+			status.State = psmdbv1.RestoreStateRunning
+		case defs.StatusDone:
+			for _, rs := range meta.Replsets {
+				if rs.Status == defs.StatusDone {
+					continue
+				}
+
+				log.Info("Waiting replset restore to finish", "replset", rs.Name, "status", rs.Status)
+
+				status.State = psmdbv1.RestoreStateRunning
+				return status, nil
+			}
+
+			// status.State = psmdbv1.RestoreStateReady
+			restoreIsDone = true
+		}
+
+		if !restoreIsDone {
+			return status, nil
+		}
+
+		if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+			if err := r.client.Delete(ctx, s); err != nil {
+				return errors.Wrapf(err, "delete statefulset %s", s)
+			}
+			return nil
+		}); client.IgnoreNotFound(err) != nil {
+			return status, err
+		}
+		return status, nil
 	}
 
-	if status.State == psmdbv1.RestoreStateReady {
-		replsets := cluster.Spec.Replsets
-		if cluster.Spec.Sharding.Enabled {
-			replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-		}
+	finished, err := r.finishPhysicalRestore(ctx, cluster)
+	if err != nil {
+		return status, err // TODO: shouldn't return error
+	}
+	if !finished {
+		return status, nil
+	}
 
-		for _, rs := range replsets {
-			stsName := naming.MongodStatefulSetName(cluster, rs)
+	status.State = psmdbv1.RestoreStateReady
 
-			log.Info("Deleting statefulset", "statefulset", stsName)
-
-			sts := appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stsName,
-					Namespace: cluster.Namespace,
-				},
-			}
-
-			if err := r.client.Delete(ctx, &sts); err != nil {
-				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-			}
-
-			if rs.NonVoting.Enabled {
-				stsName := naming.NonVotingStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
-			}
-
-			if rs.Arbiter.Enabled {
-				stsName := naming.ArbiterStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
-			}
-		}
-
-		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			c := &psmdbv1.PerconaServerMongoDB{}
-			err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
-			if err != nil {
-				return err
-			}
-
-			orig := c.DeepCopy()
-
-			if c.Annotations == nil {
-				c.Annotations = make(map[string]string)
-			}
-			c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
-
-			return r.client.Patch(ctx, c, client.MergeFrom(orig))
-		})
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		c := &psmdbv1.PerconaServerMongoDB{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
 		if err != nil {
-			return status, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
+			return err
 		}
 
+		orig := c.DeepCopy()
+
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
+		c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
+
+		return r.client.Patch(ctx, c, client.MergeFrom(orig))
+	})
+	if err != nil {
+		return status, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
 	}
 
 	return status, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context.Context, cluster *api.PerconaServerMongoDB) (bool, error) {
+	stsIsUpdated := true
+	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
+		if sts.Spec.Template.Spec.Containers[0].Name == naming.ContainerBackupAgent {
+			stsIsUpdated = false
+		} else if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] != "true" {
+			stsIsUpdated = false
+			sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+		}
+		return nil
+	}); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "delete restore in progress annotation")
+	}
+	if !stsIsUpdated {
+		return false, nil
+	}
+
+	ready := true
+	err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+		if !ready {
+			return nil
+		}
+
+		var err error
+		ready, err = r.isStatefulSetReady(ctx, cluster, s)
+		return err
+	})
+	if client.IgnoreNotFound(err) != nil {
+		return false, err
+	}
+	if !ready || k8serrors.IsNotFound(err) {
+		return false, err
+	}
+
+	wait := false
+	if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+		if s.Labels[naming.LabelKubernetesComponent] != naming.ComponentMongod {
+			return nil
+		}
+		rs := cluster.Spec.Replset(s.Labels[naming.LabelKubernetesReplset])
+		c, err := r.MongoClientWithRole(ctx, cluster, rs, api.RoleClusterAdmin)
+		if err != nil {
+			wait = true
+
+			if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
+				pods, err := r.getReplsetPods(ctx, cluster, rs, s.Labels[naming.LabelKubernetesComponent])
+				if err != nil {
+					return err
+				}
+				for _, pod := range pods.Items {
+					cli, err := r.StandaloneClientWithRole(ctx, cluster, rs, api.RoleClusterAdmin, pod)
+					if err != nil {
+						continue
+					}
+					defer cli.Disconnect(ctx)
+
+					cfg, err := cli.ReadConfig(ctx)
+					if err != nil {
+						return errors.Wrap(err, "read replset config")
+					}
+
+					if err := cli.WriteConfig(ctx, cfg, true); err != nil {
+						return errors.Wrap(err, "reconfigure replset")
+					}
+				}
+				return nil
+			} else {
+				return err
+			}
+		}
+		return c.Disconnect(ctx)
+	}); err != nil {
+		return false, err
+	}
+	if wait {
+		return false, nil
+	}
+
+	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
+		if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] == "true" {
+			delete(sts.Annotations, psmdbv1.AnnotationRestoreInProgress)
+		}
+		return nil
+	}); err != nil {
+		return false, errors.Wrap(err, "delete restore in progress annotation")
+	}
+
+	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) iterateOverMongodSts(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, itFunc func(s *appsv1.StatefulSet) error) error {
+	replsets := cluster.Spec.Replsets
+	if cluster.Spec.Sharding.Enabled {
+		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
+	}
+
+	var errList []error
+	for _, rs := range replsets {
+		stsList := []string{naming.MongodStatefulSetName(cluster, rs)}
+		if rs.NonVoting.Enabled {
+			stsList = append(stsList, naming.NonVotingStatefulSetName(cluster, rs))
+		}
+		if rs.NonVoting.Enabled {
+			stsList = append(stsList, naming.ArbiterStatefulSetName(cluster, rs))
+		}
+
+		var rsErrList []error
+		for _, sts := range stsList {
+			s := new(appsv1.StatefulSet)
+			if err := r.client.Get(ctx, types.NamespacedName{Name: sts, Namespace: cluster.Namespace}, s); err != nil {
+				return err
+			}
+			if err := itFunc(s); err != nil {
+				rsErrList = append(rsErrList, err)
+			}
+		}
+
+		if len(rsErrList) > 0 {
+			errList = append(errList, errors.Wrapf(stdError.Join(rsErrList...), "failed to edit statefulsets for replset %s", rs.Name))
+		}
+	}
+	if len(errList) > 0 {
+		return stdError.Join(errList...)
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) updateMongodSts(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, updateFunc func(s *appsv1.StatefulSet) error) error {
+	return r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+		return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			sts := new(appsv1.StatefulSet)
+			if err := r.client.Get(ctx, client.ObjectKeyFromObject(s), sts); err != nil {
+				return err
+			}
+
+			if err := updateFunc(sts); err != nil {
+				return err
+			}
+
+			return r.client.Update(ctx, sts)
+		})
+	})
 }
 
 // updateStatefulSetForPhysicalRestore updates the StatefulSet to prepare it for a physical restore of PerconaServerMongoDB.
@@ -470,84 +596,28 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
-	for _, rs := range replsets {
-		stsName := naming.MongodStatefulSetName(cluster, rs)
-
-		sts := appsv1.StatefulSet{}
-		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
-		err := r.client.Get(ctx, nn, &sts)
-		if err != nil {
-			return err
-		}
-
+	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
 		_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
 		if ok {
-			continue
+			return nil
 		}
+		log.Info("Preparing statefulset for physical restore", "name", sts.Name)
 
-		log.Info("Preparing statefulset for physical restore", "name", stsName)
+		if sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+			zero := int32(0)
 
-		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
-		})
-		if err != nil {
-			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
-		}
+			sts.Spec.Replicas = &zero
 
-		if rs.NonVoting.Enabled {
-			stsName := naming.NonVotingStatefulSetName(cluster, rs)
-			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
-
-			log.Info("Preparing statefulset for physical restore", "name", stsName)
-
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
-			})
-			if err != nil {
-				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			if sts.Annotations == nil {
+				sts.Annotations = make(map[string]string)
 			}
+			sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+			return nil
 		}
 
-		if rs.Arbiter.Enabled {
-			stsName := naming.ArbiterStatefulSetName(cluster, rs)
-			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
-
-			log.Info("Preparing statefulset for physical restore", "name", stsName)
-
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				err := r.client.Get(ctx, nn, &sts)
-				if err != nil {
-					return err
-				}
-
-				orig := sts.DeepCopy()
-				zero := int32(0)
-
-				sts.Spec.Replicas = &zero
-
-				if sts.Annotations == nil {
-					sts.Annotations = make(map[string]string)
-				}
-				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
-
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
-			})
-			if err != nil {
-				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
-			}
-		}
+		return r.updateStatefulSetForPhysicalRestore(ctx, cluster, client.ObjectKeyFromObject(sts))
+	}); err != nil {
+		return errors.Wrap(err, "update replset sts")
 	}
 
 	return nil
@@ -811,71 +881,68 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 	if cluster.Spec.Sharding.Enabled {
 		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 	}
-
-	for _, rs := range replsets {
-		ready, err := r.checkStatefulSetForPhysicalRestore(ctx, cluster, rs, naming.ComponentMongod)
+	ready := true
+	if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+		if s.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter || ready == false {
+			return nil
+		}
+		var err error
+		ready, err = r.checkStatefulSetForPhysicalRestore(ctx, cluster, s)
 		if err != nil {
-			return false, errors.Wrapf(err, "check %s %s statefulset", rs.Name, naming.ComponentMongod)
+			return errors.Wrapf(err, "check %s %s statefulset", s.Labels[naming.LabelKubernetesReplset], s.Labels[naming.LabelKubernetesComponent])
 		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return ready, nil
+}
 
-		if !ready {
-			return false, nil
-		}
-
-		if rs.NonVoting.Enabled {
-			ready, err := r.checkStatefulSetForPhysicalRestore(ctx, cluster, rs, naming.ComponentNonVoting)
-			if err != nil {
-				return false, errors.Wrapf(err, "check %s %s statefulset", rs.Name, naming.ComponentNonVoting)
-			}
-
-			if !ready {
-				return false, nil
-			}
-		}
+func (r *ReconcilePerconaServerMongoDBRestore) isStatefulSetReady(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) (bool, error) {
+	if sts.Status.Replicas != sts.Status.ReadyReplicas {
+		return false, nil
 	}
 
+	rs := cluster.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
+	podList, err := r.getReplsetPods(ctx, cluster, rs, sts.Labels[naming.LabelKubernetesComponent])
+	if err != nil {
+		return false, errors.Wrapf(err, "get replset %s pods", sts.Labels[naming.LabelKubernetesReplset])
+	}
+	for _, pod := range podList.Items {
+		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+			return false, nil
+		}
+	}
 	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestore(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
-	rs *psmdbv1.ReplsetSpec,
-	component string,
+	sts *appsv1.StatefulSet,
 ) (bool, error) {
 	log := logf.FromContext(ctx)
-
-	stsName := naming.MongodStatefulSetName(cluster, rs)
-	if component == naming.ComponentNonVoting {
-		stsName = naming.NonVotingStatefulSetName(cluster, rs)
-	}
-
-	sts := appsv1.StatefulSet{}
-	nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
-	err := r.client.Get(ctx, nn, &sts)
-	if err != nil {
-		return false, err
-	}
 
 	_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
 	if !ok {
 		return false, nil
 	}
 
-	if sts.Status.Replicas != sts.Status.ReadyReplicas {
-		return false, nil
+	ready, err := r.isStatefulSetReady(ctx, cluster, sts)
+	if err != nil {
+		return false, err
+	}
+	if !ready {
+		return ready, nil
 	}
 
-	podList, err := r.getReplsetPods(ctx, cluster, rs, component)
+	rs := cluster.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
+	podList, err := r.getReplsetPods(ctx, cluster, rs, sts.Labels[naming.LabelKubernetesComponent])
 	if err != nil {
-		return false, errors.Wrapf(err, "get replset %s pods", rs.Name)
+		return false, errors.Wrapf(err, "get replset %s pods", sts.Labels[naming.LabelKubernetesReplset])
 	}
 
 	for _, pod := range podList.Items {
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
-			return false, nil
-		}
-
 		for _, c := range pod.Spec.Containers {
 			if c.Name == naming.ContainerBackupAgent {
 				return false, nil
@@ -885,7 +952,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 		log.V(1).Info("Pod is ready for physical restore", "pod", pod.Name)
 	}
 
-	log.V(1).Info("Statefulset is ready for physical restore", "sts", sts.Name, "replset", rs.Name)
+	log.V(1).Info("Statefulset is ready for physical restore", "sts", sts.Name, "replset", sts.Labels[naming.LabelKubernetesReplset])
 
 	return true, nil
 }

@@ -43,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, clu
 	if cluster == nil {
 		return new(Backup), nil
 	}
-	cn, err := r.newPBMFunc(ctx, r.client, cluster)
+	cn, err := r.NewPBM(ctx, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
 	}

@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	pbmc, err := r.newPBM(ctx, r.client, cr)
+	pbmc, err := r.NewPBM(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "new pbm")
 	}
