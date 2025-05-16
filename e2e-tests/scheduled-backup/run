@@ -23,6 +23,7 @@ check_backup_count() {
 	local expected=$2
 
 	local count=$(kubectl_bin get psmdb-backup -l percona.com/backup-ancestor=${ancestor} | grep ready | wc -l)
+	count="${count//[[:space:]]/}"
 
 	if [[ ${count} != ${expected} ]]; then
 		echo "${ancestor}: Expected ${expected} backups but found ${count}."
