@@ -348,8 +348,10 @@ yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
 sleep 90
 
 desc "create first PSMDB cluster $cluster"
+custom_cluster_name="super-custom"
 yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' "$test_dir/conf/$cluster-rs0.yml" \
 	| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM3_CLIENT"'"' - \
+	| yq eval '(.spec | select(has("pmm"))).pmm.customClusterName = "'"$custom_cluster_name"'"' - \
 	| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' - \
 	| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' - \
 	| yq eval '.spec.upgradeOptions.apply = "Never"' - \
@@ -419,7 +421,7 @@ get_qan_values mongodb "dev-mongod" $NEW_TOKEN
 get_qan_values mongodb "dev-mongos" $NEW_TOKEN
 
 desc 'verify that the custom cluster name is configured'
-verify_custom_cluster_name "super-custom" $NEW_TOKEN ${namespace}-${cluster}-mongos-0 ${namespace}-${cluster}-cfg-0 ${namespace}-${cluster}-rs0-0
+verify_custom_cluster_name $custom_cluster_name $NEW_TOKEN ${namespace}-${cluster}-mongos-0 ${namespace}-${cluster}-cfg-0 ${namespace}-${cluster}-rs0-0
 
 nodeList=($(get_node_id_from_pmm))
 nodeList_from_pmm=($(does_node_id_exists "${nodeList[@]}"))
