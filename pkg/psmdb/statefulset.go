@@ -584,7 +584,11 @@ func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to parse replset configuration")
 	}
+
 	if enabled == nil {
+		if replset.Storage.Engine == api.StorageEngineInMemory {
+			return false, nil // disabled for inMemory engine by default
+		}
 		return true, nil // true by default
 	}
 	return *enabled, nil
