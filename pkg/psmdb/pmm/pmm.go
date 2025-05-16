@@ -521,6 +521,11 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				MountPath: psmdbconfig.SSLDir,
 				ReadOnly:  true,
 			},
+			{
+				Name:      psmdbconfig.MongodDataVolClaimName,
+				MountPath: psmdbconfig.MongodContainerDataDir,
+				ReadOnly:  true,
+			},
 		},
 	}
 
