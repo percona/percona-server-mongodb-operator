@@ -16,12 +16,9 @@ package healthcheck
 
 import (
 	"context"
-	"encoding/json"
 
-	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
@@ -32,6 +29,7 @@ var ErrNoReplsetConfigStr = "(NotYetInitialized) no replset config has been rece
 
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongosLiveness")
+	ctx = logf.IntoContext(ctx, log)
 
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
@@ -58,6 +56,7 @@ func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) 
 
 func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (_ *mongo.MemberState, err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongodLiveness")
+	ctx = logf.IntoContext(ctx, log)
 
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
@@ -74,50 +73,14 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		return nil, errors.Wrap(err, "get isMaster response")
 	}
 
-	buildInfo, err := client.RSBuildInfo(ctx)
+	rsStatus, err := getStatus(ctx, client)
 	if err != nil {
-		return nil, errors.Wrap(err, "get buildInfo response")
-	}
-
-	replSetStatusCommand := bson.D{{Key: "replSetGetStatus", Value: 1}}
-	mongoVersion := v.Must(v.NewVersion(buildInfo.Version))
-	if mongoVersion.Compare(v.Must(v.NewVersion("4.2.1"))) < 0 {
-		// https://docs.mongodb.com/manual/reference/command/replSetGetStatus/#syntax
-		replSetStatusCommand = append(replSetStatusCommand, primitive.E{Key: "initialSync", Value: 1})
-	}
-
-	res := client.Database("admin").RunCommand(ctx, replSetStatusCommand)
-	if res.Err() != nil {
-		// if we come this far, it means db connection was successful
-		// standalone mongod nodes in an unmanaged cluster doesn't need
-		// to die before they added to a replset
-		if res.Err().Error() == ErrNoReplsetConfigStr {
+		if err.Error() == ErrNoReplsetConfigStr {
 			state := mongo.MemberStateUnknown
-			log.V(1).Info("replSetGetStatus failed", "err", res.Err().Error(), "state", state)
+			log.V(1).Info("replSetGetStatus failed", "err", err.Error(), "state", state)
 			return &state, nil
 		}
-		return nil, errors.Wrap(res.Err(), "get replsetGetStatus response")
-	}
-
-	// this is a workaround to fix decoding of empty interfaces
-	// https://jira.mongodb.org/browse/GODRIVER-988
-	rsStatus := ReplSetStatus{}
-	tempResult := bson.M{}
-	err = res.Decode(&tempResult)
-	if err != nil {
-		return nil, errors.Wrap(err, "decode replsetGetStatus response")
-	}
-
-	if err == nil {
-		result, err := json.Marshal(tempResult)
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal temp result")
-		}
-
-		err = json.Unmarshal(result, &rsStatus)
-		if err != nil {
-			return nil, errors.Wrap(err, "unmarshal temp result")
-		}
+		return nil, errors.Wrap(err, "get replSetGetStatus response")
 	}
 
 	oplogRs := OplogRs{}

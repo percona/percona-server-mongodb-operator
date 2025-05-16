@@ -25,6 +25,7 @@ type Config struct {
 	Password    string
 	TLSConf     *tls.Config
 	Direct      bool
+	Timeout     time.Duration
 }
 
 type Client interface {
@@ -75,9 +76,11 @@ func ToInterface(client *mongo.Client) Client {
 	return &mongoClient{client}
 }
 
-func Dial(conf *Config) (Client, error) {
-	ctx, connectcancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer connectcancel()
+func Dial(ctx context.Context, conf *Config) (Client, error) {
+	timeout := 10 * time.Second
+	if conf.Timeout != 0 {
+		timeout = conf.Timeout
+	}
 
 	journal := true
 	wc := writeconcern.Majority()
@@ -88,8 +91,8 @@ func Dial(conf *Config) (Client, error) {
 		SetReadPreference(readpref.Primary()).
 		SetTLSConfig(conf.TLSConf).
 		SetDirect(conf.Direct).
-		SetConnectTimeout(10 * time.Second).
-		SetServerSelectionTimeout(10 * time.Second)
+		SetConnectTimeout(timeout).
+		SetServerSelectionTimeout(timeout)
 
 	if conf.ReplSetName != "" {
 		opts.SetReplicaSet(conf.ReplSetName)
@@ -101,24 +104,24 @@ func Dial(conf *Config) (Client, error) {
 		})
 	}
 
-	client, err := mongo.Connect(ctx, opts)
+	tCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	client, err := mongo.Connect(tCtx, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo rs")
 	}
-
 	defer func() {
 		if err != nil {
-			derr := client.Disconnect(ctx)
+			derr := client.Disconnect(tCtx)
 			if derr != nil {
 				log.Error(err, "failed to disconnect")
 			}
 		}
 	}()
 
-	ctx, pingcancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer pingcancel()
-
-	err = client.Ping(ctx, readpref.Primary())
+	tCtx, cancel = context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err = client.Ping(tCtx, readpref.Primary())
 	if err != nil {
 		return nil, errors.Wrap(err, "ping mongo")
 	}
@@ -260,7 +263,6 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	}
 
 	return nil
-
 }
 
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
