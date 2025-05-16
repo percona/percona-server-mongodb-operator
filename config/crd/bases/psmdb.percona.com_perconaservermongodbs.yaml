@@ -389,6 +389,17 @@ spec:
                           type: integer
                         name:
                           type: string
+                        retention:
+                          properties:
+                            count:
+                              type: integer
+                            deleteFromStorage:
+                              type: boolean
+                            type:
+                              enum:
+                              - count
+                              type: string
+                          type: object
                         schedule:
                           type: string
                         storageName:
