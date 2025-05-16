@@ -89,7 +89,9 @@ func TestContainer(t *testing.T) {
 					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].MountPath, volumeMount.MountPath)
 					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].ReadOnly, volumeMount.ReadOnly)
 				}
+				return
 			}
+			assert.Equal(t, tt.expectedContainer, container)
 		})
 	}
 
