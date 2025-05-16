@@ -196,7 +196,7 @@ const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
 
-// DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
+// DNSMode string describes the mode used to generate fqdn/ip for communication between nodes
 // +enum
 type DNSMode string
 
@@ -369,6 +369,7 @@ type PMMSpec struct {
 	CustomClusterName string `json:"customClusterName,omitempty"`
 }
 
+// HasSecret is used for PMM2. PMM2 is reaching its EOL.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if len(secret.Data) == 0 {
 		return false
@@ -380,6 +381,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+// ShouldUseAPIKeyAuth is used for PMM2. PMM2 is reaching its EOL.
 func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 	if _, ok := secret.Data[PMMAPIKey]; !ok {
 		_, okl := secret.Data[PMMUserKey]
@@ -1186,6 +1188,7 @@ const (
 	PMMUserKey     = "PMM_SERVER_USER"
 	PMMPasswordKey = "PMM_SERVER_PASSWORD"
 	PMMAPIKey      = "PMM_SERVER_API_KEY"
+	PMMServerToken = "PMM_SERVER_TOKEN"
 )
 
 const (
