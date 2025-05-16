@@ -25,35 +25,6 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort in
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(i)})
 	}
 
-	dbArgsEnv := []corev1.EnvVar{
-		{
-			Name: "MONGODB_USER",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "MONGODB_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "DB_ARGS",
-			// no need to change the port here since these arguments are used only if cr.CompareVersion("1.2.0") < 0
-			Value: "--uri=mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@127.0.0.1:27017/",
-		},
-	}
 	dbEnv := []corev1.EnvVar{
 		{
 			Name: "DB_USER",
@@ -114,13 +85,16 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort in
 			},
 		},
 		Ports: ports,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "ssl",
+				MountPath: SSLDir,
+				ReadOnly:  true,
+			},
+		},
 	}
 
-	if cr.CompareVersion("1.2.0") >= 0 {
-		pmm.Env = append(pmm.Env, dbEnv...)
-	} else {
-		pmm.Env = append(pmm.Env, dbArgsEnv...)
-	}
+	pmm.Env = append(pmm.Env, dbEnv...)
 
 	if customLogin {
 		pmmPassKey := api.PMMAPIKey
@@ -171,14 +145,12 @@ func PMMContainer(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort in
 		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 {
-		pmm.VolumeMounts = []corev1.VolumeMount{
-			{
-				Name:      "ssl",
-				MountPath: SSLDir,
-				ReadOnly:  true,
-			},
-		}
+	if cr.CompareVersion("1.18.0") >= 0 {
+		pmm.VolumeMounts = append(pmm.VolumeMounts, corev1.VolumeMount{
+			Name:      MongodDataVolClaimName,
+			MountPath: MongodContainerDataDir,
+			ReadOnly:  true,
+		})
 	}
 
 	return pmm
