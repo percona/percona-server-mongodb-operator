@@ -106,6 +106,6 @@ func readDefaultCR(name, namespace string) (*psmdbv1.PerconaServerMongoDB, error
 
 	cr.Name = name
 	cr.Namespace = namespace
-	cr.Spec.InitImage = "perconalab/percona-server-mongodb-operator:main"
+	cr.Spec.InitImage = "percona/percona-server-mongodb-operator:1.20.0"
 	return cr, nil
 }
