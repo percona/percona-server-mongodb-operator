@@ -196,9 +196,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api
 		}
 	}
 
-	// If the primary is external, we can't match it with a running pod and
-	// it'll have an empty name
-	if sfs.Labels[naming.LabelKubernetesComponent] != "nonVoting" && len(primaryPod.Name) > 0 {
+	component := sfs.Labels[naming.LabelKubernetesComponent]
+	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
+	// If the primary is external, we can't match it with a running pod and it'll have an empty name
+	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
 		log.Info("doing step down...", "force", forceStepDown)
 		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
@@ -530,7 +531,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
 			switch container.Name {
-			case "mongod", "mongod-arbiter", "mongod-nv", "mongos":
+			case naming.ContainerMongod, naming.ContainerMongos, naming.ContainerNonVoting, naming.ContainerArbiter, naming.ContainerHidden:
 				ready = container.Ready
 			}
 		}
