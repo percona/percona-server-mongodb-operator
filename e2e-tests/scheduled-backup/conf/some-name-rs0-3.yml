@@ -49,13 +49,15 @@ spec:
     tasks:
     - name: every-min-minio
       enabled: true
-      keep: 1
+      retention:
+        count: 1
       type: physical
       schedule: "* * * * *"
       compressionType: gzip
       storageName: minio
     - name: weekly
-      enabled: true
+      retention:
+        count: 1
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3

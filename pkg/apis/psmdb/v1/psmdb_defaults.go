@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
@@ -514,9 +515,29 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	if cr.Spec.Backup.Enabled {
-		for _, bkpTask := range cr.Spec.Backup.Tasks {
+		for i := range cr.Spec.Backup.Tasks {
+			bkpTask := &cr.Spec.Backup.Tasks[i]
+
+			if bkpTask.Name == "" {
+				return errors.Errorf("backup task %d should have a name", i)
+			}
 			if string(bkpTask.CompressionType) == "" {
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
+			}
+
+			if cr.CompareVersion("1.21.0") >= 0 {
+				if bkpTask.Keep > 0 && bkpTask.Retention.Count == 0 {
+					log.Info(".spec.backup.tasks[].keep will be deprecated in the future. Consider using .spec.backup.tasks[].retention.count instead", "task", bkpTask.Name)
+					continue
+				}
+
+				if bkpTask.Retention.Type == "" {
+					bkpTask.Retention.Type = BackupTaskSpecRetentionTypeCount
+				}
+
+				if bkpTask.Retention.DeleteFromStorage == nil {
+					bkpTask.Retention.DeleteFromStorage = ptr.To(true)
+				}
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
