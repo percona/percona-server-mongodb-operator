@@ -1,4 +1,4 @@
-package psmdbconfig
+package config
 
 import (
 	"crypto/md5"

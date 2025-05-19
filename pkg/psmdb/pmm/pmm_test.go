@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
@@ -164,7 +164,7 @@ pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarte
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "ssl",
-				MountPath: psmdbconfig.SSLDir,
+				MountPath: config.SSLDir,
 				ReadOnly:  true,
 			},
 		},

@@ -11,7 +11,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // containerForPMM2 returns a pmm2 container from the given spec.
@@ -91,7 +91,7 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "ssl",
-				MountPath: psmdbconfig.SSLDir,
+				MountPath: config.SSLDir,
 				ReadOnly:  true,
 			},
 		},
@@ -150,8 +150,8 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 
 	if cr.CompareVersion("1.18.0") >= 0 {
 		pmm.VolumeMounts = append(pmm.VolumeMounts, corev1.VolumeMount{
-			Name:      psmdbconfig.MongodDataVolClaimName,
-			MountPath: psmdbconfig.MongodContainerDataDir,
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
 			ReadOnly:  true,
 		})
 	}
@@ -280,7 +280,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 			"--tls",
 			"--tls-skip-verify",
 			"--tls-certificate-key-file=/tmp/tls.pem",
-			fmt.Sprintf("--tls-ca-file=%s/ca.crt", psmdbconfig.SSLDir),
+			fmt.Sprintf("--tls-ca-file=%s/ca.crt", config.SSLDir),
 			"--authentication-mechanism=SCRAM-SHA-1",
 			"--authentication-database=admin",
 		}
@@ -293,7 +293,7 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	prerunScript := pmmWait + "\n" + pmmAddService + "\n" + pmmAnnotate
 
 	if cr.TLSEnabled() {
-		prepareTLS := fmt.Sprintf("cat %[1]s/tls.key %[1]s/tls.crt > /tmp/tls.pem;", psmdbconfig.SSLDir)
+		prepareTLS := fmt.Sprintf("cat %[1]s/tls.key %[1]s/tls.crt > /tmp/tls.pem;", config.SSLDir)
 		prerunScript = prepareTLS + "\n" + prerunScript
 	}
 
@@ -490,7 +490,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "ssl",
-				MountPath: psmdbconfig.SSLDir,
+				MountPath: config.SSLDir,
 				ReadOnly:  true,
 			},
 		},

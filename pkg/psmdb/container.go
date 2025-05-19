@@ -10,7 +10,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/psmdbconfig"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
@@ -21,22 +21,22 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 
 	volumes := []corev1.VolumeMount{
 		{
-			Name:      psmdbconfig.MongodDataVolClaimName,
-			MountPath: psmdbconfig.MongodContainerDataDir,
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
 		},
 		{
 			Name:      ikeyName,
-			MountPath: psmdbconfig.MongodSecretsDir,
+			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl",
-			MountPath: psmdbconfig.SSLDir,
+			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl-internal",
-			MountPath: psmdbconfig.SSLInternalDir,
+			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
 	}
@@ -44,24 +44,24 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
-			MountPath: psmdbconfig.MongodConfigDir,
+			MountPath: config.MongodConfigDir,
 		})
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: psmdbconfig.BinVolumeName, MountPath: psmdbconfig.BinMountPath})
+		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
-				Name:      psmdbconfig.LDAPTLSVolClaimName,
-				MountPath: psmdbconfig.LDAPTLSDir,
+				Name:      config.LDAPTLSVolClaimName,
+				MountPath: config.LDAPTLSDir,
 				ReadOnly:  true,
 			},
 			{
-				Name:      psmdbconfig.LDAPConfVolClaimName,
-				MountPath: psmdbconfig.LDAPConfDir,
+				Name:      config.LDAPConfVolClaimName,
+				MountPath: config.LDAPConfDir,
 			},
 		}...)
 	}
@@ -75,7 +75,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			volumes = append(volumes,
 				corev1.VolumeMount{
 					Name:      cr.Spec.Secrets.Vault,
-					MountPath: psmdbconfig.VaultDir,
+					MountPath: config.VaultDir,
 					ReadOnly:  true,
 				},
 			)
@@ -109,7 +109,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		Args:            containerArgs(ctx, cr, replset, resources, useConfigFile),
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          psmdbconfig.MongodPortName,
+				Name:          config.MongodPortName,
 				HostPort:      int32(0),
 				ContainerPort: replset.GetPort(),
 			},
@@ -142,7 +142,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 				},
 			},
 		},
-		WorkingDir:      psmdbconfig.MongodContainerDataDir,
+		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &livenessProbe.Probe,
 		ReadinessProbe:  readinessProbe,
 		Resources:       resources,
@@ -165,7 +165,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{psmdbconfig.BinMountPath + "/ps-entry.sh"}
+		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
 	}
 
 	return container, nil
@@ -177,7 +177,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
-		"--dbpath=" + psmdbconfig.MongodContainerDataDir,
+		"--dbpath=" + config.MongodContainerDataDir,
 		"--port=" + strconv.Itoa(int(replset.GetPort())),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
@@ -196,7 +196,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
-			"--keyFile="+psmdbconfig.MongodSecretsDir+"/mongodb-key",
+			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
 		)
 	} else if cr.TLSEnabled() {
 		args = append(args, "--clusterAuthMode=x509")
@@ -270,7 +270,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	}
 
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
-		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", psmdbconfig.MongodConfigDir))
+		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", config.MongodConfigDir))
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && replset.Configuration.QuietEnabled() {
@@ -293,13 +293,13 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64
 	if subtract1GB {
-		size = math.Floor(cacheRatio * float64(maxMemory.Value()-psmdbconfig.GigaByte))
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()-config.GigaByte))
 	} else {
 		size = math.Floor(cacheRatio * float64(maxMemory.Value()))
 	}
-	sizeGB := size / float64(psmdbconfig.GigaByte)
-	if sizeGB < psmdbconfig.MinWiredTigerCacheSizeGB {
-		sizeGB = psmdbconfig.MinWiredTigerCacheSizeGB
+	sizeGB := size / float64(config.GigaByte)
+	if sizeGB < config.MinWiredTigerCacheSizeGB {
+		sizeGB = config.MinWiredTigerCacheSizeGB
 	}
 	return sizeGB
 }
