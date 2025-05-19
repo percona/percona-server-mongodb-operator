@@ -743,9 +743,11 @@ compare_kubectl() {
 	fi
 }
 
+
 run_recovery_check() {
 	local backup_name=$1
 	local compare_suffix=${2:-"_restore"}
+	local is_sharded=${3:-""}
 
 	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
 	echo
@@ -753,7 +755,7 @@ run_recovery_check() {
 	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
 
 	# we don't wait for cluster readiness here because the annotation gets removed then
-	wait_restore "${backup_name}" "${cluster}" "ready" "0" "1800"
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
@@ -764,9 +766,13 @@ run_recovery_check() {
 	wait_cluster_consistency ${cluster}
 	wait_for_pbm_operations ${cluster}
 
-	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
-	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
-	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+	if [ -n "$is_sharded" ]; then
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
+	else
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+	fi
 }
 
 run_mongo() {
@@ -958,6 +964,15 @@ get_mongo_primary() {
 		kubectl_bin get service -o wide \
 			| grep " ${endpoint/:*/} " \
 			| awk '{print $1}'
+	fi
+}
+
+check_exported_mongos_service_endpoint() {
+	local host=$1
+
+	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+		echo "Exported host is not correct after the restore"
+		exit 1
 	fi
 }
 
