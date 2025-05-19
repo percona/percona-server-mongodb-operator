@@ -31,6 +31,22 @@ func TestContainer(t *testing.T) {
 		"secret is nil": {
 			pmmEnabled: true,
 		},
+		"pmm enabled but secret token is empty": {
+			pmmEnabled: true,
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"PMM_SERVER_TOKEN": []byte(``),
+				},
+			},
+		},
+		"pmm enabled but secret token is missing": {
+			pmmEnabled: true,
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"RANDOM_SECRET": []byte(`foo`),
+				},
+			},
+		},
 		"pmm enabled - pmm3 container constructed": {
 			pmmEnabled: true,
 			secret: &corev1.Secret{
