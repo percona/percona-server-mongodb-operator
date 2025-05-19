@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/controller"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
@@ -101,6 +102,23 @@ func main() {
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: 9443,
 		}),
+	}
+
+	options.Controller.GroupKindConcurrency = map[string]int{
+		"PerconaServerMongoDB." + psmdbv1.SchemeGroupVersion.Group:        1,
+		"PerconaServerMongoDBBackup." + psmdbv1.SchemeGroupVersion.Group:  1,
+		"PerconaServerMongoDBRestore." + psmdbv1.SchemeGroupVersion.Group: 1,
+	}
+
+	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
+		if i, err := strconv.Atoi(s); err == nil && i > 0 {
+			options.Controller.GroupKindConcurrency["PerconaServerMongoDB."+psmdbv1.SchemeGroupVersion.Group] = i
+			options.Controller.GroupKindConcurrency["PerconaServerMongoDBBackup."+psmdbv1.SchemeGroupVersion.Group] = i
+			options.Controller.GroupKindConcurrency["PerconaServerMongoDBRestore."+psmdbv1.SchemeGroupVersion.Group] = i
+		} else {
+			setupLog.Error(err, "MAX_CONCURRENT_RECONCILES must be a positive number")
+			os.Exit(1)
+		}
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE
