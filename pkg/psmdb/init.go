@@ -6,7 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, pullPolicy corev1.PullPolicy, command []string) corev1.Container {
@@ -40,7 +40,7 @@ func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, p
 func InitContainers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Container {
 	image := cr.Spec.InitImage
 	if len(image) == 0 {
-		if cr.CompareVersion(version.Version) != 0 {
+		if cr.CompareVersion(version.Version()) != 0 {
 			image = strings.Split(initImage, ":")[0] + ":" + cr.Spec.CRVersion
 		} else {
 			image = initImage

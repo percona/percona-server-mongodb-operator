@@ -16,7 +16,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // creates a fake client to mock API calls with the mock objects
@@ -97,7 +97,7 @@ func TestConnectionEndpoint(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
 			Image:     "some-image",
-			CRVersion: version.Version,
+			CRVersion: version.Version(),
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
