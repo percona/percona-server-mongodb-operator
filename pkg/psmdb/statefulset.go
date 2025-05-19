@@ -14,6 +14,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -273,6 +274,14 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
+		}
+
+		if cr.CompareVersion("1.20.0") >= 0 { // TODO: change this to 1.21
+			logCollectorCs, err := logcollector.Containers(cr)
+			if err != nil {
+				log.Error(err, "error preparing logcollector containers")
+			}
+			containers = append(containers, logCollectorCs...)
 		}
 	}
 
