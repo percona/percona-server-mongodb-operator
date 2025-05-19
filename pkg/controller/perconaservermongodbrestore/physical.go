@@ -367,12 +367,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 				if err != nil {
 					return err
 				}
-				for _, pod := range pods.Items {
+				updateConfig := func(pod corev1.Pod) error {
 					cli, err := r.StandaloneClientWithRole(ctx, cluster, rs, api.RoleClusterAdmin, pod)
 					if err != nil {
-						continue
+						return nil
 					}
-					defer cli.Disconnect(ctx)
+					defer func() { _ = cli.Disconnect(ctx) }()
 
 					cfg, err := cli.ReadConfig(ctx)
 					if err != nil {
@@ -381,6 +381,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 
 					if err := cli.WriteConfig(ctx, cfg, true); err != nil {
 						return errors.Wrap(err, "reconfigure replset")
+					}
+					return nil
+				}
+				for _, pod := range pods.Items {
+					if err := updateConfig(pod); err != nil {
+						return err
 					}
 				}
 				return nil
@@ -883,7 +889,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 	}
 	ready := true
 	if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
-		if s.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter || ready == false {
+		if s.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter || !ready {
 			return nil
 		}
 		var err error
@@ -909,7 +915,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) isStatefulSetReady(ctx context.Co
 		return false, errors.Wrapf(err, "get replset %s pods", sts.Labels[naming.LabelKubernetesReplset])
 	}
 	for _, pod := range podList.Items {
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+		if pod.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
 			return false, nil
 		}
 	}
