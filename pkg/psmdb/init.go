@@ -18,7 +18,7 @@ func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, p
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      MongodDataVolClaimName,
-				MountPath: "/data/db",
+				MountPath: MongodContainerDataDir,
 			},
 		},
 		Image:           image,
