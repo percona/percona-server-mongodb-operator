@@ -439,7 +439,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
 			{
-				Name:     psmdbconfig.MongodDataVolClaimName,
+				Name:      psmdbconfig.MongodDataVolClaimName,
 				MountPath: psmdbconfig.MongodContainerDataDir,
 				ReadOnly:  false,
 			},
