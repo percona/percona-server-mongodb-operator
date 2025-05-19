@@ -915,13 +915,6 @@ type MongodSpecInMemory struct {
 	EngineConfig *MongodSpecInMemoryEngineConfig `json:"engineConfig,omitempty"`
 }
 
-/*
-retention:
-          count: 3
-          type: count
-          deleteFromStorage: true
-*/
-
 type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
 	Enabled          bool                     `json:"enabled"`
