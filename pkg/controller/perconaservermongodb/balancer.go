@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		}
 	}
 
-	mongosSession, err := r.MongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	mongosSession, err := r.MongoClient().Mongos(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}
@@ -141,7 +141,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
-	mongosSession, err := r.MongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	mongosSession, err := r.MongoClient().Mongos(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")
 	}

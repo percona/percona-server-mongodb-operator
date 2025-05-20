@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -52,9 +52,10 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		CommonReconciler: common.New(mgr.GetClient(), mgr.GetScheme(), backup.NewPBM, nil),
-		client:           mgr.GetClient(),
-		clientcmd:        cli,
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
@@ -80,10 +81,13 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBRestore{}
 type ReconcilePerconaServerMongoDBRestore struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	common.CommonReconciler
+	psmdb.MongoProviderBase
 
 	client    client.Client // TODO: use CommonReconciler client
+	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+
+	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read

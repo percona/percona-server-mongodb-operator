@@ -19,7 +19,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -80,7 +79,8 @@ func reconciler() *ReconcilePerconaServerMongoDB {
 
 	return (&ReconcilePerconaServerMongoDB{
 		client:                 k8sClient,
-		CommonReconciler:       common.New(k8sClient, k8sClient.Scheme(), backup.NewPBM, nil),
+		scheme:                 k8sClient.Scheme(),
+		newPBMFunc:             backup.NewPBM,
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		clientcmd:              cli,

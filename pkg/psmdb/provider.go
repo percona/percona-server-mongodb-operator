@@ -15,15 +15,11 @@ import (
 type MongoClientProvider interface {
 	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error)
 	Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error)
-	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error)
+	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod) (mongo.Client, error)
 }
 
 type mongoClientProvider struct {
 	k8sclient client.Client
-}
-
-func NewProvider(c client.Client) *mongoClientProvider {
-	return &mongoClientProvider{k8sclient: c}
 }
 
 func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
@@ -44,13 +40,37 @@ func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerM
 	return mongosClient(ctx, p.k8sclient, cr, c)
 }
 
-func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod) (mongo.Client, error) {
 	c, err := GetCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
+	host, err := MongoHost(ctx, p.k8sclient, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get mongo host")
+	}
 
-	return standaloneClient(ctx, p.k8sclient, cr, c, host, tlsEnabled)
+	return standaloneClient(ctx, p.k8sclient, cr, c, host, cr.TLSEnabled())
+}
+
+type MongoProviderBase struct {
+	cl client.Client
+
+	provider MongoClientProvider
+}
+
+func NewProviderBase(cl client.Client, provider MongoClientProvider) MongoProviderBase {
+	return MongoProviderBase{
+		cl:       cl,
+		provider: provider,
+	}
+}
+
+func (provider *MongoProviderBase) MongoClient() MongoClientProvider {
+	if provider.provider == nil {
+		return &mongoClientProvider{k8sclient: provider.cl}
+	}
+	return provider.provider
 }
 
 func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {

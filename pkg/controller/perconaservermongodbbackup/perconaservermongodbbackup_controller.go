@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -29,7 +30,6 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -60,9 +60,10 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBBackup{
-		CommonReconciler: common.New(mgr.GetClient(), mgr.GetScheme(), backup.NewPBM, nil),
-		client:           mgr.GetClient(),
-		clientcmd:        cli,
+		client:     mgr.GetClient(),
+		scheme:     mgr.GetScheme(),
+		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
@@ -87,11 +88,13 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}
 
 // ReconcilePerconaServerMongoDBBackup reconciles a PerconaServerMongoDBBackup object
 type ReconcilePerconaServerMongoDBBackup struct {
-	common.CommonReconciler
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
+	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+
+	newPBMFunc backup.NewPBMFunc
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -230,7 +233,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, errors.Wrap(err, "failed to run backup")
 	}
 
-	cjobs, err := backup.HasActiveJobs(ctx, r.NewPBMFunc(), r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
+	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
 	if err != nil {
 		return status, errors.Wrap(err, "check for concurrent jobs")
 	}

@@ -91,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
-	err := setControllerReference(cr, sfs, r.Scheme())
+	err := setControllerReference(cr, sfs, r.scheme)
 	if err != nil {
 		return nil, errors.Wrapf(err, "set owner ref for StatefulSet %s", sfs.Name)
 	}

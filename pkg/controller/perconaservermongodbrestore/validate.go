@@ -32,7 +32,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get storage")
 	}
 
-	pbmc, err := r.NewPBM(ctx, cluster)
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return errWaitingPBM
 	}

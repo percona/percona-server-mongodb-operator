@@ -598,8 +598,9 @@ func TestVersionMeta(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&tt.cr, &operatorDepl).Build()
 			sv := &version.ServerVersion{Platform: version.PlatformKubernetes}
 			r := &ReconcilePerconaServerMongoDB{
-				CommonReconciler: common.New(cl, scheme, nil, nil),
+				CommonReconciler: common.New(nil),
 				client:           cl,
+				scheme:           scheme,
 				serverVersion:    sv,
 			}
 

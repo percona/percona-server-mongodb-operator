@@ -319,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 	for i := range repls {
 		replset := repls[i]
 		grp.Go(func() error {
-			client, err := r.MongoClientWithRole(gCtx, cr, replset, api.RoleUserAdmin)
+			client, err := r.MongoClient().Mongo(gCtx, cr, replset, api.RoleUserAdmin)
 			if err != nil {
 				return errors.Wrap(err, "dial:")
 			}

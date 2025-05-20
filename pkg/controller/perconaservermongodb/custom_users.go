@@ -35,9 +35,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 	var err error
 	var mongoCli mongo.Client
 	if cr.Spec.Sharding.Enabled {
-		mongoCli, err = r.MongosClientWithRole(ctx, cr, api.RoleUserAdmin)
+		mongoCli, err = r.MongoClient().Mongos(ctx, cr, api.RoleUserAdmin)
 	} else {
-		mongoCli, err = r.MongoClientWithRole(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
+		mongoCli, err = r.MongoClient().Mongo(ctx, cr, cr.Spec.Replsets[0], api.RoleUserAdmin)
 	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")

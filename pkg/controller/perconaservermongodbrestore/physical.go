@@ -358,7 +358,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 			return nil
 		}
 		rs := cluster.Spec.Replset(s.Labels[naming.LabelKubernetesReplset])
-		c, err := r.MongoClientWithRole(ctx, cluster, rs, api.RoleClusterAdmin)
+		c, err := r.MongoClient().Mongo(ctx, cluster, rs, api.RoleClusterAdmin)
 		if err != nil {
 			wait = true
 
@@ -368,7 +368,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 					return err
 				}
 				updateConfig := func(pod corev1.Pod) error {
-					cli, err := r.StandaloneClientWithRole(ctx, cluster, rs, api.RoleClusterAdmin, pod)
+					cli, err := r.MongoClient().Standalone(ctx, cluster, rs, api.RoleClusterAdmin, pod)
 					if err != nil {
 						return nil
 					}

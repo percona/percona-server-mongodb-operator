@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 )
 
@@ -167,7 +166,8 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		CommonReconciler: common.New(cl, s, fakeBackup.NewPBM, nil),
-		client:           cl,
+		client:     cl,
+		scheme:     s,
+		newPBMFunc: fakeBackup.NewPBM,
 	}
 }

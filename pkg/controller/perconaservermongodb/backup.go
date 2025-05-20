@@ -60,7 +60,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 		if err != nil {
 			return errors.Wrap(err, "can't create job")
 		}
-		err = setControllerReference(cr, &cjob, r.Scheme())
+		err = setControllerReference(cr, &cjob, r.scheme)
 		if err != nil {
 			return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
 		}

@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -159,7 +158,7 @@ func TestConnectionLeaks(t *testing.T) {
 			connectionCount := new(int)
 
 			r := buildFakeClient(obj...)
-			r.CommonReconciler = common.New(r.Client(), r.Scheme(), r.NewPBMFunc(), &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount})
+			r.MongoProviderBase = psmdb.NewProviderBase(r.client, &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount})
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
 			r.crons = NewCronRegistry()
 
@@ -396,18 +395,18 @@ func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaSer
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
 
-func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
-	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient, host: host}, nil
+	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient, pod: &pod}, nil
 }
 
 type fakeMongoClient struct {
 	pods            []client.Object
 	cr              *api.PerconaServerMongoDB
 	connectionCount *int
-	host            string
+	pod             *corev1.Pod
 	mongo.Client
 }
 
@@ -523,7 +522,7 @@ func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, er
 	if err := c.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return nil, err
 	}
-	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name, c.cr.Spec.Replsets[0].GetPort()) {
+	if c.pod.GetName() == c.pods[0].GetName() {
 		isMaster = true
 	}
 	return &mongo.IsMasterResp{

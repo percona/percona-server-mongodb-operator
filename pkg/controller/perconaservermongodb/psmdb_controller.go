@@ -88,8 +88,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDB{
-		CommonReconciler:       common.New(client, mgr.GetScheme(), backup.NewPBM, nil),
 		client:                 client,
+		scheme:                 client.Scheme(),
+		newPBMFunc:             backup.NewPBM,
 		serverVersion:          sv,
 		reconcileIn:            time.Second * 5,
 		crons:                  NewCronRegistry(),
@@ -172,15 +173,19 @@ func NewCronRegistry() CronRegistry {
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
 	common.CommonReconciler
+	psmdb.MongoProviderBase
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client     client.Client
+	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
 	crons         CronRegistry
 	clientcmd     *clientcmd.Client
 	serverVersion *version.ServerVersion
 	reconcileIn   time.Duration
+
+	newPBMFunc backup.NewPBMFunc
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
@@ -841,7 +846,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 		return errors.Wrap(err, "failed to set port")
 	}
 
-	mc, err := r.MongoClientWithRole(ctx, cr, rs, api.RoleClusterAdmin)
+	mc, err := r.MongoClient().Mongo(ctx, cr, rs, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}
@@ -884,7 +889,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, c
 	if err != nil && k8serrors.IsNotFound(err) {
 		created = true
 		if setOwner {
-			err = setControllerReference(cr, key, r.Scheme())
+			err = setControllerReference(cr, key, r.scheme)
 			if err != nil {
 				return false, errors.Wrap(err, "set owner ref")
 			}
@@ -1182,7 +1187,7 @@ func deleteConfigMapIfExists(ctx context.Context, cl client.Client, cr *api.Perc
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB, configMap *corev1.ConfigMap) error {
-	err := setControllerReference(cr, configMap, r.Scheme())
+	err := setControllerReference(cr, configMap, r.scheme)
 	if err != nil {
 		return errors.Wrapf(err, "failed to set controller ref for config map %s", configMap.Name)
 	}
@@ -1261,7 +1266,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 
 	sts := psmdb.MongosStatefulset(cr)
-	err = setControllerReference(cr, sts, r.Scheme())
+	err = setControllerReference(cr, sts, r.scheme)
 	if err != nil {
 		return errors.Wrapf(err, "set owner ref for statefulset %s", sts.Name)
 	}
@@ -1488,7 +1493,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *ap
 	if cr.CompareVersion("1.17.0") < 0 {
 		pdb.Labels = nil
 	}
-	err := setControllerReference(owner, pdb, r.Scheme())
+	err := setControllerReference(owner, pdb, r.scheme)
 	if err != nil {
 		return errors.Wrap(err, "set owner reference")
 	}

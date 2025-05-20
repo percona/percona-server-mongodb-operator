@@ -14,7 +14,6 @@ import (
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/version"
@@ -39,8 +38,9 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDB{
-		CommonReconciler:       common.New(cl, s, fakeBackup.NewPBM, nil),
+		newPBMFunc:             fakeBackup.NewPBM,
 		client:                 cl,
+		scheme:                 s,
 		lockers:                newLockStore(),
 		newCertManagerCtrlFunc: faketls.NewCertManagerController,
 	}
