@@ -743,7 +743,6 @@ compare_kubectl() {
 	fi
 }
 
-
 run_recovery_check() {
 	local backup_name=$1
 	local compare_suffix=${2:-"_restore"}
