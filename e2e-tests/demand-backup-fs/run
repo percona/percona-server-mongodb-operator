@@ -6,14 +6,10 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-if [[ "${OPENSHIFT}" ]]; then
-	echo "This test is not supported on OpenShift due to nfs privileged. See K8SPSMDB-1262"
-	exit 0
-fi
-
 deploy_nfs_server() {
 	kubectl_bin create namespace storage
-	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yaml
+	kubectl_bin apply -n storage -f ${test_dir}/conf/anyuid.yml
+	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yml
 	sleep 5 # wait for NFS server pod to be created
 
 	local nfsPod=$(kubectl_bin get pod -n storage -l app=nfs-server -o jsonpath={.items[].metadata.name})
@@ -60,6 +56,10 @@ if [[ $GKE != 1 ]]; then
 	kubectl_bin annotate storageclass ${sc} storageclass.kubernetes.io/is-default-class=true
 fi
 
+if [[ "${OPENSHIFT}" ]]; then
+	echo "OPENSHIFT"
+fi
+
 log "deploying NFS server"
 deploy_nfs_server
 
@@ -71,10 +71,10 @@ kubectl_bin apply \
 log "creating PSMDB cluster ${cluster}"
 if [[ $GKE != 1 ]]; then
 	nfs_ip=$(kubectl_bin -n storage get svc nfs-service -o jsonpath={.spec.clusterIP})
-	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${test_dir}/conf/${cluster}.yaml \
+	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${test_dir}/conf/${cluster}.yml \
 		| kubectl_bin apply -f -
 else
-	apply_cluster ${test_dir}/conf/${cluster}.yaml
+	apply_cluster ${test_dir}/conf/${cluster}.yml
 fi
 
 log 'wait for all 3 pods to start'

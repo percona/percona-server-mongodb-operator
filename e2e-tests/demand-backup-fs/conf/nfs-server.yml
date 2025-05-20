@@ -24,6 +24,7 @@ spec:
       labels:
         app: nfs-server
     spec:
+      serviceAccountName: anyuid
       containers:
       - name: nfs-server
         image: k8s.gcr.io/volume-nfs:0.8
