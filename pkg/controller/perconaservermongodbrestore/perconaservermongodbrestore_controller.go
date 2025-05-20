@@ -83,7 +83,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	// that reads objects from the cache and writes to the apiserver
 	psmdb.MongoProviderBase
 
-	client    client.Client // TODO: use CommonReconciler client
+	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
 
