@@ -10,3 +10,4 @@ spec:
 #  type: physical
 #  compressionType: gzip
 #  compressionLevel: 6
+#  startingDeadlineSeconds: 300

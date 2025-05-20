@@ -65,6 +65,9 @@ spec:
                 type: string
               psmdbCluster:
                 type: string
+              startingDeadlineSeconds:
+                format: int64
+                type: integer
               storageName:
                 type: string
               type:

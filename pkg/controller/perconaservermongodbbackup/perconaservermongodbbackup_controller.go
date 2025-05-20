@@ -185,6 +185,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
+	if err := r.checkDeadlines(ctx, cluster, cr); err != nil {
+		if err := r.setFailedStatus(ctx, cr, err); err != nil {
+			return rr, errors.Wrap(err, "update status")
+		}
+		return reconcile.Result{}, nil
+	}
+
 	var bcp *Backup
 	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		var err error
@@ -230,7 +237,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if err := cluster.CanBackup(ctx); err != nil {
-		return status, errors.Wrap(err, "failed to run backup")
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
 	}
 
 	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
@@ -620,4 +628,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 	}
 
 	return errors.Wrap(err, "write status")
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) setFailedStatus(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBBackup,
+	err error,
+) error {
+	cr.SetFailedStatusWithError(err)
+	return r.updateStatus(ctx, cr)
 }

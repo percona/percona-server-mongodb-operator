@@ -59,6 +59,11 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 
 	var status api.PerconaServerMongoDBBackupStatus
 
+	if err := cluster.CanBackup(ctx); err != nil {
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
+	}
+
 	stg, ok := b.spec.Storages[cr.Spec.StorageName]
 	if !ok {
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
