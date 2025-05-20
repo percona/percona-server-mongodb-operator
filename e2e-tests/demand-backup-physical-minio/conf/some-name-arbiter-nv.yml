@@ -21,12 +21,6 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
-    tasks:
-    - name: weekly
-      enabled: true
-      schedule: "0 0 * * 0"
-      compressionType: gzip
-      storageName: aws-s3
   replsets:
   - name: rs0
     affinity:

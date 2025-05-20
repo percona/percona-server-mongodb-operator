@@ -7,8 +7,8 @@ test_dir=$(realpath "$(dirname "$0")")
 set_debug
 
 if [ -n "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-    desc 'Skip tests related to AWS S3 Cloud Storage'
-    exit 0
+	desc 'Skip tests related to AWS S3 Cloud Storage'
+	exit 0
 fi
 
 create_infra "${namespace}"
