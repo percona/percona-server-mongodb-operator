@@ -55,7 +55,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
     size: 3
   - name: rs1
     affinity:
@@ -73,7 +73,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
     size: 3
   - name: rs2
     affinity:
@@ -91,7 +91,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
     size: 3
   secrets:
     users: some-users
