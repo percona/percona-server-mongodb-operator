@@ -35,7 +35,6 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/controller/common"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -172,7 +171,6 @@ func NewCronRegistry() CronRegistry {
 
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
-	common.CommonReconciler
 	psmdb.MongoProviderBase
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
