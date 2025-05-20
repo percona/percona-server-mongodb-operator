@@ -32,6 +32,10 @@ spec:
       jsonPath: .status.type
       name: Type
       type: string
+    - description: Backup size
+      jsonPath: .status.size
+      name: Size
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -168,6 +172,8 @@ spec:
                 required:
                 - bucket
                 type: object
+              size:
+                type: string
               start:
                 format: date-time
                 type: string
@@ -322,6 +328,8 @@ spec:
                     required:
                     - bucket
                     type: object
+                  size:
+                    type: string
                   start:
                     format: date-time
                     type: string
@@ -19809,7 +19817,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.20.0
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

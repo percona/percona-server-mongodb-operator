@@ -137,6 +137,8 @@ spec:
                     required:
                     - bucket
                     type: object
+                  size:
+                    type: string
                   start:
                     format: date-time
                     type: string
