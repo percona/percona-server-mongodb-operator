@@ -5,8 +5,6 @@ import (
 	"os"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	_ "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -43,7 +41,7 @@ var _ = Describe("Starting deadline", func() {
 		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(60))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
-		bcp.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
+		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
 
 		err = checkStartingDeadline(context.Background(), cluster, bcp)
 		Expect(err).To(HaveOccurred())
@@ -59,7 +57,7 @@ var _ = Describe("Starting deadline", func() {
 		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(600))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
-		bcp.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
+		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
 		bcp.Spec.StartingDeadlineSeconds = ptr.To(int64(60))
 
 		err = checkStartingDeadline(context.Background(), cluster, bcp)
@@ -76,7 +74,7 @@ var _ = Describe("Starting deadline", func() {
 		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(600))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
-		bcp.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
+		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
 		bcp.Spec.StartingDeadlineSeconds = ptr.To(int64(300))
 
 		err = checkStartingDeadline(context.Background(), cluster, bcp)
