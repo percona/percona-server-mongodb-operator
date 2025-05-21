@@ -12,7 +12,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestContainer(t *testing.T) {
@@ -65,7 +65,7 @@ func TestContainer(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion:       version.Version,
+					CRVersion:       version.Version(),
 					ImagePullPolicy: corev1.PullAlways,
 					PMM: api.PMMSpec{
 						Enabled:           tt.pmmEnabled,
@@ -110,7 +110,6 @@ func TestContainer(t *testing.T) {
 			assert.Equal(t, tt.expectedContainer, container)
 		})
 	}
-
 }
 
 func buildExpectedPMMContainer() *corev1.Container {
