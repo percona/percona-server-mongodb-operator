@@ -43,7 +43,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 var secretFileMode int32 = 288
@@ -690,7 +690,7 @@ func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *ap
 	}
 
 	orig := cr.DeepCopy()
-	cr.Spec.CRVersion = version.Version
+	cr.Spec.CRVersion = version.Version()
 
 	if err := r.client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch CR")
