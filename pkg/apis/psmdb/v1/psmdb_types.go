@@ -556,8 +556,8 @@ func (conf MongoConfiguration) GetTLSMode() (string, error) {
 	return mode, nil
 }
 
-// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
-func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
+// isEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
+func (conf MongoConfiguration) isEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
 		return nil, err
