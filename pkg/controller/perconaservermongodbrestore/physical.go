@@ -92,9 +92,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		status.State = psmdbv1.RestoreStateWaiting
+		return status, nil
 	}
 
-	if cr.Status.State == psmdbv1.RestoreStateWaiting || status.State == psmdbv1.RestoreStateWaiting {
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	if cr.Status.State == psmdbv1.RestoreStateWaiting {
 		if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
 			return status, errors.Wrap(err, "prepare statefulsets for physical restore")
 		}
@@ -104,12 +108,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			return status, errors.Wrap(err, "check if statefulsets are ready for physical restore")
 		}
 
-		if (!sfsReady && cr.Status.State != psmdbv1.RestoreStateRunning) || cr.Status.State == psmdbv1.RestoreStateNew {
+		if !sfsReady {
 			log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
 			return status, nil
 		}
 
-		if sfsReady && cr.Spec.PITR != nil {
+		if cr.Spec.PITR != nil {
 			rsReady, err := r.checkIfReplsetsAreReadyForPhysicalRestore(ctx, cluster)
 			if err != nil {
 				return status, errors.Wrap(err, "check if replsets are ready for physical restore")
@@ -124,12 +128,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				return status, nil
 			}
 		}
-	}
 
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	if cr.Status.State == psmdbv1.RestoreStateWaiting {
 		rs := replsets[0]
 
 		pbmAgentsReady, err := r.checkIfPBMAgentsReadyForPhysicalRestore(ctx, cluster)
@@ -198,8 +197,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 		return status, errors.Wrap(err, "get pod")
 	}
+	if !pod.DeletionTimestamp.IsZero() {
+		return status, nil
+	}
 
-	if pod.Spec.Containers[0].Name == naming.ContainerBackupAgent && pod.DeletionTimestamp == nil {
+	if !hasContainerName(pod.Spec.Containers, naming.ContainerBackupAgent) {
 		meta := backup.BackupMeta{}
 		notFound := false
 
@@ -266,7 +268,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				return status, nil
 			}
 
-			// status.State = psmdbv1.RestoreStateReady
 			restoreIsDone = true
 		}
 
@@ -296,20 +297,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	status.State = psmdbv1.RestoreStateReady
 
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		c := &psmdbv1.PerconaServerMongoDB{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, c)
-		if err != nil {
+		c := new(psmdbv1.PerconaServerMongoDB)
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c); err != nil {
 			return err
 		}
-
-		orig := c.DeepCopy()
 
 		if c.Annotations == nil {
 			c.Annotations = make(map[string]string)
 		}
 		c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
 
-		return r.client.Patch(ctx, c, client.MergeFrom(orig))
+		return r.client.Update(ctx, c)
 	})
 	if err != nil {
 		return status, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
@@ -318,12 +316,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	return status, nil
 }
 
+func hasContainerName(containers []corev1.Container, name string) bool {
+	for _, c := range containers {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context.Context, cluster *api.PerconaServerMongoDB) (bool, error) {
 	stsIsUpdated := true
 	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
-		if sts.Spec.Template.Spec.Containers[0].Name == naming.ContainerBackupAgent {
-			stsIsUpdated = false
-		} else if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] != "true" {
+		if !sts.DeletionTimestamp.IsZero() {
+			return nil
+		}
+
+		if !hasContainerName(sts.Spec.Template.Spec.Containers, naming.ContainerBackupAgent) {
+			return errors.Errorf("statefulsets weren't deleted")
+		}
+
+		if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] != "true" {
 			stsIsUpdated = false
 			sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 		}
