@@ -65,7 +65,7 @@ func TestContainer(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion:       version.Version,
+					CRVersion:       version.Version(),
 					ImagePullPolicy: corev1.PullAlways,
 					PMM: api.PMMSpec{
 						Enabled:           tt.pmmEnabled,
