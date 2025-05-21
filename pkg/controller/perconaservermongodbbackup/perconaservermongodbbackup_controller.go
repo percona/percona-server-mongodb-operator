@@ -138,6 +138,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
+
+		if cr.Status.State == psmdbv1.BackupStateError && status.State == "" {
+			return
+		}
+
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
@@ -172,6 +177,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
+	if err := r.checkDeadlines(ctx, cluster, cr); err != nil {
+		if err := r.setFailedStatus(ctx, cr, err); err != nil {
+			return rr, errors.Wrap(err, "update status")
+		}
+		return reconcile.Result{}, nil
+	}
+
 	if cluster != nil {
 		var svr *version.ServerVersion
 		svr, err = version.Server(r.clientcmd)
@@ -181,15 +193,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
-		}
-	}
+			err := errors.Wrapf(err, "wrong PSMDB options for %s/%s", cluster.Namespace, cluster.Name)
 
-	if err := r.checkDeadlines(ctx, cluster, cr); err != nil {
-		if err := r.setFailedStatus(ctx, cr, err); err != nil {
-			return rr, errors.Wrap(err, "update status")
+			if err := r.setFailedStatus(ctx, cr, err); err != nil {
+				return rr, errors.Wrap(err, "update status")
+			}
+			return reconcile.Result{}, err
 		}
-		return reconcile.Result{}, nil
 	}
 
 	var bcp *Backup
