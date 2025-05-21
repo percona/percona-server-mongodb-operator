@@ -420,7 +420,7 @@ wait_restore() {
 			fi
 
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
-
+			kubectl_bin describe psmdb-restore restore-${backup_name}
 			echo "Restore object restore-${backup_name} is in ${current_state} state."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
