@@ -202,5 +202,7 @@ spec:
           secretName: internal-reconcile-statefulset-cr-users
       - emptyDir: {}
         name: mongod-data
+      - emptyDir: { }
+        name: mongod-data-logs
   updateStrategy:
     type: OnDelete

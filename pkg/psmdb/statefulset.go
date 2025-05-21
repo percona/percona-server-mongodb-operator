@@ -239,27 +239,45 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
 		volumes = append(volumes,
-			corev1.Volume{
-				Name: config.MongodDataVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+			[]corev1.Volume{
+				{
+					Name: config.MongodDataVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+				{
+					Name: config.MongodDataLogsVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			}...,
 		)
 	} else {
 		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 			volumeClaimTemplates = []corev1.PersistentVolumeClaim{
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
+				PersistentVolumeClaim(config.MongodDataLogsVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
 			volumes = append(volumes,
-				corev1.Volume{
-					Name: config.MongodDataVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						HostPath: volumeSpec.HostPath,
-						EmptyDir: volumeSpec.EmptyDir,
+				[]corev1.Volume{
+					{
+						Name: config.MongodDataVolClaimName,
+						VolumeSource: corev1.VolumeSource{
+							HostPath: volumeSpec.HostPath,
+							EmptyDir: volumeSpec.EmptyDir,
+						},
 					},
-				},
+					{
+						Name: config.MongodDataLogsVolClaimName,
+						VolumeSource: corev1.VolumeSource{
+							HostPath: volumeSpec.HostPath,
+							EmptyDir: volumeSpec.EmptyDir,
+						},
+					},
+				}...,
 			)
 		}
 
