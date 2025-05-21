@@ -3,6 +3,7 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,7 +11,6 @@ import (
 	_ "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"path/filepath"
 	"sigs.k8s.io/yaml"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
