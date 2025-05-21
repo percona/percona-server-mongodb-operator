@@ -91,33 +91,6 @@ function main() {
 	compare_generation "1" "statefulset" "${cluster}-mongos"
 	compare_generation "1" "psmdb" "${cluster}"
 
-	desc 'install PMM Server'
-	deploy_pmm_server
-	sleep 20
-	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
-			"spec": {"pmm":{"enabled":true}}
-		}'
-	sleep 120
-	# since psmdb cluster won't work without pmm server running consistency check would be enough
-	wait_cluster_consistency $cluster
-
-	kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
-			"spec": {"pmm":{"enabled":false}}
-		}'
-	sleep 120
-
-	if [[ -n ${OPENSHIFT} ]]; then
-		oc adm policy remove-scc-from-user privileged -z pmm-server
-		if [ -n "$OPERATOR_NS" ]; then
-			oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
-		else
-			oc delete rolebinding pmm-psmdb-operator-namespace-only
-		fi
-	fi
-	helm uninstall monitoring
-
-	wait_cluster_consistency $cluster
-
 	desc 'enabling arbiter'
 	kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/replsets/0/arbiter/enabled","value":true},{"op":"replace","path":"/spec/replsets/0/size","value":4}]'
 	wait_cluster_consistency $cluster
