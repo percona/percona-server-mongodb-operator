@@ -19794,7 +19794,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.20.0
+          image: tishina/percona-server-mongodb-operator:K8SPSMDB-1319-2
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
