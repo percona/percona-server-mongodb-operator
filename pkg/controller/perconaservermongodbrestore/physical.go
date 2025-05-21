@@ -692,7 +692,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runIsMaster(ctx context.Context, 
 	}
 
 	c := strings.Join([]string{
-		mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", "'db.isMaster().ismaster'",
+		mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", "'db.hello().isWritablePrimary'",
 		"|", "tail", "-n", "1",
 		"|", "grep", "-Eo", "'(true|false)'",
 	}, " ")

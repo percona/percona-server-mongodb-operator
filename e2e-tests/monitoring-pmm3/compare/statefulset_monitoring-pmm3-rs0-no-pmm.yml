@@ -5,16 +5,16 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: mongod
-    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/instance: monitoring-pmm3
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+  name: monitoring-pmm3-rs0
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
-      name: some-name
+      name: monitoring-pmm3
 spec:
   podManagementPolicy: OrderedReady
   replicas: 3
@@ -22,18 +22,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: mongod
-      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/instance: monitoring-pmm3
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
       app.kubernetes.io/replset: rs0
-  serviceName: some-name-rs0
+  serviceName: monitoring-pmm3-rs0
   template:
     metadata:
       annotations: {}
       labels:
         app.kubernetes.io/component: mongod
-        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/instance: monitoring-pmm3
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
@@ -44,16 +44,16 @@ spec:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
-            - --port=27017
+            - --port=27019
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
-            - --tlsMode=preferTLS
+            - --tlsMode=requireTLS
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
             - --quiet
@@ -61,14 +61,14 @@ spec:
             - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
-              value: some-name
+              value: monitoring-pmm3
             - name: MONGODB_PORT
-              value: "27017"
+              value: "27019"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
             - secretRef:
-                name: internal-some-name-users
+                name: internal-monitoring-pmm3-users
                 optional: false
           imagePullPolicy: Always
           livenessProbe:
@@ -92,7 +92,7 @@ spec:
             timeoutSeconds: 10
           name: mongod
           ports:
-            - containerPort: 27017
+            - containerPort: 27019
               name: mongodb
               protocol: TCP
           readinessProbe:
@@ -108,13 +108,7 @@ spec:
             periodSeconds: 3
             successThreshold: 1
             timeoutSeconds: 2
-          resources:
-            limits:
-              cpu: 500m
-              memory: 1G
-            requests:
-              cpu: 100m
-              memory: 100M
+          resources: {}
           securityContext:
             runAsNonRoot: true
             runAsUser: 1001
@@ -124,7 +118,7 @@ spec:
             - mountPath: /data/db
               name: mongod-data
             - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
+              name: monitoring-pmm3-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
@@ -137,75 +131,18 @@ spec:
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
-              name: some-name-mongodb-encryption-key
+              name: monitoring-pmm3-mongodb-encryption-key
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
-        - args:
-            - pbm-agent-entrypoint
-          command:
-            - /opt/percona/pbm-entry.sh
-          env:
-            - name: PBM_AGENT_MONGODB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_USER_ESCAPED
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_AGENT_MONGODB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_MONGODB_REPLSET
-              value: rs0
-            - name: PBM_MONGODB_PORT
-              value: "27017"
-            - name: PBM_AGENT_SIDECAR
-              value: "true"
-            - name: PBM_AGENT_SIDECAR_SLEEP
-              value: "5"
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.name
-            - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
-            - name: PBM_AGENT_TLS_ENABLED
-              value: "true"
-          imagePullPolicy: Always
-          name: backup-agent
-          resources: {}
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1001
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          volumeMounts:
-            - mountPath: /etc/mongodb-ssl
-              name: ssl
-              readOnly: true
-            - mountPath: /opt/percona
-              name: bin
-              readOnly: true
-            - mountPath: /data/db
-              name: mongod-data
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
             - /init-entrypoint.sh
           imagePullPolicy: Always
           name: mongo-init
-          resources:
-            limits:
-              cpu: 500m
-              memory: 1G
-            requests:
-              cpu: 100m
-              memory: 100M
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -221,37 +158,37 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: some-name-mongodb-keyfile
+        - name: monitoring-pmm3-mongodb-keyfile
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-keyfile
+            secretName: monitoring-pmm3-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - configMap:
             defaultMode: 420
-            name: some-name-rs0-mongod
+            name: monitoring-pmm3-rs0-mongod
             optional: true
           name: config
-        - name: some-name-mongodb-encryption-key
+        - name: monitoring-pmm3-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-mongodb-encryption-key
+            secretName: monitoring-pmm3-mongodb-encryption-key
         - name: ssl
           secret:
             defaultMode: 288
             optional: false
-            secretName: some-name-ssl
+            secretName: monitoring-pmm3-ssl
         - name: ssl-internal
           secret:
             defaultMode: 288
             optional: true
-            secretName: some-name-ssl-internal
+            secretName: monitoring-pmm3-ssl-internal
         - name: users-secret-file
           secret:
             defaultMode: 420
-            secretName: internal-some-name-users
+            secretName: internal-monitoring-pmm3-users
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
