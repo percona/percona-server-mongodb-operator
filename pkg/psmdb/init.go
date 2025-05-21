@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -17,8 +18,8 @@ func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, p
 	container := corev1.Container{
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      MongodDataVolClaimName,
-				MountPath: MongodContainerDataDir,
+				Name:      config.MongodDataVolClaimName,
+				MountPath: config.MongodContainerDataDir,
 			},
 		},
 		Image:           image,
@@ -29,8 +30,8 @@ func EntrypointInitContainer(cr *api.PerconaServerMongoDB, name, image string, p
 
 	if cr.CompareVersion("1.13.0") >= 0 {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      BinVolumeName,
-			MountPath: BinMountPath,
+			Name:      config.BinVolumeName,
+			MountPath: config.BinMountPath,
 		})
 	}
 
