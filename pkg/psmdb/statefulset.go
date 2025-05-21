@@ -294,7 +294,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			containers = append(containers, *pmmC)
 		}
 
-		if cr.CompareVersion("1.20.0") >= 0 { // TODO: change this to 1.21
+		if cr.CompareVersion("1.21.0") >= 0 {
 			logCollectorCs, err := logcollector.Containers(cr)
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")

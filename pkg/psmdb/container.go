@@ -66,7 +66,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}...)
 	}
 
-	if cr.CompareVersion("1.20.0") >= 0 { // TODO change this to 1.21
+	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.MongodDataLogsVolClaimName,
 			MountPath: config.MongodContainerDataLogsDir,
@@ -175,7 +175,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
 	}
 
-	if cr.CompareVersion("1.20.0") >= 0 {
+	if cr.CompareVersion("1.21.0") >= 0 {
 		if cr.IsLogCollectorEnabled() {
 			container.Env = append(container.Env, corev1.EnvVar{
 				Name:  "LOGCOLLECTOR_ENABLED",
