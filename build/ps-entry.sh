@@ -480,7 +480,7 @@ if [[ $originalArgOne == mongo* ]]; then
 		_mongod_hack_rename_arg_save_val --sslDisabledProtocols --tlsDisabledProtocols "${mongodHackedArgs[@]}"
 	fi
 
-	if [[ $originalArgOne == "mongod" ]]; then
+	if [[ $originalArgOne == "mongod" && "${LOGCOLLECTOR_ENABLED:-}" == "true" ]]; then
 		_mongod_hack_ensure_arg_val --logpath "/data/logs/mongod.log" "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
 	fi

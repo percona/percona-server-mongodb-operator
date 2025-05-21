@@ -17,5 +17,5 @@ else
 		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'
 	fi
 
-	exec "$@" "$fluentbit_opt"
+	exec "$@" $fluentbit_opt
 fi

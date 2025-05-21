@@ -1368,3 +1368,7 @@ type LogCollectorSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 }
+
+func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
+	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}

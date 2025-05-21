@@ -79,6 +79,8 @@ spec:
           value: "27017"
         - name: MONGODB_REPLSET
           value: cfg
+        - name: LOGCOLLECTOR_ENABLED
+          value: "true"
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
