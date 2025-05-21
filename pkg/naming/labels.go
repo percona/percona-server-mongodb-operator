@@ -14,6 +14,8 @@ const (
 	LabelKubernetesPartOf    = labelKubernetesPrefix + "part-of"
 	LabelKubernetesComponent = labelKubernetesPrefix + "component"
 	LabelKubernetesReplset   = labelKubernetesPrefix + "replset"
+
+	LabelKubernetesOperatorVersion = labelKubernetesPrefix + "version"
 )
 
 const (
@@ -22,13 +24,18 @@ const (
 	LabelCluster        = perconaPrefix + "cluster"
 )
 
-func ClusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
+func Labels() map[string]string {
 	return map[string]string{
 		LabelKubernetesName:      "percona-server-mongodb",
-		LabelKubernetesInstance:  cr.Name,
 		LabelKubernetesManagedBy: "percona-server-mongodb-operator",
 		LabelKubernetesPartOf:    "percona-server-mongodb",
 	}
+}
+
+func ClusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
+	l := Labels()
+	l[LabelKubernetesInstance] = cr.Name
+	return l
 }
 
 func ServiceLabels(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) map[string]string {

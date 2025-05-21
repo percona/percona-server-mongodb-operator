@@ -34,7 +34,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 /**
@@ -593,7 +593,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	errB := bytes.Buffer{}
 	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
 	if err != nil {
-		return errors.Wrap(err, "exec delete-backup")
+		return errors.Wrapf(err, "exec delete-backup: stdout=%s, stderr=%s", outB.String(), errB.String())
 	}
 
 	log.Info("Backup deleted")
