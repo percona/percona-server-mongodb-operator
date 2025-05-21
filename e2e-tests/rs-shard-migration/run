@@ -10,7 +10,7 @@ function get_shard_parameter() {
 	local cluster_name=$1
 	local namespace=$2
 	local parameter=${3:-lastCommittedOpTime}
-	run_mongo 'db.isMaster().'${parameter}'' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" \
+	run_mongo 'db.hello().'${parameter}'' "clusterAdmin:clusterAdmin123456@${cluster_name}-rs0-0.${cluster_name}-rs0.${namespace}" "mongodb" "" "--quiet" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:'
 }
 
@@ -59,8 +59,7 @@ function main() {
 	desc 'write data, read from all'
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 
-	if [[ -z "$(get_shard_parameter ${cluster} ${namespace} lastCommitedOpTime)" ]] \
-		&& [[ -z "$(get_shard_parameter ${cluster} ${namespace} '$configServerState.opTime.ts')" ]]; then # for mongo 3.6
+	if [[ -z "$(get_shard_parameter ${cluster} ${namespace} 'lastWrite.majorityOpTime.ts')" ]]; then
 		echo "Sharded cluster does not work properly"
 		exit 1
 	fi
