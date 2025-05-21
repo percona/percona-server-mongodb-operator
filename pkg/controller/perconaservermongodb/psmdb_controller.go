@@ -87,6 +87,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDB{
+		MongoProviderBase:      psmdb.NewProviderBase(client, nil),
 		client:                 client,
 		scheme:                 client.Scheme(),
 		newPBMFunc:             backup.NewPBM,

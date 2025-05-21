@@ -52,10 +52,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
+		MongoProviderBase: psmdb.NewProviderBase(mgr.GetClient(), nil),
+		client:            mgr.GetClient(),
+		scheme:            mgr.GetScheme(),
+		clientcmd:         cli,
+		newPBMFunc:        backup.NewPBM,
 	}, nil
 }
 
