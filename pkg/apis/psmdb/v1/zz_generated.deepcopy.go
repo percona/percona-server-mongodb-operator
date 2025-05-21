@@ -6,7 +6,7 @@ package v1
 
 import (
 	metav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
