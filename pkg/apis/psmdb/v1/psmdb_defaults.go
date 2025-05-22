@@ -850,19 +850,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	return nil
 }
 
-func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
-	if !h.Enabled {
-		return nil
-	}
-
-	if h.VolumeSpec != nil {
-		if err := h.VolumeSpec.reconcileOpts(); err != nil {
-			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
-		}
-	} else {
-		h.VolumeSpec = rs.VolumeSpec
-	}
-
+func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
 	if h.LivenessProbe == nil {
 		h.LivenessProbe = new(LivenessProbeExtended)
 	}
@@ -899,7 +887,9 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 			h.LivenessProbe.ProbeHandler.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
 	}
+}
 
+func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
 	if h.ReadinessProbe == nil {
 		h.ReadinessProbe = &corev1.Probe{}
 	}
@@ -925,6 +915,23 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 	if h.ReadinessProbe.FailureThreshold < 1 {
 		h.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
 	}
+}
+
+func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !h.Enabled {
+		return nil
+	}
+
+	if h.VolumeSpec != nil {
+		if err := h.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		h.VolumeSpec = rs.VolumeSpec
+	}
+
+	h.setLivenessProbe(cr, rs)
+	h.setReadinessProbe(rs)
 
 	if len(h.ServiceAccountName) == 0 {
 		h.ServiceAccountName = WorkloadSA
