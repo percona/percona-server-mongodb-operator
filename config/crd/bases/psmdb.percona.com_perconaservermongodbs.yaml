@@ -298,6 +298,9 @@ spec:
                     type: string
                   serviceAccountName:
                     type: string
+                  startingDeadlineSeconds:
+                    format: int64
+                    type: integer
                   storages:
                     additionalProperties:
                       properties:

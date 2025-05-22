@@ -623,6 +623,7 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
+#    startingDeadlineSeconds: 300
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
