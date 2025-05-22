@@ -141,6 +141,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /data/logs
+              name: mongod-data-logs
             - mountPath: /etc/mongodb-encryption
               name: monitoring-pmm3-mongodb-encryption-key
               readOnly: true
@@ -327,5 +329,15 @@ spec:
         resources:
           requests:
             storage: 3Gi
+      status:
+        phase: Pending
+    - metadata:
+        name: mongod-data-logs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
       status:
         phase: Pending
