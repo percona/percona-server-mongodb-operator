@@ -833,7 +833,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ServiceAccountName = WorkloadSA
 	}
 
-	nv.MultiAZ.reconcileOpts(cr)
+	//nolint:staticcheck
+	if err := nv.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s nonVoting", rs.Name)
+	}
 
 	if nv.ContainerSecurityContext == nil {
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
@@ -869,22 +872,22 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	if h.LivenessProbe.StartupDelaySeconds < 1 {
 		h.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
-	if h.LivenessProbe.ProbeHandler.Exec == nil {
-		h.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
+	if h.LivenessProbe.Exec == nil {
+		h.LivenessProbe.Exec = &corev1.ExecAction{
 			Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
 		}
 
 		if cr.TLSEnabled() {
-			h.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
-				h.LivenessProbe.Probe.ProbeHandler.Exec.Command,
+			h.LivenessProbe.Exec.Command = append(
+				h.LivenessProbe.Exec.Command,
 				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
 			)
 		}
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
 	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
-		h.LivenessProbe.ProbeHandler.Exec.Command = append(
-			h.LivenessProbe.ProbeHandler.Exec.Command,
+		h.LivenessProbe.Exec.Command = append(
+			h.LivenessProbe.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
 	}
 }
@@ -937,7 +940,10 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 		h.ServiceAccountName = WorkloadSA
 	}
 
-	h.MultiAZ.reconcileOpts(cr)
+	//nolint:staticcheck
+	if err := h.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s-hidden", rs.Name)
+	}
 
 	if h.ContainerSecurityContext == nil {
 		h.ContainerSecurityContext = rs.ContainerSecurityContext
