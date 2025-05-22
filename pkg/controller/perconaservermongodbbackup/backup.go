@@ -16,6 +16,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -192,6 +193,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 			status.Error = "incremental base backup not found"
 		}
 	case defs.StatusDone:
+		status.Size = storage.PrettySize(meta.Size)
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
