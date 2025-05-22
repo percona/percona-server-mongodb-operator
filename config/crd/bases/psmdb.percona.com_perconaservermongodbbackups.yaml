@@ -33,6 +33,10 @@ spec:
       jsonPath: .status.type
       name: Type
       type: string
+    - description: Backup size
+      jsonPath: .status.size
+      name: Size
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -169,6 +173,8 @@ spec:
                 required:
                 - bucket
                 type: object
+              size:
+                type: string
               start:
                 format: date-time
                 type: string
