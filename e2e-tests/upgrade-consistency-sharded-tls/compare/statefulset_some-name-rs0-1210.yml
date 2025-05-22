@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 7
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -130,6 +130,7 @@ spec:
               memory: 100M
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -176,7 +177,8 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext: {}
+      securityContext:
+        fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 60

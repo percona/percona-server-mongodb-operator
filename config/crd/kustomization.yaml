@@ -7,6 +7,11 @@ resources:
 - bases/psmdb.percona.com_perconaservermongodbs.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
+patchesStrategicMerge:
+  - patches/versionlabel_in_psmdb.yaml
+  - patches/versionlabel_in_psmdbbackup.yaml
+  - patches/versionlabel_in_psmdbrestore.yaml
+
 patches:
   - path: patches/deprecated-1.2.json
     target:

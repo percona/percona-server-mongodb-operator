@@ -45,7 +45,7 @@ run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }
 	mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons-3.json
 diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
 
-isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
+isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
 if [ "${isMaster}" != "true" ]; then
 	echo "mongo client should've redirect the connection to primary"
 	exit 1
@@ -58,7 +58,7 @@ run_mongo_tls "rs.stepDown()" \
 
 sleep 10 # give some time for re-election
 
-isMaster=$(run_mongo_tls "db.isMaster().ismaster" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
+isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
 if [ "${isMaster}" != "true" ]; then
 	echo "mongo client should've redirect the connection to primary"
 	exit 1

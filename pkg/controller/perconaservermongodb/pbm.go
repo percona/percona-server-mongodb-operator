@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -188,6 +189,56 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 	return false
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
+	ctx context.Context,
+	pbm backup.PBM,
+	cr *psmdbv1.PerconaServerMongoDB,
+) error {
+	log := logf.FromContext(ctx)
+
+	if len(cr.Spec.Backup.Storages) != 1 {
+		log.Info("Expected exactly one storage for PiTR in legacy version", "configured", len(cr.Spec.Backup.Storages))
+		return nil
+	}
+
+	// if PiTR is enabled user can configure only one storage
+	var storage psmdbv1.BackupStorageSpec
+	for name, stg := range cr.Spec.Backup.Storages {
+		storage = stg
+		log.Info("Configuring PBM with storage", "storage", name)
+		break
+	}
+
+	var secretName string
+	switch storage.Type {
+	case psmdbv1.BackupStorageS3:
+		secretName = storage.S3.CredentialsSecret
+	case psmdbv1.BackupStorageAzure:
+		secretName = storage.Azure.CredentialsSecret
+	}
+
+	if secretName != "" {
+		exists, err := secretExists(ctx, r.client, types.NamespacedName{Name: secretName, Namespace: cr.Namespace})
+		if err != nil {
+			return errors.Wrap(err, "check storage credentials secret")
+		}
+
+		if !exists {
+			log.Error(nil, "Storage credentials secret does not exist", "secret", secretName)
+			return nil
+		}
+	}
+
+	err := pbm.GetNSetConfigLegacy(ctx, r.client, cr, storage)
+	if err != nil {
+		return errors.Wrap(err, "set PBM config")
+	}
+
+	log.Info("Configured PBM storage")
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
@@ -209,10 +260,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 		return nil
 	}
 
-	stgName, _, err := cr.Spec.Backup.MainStorage()
-	if err != nil {
-		// no storage found
-		return nil
+	var stgName string
+	for name := range cr.Spec.Backup.Storages {
+		stgName = name
+		break
+	}
+	if cr.CompareVersion("1.20.0") >= 0 {
+		stgName, _, err = cr.Spec.Backup.MainStorage()
+		if err != nil {
+			// no storage found
+			return nil
+		}
 	}
 
 	if cr.Spec.Backup.PITR.Enabled && !cr.Spec.Backup.PITR.OplogOnly {
@@ -236,6 +294,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 	defer pbm.Close(ctx)
 
 	if err := enablePiTRIfNeeded(ctx, pbm, cr); err != nil {
+		if backup.IsErrNoDocuments(err) {
+			if cr.CompareVersion("1.20.0") < 0 {
+				if err := r.reconcilePiTRStorageLegacy(ctx, pbm, cr); err != nil {
+					return errors.Wrap(err, "reconcile pitr storage")
+				}
+			}
+			return nil
+		}
+
 		return errors.Wrap(err, "enable pitr if needed")
 	}
 

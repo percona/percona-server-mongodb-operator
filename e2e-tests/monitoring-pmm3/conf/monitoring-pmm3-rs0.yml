@@ -1,0 +1,74 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: monitoring-pmm3
+spec:
+  #platform: openshift
+  image:
+  tls:
+    mode: requireTLS
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      net:
+        port: 27019
+      operationProfiling:
+        mode: all
+        slowOpThresholdMs: 100
+        rateLimit: 100
+      security:
+        enableEncryption: true
+
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      configuration: |
+        net:
+          port: 27019
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+
+    mongos:
+      size: 3
+      configuration: |
+        net:
+          port: 27019
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      expose:
+        type: ClusterIP
+        labels:
+          test: monitoring-pmm3
+        annotations:
+          test: monitoring-pmm3
+
+  pmm:
+    enabled: true
+    image:
+    serverHost: monitoring-service
+    mongosParams: "--environment=dev-mongos"
+    mongodParams: "--enable-all-collectors --environment=dev-mongod"
+    customClusterName:
+  secrets:
+    users: some-users

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 3
+  generation: 7
   labels:
     app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
@@ -129,7 +129,6 @@ spec:
               memory: 500M
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -174,8 +173,7 @@ spec:
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 60

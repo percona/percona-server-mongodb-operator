@@ -89,6 +89,7 @@ type PBM interface {
 	GetProfile(ctx context.Context, name string) (*config.Config, error)
 	RemoveProfile(ctx context.Context, name string) error
 	GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error
+	GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
 	SetConfig(ctx context.Context, cfg *config.Config) error
 	SetConfigVar(ctx context.Context, key, val string) error
 
@@ -520,6 +521,26 @@ func (b *pbmC) RemoveProfile(ctx context.Context, name string) error {
 	log.Info("Removing profile", "name", name)
 
 	return config.RemoveProfile(ctx, b.Client, name)
+}
+
+// GetNSetConfigLegacy sets the PBM config with given storage
+func (b *pbmC) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	log := logf.FromContext(ctx)
+
+	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
+	if err != nil {
+		return errors.Wrap(err, "get PBM config")
+	}
+
+	log.Info("Setting config", "cluster", cluster.Name, "storage", stg)
+
+	if err := config.SetConfig(ctx, b.Client, &conf); err != nil {
+		return errors.Wrap(err, "write config")
+	}
+
+	time.Sleep(11 * time.Second) // give time to init new storage
+
+	return nil
 }
 
 // GetNSetConfig sets the PBM config with main storage defined in the cluster CR

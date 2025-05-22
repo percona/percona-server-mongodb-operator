@@ -18,7 +18,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
@@ -547,6 +547,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			cr.Spec.PMM.ContainerSecurityContext = &corev1.SecurityContext{
 				RunAsNonRoot: &tvar,
 				RunAsUser:    fsgroup,
+			}
+		}
+
+		if cr.CompareVersion("1.20.0") < 0 && cr.Spec.Backup.PITR.Enabled {
+			if len(cr.Spec.Backup.Storages) != 1 {
+				cr.Spec.Backup.PITR.Enabled = false
+				log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
 			}
 		}
 

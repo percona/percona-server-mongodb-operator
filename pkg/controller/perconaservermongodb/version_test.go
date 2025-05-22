@@ -25,7 +25,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func Test_majorUpgradeRequested(t *testing.T) {
@@ -360,7 +360,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:       "disabled",
-				Version:     version.Version,
+				Version:     version.Version(),
 				ClusterSize: 3,
 			},
 			namespace: "test-namespace",
@@ -470,7 +470,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:          "disabled",
-				Version:        version.Version,
+				Version:        version.Version(),
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
@@ -498,7 +498,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:              "disabled",
-				Version:            version.Version,
+				Version:            version.Version(),
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -530,7 +530,7 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:              "disabled",
-				Version:            version.Version,
+				Version:            version.Version(),
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -709,7 +709,7 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		DatabaseVersion:         "database-version",
 		HashicorpVaultEnabled:   true,
 		KubeVersion:             "kube-version",
-		OperatorVersion:         version.Version,
+		OperatorVersion:         version.Version(),
 		Platform:                productName,
 		PmmVersion:              "pmm-version",
 		ShardingEnabled:         true,
@@ -772,7 +772,7 @@ func TestVersionService(t *testing.T) {
 			},
 			vm: VersionMeta{
 				Apply:   string(api.UpgradeStrategyDisabled),
-				Version: version.Version,
+				Version: version.Version(),
 			},
 			want: DepVersion{},
 		},
@@ -787,7 +787,7 @@ func TestVersionService(t *testing.T) {
 			},
 			vm: VersionMeta{
 				Apply:   string(api.UpgradeStrategyNever),
-				Version: version.Version,
+				Version: version.Version(),
 			},
 			want: DepVersion{},
 		},
@@ -809,7 +809,7 @@ func TestVersionService(t *testing.T) {
 				PMMVersion:              "pmm-version",
 				BackupVersion:           "backup-version",
 				CRUID:                   "custom-resource-uid",
-				Version:                 version.Version,
+				Version:                 version.Version(),
 				ClusterWideEnabled:      true,
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
