@@ -177,7 +177,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
-	if err := r.checkDeadlines(ctx, cluster, cr); err != nil {
+	if err := checkDeadlines(ctx, cluster, cr); err != nil {
 		if err := r.setFailedStatus(ctx, cr, err); err != nil {
 			return rr, errors.Wrap(err, "update status")
 		}
@@ -193,8 +193,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			err := errors.Wrapf(err, "wrong PSMDB options for %s/%s", cluster.Namespace, cluster.Name)
-
+			err := errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 			if err := r.setFailedStatus(ctx, cr, err); err != nil {
 				return rr, errors.Wrap(err, "update status")
 			}
