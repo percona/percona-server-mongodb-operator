@@ -67,10 +67,12 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{
-			Name:      config.MongodDataLogsVolClaimName,
-			MountPath: config.MongodContainerDataLogsDir,
-		})
+		if cr.IsLogCollectorEnabled() {
+			volumes = append(volumes, corev1.VolumeMount{
+				Name:      config.MongodDataLogsVolClaimName,
+				MountPath: config.MongodContainerDataLogsDir,
+			})
+		}
 	}
 
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)

@@ -295,7 +295,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 			if cr.IsLogCollectorEnabled() {
 				if logsVolumeSpec != nil && logsVolumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
-					volumeClaimTemplates = append(volumeClaimTemplates, PersistentVolumeClaim(config.MongodDataLogsVolClaimName, cr.Namespace, volumeSpec))
+					volumeClaimTemplates = append(volumeClaimTemplates, PersistentVolumeClaim(config.MongodDataLogsVolClaimName, cr.Namespace, logsVolumeSpec))
 				} else {
 					volumes = append(volumes,
 						corev1.Volume{
