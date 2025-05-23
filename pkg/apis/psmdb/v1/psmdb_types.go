@@ -921,6 +921,7 @@ type BackupTaskSpec struct {
 	Name             string                   `json:"name"`
 	Enabled          bool                     `json:"enabled"`
 	Keep             int                      `json:"keep,omitempty"`
+	Retention        BackupTaskSpecRetention  `json:"retention,omitempty"`
 	Schedule         string                   `json:"schedule,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
@@ -928,6 +929,19 @@ type BackupTaskSpec struct {
 
 	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
+}
+
+type BackupTaskSpecRetentionType string
+
+const (
+	BackupTaskSpecRetentionTypeCount = "count"
+)
+
+type BackupTaskSpecRetention struct {
+	Count int `json:"count,omitempty"`
+	// +kubebuilder:validation:Enum={count}
+	Type              string `json:"type,omitempty"`
+	DeleteFromStorage *bool  `json:"deleteFromStorage,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
