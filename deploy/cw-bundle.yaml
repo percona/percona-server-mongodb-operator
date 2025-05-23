@@ -37,6 +37,10 @@ spec:
       jsonPath: .status.type
       name: Type
       type: string
+    - description: Backup size
+      jsonPath: .status.size
+      name: Size
+      type: string
     - description: Job status
       jsonPath: .status.state
       name: Status
@@ -66,8 +70,6 @@ spec:
               compressionLevel:
                 type: integer
               compressionType:
-                type: string
-              psmdbCluster:
                 type: string
               storageName:
                 type: string
@@ -173,6 +175,8 @@ spec:
                 required:
                 - bucket
                 type: object
+              size:
+                type: string
               start:
                 format: date-time
                 type: string
@@ -332,6 +336,8 @@ spec:
                     required:
                     - bucket
                     type: object
+                  size:
+                    type: string
                   start:
                     format: date-time
                     type: string
@@ -19971,3 +19977,5 @@ spec:
               value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
+            - name: MAX_CONCURRENT_RECONCILES
+              value: "1"
