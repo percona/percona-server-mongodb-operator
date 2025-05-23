@@ -113,6 +113,9 @@ spec:
               lastTransition:
                 format: date-time
                 type: string
+              lastWriteAt:
+                format: date-time
+                type: string
               latestRestorableTime:
                 format: date-time
                 type: string
@@ -272,6 +275,9 @@ spec:
                     - path
                     type: object
                   lastTransition:
+                    format: date-time
+                    type: string
+                  lastWriteAt:
                     format: date-time
                     type: string
                   latestRestorableTime:
