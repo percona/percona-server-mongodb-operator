@@ -31,15 +31,7 @@ var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mo
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
-	replsetSize := replset.Size
-
-	if replset.NonVoting.Enabled {
-		replsetSize += replset.NonVoting.Size
-	}
-
-	if replset.Arbiter.Enabled {
-		replsetSize += replset.Arbiter.Size
-	}
+	replsetSize := replset.GetSize()
 
 	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
 	if err != nil {
@@ -319,17 +311,23 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 	}
 
 	switch pod.Labels[naming.LabelKubernetesComponent] {
-	case "arbiter":
+	case naming.ComponentArbiter:
 		member.ArbiterOnly = true
 		member.Priority = 0
-	case "mongod", "cfg":
+	case naming.ComponentMongod, "cfg":
 		member.Tags = tags
-	case "nonVoting":
+	case naming.ComponentNonVoting:
 		member.Tags = util.MapMerge(mongo.ReplsetTags{
-			"nonVoting": "true",
+			naming.ComponentNonVoting: "true",
 		}, tags)
 		member.Priority = 0
 		member.Votes = 0
+	case naming.ComponentHidden:
+		member.Tags = util.MapMerge(mongo.ReplsetTags{
+			naming.ComponentHidden: "true",
+		}, tags)
+		member.Priority = 0
+		member.Votes = 1
 	}
 
 	return member, nil

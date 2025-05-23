@@ -26,11 +26,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	}
 
 	switch ls[naming.LabelKubernetesComponent] {
-	case "arbiter":
+	case naming.ComponentArbiter:
 		pdbspec = rs.Arbiter.PodDisruptionBudget
-	case "nonVoting":
+	case naming.ComponentNonVoting:
 		pdbspec = rs.NonVoting.PodDisruptionBudget
 		volumeSpec = rs.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		pdbspec = rs.Hidden.PodDisruptionBudget
+		volumeSpec = rs.Hidden.VolumeSpec
 	}
 
 	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
@@ -76,18 +79,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + rs.Name
-	configName := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+	configName := naming.MongodCustomConfigName(cr, rs)
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
 		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 
 	switch ls[naming.LabelKubernetesComponent] {
-	case "arbiter":
-		sfsName += "-arbiter"
-	case "nonVoting":
-		sfsName += "-nv"
-		configName = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+	case naming.ComponentArbiter:
+		sfsName += "-" + naming.ComponentArbiter
+	case naming.ComponentNonVoting:
+		sfsName += "-" + naming.ComponentNonVotingShort
+		configName = naming.NonVotingConfigMapName(cr, rs)
+	case naming.ComponentHidden:
+		sfsName += "-" + naming.ComponentHidden
+		configName = naming.HiddenConfigMapName(cr, rs)
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)

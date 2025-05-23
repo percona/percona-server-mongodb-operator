@@ -1,0 +1,112 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  #platform: openshift
+  image:
+  schedulerName: default-scheduler
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+      advanced:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongod
+                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
+    configuration: |
+      security:
+        enableEncryption: true
+    hidden:
+      enabled: true
+      size: 2
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+        advanced:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: hidden
+                    app.kubernetes.io/instance: some-name
+                    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                    app.kubernetes.io/name: percona-server-mongodb
+                    app.kubernetes.io/part-of: percona-server-mongodb
+                    app.kubernetes.io/replset: rs0
+                topologyKey: kubernetes.io/hostname
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 300m
+          memory: 0.5G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    nonvoting:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+        advanced:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: nonVoting
+                    app.kubernetes.io/instance: nonvoting
+                    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                    app.kubernetes.io/name: percona-server-mongodb
+                    app.kubernetes.io/part-of: percona-server-mongodb
+                    app.kubernetes.io/replset: rs0
+                topologyKey: kubernetes.io/hostname
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "200m"
+          memory: "0.3G"
+      livenessProbe:
+        failureThreshold: 3
+        initialDelaySeconds: 70
+        periodSeconds: 31
+        successThreshold: 1
+        timeoutSeconds: 10
+        startupDelaySeconds: 7201
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 2Gi
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+  secrets:
+    users: some-users
