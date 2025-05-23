@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + rs.Name
-	configName := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+	mongodCustomConfigName := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
 		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
@@ -87,7 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		sfsName += "-arbiter"
 	case "nonVoting":
 		sfsName += "-nv"
-		configName = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+		mongodCustomConfigName = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -101,11 +101,11 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, configName)
+	mongodCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, mongodCustomConfigName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
-
+	
 	usersSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, usersSecret)
 	if client.IgnoreNotFound(err) != nil {
@@ -118,7 +118,14 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, rs, ls, r.initImage, customConfig, psmdb.StatefulSpecSecretParams{UsersSecret: usersSecret, SSLSecret: sslSecret})
+	sfsSpec, err := psmdb.StatefulSpec(
+		ctx, cr, rs, ls, r.initImage,
+		mongodCustomConfig,
+		psmdb.StatefulSpecSecretParams{
+			UsersSecret: usersSecret,
+			SSLSecret:   sslSecret,
+		},
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}

@@ -48,10 +48,9 @@ func TestConnectionLeaks(t *testing.T) {
 			Image:     "percona/percona-server-mongodb:latest",
 			Replsets: []*api.ReplsetSpec{
 				{
-					Name:           "rs0",
-					Size:           3,
-					VolumeSpec:     fakeVolumeSpec(t),
-					LogsVolumeSpec: fakeVolumeSpec(t),
+					Name:       "rs0",
+					Size:       3,
+					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
 			UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
@@ -88,9 +87,8 @@ func TestConnectionLeaks(t *testing.T) {
 			cr: updateResource(cr.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:           3,
-					VolumeSpec:     fakeVolumeSpec(t),
-					LogsVolumeSpec: fakeVolumeSpec(t),
+					Size:       3,
+					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
 					Size: 3,
@@ -104,9 +102,8 @@ func TestConnectionLeaks(t *testing.T) {
 				cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:           3,
-					VolumeSpec:     fakeVolumeSpec(t),
-					LogsVolumeSpec: fakeVolumeSpec(t),
+					Size:       3,
+					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
 					Size: 3,

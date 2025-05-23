@@ -15,8 +15,7 @@ const (
 	MinWiredTigerCacheSizeGB float64 = 0.25
 
 	// MongodDataVolClaimName is a PVC Claim name
-	MongodDataVolClaimName     = "mongod-data"
-	MongodDataLogsVolClaimName = "mongod-data-logs"
+	MongodDataVolClaimName = "mongod-data"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir = "/data/db"
 	// MongodContainerDataLogsDir is a mongo data path in container for logs.

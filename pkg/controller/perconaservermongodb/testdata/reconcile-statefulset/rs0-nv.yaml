@@ -146,7 +146,7 @@ spec:
         - mountPath: /opt/percona
           name: bin
         - mountPath: /data/logs
-          name: mongod-data-logs
+          name: mongod-data
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true
@@ -225,7 +225,7 @@ spec:
             memory: 100M
         volumeMounts:
           - mountPath: /data/logs
-            name: mongod-data-logs
+            name: mongod-data
           - mountPath: /opt/percona
             name: bin
       - name: logrotate
@@ -238,7 +238,7 @@ spec:
             memory: 100M
         volumeMounts:
           - mountPath: /data/logs
-            name: mongod-data-logs
+            name: mongod-data
           - mountPath: /opt/percona
             name: bin
       initContainers:
@@ -301,17 +301,6 @@ spec:
     spec:
       accessModes:
       - ReadWriteOnce
-      resources:
-        requests:
-          storage: 3Gi
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: mongod-data-logs
-      namespace: reconcile-statefulset
-    spec:
-      accessModes:
-        - ReadWriteOnce
       resources:
         requests:
           storage: 3Gi

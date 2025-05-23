@@ -67,7 +67,7 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		Resources:       cr.Spec.LogCollector.Resources,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      config.MongodDataLogsVolClaimName,
+				Name:      config.MongodDataVolClaimName,
 				MountPath: config.MongodContainerDataLogsDir,
 			},
 			{
@@ -75,6 +75,13 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 				MountPath: config.BinMountPath,
 			},
 		},
+	}
+
+	if cr.Spec.LogCollector.Configuration != "" {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      "logcollector-config",
+			MountPath: "/opt/percona/logcollector/fluentbit/custom",
+		})
 	}
 
 	return &container, nil
@@ -97,7 +104,7 @@ func logRotationContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, erro
 		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      config.MongodDataLogsVolClaimName,
+				Name:      config.MongodDataVolClaimName,
 				MountPath: config.MongodContainerDataLogsDir,
 			},
 			{
@@ -105,13 +112,6 @@ func logRotationContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, erro
 				MountPath: config.BinMountPath,
 			},
 		},
-	}
-
-	if cr.Spec.LogCollector.Configuration != "" {
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      "logcollector-config",
-			MountPath: "/etc/fluentbit/custom",
-		})
 	}
 	return &container, nil
 }

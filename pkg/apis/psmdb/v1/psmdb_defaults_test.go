@@ -253,41 +253,32 @@ func TestSetSafeDefault(t *testing.T) {
 			Medium: corevs.StorageMediumDefault,
 		},
 	}
-	lvs := &api.VolumeSpec{
-		EmptyDir: &corevs.EmptyDirVolumeSource{
-			Medium: corevs.StorageMediumDefault,
-		},
-	}
 	tests := map[string]args{
 		"even number": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           4,
+				VolumeSpec: vs,
+				Size:       4,
 			},
 			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"even number2": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           2,
+				VolumeSpec: vs,
+				Size:       2,
 			},
 			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"0 w/o arbiter ": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           0,
+				VolumeSpec: vs,
+				Size:       0,
 			},
 			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"0 with arbiter": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           0,
+				VolumeSpec: vs,
+				Size:       0,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -297,17 +288,15 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"1 w/o arbiter ": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           1,
+				VolumeSpec: vs,
+				Size:       1,
 			},
 			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"1 with arbiter": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           1,
+				VolumeSpec: vs,
+				Size:       1,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -317,9 +306,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"odd with arbiter": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           3,
+				VolumeSpec: vs,
+				Size:       3,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -329,9 +317,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"odd with two arbiters": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           3,
+				VolumeSpec: vs,
+				Size:       3,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -341,9 +328,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"odd with three arbiters": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           3,
+				VolumeSpec: vs,
+				Size:       3,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    3,
@@ -353,9 +339,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"even with arbiter": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           2,
+				VolumeSpec: vs,
+				Size:       2,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -365,9 +350,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"even4 with arbiter": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           4,
+				VolumeSpec: vs,
+				Size:       4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -377,9 +361,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"even with two arbiters": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           2,
+				VolumeSpec: vs,
+				Size:       2,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -389,9 +372,8 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 		"even with three arbiters": {
 			&api.ReplsetSpec{
-				VolumeSpec:     vs,
-				LogsVolumeSpec: lvs,
-				Size:           2,
+				VolumeSpec: vs,
+				Size:       2,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    3,

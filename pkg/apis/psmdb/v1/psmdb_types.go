@@ -498,7 +498,6 @@ type NonVotingSpec struct {
 	Enabled                  bool                       `json:"enabled"`
 	Size                     int32                      `json:"size"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
-	LogsVolumeSpec           *VolumeSpec                `json:"logsVolumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
@@ -716,7 +715,6 @@ type ReplsetSpec struct {
 	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
 	Expose                   ExposeTogglable              `json:"expose,omitempty"`
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
-	LogsVolumeSpec           *VolumeSpec                  `json:"logsVolumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`

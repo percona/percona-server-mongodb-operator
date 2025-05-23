@@ -51,7 +51,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	multiAZ := replset.MultiAZ
 	resources := replset.Resources
 	volumeSpec := replset.VolumeSpec
-	logsVolumeSpec := replset.LogsVolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
 	livenessProbe := replset.LivenessProbe
@@ -75,7 +74,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
-		logsVolumeSpec = replset.NonVoting.LogsVolumeSpec
 	}
 
 	customLabels := make(map[string]string, len(ls))
@@ -248,12 +246,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
 				},
-				{
-					Name: config.MongodDataLogsVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
 			}...,
 		)
 	} else {
@@ -292,22 +284,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				log.Error(err, "error preparing logcollector containers")
 			}
 			containers = append(containers, logCollectorCs...)
-
-			if cr.IsLogCollectorEnabled() {
-				if logsVolumeSpec != nil && logsVolumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
-					volumeClaimTemplates = append(volumeClaimTemplates, PersistentVolumeClaim(config.MongodDataLogsVolClaimName, cr.Namespace, logsVolumeSpec))
-				} else {
-					volumes = append(volumes,
-						corev1.Volume{
-							Name: config.MongodDataLogsVolClaimName,
-							VolumeSource: corev1.VolumeSource{
-								HostPath: volumeSpec.HostPath,
-								EmptyDir: volumeSpec.EmptyDir,
-							},
-						},
-					)
-				}
-			}
 		}
 	}
 

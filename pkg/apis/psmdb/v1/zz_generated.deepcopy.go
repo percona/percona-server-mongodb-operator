@@ -847,11 +847,6 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 		*out = new(VolumeSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.LogsVolumeSpec != nil {
-		in, out := &in.LogsVolumeSpec, &out.LogsVolumeSpec
-		*out = new(VolumeSpec)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.ReadinessProbe != nil {
 		in, out := &in.ReadinessProbe, &out.ReadinessProbe
 		*out = new(corev1.Probe)
@@ -1573,11 +1568,6 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 	in.Expose.DeepCopyInto(&out.Expose)
 	if in.VolumeSpec != nil {
 		in, out := &in.VolumeSpec, &out.VolumeSpec
-		*out = new(VolumeSpec)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.LogsVolumeSpec != nil {
-		in, out := &in.LogsVolumeSpec, &out.LogsVolumeSpec
 		*out = new(VolumeSpec)
 		(*in).DeepCopyInto(*out)
 	}
