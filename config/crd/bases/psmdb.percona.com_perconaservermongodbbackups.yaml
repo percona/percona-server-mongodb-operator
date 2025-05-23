@@ -67,8 +67,6 @@ spec:
                 type: integer
               compressionType:
                 type: string
-              psmdbCluster:
-                type: string
               storageName:
                 type: string
               type:
