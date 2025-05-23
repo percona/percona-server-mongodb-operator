@@ -1967,6 +1967,7 @@ check_backup_in_storage() {
 		*)
 			echo "unsupported storage type: ${storage_type}"
 			exit 1
+			;;
 	esac
 
 	backup_dest=$(get_backup_dest "$backup")
