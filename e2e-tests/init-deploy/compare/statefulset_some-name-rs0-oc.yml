@@ -135,6 +135,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /data/logs
+              name: mongod-data-logs
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
@@ -204,6 +206,16 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: mongod-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      status:
+        phase: Pending
+    - metadata:
+        name: mongod-data-logs
       spec:
         accessModes:
           - ReadWriteOnce

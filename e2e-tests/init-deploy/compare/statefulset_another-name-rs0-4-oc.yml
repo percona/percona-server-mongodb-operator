@@ -228,3 +228,13 @@ spec:
             storage: 1Gi
       status:
         phase: Pending
+    - metadata:
+        name: mongod-data-logs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      status:
+        phase: Pending

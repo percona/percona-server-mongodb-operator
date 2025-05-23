@@ -644,6 +644,12 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
 	}
 
+	if rs.LogsVolumeSpec != nil {
+		if err = rs.LogsVolumeSpec.reconcileOpts(); err != nil {
+			return fmt.Errorf("replset %s LogsVolumeSpec: %v", rs.Name, err)
+		}
+	}
+
 	if rs.Expose.Enabled {
 		if rs.Expose.ExposeType == "" {
 			rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
@@ -748,6 +754,14 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		}
 	} else {
 		nv.VolumeSpec = rs.VolumeSpec
+	}
+
+	if nv.LogsVolumeSpec != nil {
+		if err := nv.LogsVolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile log volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		nv.LogsVolumeSpec = rs.LogsVolumeSpec
 	}
 
 	startupDelaySecondsFlag := "--startupDelaySeconds"

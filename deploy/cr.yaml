@@ -256,6 +256,21 @@ spec:
         resources:
           requests:
             storage: 3Gi
+    logsVolumeSpec:
+      #        emptyDir: {}
+      #        hostPath:
+      #          path: /data
+      #          type: Directory
+      persistentVolumeClaim:
+        #          annotations:
+        #            volume.beta.kubernetes.io/storage-class: example-hostpath
+        #          labels:
+        #            rack: rack-22
+        #          storageClassName: standard
+        #          accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
 
     nonvoting:
       enabled: false
@@ -317,6 +332,21 @@ spec:
           resources:
             requests:
               storage: 3Gi
+      logsVolumeSpec:
+        #        emptyDir: {}
+        #        hostPath:
+        #          path: /data
+        #          type: Directory
+        persistentVolumeClaim:
+          #          annotations:
+          #            volume.beta.kubernetes.io/storage-class: example-hostpath
+          #          labels:
+          #            rack: rack-22
+          #          storageClassName: standard
+          #          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 1Gi
     arbiter:
       enabled: false
       size: 1
@@ -470,6 +500,21 @@ spec:
           resources:
             requests:
               storage: 3Gi
+      logsVolumeSpec:
+        #        emptyDir: {}
+        #        hostPath:
+        #          path: /data
+        #          type: Directory
+        persistentVolumeClaim:
+          #          annotations:
+          #            volume.beta.kubernetes.io/storage-class: example-hostpath
+          #          labels:
+          #            rack: rack-22
+          #          storageClassName: standard
+          #          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 1Gi
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
