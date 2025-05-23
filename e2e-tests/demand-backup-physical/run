@@ -44,6 +44,7 @@ run_recovery_check() {
 	echo
 
 	wait_cluster_consistency ${cluster}
+	sleep 5
 	wait_for_pbm_operations ${cluster}
 
 	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"

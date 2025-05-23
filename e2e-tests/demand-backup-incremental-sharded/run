@@ -57,6 +57,7 @@ run_recovery_check() {
 	echo
 
 	wait_cluster_consistency ${cluster} 60
+	sleep 5
 	wait_for_pbm_operations ${cluster}
 
 	if [[ $base == true ]]; then
