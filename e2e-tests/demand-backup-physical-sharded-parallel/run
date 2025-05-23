@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+create_infra "${namespace}"
+
+deploy_minio
+apply_s3_storage_secrets
+
+### Case 1: Backup on sharded cluster
+desc 'Testing on sharded cluster'
+
+echo "Creating PSMDB cluster"
+cluster="some-name"
+kubectl_bin apply -f "${conf_dir}/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}-sharded.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+echo "check if all pods started"
+wait_for_running ${cluster}-rs0 3
+wait_for_running ${cluster}-cfg 3
+wait_for_running ${cluster}-mongos 3
+wait_cluster_consistency ${cluster}
+
+lbEndpoint=$(kubectl_bin get svc $cluster-mongos -o=jsonpath='{.status}' \
+	| jq -r 'select(.loadBalancer != null and .loadBalancer.ingress != null and .loadBalancer.ingress != []) | .loadBalancer.ingress[0] | if .ip then .ip else .hostname end')
+if [ -z $lbEndpoint ]; then
+	echo "Mongos service not exported correctly"
+	exit 1
+fi
+
+run_mongos \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+sleep 1
+run_mongos \
+	'use myApp\n db.test.insert({ x: 100501 })' \
+	"myApp:myPass@${cluster}-mongos.${namespace}"
+sleep 5
+compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
+
+# wait for stable timestamp in wiredtiger
+echo 'Waiting 60 seconds for stable timestamp in wiredtiger'
+sleep 80
+
+echo 'Running backups'
+backup_name_minio="backup-minio-sharded"
+run_backup minio ${backup_name_minio} 'physical'
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	backup_name_aws="backup-aws-s3-sharded"
+	backup_name_gcp="backup-gcp-cs-sharded"
+	backup_name_azure="backup-azure-blob-sharded"
+
+	run_backup aws-s3 ${backup_name_aws} 'physical'
+	run_backup gcp-cs ${backup_name_gcp} 'physical'
+	run_backup azure-blob ${backup_name_azure} 'physical'
+
+	wait_backup "${backup_name_aws}"
+	check_backup_in_storage ${backup_name_aws} s3 rs0
+	check_backup_in_storage ${backup_name_aws} s3 cfg
+
+	wait_backup "${backup_name_gcp}"
+	check_backup_in_storage ${backup_name_gcp} gcs rs0
+	check_backup_in_storage ${backup_name_gcp} gcs cfg
+
+	wait_backup "${backup_name_azure}"
+	check_backup_in_storage ${backup_name_azure} azure rs0
+	check_backup_in_storage ${backup_name_azure} azure cfg
+fi
+wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
+
+echo "Drop collection"
+run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+
+destroy "$namespace"
+
+desc 'test passed'

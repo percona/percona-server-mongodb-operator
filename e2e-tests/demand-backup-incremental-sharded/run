@@ -142,6 +142,7 @@ fi
 backup_name_minio="backup-minio-sharded"
 run_backup minio ${backup_name_minio}
 wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
 
 run_mongos \
 	'use myApp\n db.test.insert({ x: 100502 })' \
@@ -152,6 +153,7 @@ compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-not-ba
 backup_name_minio_not_base="backup-minio-not-base-sharded"
 run_backup minio ${backup_name_minio_not_base} false
 wait_backup "${backup_name_minio_not_base}"
+check_backup_in_storage ${backup_name_minio_not_base} minio rs0
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_restore "${backup_name_aws}" "_restore_sharded"
