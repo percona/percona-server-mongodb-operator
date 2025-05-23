@@ -66,6 +66,15 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}...)
 	}
 
+	if cr.CompareVersion("1.21.0") >= 0 {
+		if cr.IsLogCollectorEnabled() {
+			volumes = append(volumes, corev1.VolumeMount{
+				Name:      config.MongodDataVolClaimName,
+				MountPath: config.MongodContainerDataLogsDir,
+			})
+		}
+	}
+
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
 	if err != nil {
 		return corev1.Container{}, err
@@ -166,6 +175,15 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 
 	if cr.CompareVersion("1.14.0") >= 0 {
 		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 {
+		if cr.IsLogCollectorEnabled() {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "LOGCOLLECTOR_ENABLED",
+				Value: "true",
+			})
+		}
 	}
 
 	return container, nil

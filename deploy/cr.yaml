@@ -256,7 +256,6 @@ spec:
         resources:
           requests:
             storage: 3Gi
-
     nonvoting:
       enabled: false
 #      podSecurityContext: {}
@@ -743,3 +742,10 @@ spec:
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+  logcollector:
+    enabled: true
+    image: perconalab/percona-xtradb-cluster-operator:main-logcollector
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m

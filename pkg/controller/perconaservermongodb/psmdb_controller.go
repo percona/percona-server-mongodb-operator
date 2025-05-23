@@ -46,8 +46,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-var secretFileMode int32 = 288
-
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {

@@ -79,6 +79,8 @@ spec:
           value: "27017"
         - name: MONGODB_REPLSET
           value: rs0
+        - name: LOGCOLLECTOR_ENABLED
+          value: "true"
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
@@ -145,6 +147,8 @@ spec:
           readOnly: true
         - mountPath: /opt/percona
           name: bin
+        - mountPath: /data/logs
+          name: mongod-data
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true

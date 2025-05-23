@@ -18,9 +18,10 @@ const (
 	MongodDataVolClaimName = "mongod-data"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir = "/data/db"
-
-	BinVolumeName = "bin"
-	BinMountPath  = "/opt/percona"
+	// MongodContainerDataLogsDir is a mongo data path in container for logs.
+	MongodContainerDataLogsDir = "/data/logs"
+	BinVolumeName              = "bin"
+	BinMountPath               = "/opt/percona"
 
 	LDAPConfVolClaimName = "ldap"
 	LDAPConfDir          = "/etc/openldap"
