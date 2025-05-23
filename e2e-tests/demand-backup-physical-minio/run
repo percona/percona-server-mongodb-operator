@@ -43,6 +43,7 @@ echo 'Running backups'
 backup_name_minio="backup-minio"
 run_backup minio ${backup_name_minio} 'physical'
 wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
 
 echo 'Drop collection'
 run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
@@ -62,6 +63,7 @@ echo 'Running backups'
 backup_name_minio="backup-minio-arbiter-nv"
 run_backup minio ${backup_name_minio} 'physical'
 wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
 
 echo 'Drop collection'
 run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"

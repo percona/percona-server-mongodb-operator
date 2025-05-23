@@ -72,6 +72,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_in_storage ${backup_name_azure} azure cfg
 fi
 wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
 
 echo "Drop collection"
 run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"

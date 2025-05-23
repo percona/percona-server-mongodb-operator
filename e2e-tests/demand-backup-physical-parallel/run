@@ -62,6 +62,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_in_storage ${backup_name_azure} azure rs0
 fi
 wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
 
 destroy "$namespace"
 
