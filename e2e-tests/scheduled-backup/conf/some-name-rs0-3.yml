@@ -56,6 +56,7 @@ spec:
       compressionType: gzip
       storageName: minio
     - name: weekly
+      enabled: true
       retention:
         count: 1
       schedule: "0 0 * * 0"
