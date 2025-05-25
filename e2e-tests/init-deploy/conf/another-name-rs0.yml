@@ -68,3 +68,6 @@ spec:
     size: 3
   secrets:
     users: some-users
+  logcollector:
+    enabled: true
+    image: perconalab/percona-xtradb-cluster-operator:main-logcollector
