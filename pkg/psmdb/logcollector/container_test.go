@@ -103,7 +103,7 @@ func expectedContainers(configuration string) []corev1.Container {
 		Args:    []string{"fluent-bit"},
 		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
+			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
 		},
 	}
@@ -122,7 +122,7 @@ func expectedContainers(configuration string) []corev1.Container {
 		Args:            []string{"logrotate"},
 		Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
+			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
 		},
 	}

@@ -11,7 +11,7 @@ if [ "$1" = 'logrotate' ]; then
 		cat /tmp/passwd >/etc/passwd
 		rm -rf /tmp/passwd
 	fi
-	exec go-cron "0 0 * * *" sh -c "logrotate -s /data/logs/logrotate.status /opt/percona/logcollector/logrotate/logrotate.conf;/usr/bin/find /data/logs/ -mtime +7 ! -name logrotate.status -delete"
+	exec go-cron "0 0 * * *" sh -c "logrotate -s /data/db/logs/logrotate.status /opt/percona/logcollector/logrotate/logrotate.conf;/usr/bin/find /data/db/logs/ -type f -name '*.log' -mtime +7 -delete"
 else
 	if [ "$1" = 'fluent-bit' ]; then
 		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'

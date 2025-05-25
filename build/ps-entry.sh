@@ -481,7 +481,8 @@ if [[ $originalArgOne == mongo* ]]; then
 	fi
 
 	if [[ $originalArgOne == "mongod" && "${LOGCOLLECTOR_ENABLED:-}" == "true" ]]; then
-		_mongod_hack_ensure_arg_val --logpath "/data/logs/mongod.log" "${mongodHackedArgs[@]}"
+	  mkdir /data/db/logs/
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
 	fi
 

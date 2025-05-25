@@ -17,9 +17,8 @@ const (
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
 	// MongodContainerDataDir is a mongo data path in container
-	MongodContainerDataDir = "/data/db"
-	// MongodContainerDataLogsDir is a mongo data path in container for logs.
-	MongodContainerDataLogsDir = "/data/logs"
+	MongodContainerDataDir     = "/data/db"
+	MongodContainerDataLogsDir = "/data/db/logs"
 	BinVolumeName              = "bin"
 	BinMountPath               = "/opt/percona"
 

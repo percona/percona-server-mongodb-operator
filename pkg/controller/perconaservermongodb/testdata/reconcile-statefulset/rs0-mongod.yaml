@@ -146,8 +146,6 @@ spec:
           readOnly: true
         - mountPath: /opt/percona
           name: bin
-        - mountPath: /data/logs
-          name: mongod-data
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true
@@ -211,7 +209,7 @@ spec:
         args: [ "fluent-bit" ]
         env:
           - name: LOG_DATA_DIR
-            value: /data/logs
+            value: /data/db/logs
           - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
@@ -225,7 +223,7 @@ spec:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/logs
+          - mountPath: /data/db
             name: mongod-data
           - mountPath: /opt/percona
             name: bin
@@ -238,7 +236,7 @@ spec:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/logs
+          - mountPath: /data/db
             name: mongod-data
           - mountPath: /opt/percona
             name: bin

@@ -84,7 +84,7 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataLogsDir,
+				MountPath: config.MongodContainerDataDir,
 			},
 			{
 				Name:      config.BinVolumeName,
@@ -121,7 +121,7 @@ func logRotationContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, erro
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataLogsDir,
+				MountPath: config.MongodContainerDataDir,
 			},
 			{
 				Name:      config.BinVolumeName,

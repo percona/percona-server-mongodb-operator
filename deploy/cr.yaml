@@ -750,7 +750,6 @@ spec:
 #          Flush        1
 #          Log_Level    error
 #          Daemon       off
-#
     resources:
       requests:
         memory: 100M

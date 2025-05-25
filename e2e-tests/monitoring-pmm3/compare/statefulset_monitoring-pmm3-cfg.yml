@@ -142,8 +142,6 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
-            - mountPath: /data/logs
-              name: mongod-data
             - mountPath: /etc/mongodb-encryption
               name: monitoring-pmm3-mongodb-encryption-key
               readOnly: true

@@ -147,8 +147,6 @@ spec:
           readOnly: true
         - mountPath: /opt/percona
           name: bin
-        - mountPath: /data/logs
-          name: mongod-data
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true
