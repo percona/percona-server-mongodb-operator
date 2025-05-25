@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	stderrors "errors"
 	"fmt"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"os"
 	"sort"
 	"strings"
@@ -341,6 +342,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	if err := r.reconcileMongosConfigMap(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos config map")
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 {
+		if err := r.reconcileLogCollectorConfigMaps(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "reconcile log collector config map")
+		}
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
@@ -1157,6 +1164,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 	err := r.createOrUpdateConfigMap(ctx, cr, cm)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.IsLogCollectorEnabled() {
+		return nil
+	}
+
+	if cr.Spec.LogCollector.Configuration == "" {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logcollector.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log collector config map")
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      logcollector.ConfigMapName(cr.Name),
+			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			logcollector.FluentBitCustomConfigurationFile: cr.Spec.LogCollector.Configuration,
+		},
+	}
+
+	err := r.createOrUpdateConfigMap(ctx, cr, cm)
+	if err != nil {
+		return errors.Wrap(err, "create or update config map")
 	}
 
 	return nil

@@ -1,12 +1,28 @@
 package logcollector
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
+
+const (
+	ConfigMapNameSuffix = "log-collector-config"
+	VolumeName          = "log-collector-volume"
+
+	FluentBitCustomConfigurationFile = "fluentbit_custom.conf"
+)
+
+func ConfigMapName(prefix string) string {
+	if prefix == "" {
+		return ConfigMapNameSuffix
+	}
+	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
+}
 
 func Containers(cr *api.PerconaServerMongoDB) ([]corev1.Container, error) {
 	if cr.Spec.LogCollector == nil || !cr.Spec.LogCollector.Enabled {
@@ -79,7 +95,7 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 
 	if cr.Spec.LogCollector.Configuration != "" {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      "logcollector-config",
+			Name:      VolumeName,
 			MountPath: "/opt/percona/logcollector/fluentbit/custom",
 		})
 	}

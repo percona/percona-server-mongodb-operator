@@ -40,10 +40,15 @@ type StatefulSpecSecretParams struct {
 	SSLSecret   *corev1.Secret
 }
 
+type StatefulConfigParams struct {
+	MongoDConf        config.CustomConfig
+	LogCollectionConf config.CustomConfig
+}
+
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	ls map[string]string, initImage string, customConf config.CustomConfig, secrets StatefulSpecSecretParams,
+	ls map[string]string, initImage string, configs StatefulConfigParams, secrets StatefulSpecSecretParams,
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
 	size := replset.Size
@@ -56,6 +61,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := MongodCustomConfigName(cr.Name, replset.Name)
+	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
 	switch ls[naming.LabelKubernetesComponent] {
 	case "arbiter":
@@ -111,10 +117,16 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		})
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: customConf.Type.VolumeSource(configName),
+			VolumeSource: configs.MongoDConf.Type.VolumeSource(configName),
+		})
+	}
+	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         logcollector.VolumeName,
+			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
 	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
@@ -152,7 +164,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), customConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
@@ -173,8 +185,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = customConf.HashHex
+	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}

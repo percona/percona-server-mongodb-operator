@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -105,7 +106,12 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
-	
+
+	logCollectionCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
+	if err != nil {
+		return nil, errors.Wrap(err, "check if log collection custom configuration exists")
+	}
+
 	usersSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, usersSecret)
 	if client.IgnoreNotFound(err) != nil {
@@ -120,7 +126,10 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 
 	sfsSpec, err := psmdb.StatefulSpec(
 		ctx, cr, rs, ls, r.initImage,
-		mongodCustomConfig,
+		psmdb.StatefulConfigParams{
+			MongoDConf:        mongodCustomConfig,
+			LogCollectionConf: logCollectionCustomConfig,
+		},
 		psmdb.StatefulSpecSecretParams{
 			UsersSecret: usersSecret,
 			SSLSecret:   sslSecret,

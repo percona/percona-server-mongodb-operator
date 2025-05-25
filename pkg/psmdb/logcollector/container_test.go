@@ -33,49 +33,17 @@ func TestContainers(t *testing.T) {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers: []corev1.Container{
-				{
-					Name:            "logs",
-					Image:           "log-test-image",
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Env: []corev1.EnvVar{
-						{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
-						{
-							Name: "POD_NAMESPACE",
-							ValueFrom: &corev1.EnvVarSource{
-								FieldRef: &corev1.ObjectFieldSelector{
-									FieldPath: "metadata.namespace",
-								},
-							},
-						},
-						{
-							Name: "POD_NAME",
-							ValueFrom: &corev1.EnvVarSource{
-								FieldRef: &corev1.ObjectFieldSelector{
-									FieldPath: "metadata.name",
-								},
-							},
-						},
-					},
-					Args:    []string{"fluent-bit"},
-					Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
-						{Name: config.BinVolumeName, MountPath: config.BinMountPath},
-					},
-				},
-				{
-					Name:            "logrotate",
-					Image:           "log-test-image",
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					Args:            []string{"logrotate"},
-					Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
-					VolumeMounts: []corev1.VolumeMount{
-						{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
-						{Name: config.BinVolumeName, MountPath: config.BinMountPath},
-					},
-				},
+			expectedContainers:     expectedContainers(""),
+		},
+		"logcollector enabled with configuration": {
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Configuration:   "my-config",
 			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("my-config"),
 		},
 	}
 
@@ -106,4 +74,58 @@ func TestContainers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func expectedContainers(configuration string) []corev1.Container {
+	logsC := corev1.Container{
+		Name:            "logs",
+		Image:           "log-test-image",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Env: []corev1.EnvVar{
+			{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
+			{
+				Name: "POD_NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.namespace",
+					},
+				},
+			},
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+		},
+		Args:    []string{"fluent-bit"},
+		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
+			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
+		},
+	}
+
+	if configuration != "" {
+		logsC.VolumeMounts = append(logsC.VolumeMounts, corev1.VolumeMount{
+			Name:      VolumeName,
+			MountPath: "/opt/percona/logcollector/fluentbit/custom",
+		})
+	}
+
+	logRotateC := corev1.Container{
+		Name:            "logrotate",
+		Image:           "log-test-image",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Args:            []string{"logrotate"},
+		Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataLogsDir},
+			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
+		},
+	}
+
+	return []corev1.Container{logsC, logRotateC}
 }

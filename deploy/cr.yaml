@@ -745,6 +745,12 @@ spec:
   logcollector:
     enabled: true
     image: perconalab/percona-xtradb-cluster-operator:main-logcollector
+#    configuration: |
+#      [SERVICE]
+#          Flush        1
+#          Log_Level    error
+#          Daemon       off
+#
     resources:
       requests:
         memory: 100M
