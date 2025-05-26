@@ -637,6 +637,21 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	return nil
 }
 
+func (rs *ReplsetSpec) IsEncryptionEnabled() (bool, error) {
+	enabled, err := rs.Configuration.isEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
+	}
+
+	if enabled == nil {
+		if rs.Storage.Engine == StorageEngineInMemory {
+			return false, nil // disabled for inMemory engine by default
+		}
+		return true, nil // true by default
+	}
+	return *enabled, nil
+}
+
 // SetDefaults set default options for the replset
 func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
@@ -735,6 +750,16 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 		if extNode.Votes == 0 && extNode.Priority != 0 {
 			return errors.Errorf("invalid priority for %s: non-voting members must have priority 0", extNode.Host)
+		}
+	}
+
+	if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+		encryptionEnabled, err := rs.IsEncryptionEnabled()
+		if err != nil {
+			return errors.Wrap(err, "failed to parse replset configuration")
+		}
+		if encryptionEnabled {
+			return errors.New("inMemory storage engine doesn't support encryption")
 		}
 	}
 

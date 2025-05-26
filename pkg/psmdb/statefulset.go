@@ -127,7 +127,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
 	}
@@ -582,15 +582,4 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 		result = append(result, tsc)
 	}
 	return result
-}
-
-func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	enabled, err := replset.Configuration.IsEncryptionEnabled()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to parse replset configuration")
-	}
-	if enabled == nil {
-		return true, nil // true by default
-	}
-	return *enabled, nil
 }
