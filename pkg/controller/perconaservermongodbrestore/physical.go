@@ -289,7 +289,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	finished, err := r.finishPhysicalRestore(ctx, cluster)
 	if err != nil {
 		log.Error(err, "Failed to recover the cluster after the restore")
-		status.State = psmdbv1.RestoreStateReady
+		// status.State = psmdbv1.RestoreStateReady
 		return status, nil
 	}
 	if !finished {
@@ -400,6 +400,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 		return false, nil
 	}
 
+	resyncPresent := false
 	if err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(psmdbv1.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c); err != nil {
@@ -409,11 +410,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 		if c.Annotations == nil {
 			c.Annotations = make(map[string]string)
 		}
+		if c.Annotations[psmdbv1.AnnotationResyncPBM] == "true" {
+			resyncPresent = true
+			return nil
+		}
+
 		c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
 
 		return r.client.Update(ctx, c)
 	}); err != nil {
 		return false, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
+	}
+	if !resyncPresent {
+		return false, nil
 	}
 
 	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
