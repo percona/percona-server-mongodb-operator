@@ -13,7 +13,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
@@ -25,7 +25,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
-			CRVersion: version.Version,
+			CRVersion: version.Version(),
 			Backup: psmdbv1.BackupSpec{
 				Image: "percona/percona-backup-mongodb:latest",
 				VolumeMounts: []corev1.VolumeMount{
