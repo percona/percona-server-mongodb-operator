@@ -46,7 +46,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
 	size := replset.Size
-	containerName := "mongod"
+	containerName := naming.ContainerMongod
 	multiAZ := replset.MultiAZ
 	resources := replset.Resources
 	volumeSpec := replset.VolumeSpec
@@ -54,25 +54,36 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	containerSecurityContext := replset.ContainerSecurityContext
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
-	configName := MongodCustomConfigName(cr.Name, replset.Name)
+	configName := naming.MongodCustomConfigName(cr, replset)
 
 	switch ls[naming.LabelKubernetesComponent] {
-	case "arbiter":
-		containerName += "-arbiter"
+	case naming.ComponentArbiter:
+		containerName = naming.ContainerArbiter
 		size = replset.Arbiter.Size
 		multiAZ = replset.Arbiter.MultiAZ
 		resources = replset.Arbiter.Resources
-	case "nonVoting":
-		containerName += "-nv"
+	case naming.ComponentNonVoting:
+		containerName = naming.ContainerNonVoting
 		size = replset.NonVoting.Size
 		multiAZ = replset.NonVoting.MultiAZ
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		configName = MongodCustomConfigName(cr.Name, replset.Name+"-nv")
+		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		containerName = naming.ContainerHidden
+		size = replset.Hidden.Size
+		multiAZ = replset.Hidden.MultiAZ
+		resources = replset.Hidden.Resources
+		podSecurityContext = replset.Hidden.PodSecurityContext
+		containerSecurityContext = replset.Hidden.ContainerSecurityContext
+		configName = naming.HiddenConfigMapName(cr, replset)
+		livenessProbe = replset.Hidden.LivenessProbe
+		readinessProbe = replset.Hidden.ReadinessProbe
+		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
 	customLabels := make(map[string]string, len(ls))
@@ -116,7 +127,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: customConf.Type.VolumeSource(configName),
 		})
 	}
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
 	}
@@ -499,14 +510,6 @@ func sslSecretDataExist(ctx context.Context, secret *corev1.Secret) bool {
 	return true
 }
 
-func MongodCustomConfigName(clusterName, replicaSetName string) string {
-	return fmt.Sprintf("%s-%s-mongod", clusterName, replicaSetName)
-}
-
-func MongosCustomConfigName(clusterName string) string {
-	return clusterName + "-mongos"
-}
-
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
 func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
@@ -579,15 +582,4 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 		result = append(result, tsc)
 	}
 	return result
-}
-
-func isEncryptionEnabled(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	enabled, err := replset.Configuration.IsEncryptionEnabled()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to parse replset configuration")
-	}
-	if enabled == nil {
-		return true, nil // true by default
-	}
-	return *enabled, nil
 }
