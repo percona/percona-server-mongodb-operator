@@ -350,6 +350,36 @@ simple_data_check() {
 	fi
 }
 
+get_mongod_pods() {
+	local cluster=$1
+
+	kubectl_bin get pod \
+		--no-headers \
+		-l app.kubernetes.io/instance=${cluster} \
+		-l app.kubernetes.io/component=mongod
+
+}
+
+collect_physical_restore_logs() {
+	local cluster=$1
+	local restore=$2
+
+	for pod in $(get_mongod_pods ${cluster}); do
+		desc "pbm-agent logs from ${pod}"
+		kubectl_bin exec -it ${pod} -- cat /tmp/pbm-agent.log || true
+	done
+}
+
+is_physical_backup() {
+	local backup=$1
+
+	if [[ $(kubectl_bin get psmdb-backup ${backup} -o jsonpath={.status.type}) == "physical" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
 wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
@@ -391,6 +421,11 @@ wait_restore() {
 				| grep -v 'Getting tasks for pod' \
 				| grep -v 'Getting pods from source' \
 				| tail -100
+
+			if is_physical_backup ${backup_name}; then
+				collect_physical_restore_logs
+			fi
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
 			kubectl_bin describe psmdb-restore restore-${backup_name}
 			echo "Restore object restore-${backup_name} is in ${current_state} state."

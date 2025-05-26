@@ -71,8 +71,6 @@ spec:
                 type: integer
               compressionType:
                 type: string
-              psmdbCluster:
-                type: string
               storageName:
                 type: string
               type:
@@ -25158,3 +25156,5 @@ spec:
               value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
+            - name: MAX_CONCURRENT_RECONCILES
+              value: "1"
