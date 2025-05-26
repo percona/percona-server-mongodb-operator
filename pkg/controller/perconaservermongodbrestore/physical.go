@@ -971,7 +971,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 
 	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
-	command := []string{pbmBinary}
+	command := []string{pbmBinary, "status", "--out", "json"}
 	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
 		return "", errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 	}
