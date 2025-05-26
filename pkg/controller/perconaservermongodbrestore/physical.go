@@ -565,7 +565,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn, rs.GetPort())
 			})
 			if err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
