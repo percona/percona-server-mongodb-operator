@@ -78,6 +78,8 @@ main() {
 		sleep 10
 	done
 
+	sleep 10
+
 	check_recovery $backup_name_minio-2 date "${last_chunk}" "-2nd" "$cluster"
 
 	run_backup $backup_name_minio 3 physical

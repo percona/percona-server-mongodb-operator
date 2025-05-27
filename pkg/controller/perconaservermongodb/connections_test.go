@@ -23,7 +23,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // TestConnectionLeaks aims to cover every initialization of a connection to the MongoDB database.
@@ -44,7 +44,7 @@ func TestConnectionLeaks(t *testing.T) {
 			Backup: api.BackupSpec{
 				Enabled: false,
 			},
-			CRVersion: version.Version,
+			CRVersion: version.Version(),
 			Image:     "percona/percona-server-mongodb:latest",
 			Replsets: []*api.ReplsetSpec{
 				{

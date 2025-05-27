@@ -30,7 +30,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -196,7 +196,7 @@ const (
 	SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 )
 
-// DNS Mode string describes the mode used to generate fqdn/ip for communication between nodes
+// DNSMode string describes the mode used to generate fqdn/ip for communication between nodes
 // +enum
 type DNSMode string
 
@@ -369,6 +369,7 @@ type PMMSpec struct {
 	CustomClusterName string `json:"customClusterName,omitempty"`
 }
 
+// HasSecret is used for PMM2. PMM2 is reaching its EOL.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if len(secret.Data) == 0 {
 		return false
@@ -380,6 +381,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+// ShouldUseAPIKeyAuth is used for PMM2. PMM2 is reaching its EOL.
 func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
 	if _, ok := secret.Data[PMMAPIKey]; !ok {
 		_, okl := secret.Data[PMMUserKey]
@@ -511,6 +513,26 @@ func (nv *NonVotingSpec) GetSize() int32 {
 	return nv.Size
 }
 
+type HiddenSpec struct {
+	Enabled                  bool                       `json:"enabled"`
+	Size                     int32                      `json:"size"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+
+	MultiAZ `json:",inline"`
+}
+
+func (h *HiddenSpec) GetSize() int32 {
+	if !h.Enabled {
+		return 0
+	}
+	return h.Size
+}
+
 type MongoConfiguration string
 
 func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
@@ -556,8 +578,8 @@ func (conf MongoConfiguration) GetTLSMode() (string, error) {
 	return mode, nil
 }
 
-// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
-func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
+// isEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
+func (conf MongoConfiguration) isEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
 		return nil, err
@@ -720,6 +742,7 @@ type ReplsetSpec struct {
 	Configuration            MongoConfiguration           `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode              `json:"externalNodes,omitempty"`
 	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
+	Hidden                   HiddenSpec                   `json:"hidden,omitempty"`
 	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
@@ -754,6 +777,10 @@ func (ms ReplsetSpec) GetPort() int32 {
 		return p
 	}
 	return DefaultMongoPort
+}
+
+func (r ReplsetSpec) GetSize() int32 {
+	return r.Size + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
 }
 
 type LivenessProbeExtended struct {
@@ -1186,6 +1213,7 @@ const (
 	PMMUserKey     = "PMM_SERVER_USER"
 	PMMPasswordKey = "PMM_SERVER_PASSWORD"
 	PMMAPIKey      = "PMM_SERVER_API_KEY"
+	PMMServerToken = "PMM_SERVER_TOKEN"
 )
 
 const (
