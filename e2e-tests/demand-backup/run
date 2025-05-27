@@ -206,7 +206,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_recovery_check "$backup_name_gcp" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
-	check_backup_in_storage ${backup_dest_azure} azure rs0 'myApp.test.gz'
+	check_backup_in_storage ${backup_name_azure} azure rs0 'myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
 fi
 

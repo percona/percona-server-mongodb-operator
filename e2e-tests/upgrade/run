@@ -218,7 +218,7 @@ function main() {
 	desc 'drop collection and do restore with new version'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
 
-	check_backup_in_storage ${backup_name_minio} minio rs0
+	check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
 
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}-rs0.${namespace}"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"

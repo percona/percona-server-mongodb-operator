@@ -2005,7 +2005,7 @@ check_backup_in_storage() {
 			;;
 	esac
 
-	backup_dest=$(get_backup_dest "$backup")
+	backup_dest=$(get_backup_dest "$backup" | gsed 's|https://engk8soperators.blob.core.windows.net/||')
 	if [[ "${storage_type}" == 'minio' ]]; then
 		until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
