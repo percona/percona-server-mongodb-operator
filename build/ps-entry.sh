@@ -481,8 +481,13 @@ if [[ $originalArgOne == mongo* ]]; then
 	fi
 
 	if [[ $originalArgOne == "mongod" && "${LOGCOLLECTOR_ENABLED:-}" == "true" ]]; then
-	  mkdir /data/db/logs/
-		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" --logRotate reopen "${mongodHackedArgs[@]}"
+	  mkdir -p /data/db/logs/
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
+    # reopen closes and reopens the log file following the typical Linux/Unix log rotate behavior.
+    # Use reopen when using the Linux/Unix logrotate utility to avoid log loss.
+    # https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
+    # the operator is using logrotate as part of the logcollector feature.
+		_mongod_hack_ensure_arg --logRotate reopen "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
 	fi
 
