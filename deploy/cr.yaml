@@ -257,6 +257,67 @@ spec:
           requests:
             storage: 3Gi
 
+    hidden:
+      enabled: false
+#      podSecurityContext: {}
+#      containerSecurityContext: {}
+      size: 3
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#          verbosity: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+#        emptyDir: {}
+#        hostPath:
+#          path: /data
+#          type: Directory
+        persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
+
     nonvoting:
       enabled: false
 #      podSecurityContext: {}

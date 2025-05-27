@@ -286,16 +286,8 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 	}
 
 	status := api.ReplsetStatus{
-		Size:   rsSpec.Size,
+		Size:   rsSpec.GetSize(),
 		Status: api.AppStateInit,
-	}
-
-	if rsSpec.Arbiter.Enabled {
-		status.Size += rsSpec.Arbiter.Size
-	}
-
-	if rsSpec.NonVoting.Enabled {
-		status.Size += rsSpec.NonVoting.Size
 	}
 
 	for _, pod := range list.Items {
