@@ -75,10 +75,12 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 			rsSize := 0
 
 			switch lbls[naming.LabelKubernetesComponent] {
-			case "arbiter":
+			case naming.ComponentArbiter:
 				rsSize = int(rs.Arbiter.Size)
-			case "nonVoting":
+			case naming.ComponentNonVoting:
 				rsSize = int(rs.NonVoting.Size)
+			case naming.ComponentHidden:
+				rsSize = int(rs.Hidden.Size)
 			default:
 				rsSize = int(rs.Size)
 			}
