@@ -73,7 +73,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 		return nil, errors.Wrap(err, "get isMaster response")
 	}
 
-	rsStatus, err := getStatus(ctx, client)
+	rsStatus, err := client.RSStatus(ctx)
 	if err != nil {
 		if err.Error() == ErrNoReplsetConfigStr {
 			state := mongo.MemberStateUnknown
@@ -119,14 +119,7 @@ type OplogRs struct {
 	StorageSize      int64 `bson:"storageSize" json:"storageSize"`
 }
 
-type ReplSetStatus struct {
-	InitialSyncStatus InitialSyncStatus `bson:"initialSyncStatus" json:"initialSyncStatus"`
-	mongo.Status      `bson:",inline"`
-}
-
-type InitialSyncStatus interface{}
-
-func CheckState(rs ReplSetStatus, startupDelaySeconds int64, oplogSize int64) error {
+func CheckState(rs mongo.Status, startupDelaySeconds int64, oplogSize int64) error {
 	if rs.GetSelf() == nil {
 		return errors.New("invalid replset status")
 	}
