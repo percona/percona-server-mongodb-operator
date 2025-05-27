@@ -50,9 +50,7 @@ run_recovery_check() {
 	# we don't wait for cluster readiness here because the annotation gets removed then
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "1800"
 
-	sleep 15
-
-	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+	if [ "$(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"')" == null ] && [ "$(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-in-progress"')" == null ]; then
 		log "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a incremental restore"
 		exit 1
 	fi

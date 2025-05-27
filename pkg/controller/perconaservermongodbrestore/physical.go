@@ -420,28 +420,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context
 		return false, errors.Wrapf(err, "annotate psmdb/%s for PBM resync", cluster.Name)
 	}
 
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return err != nil
-	}, func() error {
-		c := new(psmdbv1.PerconaServerMongoDB)
-		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c); err != nil {
-			return err
-		}
-
-		if c.Annotations == nil {
-			return errors.New("annotation wasn't added")
-		}
-
-		if v, ok := c.Annotations[psmdbv1.AnnotationResyncPBM]; !ok || v != "true" {
-			return errors.New("annotation wasn't added 2")
-		}
-
-		return nil
-	})
-	if err != nil {
-		return false, errors.Wrap(err, "failed to check if annotation was added")
-	}
-
 	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
 		if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] == "true" {
 			delete(sts.Annotations, psmdbv1.AnnotationRestoreInProgress)
