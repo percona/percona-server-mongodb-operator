@@ -444,8 +444,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) iterateOverMongodSts(ctx context.
 		if rs.NonVoting.Enabled {
 			stsList = append(stsList, naming.NonVotingStatefulSetName(cluster, rs))
 		}
-		if rs.NonVoting.Enabled {
+		if rs.Arbiter.Enabled {
 			stsList = append(stsList, naming.ArbiterStatefulSetName(cluster, rs))
+		}
+		if rs.Hidden.Enabled {
+			stsList = append(stsList, naming.HiddenStatefulSetName(cluster, rs))
 		}
 
 		var rsErrList []error
