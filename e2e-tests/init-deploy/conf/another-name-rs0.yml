@@ -70,4 +70,4 @@ spec:
     users: some-users
   logcollector:
     enabled: true
-    image: perconalab/percona-xtradb-cluster-operator:main-logcollector
+    image: perconalab/fluentbit:main-logcollector

@@ -806,8 +806,8 @@ spec:
 #        compressionLevel: 6
   logcollector:
     enabled: true
-    image: perconalab/percona-xtradb-cluster-operator:main-logcollector
-#    configuration: |
+    image: perconalab/fluentbit:main-logcollector
+    #    configuration: |
 #      [SERVICE]
 #          Flush        1
 #          Log_Level    error

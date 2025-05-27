@@ -204,7 +204,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
       - name: logs
-        image: perconalab/percona-xtradb-cluster-operator:main-logcollector
+        image: perconalab/fluentbit:main-logcollector
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "fluent-bit" ]
         env:
@@ -228,7 +228,7 @@ spec:
           - mountPath: /opt/percona
             name: bin
       - name: logrotate
-        image: perconalab/percona-xtradb-cluster-operator:main-logcollector
+        image: perconalab/fluentbit:main-logcollector
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "logrotate" ]
         resources:
