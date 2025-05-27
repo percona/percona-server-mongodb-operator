@@ -14,6 +14,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -54,7 +55,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	}
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -118,22 +119,22 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 
 	volumes := []corev1.VolumeMount{
 		{
-			Name:      MongodDataVolClaimName,
-			MountPath: MongodContainerDataDir,
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
 		},
 		{
 			Name:      cr.Spec.Secrets.GetInternalKey(cr),
-			MountPath: mongodSecretsDir,
+			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl",
-			MountPath: SSLDir,
+			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl-internal",
-			MountPath: sslInternalDir,
+			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
 	}
@@ -141,7 +142,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
-			MountPath: mongosConfigDir,
+			MountPath: config.MongosConfigDir,
 		})
 	}
 
@@ -154,19 +155,19 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
-				Name:      LDAPTLSVolClaimName,
-				MountPath: ldapTLSDir,
+				Name:      config.LDAPTLSVolClaimName,
+				MountPath: config.LDAPTLSDir,
 				ReadOnly:  true,
 			},
 			{
-				Name:      LDAPConfVolClaimName,
-				MountPath: ldapConfDir,
+				Name:      config.LDAPConfVolClaimName,
+				MountPath: config.LDAPConfDir,
 			},
 		}...)
 	}
@@ -178,7 +179,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		Args:            mongosContainerArgs(cr, useConfigFile, cfgInstances),
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongosPortName,
+				Name:          config.MongosPortName,
 				HostPort:      cr.Spec.Sharding.Mongos.HostPort,
 				ContainerPort: cr.Spec.Sharding.Mongos.GetPort(),
 			},
@@ -207,7 +208,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 				},
 			},
 		},
-		WorkingDir:      MongodContainerDataDir,
+		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &cr.Spec.Sharding.Mongos.LivenessProbe.Probe,
 		ReadinessProbe:  cr.Spec.Sharding.Mongos.ReadinessProbe,
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
@@ -217,7 +218,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{BinMountPath + "/ps-entry.sh"}
+		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
 	}
 
 	if cr.CompareVersion("1.15.0") >= 0 {
@@ -258,7 +259,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
-			"--keyFile="+mongodSecretsDir+"/mongodb-key",
+			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
 		)
 	} else if cr.TLSEnabled() {
 		args = append(args,
@@ -280,13 +281,13 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	}
 
 	if useConfigFile {
-		args = append(args, fmt.Sprintf("--config=%s/mongos.conf", mongosConfigDir))
+		args = append(args, fmt.Sprintf("--config=%s/mongos.conf", config.MongosConfigDir))
 	}
 
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []corev1.Volume {
+func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType) []corev1.Volume {
 	fvar, tvar := false, true
 
 	sslVolumeOptional := &cr.Spec.UnsafeConf
@@ -326,7 +327,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 			},
 		},
 		{
-			Name: MongodDataVolClaimName,
+			Name: config.MongodDataVolClaimName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -362,13 +363,13 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 	if cr.CompareVersion("1.9.0") >= 0 && configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(MongosCustomConfigName(cr.Name)),
+			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 
 	if cr.CompareVersion("1.13.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: BinVolumeName,
+			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -379,7 +380,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 		if cr.Spec.Secrets.LDAPSecret != "" {
 			volumes = append(volumes, []corev1.Volume{
 				{
-					Name: LDAPTLSVolClaimName,
+					Name: config.LDAPTLSVolClaimName,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							SecretName:  cr.Spec.Secrets.LDAPSecret,
@@ -389,7 +390,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource VolumeSourceType) []core
 					},
 				},
 				{
-					Name: LDAPConfVolClaimName,
+					Name: config.LDAPConfVolClaimName,
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
@@ -437,7 +438,7 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       mongosPortName,
+				Name:       config.MongosPortName,
 				Port:       cr.Spec.Sharding.Mongos.GetPort(),
 				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
 			},

@@ -38,10 +38,12 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 var secretFileMode int32 = 288
@@ -465,6 +467,68 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	return rr, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	matchLabels := naming.MongodLabels(cr, replset)
+
+	_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+	if err != nil {
+		err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
+		return err
+	}
+
+	if replset.Arbiter.Enabled {
+		matchLabels = naming.ArbiterLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	if replset.NonVoting.Enabled {
+		matchLabels = naming.NonVotingLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	if replset.Hidden.Enabled {
+		matchLabels = naming.HiddenLabels(cr, replset)
+		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+		if err != nil {
+			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+			return err
+		}
+	} else {
+		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
+		if err != nil && !k8serrors.IsNotFound(err) {
+			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
+			return err
+		}
+	}
+
+	_, ok := cr.Status.Replsets[replset.Name]
+	if !ok {
+		cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) (api.AppState, error) {
 	log := logf.FromContext(ctx)
 
@@ -477,55 +541,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Errorf("%s is reserved name for config server replset", api.ConfigReplSetName)
 		}
 
-		matchLabels := naming.MongodLabels(cr, replset)
-
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
-			return "", err
-		}
-
-		if replset.Arbiter.Enabled {
-			matchLabels = naming.ArbiterLabels(cr, replset)
-			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-			if err != nil {
-				err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
-				return "", err
-			}
-		} else {
-			err := r.client.Delete(ctx, psmdb.NewStatefulSet(
-				cr.Name+"-"+replset.Name+"-arbiter",
-				cr.Namespace,
-			))
-
-			if err != nil && !k8serrors.IsNotFound(err) {
-				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-				return "", err
-			}
-		}
-
-		if replset.NonVoting.Enabled {
-			matchLabels = naming.NonVotingLabels(cr, replset)
-			_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-			if err != nil {
-				err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
-				return "", err
-			}
-		} else {
-			err := r.client.Delete(ctx, psmdb.NewStatefulSet(
-				cr.Name+"-"+replset.Name+"-nv",
-				cr.Namespace,
-			))
-
-			if err != nil && !k8serrors.IsNotFound(err) {
-				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
-				return "", err
-			}
-		}
-
-		_, ok := cr.Status.Replsets[replset.Name]
-		if !ok {
-			cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
+		if err := r.reconcileReplset(ctx, cr, replset); err != nil {
+			return "", errors.Wrapf(err, "reconcile replset %s", replset.Name)
 		}
 
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
@@ -545,6 +562,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 		if err != nil {
 			log.Error(err, "failed to reconcile cluster", "replset", replset.Name)
 			errs = append(errs, err)
+		}
+
+		switch replsetStatus {
+		case api.AppStateInit, api.AppStateError:
+			log.V(1).Info("Replset status is not healthy", "replset", replset.Name, "status", replsetStatus)
 		}
 
 		statusPriority := []api.AppState{
@@ -687,7 +709,7 @@ func (r *ReconcilePerconaServerMongoDB) setCRVersion(ctx context.Context, cr *ap
 	}
 
 	orig := cr.DeepCopy()
-	cr.Spec.CRVersion = version.Version
+	cr.Spec.CRVersion = version.Version()
 
 	if err := r.client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch CR")
@@ -933,8 +955,8 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				if strings.HasPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-") {
-					podName := strings.TrimPrefix(pvc.Name, psmdb.MongodDataVolClaimName+"-")
+				if strings.HasPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-") {
+					podName := strings.TrimPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-")
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
 						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
@@ -1061,7 +1083,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	for _, rs := range repls {
-		name := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+		name := naming.MongodCustomConfigName(cr, rs)
 
 		if rs.Configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
@@ -1095,7 +1117,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			continue
 		}
 
-		name = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+		name = naming.NonVotingConfigMapName(cr, rs)
 		if rs.NonVoting.Configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
@@ -1126,7 +1148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	name := psmdb.MongosCustomConfigName(cr.Name)
+	name := naming.MongosCustomConfigName(cr)
 
 	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
 		err := deleteConfigMapIfExists(ctx, r.client, cr, name)
@@ -1273,7 +1295,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, psmdb.MongosCustomConfigName(cr.Name))
+	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
 	if err != nil {
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
@@ -1327,7 +1349,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "check pmm secrets: %s", api.UserSecretName(cr))
 	}
-	pmmC := psmdb.AddPMMContainer(cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
+	pmmC := pmm.Container(ctx, cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
@@ -1599,23 +1621,23 @@ func OwnerRef(ro client.Object, scheme *runtime.Scheme) (metav1.OwnerReference, 
 	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdb.CustomConfig, error) {
+func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, namespace, name string) (psmdbconfig.CustomConfig, error) {
 	n := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}
 
-	sources := []psmdb.VolumeSourceType{
-		psmdb.VolumeSourceSecret,
-		psmdb.VolumeSourceConfigMap,
+	sources := []psmdbconfig.VolumeSourceType{
+		psmdbconfig.VolumeSourceSecret,
+		psmdbconfig.VolumeSourceConfigMap,
 	}
 
 	for _, s := range sources {
-		obj := psmdb.VolumeSourceTypeToObj(s)
+		obj := psmdbconfig.VolumeSourceTypeToObj(s)
 
 		ok, err := getObjectByName(ctx, r.client, n, obj.GetRuntimeObject())
 		if err != nil {
-			return psmdb.CustomConfig{}, errors.Wrapf(err, "get %s", s)
+			return psmdbconfig.CustomConfig{}, errors.Wrapf(err, "get %s", s)
 		}
 		if !ok {
 			continue
@@ -1623,10 +1645,10 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, nam
 
 		hashHex, err := obj.GetHashHex()
 		if err != nil {
-			return psmdb.CustomConfig{}, errors.Wrapf(err, "failed to get hash of %s", s)
+			return psmdbconfig.CustomConfig{}, errors.Wrapf(err, "failed to get hash of %s", s)
 		}
 
-		conf := psmdb.CustomConfig{
+		conf := psmdbconfig.CustomConfig{
 			Type:    s,
 			HashHex: hashHex,
 		}
@@ -1634,7 +1656,7 @@ func (r *ReconcilePerconaServerMongoDB) getCustomConfig(ctx context.Context, nam
 		return conf, nil
 	}
 
-	return psmdb.CustomConfig{}, nil
+	return psmdbconfig.CustomConfig{}, nil
 }
 
 func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedName, obj client.Object) (bool, error) {
