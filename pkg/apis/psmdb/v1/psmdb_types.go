@@ -918,10 +918,12 @@ type MongodSpecInMemory struct {
 }
 
 type BackupTaskSpec struct {
-	Name             string                   `json:"name"`
-	Enabled          bool                     `json:"enabled"`
-	Keep             int                      `json:"keep,omitempty"`
-	Retention        BackupTaskSpecRetention  `json:"retention,omitempty"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	// Deprecated: Use Retention instead. This field will be removed after version 1.21.
+	Keep int `json:"keep,omitempty"`
+	// +optional
+	Retention        *BackupTaskSpecRetention `json:"retention,omitempty"`
 	Schedule         string                   `json:"schedule,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
@@ -931,6 +933,17 @@ type BackupTaskSpec struct {
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
+func (task *BackupTaskSpec) GetRetention(cr *PerconaServerMongoDB) BackupTaskSpecRetention {
+	if task.Retention != nil && cr.CompareVersion("1.21.0") >= 0 {
+		return *task.Retention
+	}
+	return BackupTaskSpecRetention{
+		Type:              BackupTaskSpecRetentionTypeCount,
+		Count:             task.Keep,
+		DeleteFromStorage: true,
+	}
+}
+
 type BackupTaskSpecRetentionType string
 
 const (
@@ -938,10 +951,16 @@ const (
 )
 
 type BackupTaskSpecRetention struct {
+	// +kubebuilder:validation:Minimum=0
 	Count int `json:"count,omitempty"`
+
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum={count}
-	Type              string `json:"type,omitempty"`
-	DeleteFromStorage *bool  `json:"deleteFromStorage,omitempty"`
+	Type string `json:"type,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default=true
+	DeleteFromStorage bool `json:"deleteFromStorage,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {

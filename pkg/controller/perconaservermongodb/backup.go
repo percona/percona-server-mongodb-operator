@@ -95,22 +95,17 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 				return true
 			}
 
-			retentionCount := spec.Keep
-			if cr.CompareVersion("1.21.0") >= 0 {
-				if spec.Retention.Type != api.BackupTaskSpecRetentionTypeCount {
-					log.Error(nil, "unsupported retention type", "type", spec.Retention.Type)
-					return true
-				}
-				if spec.Retention.Count != 0 {
-					retentionCount = spec.Retention.Count
-				}
-			}
-
-			if retentionCount <= 0 {
+			ret := spec.GetRetention(cr)
+			if ret.Type != api.BackupTaskSpecRetentionTypeCount {
+				log.Error(nil, "unsupported retention type", "type", ret.Type)
 				return true
 			}
 
-			oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, retentionCount)
+			if ret.Count <= 0 {
+				return true
+			}
+
+			oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, ret.Count)
 			if err != nil {
 				log.Error(err, "failed to list old backups", "job", item.Name)
 				return true
