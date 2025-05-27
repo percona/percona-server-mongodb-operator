@@ -127,6 +127,9 @@ type ReplSetStatus struct {
 type InitialSyncStatus interface{}
 
 func CheckState(rs ReplSetStatus, startupDelaySeconds int64, oplogSize int64) error {
+	if rs.GetSelf() == nil {
+		return errors.New("invalid replset status")
+	}
 	uptime := rs.GetSelf().Uptime
 
 	switch rs.MyState {

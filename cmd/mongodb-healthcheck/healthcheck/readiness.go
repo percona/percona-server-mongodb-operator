@@ -44,25 +44,28 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		return err
 	}
 
-	s, err := func() (ReplSetStatus, error) {
+	s, err := func() (*ReplSetStatus, error) {
 		cnf.Timeout = time.Second
 		client, err := db.Dial(ctx, cnf)
 		if err != nil {
-			return ReplSetStatus{}, errors.Wrap(err, "connection error")
+			return nil, nil
 		}
 		defer func() {
 			if derr := client.Disconnect(ctx); derr != nil && err == nil {
 				err = errors.Wrap(derr, "failed to disconnect")
 			}
 		}()
-		return getStatus(ctx, client)
+		rs, err := getStatus(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+		return &rs, nil
 	}()
-	if err != nil {
-		log.Error(err, "Failed to get replset status")
-		return nil
+	if err != nil || s == nil {
+		return err
 	}
 
-	if err := CheckState(s, 0, 0); err != nil {
+	if err := CheckState(*s, 0, 0); err != nil {
 		return errors.Wrap(err, "check state")
 	}
 
