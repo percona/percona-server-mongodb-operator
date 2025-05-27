@@ -25111,6 +25111,7 @@ kind: Deployment
 metadata:
   name: percona-server-mongodb-operator
   labels:
+    name: percona-server-mongodb-operator
     app.kubernetes.io/component: operator
     app.kubernetes.io/instance: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb-operator
@@ -25119,13 +25120,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/component: operator
-      app.kubernetes.io/instance: percona-server-mongodb-operator
-      app.kubernetes.io/name: percona-server-mongodb-operator
-      app.kubernetes.io/part-of: percona-server-mongodb-operator 
+      name: percona-server-mongodb-operator
   template:
     metadata:
       labels:
+        name: percona-server-mongodb-operator
         app.kubernetes.io/component: operator
         app.kubernetes.io/instance: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb-operator
