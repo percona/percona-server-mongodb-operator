@@ -920,7 +920,7 @@ type MongodSpecInMemory struct {
 type BackupTaskSpec struct {
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
-	// Deprecated: Use Retention instead. This field will be removed after version 1.21.
+	// Deprecated: Use Retention instead. This field will be removed in the future
 	Keep int `json:"keep,omitempty"`
 	// +optional
 	Retention        *BackupTaskSpecRetention `json:"retention,omitempty"`
