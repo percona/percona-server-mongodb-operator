@@ -312,20 +312,36 @@ func hasContainerName(containers []corev1.Container, name string) bool {
 
 func (r *ReconcilePerconaServerMongoDBRestore) finishPhysicalRestore(ctx context.Context, cluster *api.PerconaServerMongoDB) (bool, error) {
 	stsIsUpdated := true
-	if err := r.updateMongodSts(ctx, cluster, func(sts *appsv1.StatefulSet) error {
+	if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
+		sts := new(appsv1.StatefulSet)
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(s), sts); err != nil {
+			return err
+		}
 		if !sts.DeletionTimestamp.IsZero() {
 			return nil
 		}
 
-		if !hasContainerName(sts.Spec.Template.Spec.Containers, naming.ContainerBackupAgent) {
-			return errors.Errorf("statefulsets weren't deleted")
+		if sts.Labels[naming.LabelKubernetesComponent] != naming.ComponentArbiter {
+			if !hasContainerName(sts.Spec.Template.Spec.Containers, naming.ContainerBackupAgent) {
+				return errors.Errorf("statefulset %s wasn't deleted", sts.Name)
+			}
 		}
 
-		if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] != "true" {
-			stsIsUpdated = false
-			sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+		if sts.Annotations[psmdbv1.AnnotationRestoreInProgress] == "true" {
+			return nil
 		}
-		return nil
+
+		stsIsUpdated = false
+
+		return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.client.Get(ctx, client.ObjectKeyFromObject(s), sts); err != nil {
+				return err
+			}
+
+			sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+			return r.client.Update(ctx, sts)
+		})
 	}); client.IgnoreNotFound(err) != nil {
 		return false, errors.Wrap(err, "delete restore in progress annotation")
 	}
