@@ -37,11 +37,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/version"
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -61,6 +56,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 	return &ReconcilePerconaServerMongoDBBackup{
 		client:     mgr.GetClient(),
+		apiReader:  mgr.GetAPIReader(),
 		scheme:     mgr.GetScheme(),
 		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
@@ -91,6 +87,7 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
+	apiReader client.Reader
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
 
@@ -113,7 +110,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
-	err := r.client.Get(ctx, request.NamespacedName, cr)
+
+	// Here we use k8s APIReader to read the k8s object by making the
+	// direct call to k8s apiserver instead of using k8sClient.
+	// The reason is that k8sClient uses a cache and sometimes k8sClient can
+	// return stale copy of object.
+	// It is okay to make direct call to k8s apiserver because we are only
+	// making single read call for complete reconciler loop.
+	err := r.apiReader.Get(ctx, request.NamespacedName, cr)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -124,6 +128,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
+
+	log.V(1).Info("Got object from API server", "state", cr.Status.State)
 
 	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
 		cr.ObjectMeta.DeletionTimestamp == nil {
