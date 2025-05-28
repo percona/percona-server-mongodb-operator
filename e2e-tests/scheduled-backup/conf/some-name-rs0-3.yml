@@ -58,7 +58,9 @@ spec:
     - name: weekly
       enabled: true
       retention:
+        type: count
         count: 1
+        deleteFromStorage: true
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3
