@@ -1,7 +1,6 @@
 package logcollector
 
 import (
-	"github.com/pkg/errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,28 +28,11 @@ func TestContainers(t *testing.T) {
 				Enabled: false,
 			},
 		},
-		"logcollector enabled but secret is missing": {
-			logCollector: &api.LogCollectorSpec{
-				Enabled:         true,
-				Image:           "log-test-image",
-				ImagePullPolicy: corev1.PullIfNotPresent,
-			},
-			expectedErr: errors.New("missing secret for log-collector"),
-		},
 		"logcollector enabled": {
 			logCollector: &api.LogCollectorSpec{
 				Enabled:         true,
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
-			},
-			secrets: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-secret",
-				},
-				Data: map[string][]byte{
-					"MONGODB_CLUSTER_ADMIN_USER_ESCAPED":     []byte("admin"),
-					"MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED": []byte("password"),
-				},
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
 			expectedContainers:     expectedContainers(""),
@@ -61,15 +43,6 @@ func TestContainers(t *testing.T) {
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Configuration:   "my-config",
-			},
-			secrets: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-secret",
-				},
-				Data: map[string][]byte{
-					"MONGODB_CLUSTER_ADMIN_USER_ESCAPED":     []byte("admin"),
-					"MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED": []byte("password"),
-				},
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
 			expectedContainers:     expectedContainers("my-config"),
@@ -86,10 +59,13 @@ func TestContainers(t *testing.T) {
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion:    version.Version(),
 					LogCollector: tt.logCollector,
+					Secrets: &api.SecretsSpec{
+						Users: "users-secret",
+					},
 				},
 			}
 
-			containers, err := Containers(cr, tt.secrets, 27017)
+			containers, err := Containers(cr, 27017)
 
 			if tt.expectedContainers != nil {
 				var gotNames []string
@@ -164,7 +140,7 @@ func expectedContainers(configuration string) []corev1.Container {
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "my-secret",
+							Name: "internal-my-cluster-users",
 						},
 						Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
 						Optional: &boolFalse,
@@ -176,7 +152,7 @@ func expectedContainers(configuration string) []corev1.Container {
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "my-secret",
+							Name: "internal-my-cluster-users",
 						},
 						Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
 						Optional: &boolFalse,

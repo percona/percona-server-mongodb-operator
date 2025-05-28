@@ -25,13 +25,9 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Containers(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *corev1.Secret, mongoPort int32) ([]corev1.Container, error) {
+func Containers(cr *api.PerconaServerMongoDB, mongoPort int32) ([]corev1.Container, error) {
 	if cr.Spec.LogCollector == nil || !cr.Spec.LogCollector.Enabled {
 		return nil, nil
-	}
-
-	if mongoCredentialsSecret == nil {
-		return nil, errors.Errorf("missing secret for log-collector")
 	}
 
 	logCont, err := logContainer(cr)
@@ -39,7 +35,7 @@ func Containers(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *corev1.Sec
 		return nil, err
 	}
 
-	logRotationCont, err := logRotationContainer(cr, mongoCredentialsSecret, mongoPort)
+	logRotationCont, err := logRotationContainer(cr, mongoPort)
 	if err != nil {
 		return nil, err
 	}
@@ -108,12 +104,14 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 	return &container, nil
 }
 
-func logRotationContainer(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *corev1.Secret, mongoPort int32) (*corev1.Container, error) {
+func logRotationContainer(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
 	}
 
 	boolFalse := false
+
+	usersSecretName := api.UserSecretName(cr)
 
 	envs := []corev1.EnvVar{
 		{
@@ -130,7 +128,7 @@ func logRotationContainer(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: mongoCredentialsSecret.Name,
+						Name: usersSecretName,
 					},
 					Optional: &boolFalse,
 				},
@@ -142,7 +140,7 @@ func logRotationContainer(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: mongoCredentialsSecret.Name,
+						Name: usersSecretName,
 					},
 					Optional: &boolFalse,
 				},
