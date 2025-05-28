@@ -487,7 +487,7 @@ if [[ $originalArgOne == mongo* ]]; then
 		# Use reopen when using the Linux/Unix logrotate utility to avoid log loss.
 		# https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
 		# the operator is using logrotate as part of the logcollector feature.
-		_mongod_hack_ensure_arg --logRotate reopen "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg_val --logRotate reopen "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
 	fi
 
