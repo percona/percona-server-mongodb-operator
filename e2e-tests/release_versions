@@ -1,4 +1,4 @@
-IMAGE_OPERATOR=percona/percona-server-mongodb-operator:1.20.0
+IMAGE_OPERATOR=percona/percona-server-mongodb-operator:1.20.1
 IMAGE_MONGOD80=percona/percona-server-mongodb:8.0.8-3
 IMAGE_MONGOD70=percona/percona-server-mongodb:7.0.18-11
 IMAGE_MONGOD60=percona/percona-server-mongodb:6.0.21-18
