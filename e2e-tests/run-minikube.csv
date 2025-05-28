@@ -2,7 +2,11 @@ arbiter
 default-cr
 demand-backup
 demand-backup-incremental
-demand-backup-physical
+demand-backup-physical-parallel
+demand-backup-physical-aws
+demand-backup-physical-azure
+demand-backup-physical-gcp
+demand-backup-physical-minio
 limits
 liveness
 mongod-major-upgrade
