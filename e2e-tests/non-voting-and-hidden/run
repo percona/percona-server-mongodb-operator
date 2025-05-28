@@ -1,0 +1,78 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="some-name"
+
+create_infra $namespace
+deploy_cert_manager
+apply_s3_storage_secrets
+deploy_minio
+kubectl_bin apply \
+	-f $conf_dir/client.yml \
+	-f $conf_dir/secrets.yml
+
+desc "Creating PSMDB cluster with non-voting + hidden members"
+
+log "create PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster.yml"
+
+log 'check if Pods are started'
+wait_for_running "${cluster}-rs0" 3
+
+log 'check if statefulsets created with expected config'
+compare_kubectl "statefulset/${cluster}-rs0"
+compare_kubectl "statefulset/${cluster}-rs0-nv"
+compare_kubectl "statefulset/${cluster}-rs0-hidden"
+
+log 'create user myApp'
+run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+
+log 'write data'
+run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 10
+
+log 'compare data'
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-nv-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-1.$cluster-rs0.$namespace"
+
+run_backup minio backup-logical logical
+wait_backup backup-logical ready
+
+log "drop collection"
+run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+run_restore backup-logical
+wait_restore backup-logical ${cluster}
+
+log "compare data after restore-backup-logical"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-nv-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-1.$cluster-rs0.$namespace"
+
+run_backup minio backup-physical physical
+wait_backup backup-physical ready
+
+log "drop collection"
+run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+run_restore backup-physical
+wait_restore backup-physical ${cluster}
+
+log "compare data after restore-backup-physical"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-nv-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-0.$cluster-rs0.$namespace"
+compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-1.$cluster-rs0.$namespace"
+
+desc 'test passed'
+
+destroy $namespace
