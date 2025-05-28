@@ -109,6 +109,10 @@ func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cl
 	return nil
 }
 
+func (p *fakePBM) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	return nil
+}
+
 func (p *fakePBM) SetConfigVar(ctx context.Context, key, val string) error {
 	return nil
 }

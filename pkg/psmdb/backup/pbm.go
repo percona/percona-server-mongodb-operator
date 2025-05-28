@@ -89,6 +89,7 @@ type PBM interface {
 	GetProfile(ctx context.Context, name string) (*config.Config, error)
 	RemoveProfile(ctx context.Context, name string) error
 	GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error
+	GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
 	SetConfig(ctx context.Context, cfg *config.Config) error
 	SetConfigVar(ctx context.Context, key, val string) error
 
@@ -281,17 +282,20 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 		},
 	}
 
-	if cluster.Spec.Backup.Configuration.BackupOptions != nil {
+	if opts := cluster.Spec.Backup.Configuration.BackupOptions; opts != nil {
 		conf.Backup = &config.BackupConf{
-			OplogSpanMin:           cluster.Spec.Backup.Configuration.BackupOptions.OplogSpanMin,
-			NumParallelCollections: cluster.Spec.Backup.Configuration.BackupOptions.NumParallelCollections,
-			Timeouts: &config.BackupTimeouts{
-				Starting: cluster.Spec.Backup.Configuration.BackupOptions.Timeouts.Starting,
-			},
+			OplogSpanMin:           opts.OplogSpanMin,
+			NumParallelCollections: opts.NumParallelCollections,
 		}
 
-		if cluster.Spec.Backup.Configuration.BackupOptions.Priority != nil {
-			conf.Backup.Priority = cluster.Spec.Backup.Configuration.BackupOptions.Priority
+		if opts.Timeouts != nil {
+			conf.Backup.Timeouts = &config.BackupTimeouts{
+				Starting: opts.Timeouts.Starting,
+			}
+		}
+
+		if opts.Priority != nil {
+			conf.Backup.Priority = opts.Priority
 		} else {
 			priority, err := GetPriorities(ctx, k8sclient, cluster)
 			if err != nil {
@@ -517,6 +521,26 @@ func (b *pbmC) RemoveProfile(ctx context.Context, name string) error {
 	log.Info("Removing profile", "name", name)
 
 	return config.RemoveProfile(ctx, b.Client, name)
+}
+
+// GetNSetConfigLegacy sets the PBM config with given storage
+func (b *pbmC) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	log := logf.FromContext(ctx)
+
+	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
+	if err != nil {
+		return errors.Wrap(err, "get PBM config")
+	}
+
+	log.Info("Setting config", "cluster", cluster.Name, "storage", stg)
+
+	if err := config.SetConfig(ctx, b.Client, &conf); err != nil {
+		return errors.Wrap(err, "write config")
+	}
+
+	time.Sleep(11 * time.Second) // give time to init new storage
+
+	return nil
 }
 
 // GetNSetConfig sets the PBM config with main storage defined in the cluster CR

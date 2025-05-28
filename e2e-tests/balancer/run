@@ -83,7 +83,7 @@ write_data() {
 		"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" \
 		"mongodb" ".svc.cluster.local" "--quiet" "27017" "mongosh"
 
-	log 'write data'
+	log 'write data (this can take some time, be patient)'
 	run_script_mongos "${test_dir}/data.js" "user:pass@$cluster-mongos.$namespace" \
 		"mongodb" ".svc.cluster.local" "--quiet" "mongosh"
 

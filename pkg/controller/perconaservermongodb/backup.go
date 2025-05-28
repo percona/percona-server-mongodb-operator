@@ -3,12 +3,10 @@ package perconaservermongodb
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -103,51 +101,13 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB, ctasks map[string]api.BackupTaskSpec) error {
 	log := logf.FromContext(ctx)
 
-	if cr.CompareVersion("1.13.0") < 0 {
-		ls := naming.NewBackupCronJobLabels(cr, cr.Spec.Backup.Labels)
-		tasksList := &batchv1.CronJobList{}
-		err := r.client.List(ctx,
-			tasksList,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(ls),
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("get backup list: %v", err)
-		}
-
-		for _, t := range tasksList.Items {
-			if spec, ok := ctasks[t.Name]; ok {
-				// TODO: make .keep to work with incremental backups
-				if spec.Type == defs.IncrementalBackup {
-					continue
-				}
-				if spec.Keep > 0 {
-					oldjobs, err := r.oldScheduledBackups(ctx, cr, t.Name, spec.Keep)
-					if err != nil {
-						return fmt.Errorf("remove old backups: %v", err)
-					}
-
-					for _, todel := range oldjobs {
-						err = r.client.Delete(ctx, &todel)
-						if err != nil {
-							return fmt.Errorf("failed to delete backup object: %v", err)
-						}
-					}
-				}
-			} else {
-				err := r.client.Delete(ctx, &t)
-				if err != nil && !k8sErrors.IsNotFound(err) {
-					return fmt.Errorf("delete backup task %s: %v", t.Name, err)
-				}
-			}
-		}
-		return nil
-	}
 	r.crons.backupJobs.Range(func(k, v interface{}) bool {
 		item := v.(BackupScheduleJob)
 		if spec, ok := ctasks[item.Name]; ok {
+			// TODO: make .keep to work with incremental backups
+			if spec.Type == defs.IncrementalBackup {
+				return true
+			}
 			if spec.Keep > 0 {
 				oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, spec.Keep)
 				if err != nil {

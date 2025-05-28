@@ -9,7 +9,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestCheckFinalizers(t *testing.T) {
@@ -24,7 +24,7 @@ func TestCheckFinalizers(t *testing.T) {
 
 	obj := append(
 		fakePodsForRS(defaultCR, defaultCR.Spec.Replsets[0]),
-		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0], defaultCR.Spec.Replsets[0].Size, ""),
+		fakeStatefulset(defaultCR, defaultCR.Spec.Replsets[0], defaultCR.Spec.Replsets[0].Size, "", ""),
 	)
 
 	tests := []struct {

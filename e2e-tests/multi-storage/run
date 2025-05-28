@@ -283,11 +283,17 @@ wait_for_advanced_restorable_time backup-minio-3
 restore_time=$(get_latest_restorable_time backup-minio-3)
 check_recovery backup-minio-3 "$(format_pitr_target ${restore_time})"
 
+log "sleeping for 60 seconds for resync to finish"
+sleep 60 # minio buckets are basically empty, resync should finish very quickly
+
 log "changing main storage from minio-1 to minio-2"
 kubectl patch psmdb ${cluster} --type=json -p='[
   {"op": "remove", "path": "/spec/backup/storages/minio-1/main"},
   {"op": "add", "path": "/spec/backup/storages/minio-2/main", "value": true}
 ]'
+
+log "sleeping for 60 seconds for resync to finish"
+sleep 60 # minio buckets are basically empty, resync should finish very quickly
 
 run_backup minio-2 backup-minio-2-1 logical
 wait_backup backup-minio-2-1

@@ -257,9 +257,7 @@ spec:
             optional: true
             secretName: some-name-ssl-internal
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

@@ -12,6 +12,10 @@
         "db": "admin"
       },
       {
+        "role": "directShardOperations",
+        "db": "admin"
+      },
+      {
         "role": "explainRole",
         "db": "admin"
       },
@@ -191,6 +195,7 @@
           "getShardMap",
           "hostInfo",
           "inprog",
+          "issueDirectShardOperations",
           "listDatabases",
           "listSampledQueries",
           "listSessions",

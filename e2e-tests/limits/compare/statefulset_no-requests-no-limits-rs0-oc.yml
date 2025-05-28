@@ -199,9 +199,7 @@ spec:
             defaultMode: 420
             secretName: internal-no-requests-no-limits-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

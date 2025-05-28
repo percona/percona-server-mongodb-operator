@@ -10,6 +10,10 @@
       {
         "role": "clusterAdmin",
         "db": "admin"
+      },
+      {
+        "role": "directShardOperations",
+        "db": "admin"
       }
     ],
     "authenticatedUserPrivileges": [
@@ -277,6 +281,7 @@
           "hostInfo",
           "inprog",
           "invalidateUserCache",
+          "issueDirectShardOperations",
           "killAnyCursor",
           "killAnySession",
           "killop",

@@ -37,6 +37,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Con
 		if err := r.createOrUpdateSvc(ctx, cr, service, true); err != nil {
 			return errors.Wrapf(err, "create or update service for replset %s", rs.Name)
 		}
+		if err := r.removeOutdatedServices(ctx, cr, rs); err != nil {
+			return errors.Wrapf(err, "failed to remove old services of replset %s", rs.Name)
+		}
 		if !rs.Expose.Enabled {
 			continue
 		}
@@ -47,10 +50,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Con
 		}
 		if err := r.ensureExternalServices(ctx, cr, rs, &pods); err != nil {
 			return errors.Wrap(err, "ensure external services")
-		}
-
-		if err := r.removeOutdatedServices(ctx, cr, rs); err != nil {
-			return errors.Wrapf(err, "failed to remove old services of replset %s", rs.Name)
 		}
 	}
 	return nil

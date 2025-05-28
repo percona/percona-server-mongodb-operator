@@ -205,6 +205,4 @@ spec:
             type: Directory
           name: mongod-data
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
