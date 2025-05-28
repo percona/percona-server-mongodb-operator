@@ -199,26 +199,22 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	check_backup_in_storage ${backup_name_aws} s3 rs0 'myApp.test.gz'
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	check_backup_in_storage ${backup_name_gcp} gcs rs0 'myApp.test.gz'
 	run_recovery_check "$backup_name_gcp" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
+	check_backup_in_storage ${backup_name_azure} azure rs0 'myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
 fi
 
 desc 'check backup and restore -- minio'
-backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep myApp.test.gz
+check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
 run_recovery_check "$backup_name_minio" "$cluster"
 
 run_mongo \
@@ -278,6 +274,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
 	wait_backup "$backup_name_azure"
+	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 fi
 
 kubectl_bin delete psmdb --all
