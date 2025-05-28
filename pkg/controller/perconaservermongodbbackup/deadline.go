@@ -14,14 +14,6 @@ var (
 	errStartingDeadlineExceeded = errors.New("starting deadline seconds exceeded")
 )
 
-func checkDeadlines(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	if err := checkStartingDeadline(ctx, cluster, cr); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func checkStartingDeadline(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	log := logf.FromContext(ctx)
 

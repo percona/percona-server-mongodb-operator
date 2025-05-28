@@ -177,7 +177,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
-	if err := checkDeadlines(ctx, cluster, cr); err != nil {
+	if err := checkStartingDeadline(ctx, cluster, cr); err != nil {
 		if err := r.setFailedStatus(ctx, cr, err); err != nil {
 			return rr, errors.Wrap(err, "update status")
 		}
