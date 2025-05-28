@@ -230,6 +230,23 @@ spec:
         image: perconalab/fluentbit:main-logcollector
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "logrotate" ]
+        env:
+          - name: MONGODB_HOST
+            value: localhost
+          - name: MONGODB_PORT
+            value: "27017"
+          - name: MONGODB_USER
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
+          - name: MONGODB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
         resources:
           requests:
             cpu: 200m

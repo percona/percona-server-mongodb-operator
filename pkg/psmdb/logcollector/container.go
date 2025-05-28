@@ -2,6 +2,7 @@ package logcollector
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -24,9 +25,13 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Containers(cr *api.PerconaServerMongoDB) ([]corev1.Container, error) {
+func Containers(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *corev1.Secret, mongoPort int32) ([]corev1.Container, error) {
 	if cr.Spec.LogCollector == nil || !cr.Spec.LogCollector.Enabled {
 		return nil, nil
+	}
+
+	if mongoCredentialsSecret == nil {
+		return nil, errors.Errorf("missing secret for log-collector")
 	}
 
 	logCont, err := logContainer(cr)
@@ -34,7 +39,7 @@ func Containers(cr *api.PerconaServerMongoDB) ([]corev1.Container, error) {
 		return nil, err
 	}
 
-	logRotationCont, err := logRotationContainer(cr)
+	logRotationCont, err := logRotationContainer(cr, mongoCredentialsSecret, mongoPort)
 	if err != nil {
 		return nil, err
 	}
@@ -103,14 +108,52 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 	return &container, nil
 }
 
-func logRotationContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
+func logRotationContainer(cr *api.PerconaServerMongoDB, mongoCredentialsSecret *corev1.Secret, mongoPort int32) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
+	}
+
+	boolFalse := false
+
+	envs := []corev1.EnvVar{
+		{
+			Name:  "MONGODB_HOST",
+			Value: "localhost",
+		},
+		{
+			Name:  "MONGODB_PORT",
+			Value: strconv.Itoa(int(mongoPort)),
+		},
+		{
+			Name: "MONGODB_USER",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mongoCredentialsSecret.Name,
+					},
+					Optional: &boolFalse,
+				},
+			},
+		},
+		{
+			Name: "MONGODB_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mongoCredentialsSecret.Name,
+					},
+					Optional: &boolFalse,
+				},
+			},
+		},
 	}
 
 	container := corev1.Container{
 		Name:            "logrotate",
 		Image:           cr.Spec.LogCollector.Image,
+		Env:             envs,
 		ImagePullPolicy: cr.Spec.LogCollector.ImagePullPolicy,
 		SecurityContext: cr.Spec.LogCollector.ContainerSecurityContext,
 		Resources:       cr.Spec.LogCollector.Resources,

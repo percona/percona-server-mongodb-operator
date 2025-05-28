@@ -1,6 +1,7 @@
 package logcollector
 
 import (
+	"github.com/pkg/errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,8 +16,10 @@ import (
 func TestContainers(t *testing.T) {
 	tests := map[string]struct {
 		logCollector           *api.LogCollectorSpec
+		secrets                *corev1.Secret
 		expectedContainerNames []string
 		expectedContainers     []corev1.Container
+		expectedErr            error
 	}{
 		"nil logcollector": {
 			logCollector: nil,
@@ -26,11 +29,28 @@ func TestContainers(t *testing.T) {
 				Enabled: false,
 			},
 		},
+		"logcollector enabled but secret is missing": {
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedErr: errors.New("missing secret for log-collector"),
+		},
 		"logcollector enabled": {
 			logCollector: &api.LogCollectorSpec{
 				Enabled:         true,
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			secrets: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-secret",
+				},
+				Data: map[string][]byte{
+					"MONGODB_CLUSTER_ADMIN_USER_ESCAPED":     []byte("admin"),
+					"MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED": []byte("password"),
+				},
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
 			expectedContainers:     expectedContainers(""),
@@ -41,6 +61,15 @@ func TestContainers(t *testing.T) {
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Configuration:   "my-config",
+			},
+			secrets: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-secret",
+				},
+				Data: map[string][]byte{
+					"MONGODB_CLUSTER_ADMIN_USER_ESCAPED":     []byte("admin"),
+					"MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED": []byte("password"),
+				},
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
 			expectedContainers:     expectedContainers("my-config"),
@@ -60,18 +89,22 @@ func TestContainers(t *testing.T) {
 				},
 			}
 
-			containers, err := Containers(cr)
-			assert.NoError(t, err)
-
-			var gotNames []string
-			for _, c := range containers {
-				gotNames = append(gotNames, c.Name)
-			}
-			assert.Equal(t, tt.expectedContainerNames, gotNames)
+			containers, err := Containers(cr, tt.secrets, 27017)
 
 			if tt.expectedContainers != nil {
+				var gotNames []string
+				for _, c := range containers {
+					gotNames = append(gotNames, c.Name)
+				}
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedContainerNames, gotNames)
 				assert.Equal(t, tt.expectedContainers, containers)
+				return
 			}
+			if tt.expectedErr != nil {
+				assert.EqualError(t, err, tt.expectedErr.Error())
+			}
+
 		})
 	}
 }
@@ -115,12 +148,42 @@ func expectedContainers(configuration string) []corev1.Container {
 		})
 	}
 
+	boolFalse := false
+
 	logRotateC := corev1.Container{
 		Name:            "logrotate",
 		Image:           "log-test-image",
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args:            []string{"logrotate"},
 		Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
+		Env: []corev1.EnvVar{
+			{Name: "MONGODB_HOST", Value: "localhost"},
+			{Name: "MONGODB_PORT", Value: "27017"},
+			{
+				Name: "MONGODB_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "my-secret",
+						},
+						Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
+						Optional: &boolFalse,
+					},
+				},
+			},
+			{
+				Name: "MONGODB_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "my-secret",
+						},
+						Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+						Optional: &boolFalse,
+					},
+				},
+			},
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
