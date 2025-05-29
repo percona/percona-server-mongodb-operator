@@ -25,7 +25,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:support_external_autoscaler
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
