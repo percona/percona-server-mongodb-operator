@@ -80,6 +80,14 @@ log() {
 	set_debug
 }
 
+sleep_with_log() {
+	local d=$1
+	local msg=$2
+
+	log "${msg}. sleeping for ${d} seconds"
+	sleep ${d}
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
