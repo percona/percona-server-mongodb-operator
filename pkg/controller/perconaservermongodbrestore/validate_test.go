@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 )
@@ -241,7 +242,7 @@ func TestValidatePiTR(t *testing.T) {
 					Namespace: ns,
 				},
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
-					Type:        defs.LogicalBackup,
+					Type:        defs.PhysicalBackup,
 					ClusterName: clusterName,
 					StorageName: storageName,
 				},
@@ -321,7 +322,7 @@ func TestValidatePiTR(t *testing.T) {
 					Namespace: ns,
 				},
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
-					Type:        defs.LogicalBackup,
+					Type:        defs.PhysicalBackup,
 					ClusterName: clusterName,
 					StorageName: storageName,
 				},
@@ -367,7 +368,7 @@ func TestValidatePiTR(t *testing.T) {
 				},
 				Status: psmdbv1.PerconaServerMongoDBBackupStatus{
 					State: psmdbv1.BackupStateReady,
-					Type:  defs.PhysicalBackup,
+					Type:  defs.LogicalBackup,
 					LastWriteAt: &metav1.Time{
 						Time: mustParseTime(time.RFC3339, "2010-02-04T21:00:57Z"),
 					},
@@ -400,7 +401,7 @@ func TestValidatePiTR(t *testing.T) {
 			runtimeObjs := []client.Object{&secret, tt.restore, cluster, tt.backup}
 			r := fakeReconciler(runtimeObjs...)
 			err := r.validate(ctx, tt.restore, cluster)
-			if len(tt.expectedErr) > 0 {
+			if tt.expectedErr != "" {
 				assert.EqualError(t, err, tt.expectedErr)
 			} else {
 				assert.NoError(t, err)
