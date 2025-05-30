@@ -49,31 +49,46 @@ spec:
     tasks:
     - name: every-min-minio
       enabled: true
-      keep: 1
+      retention:
+        type: count
+        count: 1
+        deleteFromStorage: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: minio
     - name: every-min-aws-s3
       enabled: true
-      keep: 1
+      retention:
+        type: count
+        count: 1
+        deleteFromStorage: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: aws-s3
     - name: every-min-gcp-cs
       enabled: true
-      keep: 1
+      retention:
+        type: count
+        count: 1
+        deleteFromStorage: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: gcp-cs
     - name: every-min-azure-blob
       enabled: true
-      keep: 1
+      retention:
+        type: count
+        count: 1
+        deleteFromStorage: true
       schedule: "* * * * *"
       compressionType: gzip
       storageName: azure-blob
     - name: weekly
       enabled: true
-      keep: 1
+      retention:
+        type: count
+        count: 1
+        deleteFromStorage: true
       schedule: "0 0 * * 0"
       compressionType: gzip
       storageName: aws-s3
