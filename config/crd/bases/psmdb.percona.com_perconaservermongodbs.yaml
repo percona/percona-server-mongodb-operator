@@ -534,7 +534,7 @@ spec:
                 type: object
               initImage:
                 type: string
-              logcollector:
+              logCollector:
                 properties:
                   configuration:
                     type: string
