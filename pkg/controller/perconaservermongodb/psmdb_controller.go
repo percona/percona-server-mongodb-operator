@@ -1191,12 +1191,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 
 func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.IsLogCollectorEnabled() {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logcollector.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log collector config map when log collector is disabled")
+		}
 		return nil
 	}
 
 	if cr.Spec.LogCollector.Configuration == "" {
 		if err := deleteConfigMapIfExists(ctx, r.client, cr, logcollector.ConfigMapName(cr.Name)); err != nil {
-			return errors.Wrap(err, "failed to delete log collector config map")
+			return errors.Wrap(err, "failed to delete log collector config map when the configuration is empty")
 		}
 		return nil
 	}
