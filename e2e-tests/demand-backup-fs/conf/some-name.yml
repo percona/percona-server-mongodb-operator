@@ -1,0 +1,63 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  finalizers:
+  - percona.com/delete-psmdb-pods-in-order
+  name: some-name
+spec:
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    pitr:
+      compressionLevel: 6
+      compressionType: gzip
+      enabled: true
+      oplogOnly: false
+      oplogSpanMin: 1
+    storages:
+      nfs:
+        filesystem:
+          path: /mnt/nfs/
+        type: filesystem
+    volumeMounts:
+    - mountPath: /mnt/nfs/
+      name: backup-nfs
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  imagePullPolicy: Always
+  pmm:
+    enabled: false
+    image: perconalab/pmm-client:dev-latest
+    serverHost: monitoring-service
+  replsets:
+  - name: rs0
+    size: 3
+    expose:
+      enabled: false
+      type: ClusterIP
+    podDisruptionBudget:
+      maxUnavailable: 1
+    resources:
+      limits:
+        cpu: 300m
+        memory: 0.5G
+      requests:
+        cpu: 300m
+        memory: 0.5G
+    sidecarVolumes:
+    - name: backup-nfs
+      nfs:
+        server: "nfs-service.storage.svc.cluster.local"
+        path: "/psmdb-some-name-rs0"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+  secrets:
+    users: some-users
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    apply: disabled
+    schedule: 0 2 * * *
+    setFCV: false
+    versionServiceEndpoint: https://check-dev.percona.com
