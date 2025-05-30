@@ -197,7 +197,7 @@ spec:
         - command:
             - bash
             - -c
-            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent
+            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent && install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint
           imagePullPolicy: Always
           name: pbm-init
           resources: {}
