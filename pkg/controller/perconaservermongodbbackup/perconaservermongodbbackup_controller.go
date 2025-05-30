@@ -139,10 +139,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
 
-		if cr.Status.State == psmdbv1.BackupStateError && status.State == "" {
-			return
-		}
-
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
@@ -181,6 +177,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		if err := r.setFailedStatus(ctx, cr, err); err != nil {
 			return rr, errors.Wrap(err, "update status")
 		}
+		status = cr.Status
 		return reconcile.Result{}, nil
 	}
 
@@ -193,11 +190,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			err := errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
-			if err := r.setFailedStatus(ctx, cr, err); err != nil {
-				return rr, errors.Wrap(err, "update status")
-			}
-			return reconcile.Result{}, err
+			return reconcile.Result{}, errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 		}
 	}
 
