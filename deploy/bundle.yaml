@@ -71,6 +71,9 @@ spec:
                 type: integer
               compressionType:
                 type: string
+              startingDeadlineSeconds:
+                format: int64
+                type: integer
               storageName:
                 type: string
               type:
@@ -1017,6 +1020,9 @@ spec:
                     type: string
                   serviceAccountName:
                     type: string
+                  startingDeadlineSeconds:
+                    format: int64
+                    type: integer
                   storages:
                     additionalProperties:
                       properties:

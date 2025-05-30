@@ -17,7 +17,8 @@ type PerconaServerMongoDBBackupSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
-	Type defs.BackupType `json:"type,omitempty"`
+	Type                    defs.BackupType `json:"type,omitempty"`
+	StartingDeadlineSeconds *int64          `json:"startingDeadlineSeconds,omitempty"`
 }
 
 type BackupState string
@@ -26,7 +27,6 @@ const (
 	BackupStateNew       BackupState = ""
 	BackupStateWaiting   BackupState = "waiting"
 	BackupStateRequested BackupState = "requested"
-	BackupStateRejected  BackupState = "rejected"
 	BackupStateRunning   BackupState = "running"
 	BackupStateError     BackupState = "error"
 	BackupStateReady     BackupState = "ready"
@@ -121,4 +121,9 @@ func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
 // GetClusterName returns ClusterName.
 func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
 	return p.ClusterName
+}
+
+func (p *PerconaServerMongoDBBackup) SetFailedStatusWithError(err error) {
+	p.Status.State = BackupStateError
+	p.Status.Error = err.Error()
 }

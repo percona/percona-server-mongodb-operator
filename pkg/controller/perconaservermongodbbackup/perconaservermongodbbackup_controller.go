@@ -144,6 +144,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
+
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
@@ -178,6 +179,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
+	if err := checkStartingDeadline(ctx, cluster, cr); err != nil {
+		if err := r.setFailedStatus(ctx, cr, err); err != nil {
+			return rr, errors.Wrap(err, "update status")
+		}
+		status = cr.Status
+		return reconcile.Result{}, nil
+	}
+
 	if cluster != nil {
 		var svr *version.ServerVersion
 		svr, err = version.Server(r.clientcmd)
@@ -187,7 +196,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+			return reconcile.Result{}, errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 		}
 	}
 
@@ -236,7 +245,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if err := cluster.CanBackup(ctx); err != nil {
-		return status, errors.Wrap(err, "failed to run backup")
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
 	}
 
 	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
@@ -626,4 +636,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 	}
 
 	return errors.Wrap(err, "write status")
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) setFailedStatus(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBBackup,
+	err error,
+) error {
+	cr.SetFailedStatusWithError(err)
+	return r.updateStatus(ctx, cr)
 }
