@@ -440,7 +440,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 		if cr.CompareVersion("1.20.0") >= 0 {
-			mongoDBURI = buildMongoDBURI(ctx, tlsEnabled, sslSecret)
+			mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
 		}
 
 		c.Env = append(c.Env, corev1.EnvVar{
@@ -471,7 +471,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	return c
 }
 
-func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
