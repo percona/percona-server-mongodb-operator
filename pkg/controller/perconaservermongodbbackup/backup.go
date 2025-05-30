@@ -198,6 +198,9 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
+		status.LastWriteAt = &metav1.Time{
+			Time: time.Unix(int64(meta.LastWriteTS.T), 0),
+		}
 	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
 		if passed >= pbmStartingDeadline {
