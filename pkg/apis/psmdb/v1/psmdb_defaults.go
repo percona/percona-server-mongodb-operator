@@ -929,7 +929,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	}
 }
 
-func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
+func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
 	if h.ReadinessProbe == nil {
 		h.ReadinessProbe = &corev1.Probe{}
 	}
@@ -941,6 +941,12 @@ func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
 				"k8s", "readiness",
 				"--component", "mongod",
 			},
+		}
+		if cr.TLSEnabled() {
+			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
 		}
 	}
 	if h.ReadinessProbe.InitialDelaySeconds < 1 {
@@ -971,7 +977,7 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 	}
 
 	h.setLivenessProbe(cr, rs)
-	h.setReadinessProbe(rs)
+	h.setReadinessProbe(cr, rs)
 
 	if len(h.ServiceAccountName) == 0 {
 		h.ServiceAccountName = WorkloadSA
