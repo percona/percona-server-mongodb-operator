@@ -97,6 +97,7 @@ type PerconaServerMongoDBSpec struct {
 	Users                        []User                               `json:"users,omitempty"`
 	Roles                        []Role                               `json:"roles,omitempty"`
 	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
+	LogCollector                 *LogCollectorSpec                    `json:"logcollector,omitempty"`
 }
 
 type UserRole struct {
@@ -1381,4 +1382,19 @@ func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
 	v, ok := cr.Annotations[AnnotationResyncInProgress]
 	return ok && v != ""
+}
+
+// LogCollectorSpec defines the configuration for enabling and customizing
+// the log collection component that stores logs in a PVC.
+type LogCollectorSpec struct {
+	Enabled                  bool                        `json:"enabled,omitempty"`
+	Image                    string                      `json:"image,omitempty"`
+	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
+	Configuration            string                      `json:"configuration,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+}
+
+func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
+	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
