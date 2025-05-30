@@ -22,6 +22,9 @@ spec:
     volumeMounts:
     - mountPath: /mnt/nfs/
       name: backup-nfs
+    containerSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1001210000
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
   pmm:
@@ -30,6 +33,7 @@ spec:
     serverHost: monitoring-service
   replsets:
   - name: rs0
+    size: 3
     expose:
       enabled: false
       type: ClusterIP
@@ -47,52 +51,21 @@ spec:
       nfs:
         server: "nfs-service.storage.svc.cluster.local"
         path: "/psmdb-some-name-rs0"
-    size: 3
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
             storage: 3Gi
+    serviceAccountName: psmdb-pods
+    containerSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1001210000
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1001210000
+      fsGroup: 1001210000
   secrets:
     users: some-users
-  sharding:
-    configsvrReplSet:
-      affinity:
-        antiAffinityTopologyKey: none
-      expose:
-        enabled: false
-        type: ClusterIP
-      podDisruptionBudget:
-        maxUnavailable: 1
-      resources:
-        limits:
-          cpu: 300m
-          memory: 0.5G
-        requests:
-          cpu: 300m
-          memory: 0.5G
-      size: 3
-      volumeSpec:
-        persistentVolumeClaim:
-          resources:
-            requests:
-              storage: 3Gi
-    enabled: false
-    mongos:
-      affinity:
-        antiAffinityTopologyKey: none
-      expose:
-        type: ClusterIP
-      podDisruptionBudget:
-        maxUnavailable: 1
-      resources:
-        limits:
-          cpu: 300m
-          memory: 0.5G
-        requests:
-          cpu: 300m
-          memory: 0.5G
-      size: 3
   updateStrategy: SmartUpdate
   upgradeOptions:
     apply: disabled
