@@ -168,6 +168,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrap(err, "get backup")
 	}
 
+	switch bcp.Status.State {
+	case psmdbv1.BackupStateError:
+		err = errors.New("backup is in error state")
+		return rr, nil
+	case psmdbv1.BackupStateReady:
+	default:
+		return reconcile.Result{}, errors.New("backup is not ready")
+	}
+
 	var svr *version.ServerVersion
 	svr, err = version.Server(r.clientcmd)
 	if err != nil {
@@ -178,16 +187,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
 	}
 
-	switch bcp.Status.State {
-	case psmdbv1.BackupStateError:
-		err = errors.New("backup is in error state")
-		return rr, nil
-	case psmdbv1.BackupStateReady:
-	default:
-		return reconcile.Result{}, errors.New("backup is not ready")
-	}
-
 	if cr.Status.State == psmdbv1.RestoreStateNew {
+		if cr.Spec.BackupSource.Filesystem != nil {
+
+		}
+
 		err := r.validate(ctx, cr, cluster)
 		if err != nil {
 			if errors.Is(err, errWaitingPBM) {
@@ -309,14 +313,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				StorageName: cr.Spec.StorageName,
 			},
 			Status: psmdbv1.PerconaServerMongoDBBackupStatus{
-				Type:        cr.Spec.BackupSource.Type,
-				State:       psmdbv1.BackupStateReady,
-				Destination: cr.Spec.BackupSource.Destination,
-				StorageName: cr.Spec.StorageName,
-				S3:          cr.Spec.BackupSource.S3,
-				Azure:       cr.Spec.BackupSource.Azure,
-				Filesystem:  cr.Spec.BackupSource.Filesystem,
-				PBMname:     backupName,
+				PBMname:      backupName,
+				Type:         cr.Spec.BackupSource.Type,
+				State:        psmdbv1.BackupStateReady,
+				Destination:  cr.Spec.BackupSource.Destination,
+				StorageName:  cr.Spec.StorageName,
+				S3:           cr.Spec.BackupSource.S3,
+				Azure:        cr.Spec.BackupSource.Azure,
+				Filesystem:   cr.Spec.BackupSource.Filesystem,
+				VolumeMounts: cr.Spec.BackupSource.VolumeMounts,
 			},
 		}, nil
 	}
@@ -402,10 +407,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 
 		_, err = pbmC.GetConfig(ctx)
 		if err == nil {
+			log.Info("Adding backup source as a profile", "profileName", profileName)
 			if err := pbmC.AddProfile(ctx, r.client, cluster, profileName, stg); err != nil {
 				return errors.Wrap(err, "add backup source as profile")
 			}
 
+			log.Info("Starting resync for the profile", "profileName", profileName)
 			if err := pbmC.ResyncProfileAndWait(ctx, profileName); err != nil {
 				return errors.Wrap(err, "start profile resync")
 			}

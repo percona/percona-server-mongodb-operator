@@ -153,6 +153,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 	case api.BackupStorageFilesystem:
 		status.Filesystem = &stg.Filesystem
 		status.Destination = strings.TrimSuffix(stg.Filesystem.Path, "/")
+		status.VolumeMounts = cluster.Spec.Backup.VolumeMounts
 	}
 	status.Destination += "/" + status.PBMname
 

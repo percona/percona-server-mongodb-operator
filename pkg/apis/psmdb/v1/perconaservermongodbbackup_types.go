@@ -3,6 +3,7 @@ package v1
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
@@ -47,6 +48,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	Filesystem     *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 	ReplsetNames   []string                     `json:"replsetNames,omitempty"`
 	PBMname        string                       `json:"pbmName,omitempty"`
+	VolumeMounts   []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 
 	// Deprecated: Use PBMPods instead
 	PBMPod               string            `json:"pbmPod,omitempty"`

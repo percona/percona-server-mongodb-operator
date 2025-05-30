@@ -1111,6 +1111,13 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.VolumeMounts != nil {
+		in, out := &in.VolumeMounts, &out.VolumeMounts
+		*out = make([]corev1.VolumeMount, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.PBMPods != nil {
 		in, out := &in.PBMPods, &out.PBMPods
 		*out = make(map[string]string, len(*in))
