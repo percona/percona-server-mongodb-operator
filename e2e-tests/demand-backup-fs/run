@@ -6,14 +6,11 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-if [[ "${OPENSHIFT}" ]]; then
-	echo "This test is not supported on OpenShift due to nfs privileged. See K8SPSMDB-1262"
-	exit 0
-fi
-
 deploy_nfs_server() {
+	local uid=$1
+
 	kubectl_bin create namespace storage
-	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yaml
+	kubectl_bin apply -n storage -f ${test_dir}/conf/nfs-server.yml
 	sleep 5 # wait for NFS server pod to be created
 
 	local nfsPod=$(kubectl_bin get pod -n storage -l app=nfs-server -o jsonpath={.items[].metadata.name})
@@ -23,7 +20,7 @@ deploy_nfs_server() {
 	done
 
 	kubectl_bin exec -n storage ${nfsPod} -- mkdir /exports/psmdb-${cluster}-rs0
-	kubectl_bin exec -n storage ${nfsPod} -- chown 1001:1001 /exports/psmdb-${cluster}-rs0
+	kubectl_bin exec -n storage ${nfsPod} -- chown ${uid}:${uid} /exports/psmdb-${cluster}-rs0
 }
 
 run_recovery_check() {
@@ -60,21 +57,35 @@ if [[ $GKE != 1 ]]; then
 	kubectl_bin annotate storageclass ${sc} storageclass.kubernetes.io/is-default-class=true
 fi
 
+uid=1001
+if [[ "${OPENSHIFT}" ]]; then
+	uid=1001210000
+fi
+
 log "deploying NFS server"
-deploy_nfs_server
+deploy_nfs_server ${uid}
 
 log 'creating secrets and start client'
 kubectl_bin apply \
 	-f "${conf_dir}/secrets.yml" \
 	-f "${conf_dir}/client.yml"
 
+if [[ "${OPENSHIFT}" ]]; then
+	log "creating custom security context constraints to allow NFS volumes"
+	kubectl_bin apply -f ${test_dir}/conf/rbac-oc.yml
+fi
+
 log "creating PSMDB cluster ${cluster}"
 if [[ $GKE != 1 ]]; then
+	cluster_yaml=${test_dir}/conf/${cluster}.yml
+	if [[ "${OPENSHIFT}" ]]; then
+		cluster_yaml=${test_dir}/conf/${cluster}-oc.yml
+	fi
+
 	nfs_ip=$(kubectl_bin -n storage get svc nfs-service -o jsonpath={.spec.clusterIP})
-	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${test_dir}/conf/${cluster}.yaml \
-		| kubectl_bin apply -f -
+	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${cluster_yaml} | kubectl_bin apply -f -
 else
-	apply_cluster ${test_dir}/conf/${cluster}.yaml
+	apply_cluster ${test_dir}/conf/${cluster}.yml
 fi
 
 log 'wait for all 3 pods to start'
