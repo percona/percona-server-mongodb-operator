@@ -804,7 +804,7 @@ spec:
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
-  logcollector:
+  logCollector:
     enabled: true
     image: perconalab/fluentbit:main-logcollector
 #    configuration: |

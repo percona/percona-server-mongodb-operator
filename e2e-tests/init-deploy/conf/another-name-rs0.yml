@@ -68,6 +68,6 @@ spec:
     size: 3
   secrets:
     users: some-users
-  logcollector:
+  logCollector:
     enabled: true
     image: perconalab/fluentbit:main-logcollector

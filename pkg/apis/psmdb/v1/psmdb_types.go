@@ -97,7 +97,7 @@ type PerconaServerMongoDBSpec struct {
 	Users                        []User                               `json:"users,omitempty"`
 	Roles                        []Role                               `json:"roles,omitempty"`
 	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
-	LogCollector                 *LogCollectorSpec                    `json:"logcollector,omitempty"`
+	LogCollector                 *LogCollectorSpec                    `json:"logCollector,omitempty"`
 }
 
 type UserRole struct {
