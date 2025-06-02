@@ -67,6 +67,8 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: LOGCOLLECTOR_ENABLED
+              value: "true"
           envFrom:
             - secretRef:
                 name: internal-another-name-users
@@ -157,6 +159,64 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+        - args:
+            - fluent-bit
+          command:
+            - /opt/percona/logcollector/entrypoint.sh
+          env:
+            - name: LOG_DATA_DIR
+              value: /data/db/logs
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          imagePullPolicy: IfNotPresent
+          name: logs
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
+        - args:
+            - logrotate
+          command:
+            - /opt/percona/logcollector/entrypoint.sh
+          env:
+            - name: MONGODB_HOST
+              value: localhost
+            - name: MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+                  name: internal-another-name-users
+                  optional: false
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+                  name: internal-another-name-users
+                  optional: false
+          imagePullPolicy: IfNotPresent
+          name: logrotate
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       dnsPolicy: ClusterFirst
       initContainers:
         - command:

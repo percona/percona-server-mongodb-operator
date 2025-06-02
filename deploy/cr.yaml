@@ -816,3 +816,15 @@ spec:
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
+#    configuration: |
+#      [SERVICE]
+#          Flush        1
+#          Log_Level    error
+#          Daemon       off
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m
