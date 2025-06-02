@@ -122,8 +122,3 @@ func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
 func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
 	return p.ClusterName
 }
-
-func (p *PerconaServerMongoDBBackup) SetFailedStatusWithError(err error) {
-	p.Status.State = BackupStateError
-	p.Status.Error = err.Error()
-}

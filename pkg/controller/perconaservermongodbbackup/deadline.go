@@ -10,10 +10,6 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-var (
-	errStartingDeadlineExceeded = errors.New("starting deadline seconds exceeded")
-)
-
 func checkStartingDeadline(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	log := logf.FromContext(ctx)
 
@@ -41,5 +37,5 @@ func checkStartingDeadline(ctx context.Context, cluster *psmdbv1.PerconaServerMo
 		"startingDeadlineSeconds", *deadlineSeconds,
 		"passedSeconds", since)
 
-	return errStartingDeadlineExceeded
+	return errors.New("starting deadline seconds exceeded")
 }
