@@ -97,6 +97,7 @@ type PerconaServerMongoDBSpec struct {
 	Users                        []User                               `json:"users,omitempty"`
 	Roles                        []Role                               `json:"roles,omitempty"`
 	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
+	LogCollector                 *LogCollectorSpec                    `json:"logcollector,omitempty"`
 }
 
 type UserRole struct {
@@ -943,9 +944,12 @@ type MongodSpecInMemory struct {
 }
 
 type BackupTaskSpec struct {
-	Name             string                   `json:"name"`
-	Enabled          bool                     `json:"enabled"`
-	Keep             int                      `json:"keep,omitempty"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	// Deprecated: Use Retention instead. This field will be removed in the future
+	Keep int `json:"keep,omitempty"`
+	// +optional
+	Retention        *BackupTaskSpecRetention `json:"retention,omitempty"`
 	Schedule         string                   `json:"schedule,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
@@ -953,6 +957,36 @@ type BackupTaskSpec struct {
 
 	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
+}
+
+func (task *BackupTaskSpec) GetRetention(cr *PerconaServerMongoDB) BackupTaskSpecRetention {
+	if task.Retention != nil && cr.CompareVersion("1.21.0") >= 0 {
+		return *task.Retention
+	}
+	return BackupTaskSpecRetention{
+		Type:              BackupTaskSpecRetentionTypeCount,
+		Count:             task.Keep,
+		DeleteFromStorage: true,
+	}
+}
+
+type BackupTaskSpecRetentionType string
+
+const (
+	BackupTaskSpecRetentionTypeCount = "count"
+)
+
+type BackupTaskSpecRetention struct {
+	// +kubebuilder:validation:Minimum=0
+	Count int `json:"count,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum={count}
+	Type string `json:"type,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default=true
+	DeleteFromStorage bool `json:"deleteFromStorage,omitempty"`
 }
 
 func (task *BackupTaskSpec) JobName(cr *PerconaServerMongoDB) string {
@@ -1380,4 +1414,19 @@ func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
 	v, ok := cr.Annotations[AnnotationResyncInProgress]
 	return ok && v != ""
+}
+
+// LogCollectorSpec defines the configuration for enabling and customizing
+// the log collection component that stores logs in a PVC.
+type LogCollectorSpec struct {
+	Enabled                  bool                        `json:"enabled,omitempty"`
+	Image                    string                      `json:"image,omitempty"`
+	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
+	Configuration            string                      `json:"configuration,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+}
+
+func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
+	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
