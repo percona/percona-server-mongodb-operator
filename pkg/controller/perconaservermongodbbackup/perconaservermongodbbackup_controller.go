@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -608,7 +609,25 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	// Step    Duration
+	// ----    --------
+	// 1       53.928563ms
+	// 2       76.894334ms
+	// 3       124.225991ms
+	// 4       193.871344ms
+	// 5       344.249248ms
+	// 6       393.157996ms
+	// 7       573.704031ms
+	// 8       1.001718413s
+	// 9       1.909888313s
+	// 10      2.378550138s
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 50 * time.Millisecond,
+		Factor:   1.5,
+		Jitter:   0.5,
+	}
+	err := retry.RetryOnConflict(backoff, func() error {
 		c := &psmdbv1.PerconaServerMongoDBBackup{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
