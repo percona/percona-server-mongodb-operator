@@ -480,6 +480,16 @@ if [[ $originalArgOne == mongo* ]]; then
 		_mongod_hack_rename_arg_save_val --sslDisabledProtocols --tlsDisabledProtocols "${mongodHackedArgs[@]}"
 	fi
 
+	if [[ $originalArgOne == "mongod" && ${LOGCOLLECTOR_ENABLED:-} == "true" ]]; then
+		mkdir -p /data/db/logs/
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
+		# https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
+		# the operator is using logrotate as part of the logcollector feature.
+		# using the rename option because logrotate performs db.adminCommand({ logRotate: 1 })
+		_mongod_hack_ensure_arg_val --logRotate rename "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
+	fi
+
 	set -- "${mongodHackedArgs[@]}"
 
 	# MongoDB 3.6+ defaults to localhost-only binding
