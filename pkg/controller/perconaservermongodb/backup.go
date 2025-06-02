@@ -55,46 +55,32 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
-	if cr.CompareVersion("1.13.0") < 0 {
-		cjob, err := backup.BackupCronJob(cr, &task)
-		if err != nil {
-			return errors.Wrap(err, "can't create job")
-		}
-		err = setControllerReference(cr, &cjob, r.scheme)
-		if err != nil {
-			return errors.Wrapf(err, "set owner reference for backup task %s", cjob.Name)
-		}
-
-		err = r.createOrUpdate(ctx, &cjob)
-		if err != nil {
-			return errors.Wrap(err, "create or update backup job")
-		}
-		return nil
-	}
 	t := BackupScheduleJob{}
 	bj, ok := r.crons.backupJobs.Load(task.JobName(cr))
 	if ok {
 		t = bj.(BackupScheduleJob)
+
+		if t.Schedule == task.Schedule && t.StorageName == task.StorageName {
+			return nil
+		}
 	}
 
-	if !ok || t.Schedule != task.Schedule || t.StorageName != task.StorageName {
-		logf.FromContext(ctx).Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
+	logf.FromContext(ctx).Info("Creating or updating backup job", "name", task.Name, "namespace", cr.Namespace, "schedule", task.Schedule)
 
-		r.deleteBackupTask(cr, t.BackupTaskSpec)
-		jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
-		if err != nil {
-			return errors.Wrapf(err, "can't parse cronjob schedule for backup %s with schedule %s", task.Name, task.Schedule)
-		}
-
-		if !ok && t.Type == defs.IncrementalBackup {
-			logf.FromContext(ctx).Info(".keep option does not work with incremental backups", "name", task.Name, "namespace", cr.Namespace)
-		}
-
-		r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
-			BackupTaskSpec: task,
-			JobID:          jobID,
-		})
+	r.deleteBackupTask(cr, t.BackupTaskSpec)
+	jobID, err := r.crons.crons.AddFunc(task.Schedule, r.createBackupTask(ctx, cr, task))
+	if err != nil {
+		return errors.Wrapf(err, "can't parse cronjob schedule for backup %s with schedule %s", task.Name, task.Schedule)
 	}
+
+	if !ok && t.Type == defs.IncrementalBackup {
+		logf.FromContext(ctx).Info(".keep option does not work with incremental backups", "name", task.Name, "namespace", cr.Namespace)
+	}
+
+	r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
+		BackupTaskSpec: task,
+		JobID:          jobID,
+	})
 	return nil
 }
 
@@ -108,22 +94,31 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 			if spec.Type == defs.IncrementalBackup {
 				return true
 			}
-			if spec.Keep > 0 {
-				oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, spec.Keep)
+
+			ret := spec.GetRetention(cr)
+			if ret.Type != api.BackupTaskSpecRetentionTypeCount {
+				log.Error(nil, "unsupported retention type", "type", ret.Type)
+				return true
+			}
+
+			if ret.Count <= 0 {
+				return true
+			}
+
+			oldjobs, err := r.oldScheduledBackups(ctx, cr, item.Name, ret.Count)
+			if err != nil {
+				log.Error(err, "failed to list old backups", "job", item.Name)
+				return true
+			}
+
+			for _, todel := range oldjobs {
+				err = r.client.Delete(ctx, &todel)
 				if err != nil {
-					log.Error(err, "failed to list old backups", "job", item.Name)
+					log.Error(err, "failed to delete backup object")
 					return true
 				}
-
-				for _, todel := range oldjobs {
-					err = r.client.Delete(ctx, &todel)
-					if err != nil {
-						log.Error(err, "failed to delete backup object")
-						return true
-					}
-				}
-
 			}
+
 		} else {
 			log.Info("deleting outdated backup job", "job", item.Name)
 			r.deleteBackupTask(cr, item.BackupTaskSpec)
