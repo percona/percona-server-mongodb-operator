@@ -355,7 +355,7 @@ get_mongod_pods() {
 	kubectl_bin get pod \
 		--no-headers \
 		-l app.kubernetes.io/instance=${cluster} \
-		-l app.kubernetes.io/component=mongod
+		-l app.kubernetes.io/component=mongod | awk '{print $1}'
 
 }
 
@@ -365,7 +365,7 @@ collect_physical_restore_logs() {
 
 	for pod in $(get_mongod_pods ${cluster}); do
 		desc "pbm-agent logs from ${pod}"
-		kubectl_bin exec -it ${pod} -- cat /tmp/pbm-agent.log || true
+		kubectl_bin exec ${pod} -- cat /tmp/pbm-agent.log || echo "failed to get /tmp/pbm-agent.log from ${pod}"
 	done
 }
 
