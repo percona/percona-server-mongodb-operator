@@ -57,6 +57,9 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		}()
 		rs, err := client.RSStatus(ctx)
 		if err != nil {
+			if errors.Is(err, mongo.ErrInvalidReplsetConfig) {
+				return nil, nil
+			}
 			return nil, err
 		}
 		return &rs, nil

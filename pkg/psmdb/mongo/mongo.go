@@ -375,11 +375,18 @@ func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig, force 
 	return nil
 }
 
+var ErrInvalidReplsetConfig = errors.New("invalid replicaset config")
+
 func (client *mongoClient) RSStatus(ctx context.Context) (Status, error) {
 	status := Status{}
 
 	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetGetStatus", Value: 1}})
 	if resp.Err() != nil {
+		if cmdErr, ok := resp.Err().(mongo.CommandError); ok {
+			if cmdErr.Code == 93 {
+				return status, ErrInvalidReplsetConfig
+			}
+		}
 		return status, errors.Wrap(resp.Err(), "replSetGetStatus")
 	}
 
