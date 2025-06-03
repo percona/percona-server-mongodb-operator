@@ -1738,7 +1738,7 @@ write_document() {
 	local cmp_postfix="$1"
 	local sleep_value=${2:-0}
 
-	desc 'write initial data, read from all'
+	log 'write initial data, read from all'
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
@@ -1855,6 +1855,8 @@ check_recovery() {
 	echo
 	set -o xtrace
 
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3
 	wait_for_running $cluster-mongos 3
 	sleep 10
 
