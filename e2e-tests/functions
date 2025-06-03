@@ -435,7 +435,7 @@ wait_restore() {
 
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
 			kubectl_bin describe psmdb-restore restore-${backup_name}
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
+			echo "Restore object restore-${backup_name} is in ${current_state} state after ${retry} minutes."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -1951,7 +1951,7 @@ check_recovery() {
 	fi
 
 	# fail faster if we don't reach requested status until some time
-	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "1200"
 	echo
 	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
 	echo

@@ -737,6 +737,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 
 			podZero := rs.PodName(cluster, 0)
 
+			if pod.Name == podZero {
+				log.Info(fmt.Sprintf("%s is already primary", podZero))
+				return nil
+			}
+
 			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name)
 			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name)
 
