@@ -418,29 +418,27 @@ wait_restore() {
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
 		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
-			echo "OK"
+			echo "OK after ${retry} minutes"
 			break
 		fi
 		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
-
 			if is_physical_backup ${backup_name}; then
 				collect_physical_restore_logs
 			fi
 
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+				| grep "restore-${backup_name}" \
+				| tail -100
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
 			kubectl_bin describe psmdb-restore restore-${backup_name}
+
 			echo "Restore object restore-${backup_name} is in ${current_state} state after ${retry} minutes."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
-	echo "OK"
+	echo "OK after ${retry} minutes"
 	set_debug
 
 	if [[ $wait_cluster_consistency -eq 1 ]]; then

@@ -727,29 +727,30 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 		for _, pod := range podList.Items {
 			isMaster, err := r.runIsMaster(ctx, cluster, &pod)
 			if err != nil {
+				log.V(1).Error(err, "failed to run db.hello()", "pod", pod.Name, "replset", rs.Name)
 				continue
 			}
 
 			if !isMaster {
-				log.V(1).Info("Skipping secondary pod", "pod", pod.Name)
+				log.V(1).Info("Skipping secondary pod", "pod", pod.Name, "replset", rs.Name)
 				continue
 			}
 
 			podZero := rs.PodName(cluster, 0)
 
 			if pod.Name == podZero {
-				log.Info(fmt.Sprintf("%s is already primary", podZero))
-				return nil
+				log.Info(fmt.Sprintf("%s is already primary", podZero), "replset", rs.Name)
+				continue
 			}
 
-			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name)
-			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name)
+			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name, "replset", rs.Name)
+			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name, "replset", rs.Name)
 
 			if err = r.makePrimary(ctx, cluster, &pod, podZero); err != nil {
 				return errors.Wrapf(err, "make %s primary", podZero)
 			}
 
-			log.Info("Stepping down the current primary", "primary", pod.Name, "pod", pod.Name)
+			log.Info("Stepping down the current primary", "primary", pod.Name, "pod", pod.Name, "replset", rs.Name)
 			if err = r.stepDown(ctx, cluster, &pod); err != nil {
 				return errors.Wrap(err, "step down")
 			}
@@ -783,6 +784,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 		}
 
 		if !isMaster {
+			log.Info(fmt.Sprintf("%s must be elected as primary before starting physical restore", pod.Name), "replset", rs.Name)
 			return false, nil
 		}
 
