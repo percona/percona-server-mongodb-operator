@@ -13,6 +13,7 @@ spec:
 #  pause: true
 #  unmanaged: false
 #  enableVolumeExpansion: false
+#  enableExternalVolumeAutoscaling: false
   crVersion: 1.21.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
