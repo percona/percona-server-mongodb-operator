@@ -815,7 +815,10 @@ compare_kubectl() {
 	fi
 
 	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
-		diff -u "$expected_result" "$new_result"
+		if ! diff -u "$expected_result" "$new_result"; then
+			log "compare_kubectl ($(caller)) failed with diff"
+			exit 1
+		fi
 	else
 		cp ${new_result} ${expected_result}
 	fi
