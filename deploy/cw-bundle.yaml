@@ -1184,6 +1184,8 @@ spec:
                 type: string
               crVersion:
                 type: string
+              enableExternalVolumeAutoscaling:
+                type: boolean
               enableVolumeExpansion:
                 type: boolean
               ignoreAnnotations:
