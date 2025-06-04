@@ -41,12 +41,12 @@ check_backup_deletion() {
 
 drop_metadata_and_resync() {
 	local psmdb_backup_count=$(kubectl get psmdb-backup --no-headers | wc -l)
-	log "there are ${initial_backup_count} psmdb-backups in ${namespace}"
+	log "there are ${psmdb_backup_count} psmdb-backups in ${namespace}"
 
 	drop_collection admin pbmBackups backup backup123456
 	kubectl_bin annotate psmdb ${cluster} percona.com/resync-pbm=true
 
-	sleep 10 # wait for resync to start
+	sleep_with_log 10 "wait resync to start" # minio buckets are basically empty, resync should finish very quickly
 
 	local retries=0
 
@@ -145,7 +145,7 @@ wait_for_restorable_time() {
 		fi
 		let retries+=1
 		echo -n .
-		sleep 70 # wait for oplog span min + 10 sec
+		sleep_with_log 70 "wait for oplog span min + 10 sec"
 	done
 	echo ".OK latestRestorableTime: ${latest_restorable_time}"
 }
@@ -168,7 +168,7 @@ wait_for_advanced_restorable_time() {
 		fi
 		let retries+=1
 		echo -n .
-		sleep 70 # wait for oplog span min + 10 sec
+		sleep_with_log 70 "wait for oplog span min + 10 sec"
 	done
 	echo ".OK latestRestorableTime: $(timestamp_to_datetime ${latest_restorable_time})"
 }
@@ -278,13 +278,14 @@ write_document 100505
 
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}"
 
+sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
 wait_for_restorable_time backup-minio-3
 wait_for_advanced_restorable_time backup-minio-3
 restore_time=$(get_latest_restorable_time backup-minio-3)
 check_recovery backup-minio-3 "$(format_pitr_target ${restore_time})"
 
-log "sleeping for 60 seconds for resync to finish"
-sleep 60 # minio buckets are basically empty, resync should finish very quickly
+sleep_with_log 60 "wait resync to finish" # minio buckets are basically empty, resync should finish very quickly
 
 log "changing main storage from minio-1 to minio-2"
 kubectl patch psmdb ${cluster} --type=json -p='[
@@ -292,8 +293,7 @@ kubectl patch psmdb ${cluster} --type=json -p='[
   {"op": "add", "path": "/spec/backup/storages/minio-2/main", "value": true}
 ]'
 
-log "sleeping for 60 seconds for resync to finish"
-sleep 60 # minio buckets are basically empty, resync should finish very quickly
+sleep_with_log 60 "wait resync to finish" # minio buckets are basically empty, resync should finish very quickly
 
 run_backup minio-2 backup-minio-2-1 logical
 wait_backup backup-minio-2-1
