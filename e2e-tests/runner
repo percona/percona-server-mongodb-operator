@@ -1,0 +1,31 @@
+#!/bin/bash
+
+desc() {
+	local msg="$@"
+	printf "\n\n-----------------------------------------------------------------------------------\n"
+	printf "$msg"
+	printf "\n-----------------------------------------------------------------------------------\n\n"
+}
+
+TEST_NAME=$1
+
+desc "starting test ${TEST_NAME}"
+
+if ! ./e2e-tests/${TEST_NAME}/run; then
+	echo ""
+
+	desc "Kubernetes nodes"
+	kubectl get node
+
+	desc "Pods"
+	kubectl get pod
+
+	kubectl get events --sort-by='.lastTimestamp' > ${TEST_NAME}_events.txt
+	kubectl logs -l app.kubernetes.io/component=operator > ${TEST_NAME}_operator.txt
+
+	desc "${TEST_NAME} failed"
+	exit 1
+fi
+
+desc "${TEST_NAME} passed"
+exit 0

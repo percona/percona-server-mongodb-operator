@@ -1,6 +1,10 @@
 #!/bin/bash
 
-set -o errexit
+set -o errexit # exit on errors
+set -o errtrace # inherits trap on ERR in function and subshell
+
+trap 'traperror $? $LINENO $BASH_LINENO "$BASH_COMMAND" $(printf "::%s" ${FUNCNAME[@]:-})' ERR
+trap 'trapexit $? $LINENO' EXIT
 
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
