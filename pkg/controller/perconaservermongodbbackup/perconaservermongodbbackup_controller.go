@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +38,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+const controllerName = "psmdbbackup-controller"
+
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -58,6 +61,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:     mgr.GetClient(),
 		apiReader:  mgr.GetAPIReader(),
 		scheme:     mgr.GetScheme(),
+		recorder:   mgr.GetEventRecorderFor(controllerName),
 		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
 	}, nil
@@ -67,7 +71,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
-		Named("psmdbbackup-controller").
+		Named(controllerName).
 		For(&psmdbv1.PerconaServerMongoDBBackup{}).
 		Watches(
 			&corev1.Pod{},
@@ -90,6 +94,7 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	apiReader client.Reader
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
 }
@@ -146,6 +151,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
+			r.recorder.Event(cr, "Warning", "BackupStateChanged", fmt.Sprintf("%s -> %s", cr.Status.State, status.State))
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {

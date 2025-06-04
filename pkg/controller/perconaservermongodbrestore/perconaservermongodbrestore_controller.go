@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+const controllerName = "psmdbrestore-controller"
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -55,6 +58,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:     mgr.GetClient(),
 		scheme:     mgr.GetScheme(),
 		clientcmd:  cli,
+		recorder:   mgr.GetEventRecorderFor(controllerName),
 		newPBMFunc: backup.NewPBM,
 	}, nil
 }
@@ -62,7 +66,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
-		Named("psmdbrestore-controller").
+		Named(controllerName).
 		For(&psmdbv1.PerconaServerMongoDBRestore{}).
 		Watches(
 			&corev1.Pod{},
@@ -84,6 +88,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
 }
@@ -124,6 +129,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
+			r.recorder.Event(cr, "Warning", "RestoreStateChanged", fmt.Sprintf("%s -> %s", cr.Status.State, status.State))
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
@@ -202,15 +208,20 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 					"pbmName", bcp.Status.PBMname,
 					"storage", bcp.Status.StorageName)
 
+				r.recorder.Event(cr, "Warning", "ResyncNeeded", "PBM resync is needed")
 				if err := r.resyncStorage(ctx, cluster, cr); err != nil {
 					return reconcile.Result{}, errors.Wrap(err, "resync storage")
 				}
+
+				r.recorder.Event(cr, "Warning", "ResyncDone", "PBM resync is finished")
 
 				return rr, nil
 			}
 
 			return rr, errors.Wrap(err, "failed to validate restore")
 		}
+
+		r.recorder.Event(cr, "Normal", "RestoreValid", "Restore validated")
 
 		if cluster.Spec.Sharding.Enabled {
 			_, err := psmdb.GetMongosSts(ctx, r.client, cluster)
@@ -237,6 +248,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				log.Info("Waiting for mongos pods to terminate")
 				return rr, nil
 			}
+
+			r.recorder.Event(cr, "Normal", "MongosTerminated", "All mongos pods are terminated")
 		}
 	}
 
