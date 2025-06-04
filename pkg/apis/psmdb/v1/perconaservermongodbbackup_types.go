@@ -11,15 +11,14 @@ import (
 
 // PerconaServerMongoDBBackupSpec defines the desired state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupSpec struct {
-	// Deprecated: Use ClusterName instead
-	PSMDBCluster     string                   `json:"psmdbCluster,omitempty"` // TODO: Remove after v1.15
 	ClusterName      string                   `json:"clusterName,omitempty"`
 	StorageName      string                   `json:"storageName,omitempty"`
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
-	Type defs.BackupType `json:"type,omitempty"`
+	Type                    defs.BackupType `json:"type,omitempty"`
+	StartingDeadlineSeconds *int64          `json:"startingDeadlineSeconds,omitempty"`
 }
 
 type BackupState string
@@ -28,7 +27,6 @@ const (
 	BackupStateNew       BackupState = ""
 	BackupStateWaiting   BackupState = "waiting"
 	BackupStateRequested BackupState = "requested"
-	BackupStateRejected  BackupState = "rejected"
 	BackupStateRunning   BackupState = "running"
 	BackupStateError     BackupState = "error"
 	BackupStateReady     BackupState = "ready"
@@ -36,24 +34,27 @@ const (
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
-	Type           defs.BackupType              `json:"type,omitempty"`
-	State          BackupState                  `json:"state,omitempty"`
-	StartAt        *metav1.Time                 `json:"start,omitempty"`
-	CompletedAt    *metav1.Time                 `json:"completed,omitempty"`
-	LastTransition *metav1.Time                 `json:"lastTransition,omitempty"`
-	Destination    string                       `json:"destination,omitempty"`
-	StorageName    string                       `json:"storageName,omitempty"`
-	S3             *BackupStorageS3Spec         `json:"s3,omitempty"`
-	Azure          *BackupStorageAzureSpec      `json:"azure,omitempty"`
-	Filesystem     *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
-	ReplsetNames   []string                     `json:"replsetNames,omitempty"`
-	PBMname        string                       `json:"pbmName,omitempty"`
+	Type         defs.BackupType              `json:"type,omitempty"`
+	State        BackupState                  `json:"state,omitempty"`
+	Destination  string                       `json:"destination,omitempty"`
+	StorageName  string                       `json:"storageName,omitempty"`
+	S3           *BackupStorageS3Spec         `json:"s3,omitempty"`
+	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
+	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	ReplsetNames []string                     `json:"replsetNames,omitempty"`
+	PBMname      string                       `json:"pbmName,omitempty"`
+	Size         string                       `json:"size,omitempty"`
 
 	// Deprecated: Use PBMPods instead
-	PBMPod               string            `json:"pbmPod,omitempty"`
-	PBMPods              map[string]string `json:"pbmPods,omitempty"`
-	Error                string            `json:"error,omitempty"`
-	LatestRestorableTime *metav1.Time      `json:"latestRestorableTime,omitempty"`
+	PBMPod  string            `json:"pbmPod,omitempty"`
+	PBMPods map[string]string `json:"pbmPods,omitempty"`
+	Error   string            `json:"error,omitempty"`
+
+	StartAt              *metav1.Time `json:"start,omitempty"`
+	CompletedAt          *metav1.Time `json:"completed,omitempty"`
+	LastWriteAt          *metav1.Time `json:"lastWriteAt,omitempty"`
+	LastTransition       *metav1.Time `json:"lastTransition,omitempty"`
+	LatestRestorableTime *metav1.Time `json:"latestRestorableTime,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -67,6 +68,7 @@ type PerconaServerMongoDBBackupStatus struct {
 // +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName",description="Storage name"
 // +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination",description="Backup destination"
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".status.type",description="Backup type"
+// +kubebuilder:printcolumn:name="Size",type=string,JSONPath=".status.size",description="Backup size"
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.state",description="Job status"
 // +kubebuilder:printcolumn:name="Completed",type=date,JSONPath=".status.completed",description="Completed time"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
@@ -92,7 +94,7 @@ func (p *PerconaServerMongoDBBackup) CheckFields() error {
 		return fmt.Errorf("spec storageName field is empty")
 	}
 	if len(p.Spec.GetClusterName()) == 0 {
-		return fmt.Errorf("spec clusterName and deprecated psmdbCluster fields are empty")
+		return fmt.Errorf("spec clusterName is empty")
 	}
 	if string(p.Spec.Type) == "" {
 		p.Spec.Type = defs.LogicalBackup
@@ -118,11 +120,7 @@ func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
 	return p.Spec.Type == BackupTypeIncrementalBase
 }
 
-// GetClusterName returns ClusterName if it's not empty. Otherwise, it will return PSMDBCluster.
-// TODO: Remove after v1.15
+// GetClusterName returns ClusterName.
 func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
-	if len(p.ClusterName) > 0 {
-		return p.ClusterName
-	}
-	return p.PSMDBCluster
+	return p.ClusterName
 }

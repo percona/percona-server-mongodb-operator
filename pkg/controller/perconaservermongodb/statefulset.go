@@ -13,6 +13,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
@@ -26,11 +27,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	}
 
 	switch ls[naming.LabelKubernetesComponent] {
-	case "arbiter":
+	case naming.ComponentArbiter:
 		pdbspec = rs.Arbiter.PodDisruptionBudget
-	case "nonVoting":
+	case naming.ComponentNonVoting:
 		pdbspec = rs.NonVoting.PodDisruptionBudget
 		volumeSpec = rs.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		pdbspec = rs.Hidden.PodDisruptionBudget
+		volumeSpec = rs.Hidden.VolumeSpec
 	}
 
 	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
@@ -76,18 +80,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + rs.Name
-	configName := psmdb.MongodCustomConfigName(cr.Name, rs.Name)
+	mongodCustomConfigName := naming.MongodCustomConfigName(cr, rs)
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
 		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 
 	switch ls[naming.LabelKubernetesComponent] {
-	case "arbiter":
-		sfsName += "-arbiter"
-	case "nonVoting":
-		sfsName += "-nv"
-		configName = psmdb.MongodCustomConfigName(cr.Name, rs.Name+"-nv")
+	case naming.ComponentArbiter:
+		sfsName += "-" + naming.ComponentArbiter
+	case naming.ComponentNonVoting:
+		sfsName += "-" + naming.ComponentNonVotingShort
+		mongodCustomConfigName = naming.NonVotingConfigMapName(cr, rs)
+	case naming.ComponentHidden:
+		sfsName += "-" + naming.ComponentHidden
+		mongodCustomConfigName = naming.HiddenConfigMapName(cr, rs)
 	}
 
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
@@ -101,9 +108,14 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, configName)
+	mongodCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, mongodCustomConfigName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
+	}
+
+	logCollectionCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
+	if err != nil {
+		return nil, errors.Wrap(err, "check if log collection custom configuration exists")
 	}
 
 	usersSecret := new(corev1.Secret)
@@ -118,7 +130,17 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
-	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, rs, ls, r.initImage, customConfig, psmdb.StatefulSpecSecretParams{UsersSecret: usersSecret, SSLSecret: sslSecret})
+	sfsSpec, err := psmdb.StatefulSpec(
+		ctx, cr, rs, ls, r.initImage,
+		psmdb.StatefulConfigParams{
+			MongoDConf:        mongodCustomConfig,
+			LogCollectionConf: logCollectionCustomConfig,
+		},
+		psmdb.StatefulSpecSecretParams{
+			UsersSecret: usersSecret,
+			SSLSecret:   sslSecret,
+		},
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}

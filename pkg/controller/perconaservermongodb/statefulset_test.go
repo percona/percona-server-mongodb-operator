@@ -14,7 +14,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestReconcileStatefulSet(t *testing.T) {
@@ -31,6 +31,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 	}
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
+	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -48,43 +49,57 @@ func TestReconcileStatefulSet(t *testing.T) {
 			name:        "rs0-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   "mongod",
+			component:   naming.ComponentMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-mongod.yaml"),
 		},
 		{
 			name:        "rs0-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   "arbiter",
+			component:   naming.ComponentArbiter,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-arbiter.yaml"),
 		},
 		{
 			name:        "rs0-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   "nonVoting",
+			component:   naming.ComponentNonVoting,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-nv.yaml"),
+		},
+		{
+			name:        "rs0-hidden",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentHidden,
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-hidden.yaml"),
 		},
 		{
 			name:        "cfg-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   "mongod",
+			component:   naming.ComponentMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
 		},
 		{
 			name:        "cfg-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   "arbiter",
+			component:   naming.ComponentArbiter,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
 		},
 		{
 			name:        "cfg-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   "nonVoting",
+			component:   naming.ComponentNonVoting,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
+		},
+		{
+			name:        "cfg-hidden",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			component:   naming.ComponentHidden,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
 		},
 	}
 
@@ -111,12 +126,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 			var ls map[string]string
 			switch tt.component {
-			case "mongod":
+			case naming.ComponentMongod:
 				ls = naming.MongodLabels(tt.cr, rs)
-			case "arbiter":
+			case naming.ComponentArbiter:
 				ls = naming.ArbiterLabels(tt.cr, rs)
-			case "nonVoting":
+			case naming.ComponentNonVoting:
 				ls = naming.NonVotingLabels(tt.cr, rs)
+			case naming.ComponentHidden:
+				ls = naming.HiddenLabels(tt.cr, rs)
 			default:
 				t.Fatalf("unexpected component: %s", tt.component)
 			}

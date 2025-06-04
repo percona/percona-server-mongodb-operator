@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,8 +151,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
-			return (strings.Contains(err.Error(), "another operation") ||
-				strings.Contains(err.Error(), "unable to upgrade connection"))
+			return strings.Contains(err.Error(), "another operation") ||
+				strings.Contains(err.Error(), "unable to upgrade connection")
 		}, func() error {
 			log.Info("Starting restore", "command", restoreCommand, "pod", pod.Name)
 
@@ -189,10 +190,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	meta := backup.BackupMeta{}
 
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return (strings.Contains(err.Error(), "container is not created or running") ||
+		return strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "unmarshal PBM describe-restore output"))
+			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
 		stderrBuf.Reset()
@@ -293,6 +294,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				}
 			}
 
+			if rs.Hidden.Enabled {
+				stsName := naming.HiddenStatefulSetName(cluster, rs)
+
+				log.Info("Deleting statefulset", "statefulset", stsName)
+
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				if err := r.client.Delete(ctx, &sts); err != nil {
+					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
+				}
+			}
+
 			if rs.Arbiter.Enabled {
 				stsName := naming.ArbiterStatefulSetName(cluster, rs)
 
@@ -344,7 +362,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Appending a volume for backup configuration.
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
-func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName) error {
+func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
+	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32) error {
 	log := logf.FromContext(ctx)
 
 	sts := appsv1.StatefulSet{}
@@ -361,7 +380,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 
 	cmd := []string{
 		"bash", "-c",
-		"install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent",
+		strings.Join([]string{
+			"install -D /usr/bin/pbm /opt/percona/pbm",
+			"install -D /usr/bin/pbm-agent /opt/percona/pbm-agent",
+			"install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
+		}, " && "),
 	}
 	pbmInit := psmdb.EntrypointInitContainer(
 		cluster,
@@ -443,6 +466,29 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+
+	sslSecret := new(corev1.Secret)
+	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "check ssl secrets")
+	}
+
+	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+	if cluster.CompareVersion("1.21.0") >= 0 {
+		mongoDBURI = psmdb.BuildMongoDBURI(ctx, cluster.TLSEnabled(), sslSecret)
+
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
+			{
+				Name:  "PBM_AGENT_TLS_ENABLED",
+				Value: strconv.FormatBool(cluster.TLSEnabled()),
+			},
+			{
+				Name:  "PBM_MONGODB_PORT",
+				Value: strconv.Itoa(int(port)),
+			},
+		}...)
+	}
+
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -453,8 +499,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			},
 		},
 		{
+			// This environment variable must be appended last because it may reference
+			// other variables using the $(VAR_NAME) syntax, which only resolves correctly
+			// if those variables are already defined above.
 			Name:  "PBM_MONGODB_URI",
-			Value: "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)",
+			Value: mongoDBURI,
 		},
 	}...)
 
@@ -493,7 +542,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 		log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+			return r.updateStatefulSetForPhysicalRestore(ctx, cluster, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}, rs.GetPort())
 		})
 		if err != nil {
 			return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -506,7 +555,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn)
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn, rs.GetPort())
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if rs.Hidden.Enabled {
+			stsName := naming.HiddenStatefulSetName(cluster, rs)
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				return r.updateStatefulSetForPhysicalRestore(ctx, cluster, nn, rs.GetPort())
 			})
 			if err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -585,74 +648,61 @@ func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Co
 	return creds, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, cmd []string) (*bytes.Buffer, *bytes.Buffer, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, eval string) (*bytes.Buffer, *bytes.Buffer, error) {
 	log := logf.FromContext(ctx)
 
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "cmd failed (stdout: %s, stderr: %s)", stdoutBuf.String(), stderrBuf.String())
+	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
+	if err != nil {
+		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
 	}
-	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
+
+	mongo60, err := cluster.CompareMongoDBVersion("6.0")
+	if err != nil {
+		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
+	}
+
+	mongoClient := "mongo"
+	if mongo60 >= 0 {
+		mongoClient = "mongosh"
+	}
+
+	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
+
+	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
+		return stdoutBuf, stderrBuf, errors.Wrapf(err, "'%s' failed in %s (stdout: %s, stderr: %s)", eval, pod.Name, stdoutBuf.String(), stderrBuf.String())
+	}
+	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String(), "pod", pod.Name, "eval", eval)
 
 	return stdoutBuf, stderrBuf, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) runIsMaster(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
-	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
+	stdoutBuf, _, err := r.runMongosh(ctx, cluster, pod, "db.hello().isWritablePrimary")
 	if err != nil {
-		return false, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
-	}
-
-	mongo60, err := cluster.CompareMongoDBVersion("6.0")
-	if err != nil {
-		return false, errors.Wrap(err, "compare mongo version")
-	}
-
-	mongoClient := "mongo"
-	if mongo60 >= 0 {
-		mongoClient = "mongosh"
-	}
-
-	c := strings.Join([]string{
-		mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", "'db.isMaster().ismaster'",
-		"|", "tail", "-n", "1",
-		"|", "grep", "-Eo", "'(true|false)'",
-	}, " ")
-	cmd := []string{"bash", "-c", c}
-
-	stdoutBuf, _, err := r.runMongosh(ctx, cluster, pod, cmd)
-	if err != nil {
-		return false, errors.Wrap(err, "run isMaster")
+		return false, errors.Wrap(err, "run db.hello()")
 	}
 
 	return strings.TrimSuffix(stdoutBuf.String(), "\n") == "true", nil
 }
 
+func (r *ReconcilePerconaServerMongoDBRestore) stepDown(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) error {
+	_, _, err := r.runMongosh(ctx, cluster, pod, "rs.stepDown()")
+	if err != nil {
+		return errors.Wrap(err, "run rs.stepDown()")
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDBRestore) makePrimary(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, targetPod string) error {
 	jsTempl := `cfg = rs.config(); podZero = cfg.members.find(member => member.tags.podName === "%s"); podZero.priority += 1; rs.reconfig(cfg)`
 
-	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
+	_, _, err := r.runMongosh(ctx, cluster, pod, fmt.Sprintf(jsTempl, targetPod))
 	if err != nil {
-		return errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
-	}
-
-	mongo60, err := cluster.CompareMongoDBVersion("6.0")
-	if err != nil {
-		return errors.Wrap(err, "compare mongo version")
-	}
-
-	mongoClient := "mongo"
-	if mongo60 >= 0 {
-		mongoClient = "mongosh"
-	}
-
-	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", fmt.Sprintf(jsTempl, targetPod)}
-
-	_, _, err = r.runMongosh(ctx, cluster, pod, cmd)
-	if err != nil {
-		return errors.Wrap(err, "run isMaster")
+		return errors.Wrapf(err, "reconfigure replset in %s", pod.Name)
 	}
 
 	return nil
@@ -677,17 +727,32 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore
 		for _, pod := range podList.Items {
 			isMaster, err := r.runIsMaster(ctx, cluster, &pod)
 			if err != nil {
+				log.V(1).Error(err, "failed to run db.hello()", "pod", pod.Name, "replset", rs.Name)
 				continue
 			}
 
 			if !isMaster {
-				log.V(1).Info("Skipping secondary pod", "pod", pod.Name)
+				log.V(1).Info("Skipping secondary pod", "pod", pod.Name, "replset", rs.Name)
 				continue
 			}
 
 			podZero := rs.PodName(cluster, 0)
+
+			if pod.Name == podZero {
+				log.Info(fmt.Sprintf("%s is already primary", podZero), "replset", rs.Name)
+				continue
+			}
+
+			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name, "replset", rs.Name)
+			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name, "replset", rs.Name)
+
 			if err = r.makePrimary(ctx, cluster, &pod, podZero); err != nil {
 				return errors.Wrapf(err, "make %s primary", podZero)
+			}
+
+			log.Info("Stepping down the current primary", "primary", pod.Name, "pod", pod.Name, "replset", rs.Name)
+			if err = r.stepDown(ctx, cluster, &pod); err != nil {
+				return errors.Wrap(err, "step down")
 			}
 		}
 	}
@@ -719,6 +784,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 		}
 
 		if !isMaster {
+			log.Info(fmt.Sprintf("%s must be elected as primary before starting physical restore", pod.Name), "replset", rs.Name)
 			return false, nil
 		}
 
@@ -832,6 +898,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhy
 				return false, nil
 			}
 		}
+
+		if rs.Hidden.Enabled {
+			ready, err := r.checkStatefulSetForPhysicalRestore(ctx, cluster, rs, naming.ComponentHidden)
+			if err != nil {
+				return false, errors.Wrapf(err, "check %s %s statefulset", rs.Name, naming.ComponentHidden)
+			}
+
+			if !ready {
+				return false, nil
+			}
+		}
 	}
 
 	return true, nil
@@ -845,9 +922,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 ) (bool, error) {
 	log := logf.FromContext(ctx)
 
-	stsName := naming.MongodStatefulSetName(cluster, rs)
-	if component == naming.ComponentNonVoting {
+	var stsName string
+	switch component {
+	case naming.ComponentMongod:
+		stsName = naming.MongodStatefulSetName(cluster, rs)
+	case naming.ComponentNonVoting:
 		stsName = naming.NonVotingStatefulSetName(cluster, rs)
+	case naming.ComponentHidden:
+		stsName = naming.HiddenStatefulSetName(cluster, rs)
 	}
 
 	sts := appsv1.StatefulSet{}
@@ -916,6 +998,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Cont
 
 	if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
 		return "", errors.Wrap(err, "unmarshal PBM status output")
+	}
+
+	if len(pbmStatus.Backups.Chunks.Timelines) < 1 {
+		return "", errors.New("no oplog chunks")
 	}
 
 	latest := pbmStatus.Backups.Chunks.Timelines[len(pbmStatus.Backups.Chunks.Timelines)-1].Range.End

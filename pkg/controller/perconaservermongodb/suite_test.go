@@ -21,7 +21,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -106,6 +106,6 @@ func readDefaultCR(name, namespace string) (*psmdbv1.PerconaServerMongoDB, error
 
 	cr.Name = name
 	cr.Namespace = namespace
-	cr.Spec.InitImage = "percona/percona-server-mongodb-operator:1.20.1"
+	cr.Spec.InitImage = "perconalab/percona-server-mongodb-operator:main"
 	return cr, nil
 }

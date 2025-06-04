@@ -18,6 +18,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // Service returns a core/v1 API Service
@@ -37,7 +38,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       mongodPortName,
+					Name:       config.MongodPortName,
 					Port:       replset.GetPort(),
 					TargetPort: intstr.FromInt(int(replset.GetPort())),
 				},
@@ -85,7 +86,7 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       mongodPortName,
+				Name:       config.MongodPortName,
 				Port:       replset.GetPort(),
 				TargetPort: intstr.FromInt(int(replset.GetPort())),
 			},
@@ -146,7 +147,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 	case corev1.ServiceTypeClusterIP:
 		addr.Host = svc.Spec.ClusterIP
 		for _, p := range svc.Spec.Ports {
-			if p.Name != mongodPortName {
+			if p.Name != config.MongodPortName {
 				continue
 			}
 			addr.Port = int(p.Port)
@@ -159,7 +160,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 		}
 		addr.Host = host
 		for _, p := range svc.Spec.Ports {
-			if p.Name != mongodPortName {
+			if p.Name != config.MongodPortName {
 				continue
 			}
 			addr.Port = int(p.Port)
@@ -168,7 +169,7 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 	case corev1.ServiceTypeNodePort:
 		addr.Host = pod.Status.HostIP
 		for _, p := range svc.Spec.Ports {
-			if p.Name != mongodPortName {
+			if p.Name != config.MongodPortName {
 				continue
 			}
 			addr.Port = int(p.NodePort)

@@ -10,6 +10,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
@@ -20,22 +21,22 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 
 	volumes := []corev1.VolumeMount{
 		{
-			Name:      MongodDataVolClaimName,
-			MountPath: MongodContainerDataDir,
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
 		},
 		{
 			Name:      ikeyName,
-			MountPath: mongodSecretsDir,
+			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl",
-			MountPath: SSLDir,
+			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
 		{
 			Name:      "ssl-internal",
-			MountPath: sslInternalDir,
+			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
 	}
@@ -43,29 +44,29 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
-			MountPath: mongodConfigDir,
+			MountPath: config.MongodConfigDir,
 		})
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: BinVolumeName, MountPath: BinMountPath})
+		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
-				Name:      LDAPTLSVolClaimName,
-				MountPath: ldapTLSDir,
+				Name:      config.LDAPTLSVolClaimName,
+				MountPath: config.LDAPTLSDir,
 				ReadOnly:  true,
 			},
 			{
-				Name:      LDAPConfVolClaimName,
-				MountPath: ldapConfDir,
+				Name:      config.LDAPConfVolClaimName,
+				MountPath: config.LDAPConfDir,
 			},
 		}...)
 	}
 
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return corev1.Container{}, err
 	}
@@ -74,7 +75,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			volumes = append(volumes,
 				corev1.VolumeMount{
 					Name:      cr.Spec.Secrets.Vault,
-					MountPath: vaultDir,
+					MountPath: config.VaultDir,
 					ReadOnly:  true,
 				},
 			)
@@ -108,7 +109,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		Args:            containerArgs(ctx, cr, replset, resources, useConfigFile),
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          mongodPortName,
+				Name:          config.MongodPortName,
 				HostPort:      int32(0),
 				ContainerPort: replset.GetPort(),
 			},
@@ -141,7 +142,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 				},
 			},
 		},
-		WorkingDir:      MongodContainerDataDir,
+		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &livenessProbe.Probe,
 		ReadinessProbe:  readinessProbe,
 		Resources:       resources,
@@ -164,7 +165,16 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{BinMountPath + "/ps-entry.sh"}
+		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 {
+		if cr.IsLogCollectorEnabled() {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "LOGCOLLECTOR_ENABLED",
+				Value: "true",
+			})
+		}
 	}
 
 	return container, nil
@@ -176,7 +186,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	args := []string{
 		"--bind_ip_all",
 		"--auth",
-		"--dbpath=" + MongodContainerDataDir,
+		"--dbpath=" + config.MongodContainerDataDir,
 		"--port=" + strconv.Itoa(int(replset.GetPort())),
 		"--replSet=" + replset.Name,
 		"--storageEngine=" + string(replset.Storage.Engine),
@@ -195,7 +205,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
 		args = append(args,
 			"--clusterAuthMode=keyFile",
-			"--keyFile="+mongodSecretsDir+"/mongodb-key",
+			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
 		)
 	} else if cr.TLSEnabled() {
 		args = append(args, "--clusterAuthMode=x509")
@@ -213,7 +223,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args = append(args, "--shardsvr")
 	}
 
-	encryptionEnabled, err := isEncryptionEnabled(cr, replset)
+	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to check if mongo encryption enabled")
 	}
@@ -269,7 +279,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	}
 
 	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
-		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", mongodConfigDir))
+		args = append(args, fmt.Sprintf("--config=%s/mongod.conf", config.MongodConfigDir))
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && replset.Configuration.QuietEnabled() {
@@ -292,13 +302,13 @@ func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64
 	if subtract1GB {
-		size = math.Floor(cacheRatio * float64(maxMemory.Value()-gigaByte))
+		size = math.Floor(cacheRatio * float64(maxMemory.Value()-config.GigaByte))
 	} else {
 		size = math.Floor(cacheRatio * float64(maxMemory.Value()))
 	}
-	sizeGB := size / float64(gigaByte)
-	if sizeGB < minWiredTigerCacheSizeGB {
-		sizeGB = minWiredTigerCacheSizeGB
+	sizeGB := size / float64(config.GigaByte)
+	if sizeGB < config.MinWiredTigerCacheSizeGB {
+		sizeGB = config.MinWiredTigerCacheSizeGB
 	}
 	return sizeGB
 }

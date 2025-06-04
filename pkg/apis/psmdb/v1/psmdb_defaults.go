@@ -18,7 +18,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
@@ -511,12 +511,26 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
+
+		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
+			return errors.Wrap(err, "set nonvoting defaults")
+		}
 	}
 
 	if cr.Spec.Backup.Enabled {
-		for _, bkpTask := range cr.Spec.Backup.Tasks {
+		for i := range cr.Spec.Backup.Tasks {
+			bkpTask := &cr.Spec.Backup.Tasks[i]
+
+			if bkpTask.Name == "" {
+				return errors.Errorf("backup task %d should have a name", i)
+			}
 			if string(bkpTask.CompressionType) == "" {
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
+			}
+
+			if cr.CompareVersion("1.21.0") >= 0 && bkpTask.Keep > 0 && bkpTask.Retention != nil && bkpTask.Retention.Count == 0 {
+				log.Info(".spec.backup.tasks[].keep will be deprecated in the future. Consider using .spec.backup.tasks[].retention.count instead", "task", bkpTask.Name)
+				continue
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
@@ -633,6 +647,21 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	return nil
 }
 
+func (rs *ReplsetSpec) IsEncryptionEnabled() (bool, error) {
+	enabled, err := rs.Configuration.isEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
+	}
+
+	if enabled == nil {
+		if rs.Storage.Engine == StorageEngineInMemory {
+			return false, nil // disabled for inMemory engine by default
+		}
+		return true, nil // true by default
+	}
+	return *enabled, nil
+}
+
 // SetDefaults set default options for the replset
 func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
@@ -734,6 +763,16 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
+	if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+		encryptionEnabled, err := rs.IsEncryptionEnabled()
+		if err != nil {
+			return errors.Wrap(err, "failed to parse replset configuration")
+		}
+		if encryptionEnabled {
+			return errors.New("inMemory storage engine doesn't support encryption")
+		}
+	}
+
 	return nil
 }
 
@@ -829,7 +868,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ServiceAccountName = WorkloadSA
 	}
 
-	nv.MultiAZ.reconcileOpts(cr)
+	//nolint:staticcheck
+	if err := nv.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s nonVoting", rs.Name)
+	}
 
 	if nv.ContainerSecurityContext == nil {
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
@@ -840,6 +882,113 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 
 	if err := nv.Configuration.SetDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set configuration defaults")
+	}
+
+	return nil
+}
+
+func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
+	if h.LivenessProbe == nil {
+		h.LivenessProbe = new(LivenessProbeExtended)
+	}
+	if h.LivenessProbe.InitialDelaySeconds < 1 {
+		h.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
+	}
+	if h.LivenessProbe.TimeoutSeconds < 1 {
+		h.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
+	}
+	if h.LivenessProbe.PeriodSeconds < 1 {
+		h.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
+	}
+	if h.LivenessProbe.FailureThreshold < 1 {
+		h.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
+	}
+	if h.LivenessProbe.StartupDelaySeconds < 1 {
+		h.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
+	}
+	if h.LivenessProbe.Exec == nil {
+		h.LivenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		if cr.TLSEnabled() {
+			h.LivenessProbe.Exec.Command = append(
+				h.LivenessProbe.Exec.Command,
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+			)
+		}
+	}
+	startupDelaySecondsFlag := "--startupDelaySeconds"
+	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		h.LivenessProbe.Exec.Command = append(
+			h.LivenessProbe.Exec.Command,
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+	}
+}
+
+func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
+	if h.ReadinessProbe == nil {
+		h.ReadinessProbe = &corev1.Probe{}
+	}
+
+	if h.ReadinessProbe.TCPSocket == nil && h.ReadinessProbe.Exec == nil {
+		h.ReadinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
+			},
+		}
+	}
+	if h.ReadinessProbe.InitialDelaySeconds < 1 {
+		h.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
+	}
+	if h.ReadinessProbe.TimeoutSeconds < 1 {
+		h.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
+	}
+	if h.ReadinessProbe.PeriodSeconds < 1 {
+		h.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
+	}
+	if h.ReadinessProbe.FailureThreshold < 1 {
+		h.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
+	}
+}
+
+func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !h.Enabled {
+		return nil
+	}
+
+	if h.VolumeSpec != nil {
+		if err := h.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		h.VolumeSpec = rs.VolumeSpec
+	}
+
+	h.setLivenessProbe(cr, rs)
+	h.setReadinessProbe(rs)
+
+	if len(h.ServiceAccountName) == 0 {
+		h.ServiceAccountName = WorkloadSA
+	}
+
+	//nolint:staticcheck
+	if err := h.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s-hidden", rs.Name)
+	}
+
+	if h.ContainerSecurityContext == nil {
+		h.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if h.PodSecurityContext == nil {
+		h.PodSecurityContext = rs.PodSecurityContext
+	}
+
+	if err := h.Configuration.SetDefaults(); err != nil {
 		return errors.Wrap(err, "failed to set configuration defaults")
 	}
 

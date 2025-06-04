@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+create_infra "${namespace}"
+
+deploy_minio
+apply_s3_storage_secrets
+
+desc 'Testing on not sharded cluster'
+
+echo 'Creating PSMDB cluster'
+cluster="some-name"
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+echo 'Check if all pods started'
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency ${cluster}
+
+sleep 60 # give time for resync to start
+
+wait_for_pbm_operations ${cluster}
+
+echo 'Writing test data'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+
+echo 'Running backups'
+backup_name_minio="backup-minio"
+run_backup minio ${backup_name_minio} 'physical'
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	backup_name_aws="backup-aws-s3"
+	backup_name_gcp="backup-gcp-cs"
+	backup_name_azure="backup-azure-blob"
+
+	run_backup aws-s3 ${backup_name_aws} 'physical'
+	run_backup gcp-cs ${backup_name_gcp} 'physical'
+	run_backup azure-blob ${backup_name_azure} 'physical'
+
+	wait_backup "${backup_name_aws}"
+	check_backup_in_storage ${backup_name_aws} s3 rs0
+
+	wait_backup "${backup_name_gcp}"
+	check_backup_in_storage ${backup_name_gcp} gcs rs0
+
+	wait_backup "${backup_name_azure}"
+	check_backup_in_storage ${backup_name_azure} azure rs0
+fi
+wait_backup "${backup_name_minio}"
+check_backup_in_storage ${backup_name_minio} minio rs0
+
+destroy "$namespace"
+
+desc 'test passed'
