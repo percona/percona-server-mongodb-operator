@@ -69,35 +69,36 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause                        bool                                 `json:"pause,omitempty"`
-	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
-	CRVersion                    string                               `json:"crVersion,omitempty"`
-	Platform                     *version.Platform                    `json:"platform,omitempty"`
-	Image                        string                               `json:"image"`
-	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
-	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
-	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
-	Backup                       BackupSpec                           `json:"backup,omitempty"`
-	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
-	PMM                          PMMSpec                              `json:"pmm,omitempty"`
-	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
-	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	SchedulerName                string                               `json:"schedulerName,omitempty"`
-	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
-	ClusterServiceDNSMode        DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
-	Sharding                     Sharding                             `json:"sharding,omitempty"`
-	InitImage                    string                               `json:"initImage,omitempty"`
-	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
-	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
-	TLS                          *TLSSpec                             `json:"tls,omitempty"`
-	Users                        []User                               `json:"users,omitempty"`
-	Roles                        []Role                               `json:"roles,omitempty"`
-	VolumeExpansionEnabled       bool                                 `json:"enableVolumeExpansion,omitempty"`
-	LogCollector                 *LogCollectorSpec                    `json:"logcollector,omitempty"`
+	Pause                           bool                                 `json:"pause,omitempty"`
+	Unmanaged                       bool                                 `json:"unmanaged,omitempty"`
+	CRVersion                       string                               `json:"crVersion,omitempty"`
+	Platform                        *version.Platform                    `json:"platform,omitempty"`
+	Image                           string                               `json:"image"`
+	ImagePullSecrets                []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
+	UnsafeConf                      bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                          UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	IgnoreLabels                    []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations               []string                             `json:"ignoreAnnotations,omitempty"`
+	Replsets                        []*ReplsetSpec                       `json:"replsets,omitempty"`
+	Secrets                         *SecretsSpec                         `json:"secrets,omitempty"`
+	Backup                          BackupSpec                           `json:"backup,omitempty"`
+	ImagePullPolicy                 corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
+	PMM                             PMMSpec                              `json:"pmm,omitempty"`
+	UpdateStrategy                  appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	UpgradeOptions                  UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	SchedulerName                   string                               `json:"schedulerName,omitempty"`
+	ClusterServiceDNSSuffix         string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode           DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
+	Sharding                        Sharding                             `json:"sharding,omitempty"`
+	InitImage                       string                               `json:"initImage,omitempty"`
+	InitContainerSecurityContext    *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
+	MultiCluster                    MultiCluster                         `json:"multiCluster,omitempty"`
+	TLS                             *TLSSpec                             `json:"tls,omitempty"`
+	Users                           []User                               `json:"users,omitempty"`
+	Roles                           []Role                               `json:"roles,omitempty"`
+	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
+	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
+	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
 }
 
 type UserRole struct {
@@ -1106,6 +1107,7 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
+	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
