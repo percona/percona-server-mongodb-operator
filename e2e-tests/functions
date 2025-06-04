@@ -80,6 +80,14 @@ log() {
 	set_debug
 }
 
+sleep_with_log() {
+	local d=$1
+	local msg=$2
+
+	log "${msg}. sleeping for ${d} seconds"
+	sleep ${d}
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
@@ -229,6 +237,10 @@ wait_backup_agent() {
 	set_debug
 }
 
+print_operator_logs() {
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+}
+
 wait_backup() {
 	local backup_name=$1
 	local target_state=${2:-"ready"}
@@ -243,15 +255,10 @@ wait_backup() {
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
 		if [[ $retry -ge 600 || ${current_status} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -200
+			print_operator_logs | tail -n 200
 			kubectl_bin get psmdb-backup
+			kubectl_bin describe psmdb-backup/${backup_name}
 			echo "Backup object psmdb-backup/${backup_name} is in ${current_status} state."
-			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
@@ -356,7 +363,7 @@ get_mongod_pods() {
 	kubectl_bin get pod \
 		--no-headers \
 		-l app.kubernetes.io/instance=${cluster} \
-		-l app.kubernetes.io/component=mongod
+		-l app.kubernetes.io/component=mongod | awk '{print $1}'
 
 }
 
@@ -366,7 +373,7 @@ collect_physical_restore_logs() {
 
 	for pod in $(get_mongod_pods ${cluster}); do
 		desc "pbm-agent logs from ${pod}"
-		kubectl_bin exec -it ${pod} -- cat /tmp/pbm-agent.log || true
+		kubectl_bin exec ${pod} -- cat /tmp/pbm-agent.log || echo "failed to get /tmp/pbm-agent.log from ${pod}"
 	done
 }
 
@@ -411,29 +418,27 @@ wait_restore() {
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
 		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
-			echo "OK"
+			echo "OK after ${retry} minutes"
 			break
 		fi
 		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
-
 			if is_physical_backup ${backup_name}; then
 				collect_physical_restore_logs
 			fi
 
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+				| grep "restore-${backup_name}" \
+				| tail -100
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
 			kubectl_bin describe psmdb-restore restore-${backup_name}
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
+
+			echo "Restore object restore-${backup_name} is in ${current_state} state after ${retry} minutes."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
-	echo "OK"
+	echo "OK after ${retry} minutes"
 	set_debug
 
 	if [[ $wait_cluster_consistency -eq 1 ]]; then
@@ -808,7 +813,10 @@ compare_kubectl() {
 	fi
 
 	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
-		diff -u "$expected_result" "$new_result"
+		if ! diff -u "$expected_result" "$new_result"; then
+			log "compare_kubectl ($(caller)) failed with diff"
+			exit 1
+		fi
 	else
 		cp ${new_result} ${expected_result}
 	fi
@@ -1833,7 +1841,7 @@ write_document() {
 	local cmp_postfix="$1"
 	local sleep_value=${2:-0}
 
-	desc 'write initial data, read from all'
+	log 'write initial data, read from all'
 	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
 		"myApp:myPass@$cluster-mongos.$namespace"
@@ -1944,12 +1952,14 @@ check_recovery() {
 	fi
 
 	# fail faster if we don't reach requested status until some time
-	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "1200"
 	echo
 	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
 	echo
 	set -o xtrace
 
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3
 	wait_for_running $cluster-mongos 3
 	sleep 10
 

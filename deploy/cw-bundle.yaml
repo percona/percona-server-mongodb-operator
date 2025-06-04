@@ -113,6 +113,9 @@ spec:
               lastTransition:
                 format: date-time
                 type: string
+              lastWriteAt:
+                format: date-time
+                type: string
               latestRestorableTime:
                 format: date-time
                 type: string
@@ -272,6 +275,9 @@ spec:
                     - path
                     type: object
                   lastTransition:
+                    format: date-time
+                    type: string
+                  lastWriteAt:
                     format: date-time
                     type: string
                   latestRestorableTime:
@@ -1108,6 +1114,22 @@ spec:
                           type: integer
                         name:
                           type: string
+                        retention:
+                          properties:
+                            count:
+                              minimum: 0
+                              type: integer
+                            deleteFromStorage:
+                              default: true
+                              type: boolean
+                            type:
+                              enum:
+                              - count
+                              type: string
+                          required:
+                          - deleteFromStorage
+                          - type
+                          type: object
                         schedule:
                           type: string
                         storageName:
