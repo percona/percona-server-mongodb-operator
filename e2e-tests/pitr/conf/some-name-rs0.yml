@@ -22,7 +22,6 @@ spec:
       enabled: true
       oplogSpanMin: 2
       oplogOnly: false
-      oplogSpanMin: 10
       compressionType: gzip
       compressionLevel: 6
   replsets:
