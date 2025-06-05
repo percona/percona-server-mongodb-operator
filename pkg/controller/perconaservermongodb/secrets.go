@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -18,10 +19,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
-func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
+func getSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
 	secrets := corev1.Secret{}
 	err := cl.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, &secrets)
-	return secrets, errors.Wrap(err, "get user secrets")
+	return secrets, err
 }
 
 func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (psmdb.Credentials, error) {
@@ -30,7 +31,7 @@ func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.Perco
 
 func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.SystemUserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
-	usersSecret, err := getUserSecret(ctx, cl, cr, name)
+	usersSecret, err := getSecret(ctx, cl, cr, name)
 	if err != nil {
 		return creds, errors.Wrap(err, "failed to get user secret")
 	}
@@ -62,7 +63,65 @@ func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServer
 	return creds, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) ensureSecretExistence(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Secrets == nil {
+		return nil
+	}
+
+	if cr.Spec.Secrets.Users != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.Users); err != nil {
+			return fmt.Errorf("users '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.Users, err)
+		}
+	}
+
+	if cr.Spec.Secrets.SSL != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSL); err != nil {
+			return fmt.Errorf("ssl '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSL, err)
+		}
+	}
+
+	if cr.Spec.Secrets.SSLInternal != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSLInternal); err != nil {
+			return fmt.Errorf("ssl internal '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSLInternal, err)
+		}
+	}
+
+	if cr.Spec.Secrets.InternalKey != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.InternalKey); err != nil {
+			return fmt.Errorf("internal key '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.InternalKey, err)
+		}
+	}
+
+	if cr.Spec.Secrets.EncryptionKey != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.EncryptionKey); err != nil {
+			return fmt.Errorf("encryption key '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.EncryptionKey, err)
+		}
+	}
+
+	if cr.Spec.Secrets.Vault != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.Vault); err != nil {
+			return fmt.Errorf("vault '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.Vault, err)
+		}
+	}
+
+	if cr.Spec.Secrets.SSE != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSE); err != nil {
+			return fmt.Errorf("sse '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSE, err)
+		}
+	}
+
+	if cr.Spec.Secrets.LDAPSecret != "" {
+		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.LDAPSecret); err != nil {
+			return fmt.Errorf("ldap '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.LDAPSecret, err)
+		}
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsersSecret")
+
 	secretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -116,6 +175,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	if err != nil {
 		return fmt.Errorf("create Users secret: %v", err)
 	}
+
+	log.Info("Created user secrets", "secret", cr.Spec.Secrets.Users)
 
 	return nil
 }
