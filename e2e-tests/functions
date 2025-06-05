@@ -695,6 +695,12 @@ wait_for_running() {
 			timeout=$((timeout + 1))
 			echo -n '.'
 			if [[ ${timeout} -gt 1500 ]]; then
+				kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+					| grep -v 'level=info' \
+					| grep -v 'level=debug' \
+					| grep -v 'Getting tasks for pod' \
+					| grep -v 'Getting pods from source' \
+					| tail -200
 				echo
 				echo "Waiting timeout has been reached. Exiting..."
 				exit 1
