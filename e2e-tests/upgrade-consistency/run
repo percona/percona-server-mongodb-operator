@@ -24,9 +24,9 @@ main() {
 	compare_kubectl service/${CLUSTER}-rs0 "-1191"
 	compare_kubectl statefulset/${CLUSTER}-rs0 "-1191"
 
-	desc 'test 1.20.0'
+	desc 'test 1.20.1'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.20.0"}
+        "spec": {"crVersion":"1.20.1"}
     }'
 	# Wait for at least one reconciliation
 	sleep 10
@@ -34,8 +34,8 @@ main() {
 	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1200"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1200"
+	compare_kubectl service/${CLUSTER}-rs0 "-1201"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1201"
 
 	desc 'test 1.21.0'
 	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
