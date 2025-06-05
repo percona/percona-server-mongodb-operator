@@ -70,49 +70,49 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecretExistence(ctx context.Contex
 
 	if cr.Spec.Secrets.Users != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.Users); err != nil {
-			return fmt.Errorf("users '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.Users, err)
+			return fmt.Errorf("users '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.Users, err)
 		}
 	}
 
 	if cr.Spec.Secrets.SSL != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSL); err != nil {
-			return fmt.Errorf("ssl '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSL, err)
+			return fmt.Errorf("ssl '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.SSL, err)
 		}
 	}
 
 	if cr.Spec.Secrets.SSLInternal != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSLInternal); err != nil {
-			return fmt.Errorf("ssl internal '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSLInternal, err)
+			return fmt.Errorf("ssl internal '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.SSLInternal, err)
 		}
 	}
 
 	if cr.Spec.Secrets.InternalKey != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.InternalKey); err != nil {
-			return fmt.Errorf("internal key '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.InternalKey, err)
+			return fmt.Errorf("internal key '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.InternalKey, err)
 		}
 	}
 
 	if cr.Spec.Secrets.EncryptionKey != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.EncryptionKey); err != nil {
-			return fmt.Errorf("encryption key '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.EncryptionKey, err)
+			return fmt.Errorf("encryption key '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.EncryptionKey, err)
 		}
 	}
 
 	if cr.Spec.Secrets.Vault != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.Vault); err != nil {
-			return fmt.Errorf("vault '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.Vault, err)
+			return fmt.Errorf("vault '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.Vault, err)
 		}
 	}
 
 	if cr.Spec.Secrets.SSE != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.SSE); err != nil {
-			return fmt.Errorf("sse '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.SSE, err)
+			return fmt.Errorf("sse '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.SSE, err)
 		}
 	}
 
 	if cr.Spec.Secrets.LDAPSecret != "" {
 		if _, err := getSecret(ctx, r.client, cr, cr.Spec.Secrets.LDAPSecret); err != nil {
-			return fmt.Errorf("ldap '%s' secret must exist if specified in the in the manifest: %w", cr.Spec.Secrets.LDAPSecret, err)
+			return fmt.Errorf("ldap '%s' secret must exist if specified in the manifest: %w", cr.Spec.Secrets.LDAPSecret, err)
 		}
 	}
 
