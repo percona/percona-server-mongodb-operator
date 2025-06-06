@@ -1,0 +1,32 @@
+name: E2E Python Quality Check
+
+on:
+  push:
+    paths:
+      - 'e2e-tests/**/*.py'
+  pull_request:
+    paths:
+      - 'e2e-tests/**/*.py'
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        
+      - name: Set up Python
+        run: uv python install 3.13
+        
+      - name: Install dependencies
+        run: uv sync
+        
+      - name: Run ruff check
+        run: uv run ruff check e2e-tests/
+        
+      - name: Run mypy
+        run: uv run mypy e2e-tests/
