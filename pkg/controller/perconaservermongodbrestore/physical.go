@@ -290,7 +290,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	finished, err := r.finishPhysicalRestore(ctx, cluster)
 	if err != nil {
 		log.Error(err, "Failed to recover the cluster after the restore")
-		// status.State = psmdbv1.RestoreStateReady
 		return status, nil
 	}
 	if !finished {
