@@ -949,10 +949,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
 	ready := true
 	if err := r.iterateOverMongodSts(ctx, cluster, func(s *appsv1.StatefulSet) error {
 		if s.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter || !ready {
