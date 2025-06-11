@@ -39,14 +39,13 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
-
-var secretFileMode int32 = 288
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -344,6 +343,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	if err := r.reconcileMongosConfigMap(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos config map")
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 {
+		if err := r.reconcileLogCollectorConfigMaps(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "reconcile log collector config map")
+		}
 	}
 
 	if cr.CompareVersion("1.5.0") >= 0 {
@@ -1180,6 +1185,44 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Con
 	err := r.createOrUpdateConfigMap(ctx, cr, cm)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.IsLogCollectorEnabled() {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logcollector.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log collector config map when log collector is disabled")
+		}
+		return nil
+	}
+
+	if cr.Spec.LogCollector.Configuration == "" {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logcollector.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log collector config map when the configuration is empty")
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      logcollector.ConfigMapName(cr.Name),
+			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			logcollector.FluentBitCustomConfigurationFile: cr.Spec.LogCollector.Configuration,
+		},
+	}
+
+	err := r.createOrUpdateConfigMap(ctx, cr, cm)
+	if err != nil {
+		return errors.Wrap(err, "create or update config map")
 	}
 
 	return nil

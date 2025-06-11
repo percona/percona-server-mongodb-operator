@@ -28,7 +28,7 @@ if [[ -z ${PBM_AGENT_TLS_ENABLED} ]] || [[ ${PBM_AGENT_TLS_ENABLED} == "true" ]]
 	fi
 fi
 
-/opt/percona/pbm-agent >${PBM_AGENT_LOG} 2>&1 &
+PATH=${PATH}:/opt/percona /opt/percona/pbm-agent-entrypoint >${PBM_AGENT_LOG} 2>&1 &
 pbm_pid=$!
 
 /opt/percona/ps-entry.sh "$@" >${MONGOD_LOG} 2>&1 &
@@ -39,5 +39,5 @@ echo "Physical restore in progress... pbm-agent logs: ${PBM_AGENT_LOG} mongod lo
 echo "Script PID: $$, pbm-agent PID: $pbm_pid, mongod PID: $mongod_pid"
 while true; do
     echo "Still in progress at $(date)"
-    sleep 10
+    sleep 120
 done

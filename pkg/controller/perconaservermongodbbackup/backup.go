@@ -25,7 +25,7 @@ import (
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
 	pbmStartingDeadline       = time.Duration(120) * time.Second
-	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
+	pbmStartingDeadlineErrMsg = "backup did not progress from 'starting' state within the allowed timeout"
 )
 
 var defaultBackoff = wait.Backoff{
@@ -197,6 +197,9 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
+		}
+		status.LastWriteAt = &metav1.Time{
+			Time: time.Unix(int64(meta.LastWriteTS.T), 0),
 		}
 	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
