@@ -1,55 +1,66 @@
 import os
 import subprocess
+import pytest
 from pathlib import Path
 from typing import List, Tuple
 
-import pytest
 
-
-def get_bash_tests() -> List[Tuple[str, Path]]:
-    """Find all bash test scripts in the same directory as this test file"""
+def get_bash_tests(test_suite: str = "") -> List[Tuple[str, Path]]:
+    """Get bash test scripts from file or all directories"""
     current_dir = Path(__file__).parent
     bash_tests: List[Tuple[str, Path]] = []
-    
-    for test_dir in current_dir.iterdir():
-        if test_dir.is_dir():
-            run_script = test_dir / "run"
-            if run_script.exists():
-                bash_tests.append((test_dir.name, run_script))
+
+    if test_suite:
+        file_path = current_dir / f"run-{test_suite}.csv"
+        if not file_path.exists():
+            raise FileNotFoundError(f"Test suite file not found: {file_path}")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            test_names = [line.strip() for line in f if line.strip()]
+    else:
+        test_names = [d.name for d in current_dir.iterdir() if d.is_dir()]
+
+    for test_name in test_names:
+        test_dir = current_dir / test_name
+        run_script = test_dir / "run"
+        if run_script.exists():
+            bash_tests.append((test_name, run_script))
 
     return bash_tests
 
 
-bash_tests = get_bash_tests()
+def pytest_generate_tests(metafunc):
+    """Generate tests dynamically"""
+    if "test_name" in metafunc.fixturenames and "script_path" in metafunc.fixturenames:
+        test_suite = metafunc.config.getoption("--test-suite")
+        bash_tests = get_bash_tests(test_suite)
+        metafunc.parametrize(
+            "test_name,script_path", bash_tests, ids=[name for name, _ in bash_tests]
+        )
 
 
-@pytest.mark.parametrize(
-    "test_name,script_path", bash_tests, ids=[name for name, _ in bash_tests]
-)
 def test_e2e(test_name: str, script_path: Path) -> None:
     """Run bash script and check exit code"""
-
-    original_cwd: str = os.getcwd()
-    script_dir: Path = script_path.parent
+    original_cwd = os.getcwd()
+    script_dir = script_path.parent
 
     try:
         os.chdir(script_dir)
-        result: subprocess.CompletedProcess[str] = subprocess.run(
-            ["bash", "run"], capture_output=True, text=True
-        )
+        result = subprocess.run(["bash", "run"], capture_output=True, text=True)
 
         if result.returncode != 0:
-            print(f"\nSTDOUT:\n{result.stdout}")
-            print(f"\nSTDERR:\n{result.stderr}")
+            error_msg = f"""
+Test {test_name} failed with exit code {result.returncode}
 
-            k8s_result: subprocess.CompletedProcess[str] = subprocess.run(
-                ["kubectl", "get", "nodes"], capture_output=True, text=True
-            )
-            print(f"\nK8s LOGS:\n{k8s_result.stdout}")
+STDOUT:
+{result.stdout}
 
-        assert result.returncode == 0, (
-            f"Test {test_name} failed with exit code {result.returncode}"
-        )
+STDERR:
+{result.stderr}
+"""
+            pytest.fail(error_msg)
+
+        assert result.returncode == 0
 
     finally:
         os.chdir(original_cwd)

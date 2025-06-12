@@ -14,3 +14,11 @@ dependencies = [
 
 [tool.pytest.ini_options]
 addopts = "--html=e2e-tests/reports/report.html --self-contained-html --json-report --json-report-file=e2e-tests/reports/report.json --junitxml=e2e-tests/reports/report.xml"
+render_collapsed = "all"
+
+[[tool.mypy.overrides]]
+module = ["pytest_html.*"]
+follow_untyped_imports = true
+
+[tool.ruff]
+line-length = 99

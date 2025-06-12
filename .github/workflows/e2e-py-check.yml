@@ -1,9 +1,6 @@
-name: E2E Python Quality Check
+name: e2e-tests Python Quality Check
 
 on:
-  push:
-    paths:
-      - 'e2e-tests/**/*.py'
   pull_request:
     paths:
       - 'e2e-tests/**/*.py'
@@ -17,13 +14,15 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
         
       - name: Set up Python
-        run: uv python install 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
         
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
         
       - name: Run ruff check
         run: uv run ruff check e2e-tests/
