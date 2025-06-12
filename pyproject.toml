@@ -4,16 +4,18 @@ version = "0.1.0"
 description = "Tests for PSMDB Operator"
 requires-python = ">=3.13"
 dependencies = [
+    "junitparser>=3.2.0",
     "mypy>=1.16.0",
     "pytest>=8.4.0",
     "pytest-html>=4.1.1",
+    "pytest-html-merger>=0.1.0",
     "pytest-json-report>=1.5.0",
     "pyyaml>=6.0.2",
     "ruff>=0.11.12",
 ]
 
 [tool.pytest.ini_options]
-addopts = "--html=e2e-tests/reports/report.html --self-contained-html --json-report --json-report-file=e2e-tests/reports/report.json --junitxml=e2e-tests/reports/report.xml"
+addopts = "--self-contained-html --json-report --json-report-file=e2e-tests/reports/report.json"
 render_collapsed = "all"
 
 [[tool.mypy.overrides]]

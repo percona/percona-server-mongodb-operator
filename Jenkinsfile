@@ -149,31 +149,41 @@ void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
     """
 }
 
-TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
-TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
+String formatTime(def time) {
+    if (!time || time == "N/A") return "N/A"
+
+    try {
+        def seconds = time as Double
+        if (seconds < 60) {
+            return "${seconds.round(2)}s"
+        } else {
+            def minutes = (seconds / 60) as Integer
+            def remainingSeconds = (seconds % 60).round(2)
+            return "${minutes}m ${remainingSeconds}s"
+        }
+    } catch (Exception e) {
+        return time.toString()
+    }
+}
+
+TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
 
 void makeReport() {
-    def wholeTestAmount=tests.size()
+    def wholeTestAmount = tests.size()
     def startedTestAmount = 0
 
-    for (int i=0; i<tests.size(); i++) {
+    for (int i = 0; i < tests.size(); i++) {
         def testName = tests[i]["name"]
         def testResult = tests[i]["result"]
-        def testTime = tests[i]["time"]
+        def testTime = formatTime(tests[i]["time"])
         def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
 
         if (tests[i]["result"] != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| "+ testName +" | ["+ testResult +"]("+ testUrl +") |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
+        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + testTime + " |"
     }
-    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
-    TestsReportXML = TestsReportXML + '</testsuite>\n'
-
-    sh """
-        echo "${TestsReportXML}" > TestsReport.xml
-    """
+    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount | | |"
 }
 
 void clusterRunner(String cluster) {
@@ -215,7 +225,10 @@ void runTest(Integer TEST_ID) {
                         export DEBUG_TESTS=1
                     fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
-                    time ./e2e-tests/$testName/run
+
+                    uv run pytest -v -s -k "$testName" \
+                        --html=e2e-tests/reports/$CLUSTER_NAME-$testName-report.html \
+                        --junitxml=e2e-tests/reports/$CLUSTER_NAME-$testName-report.xml
                 """
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -264,6 +277,10 @@ EOF
         sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv python install 3.13
+        uv sync --locked
     """
 }
 
@@ -578,9 +595,16 @@ pipeline {
                             }
                         }
                         makeReport()
-                        step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
-                        archiveArtifacts '*.xml'
-
+                        if (fileExists('e2e-tests/reports')){
+                            sh """
+                            pytest_html_merger -i e2e-tests/reports -o final_report.html
+                            junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            """
+                            step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
+                            archiveArtifacts 'final_report.xml, final_report.html'
+                        }else {
+                            echo "No report files found in e2e-tests/reports, skipping report generation"
+                        }
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                         TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
