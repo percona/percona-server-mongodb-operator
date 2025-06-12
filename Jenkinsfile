@@ -226,6 +226,7 @@ void runTest(Integer TEST_ID) {
                     fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
 
+                    source \$HOME/.local/bin/env
                     uv run pytest -v -s -k "$testName" \
                         --html=e2e-tests/reports/$CLUSTER_NAME-$testName-report.html \
                         --junitxml=e2e-tests/reports/$CLUSTER_NAME-$testName-report.xml
@@ -279,6 +280,7 @@ EOF
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
 
         curl -LsSf https://astral.sh/uv/install.sh | sh
+        source \$HOME/.local/bin/env
         uv python install 3.13
         uv sync --locked
     """
@@ -602,7 +604,7 @@ pipeline {
                             """
                             step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
                             archiveArtifacts 'final_report.xml, final_report.html'
-                        }else {
+                        } else {
                             echo "No report files found in e2e-tests/reports, skipping report generation"
                         }
                         unstash 'IMAGE'
