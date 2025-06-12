@@ -227,7 +227,7 @@ void runTest(Integer TEST_ID) {
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
 
                     source \$HOME/.local/bin/env
-                    uv run pytest -v -s -k "$testName" \
+                    uv run pytest e2e-tests/test_pytest_wrapper.py -v -s --test-regex "^${testName}\$" \
                         --html=e2e-tests/reports/$CLUSTER_NAME-$testName-report.html \
                         --junitxml=e2e-tests/reports/$CLUSTER_NAME-$testName-report.xml
                 """
