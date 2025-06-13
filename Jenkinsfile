@@ -599,8 +599,9 @@ pipeline {
                         makeReport()
                         if (fileExists('e2e-tests/reports')){
                             sh """
-                            pytest_html_merger -i e2e-tests/reports -o final_report.html
-                            junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            source \$HOME/.local/bin/env
+                            uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
+                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
                             """
                             step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
                             archiveArtifacts 'final_report.xml, final_report.html'
