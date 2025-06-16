@@ -13,7 +13,20 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
-                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.30 --machine-type=n1-standard-4 --preemptible --disk-size 30 --num-nodes=\$NODES_NUM --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
+                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} \
+                    --cluster-version=1.32 \
+                    --machine-type=n1-standard-4 \
+                    --preemptible --disk-size 30 \
+                    --num-nodes=\$NODES_NUM \
+                    --network=jenkins-vpc \
+                    --subnetwork=jenkins-${CLUSTER_SUFFIX} \
+                    --no-enable-autoupgrade \
+                    --cluster-ipv4-cidr=/21 \
+                    --labels delete-cluster-after-hours=6 \
+                    --enable-ip-alias \
+                    --monitoring=NONE \
+                    --logging=NONE \
+                    --workload-pool=cloud-dev-112233.svc.id.goog && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -153,7 +166,9 @@ String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
 
     try {
+        println("Input time: ${time} (type: ${time.class})")
         def seconds = time as Double
+        println("Converted to double: ${seconds}")
         if (seconds < 60) {
             return "${seconds.round(2)}s"
         } else {
@@ -162,6 +177,7 @@ String formatTime(def time) {
             return "${minutes}m ${remainingSeconds}s"
         }
     } catch (Exception e) {
+        println("Error converting time: ${e.message}")
         return time.toString()
     }
 }
@@ -248,7 +264,7 @@ void runTest(Integer TEST_ID) {
         }
         finally {
             def timeStop = new Date().getTime()
-            def durationSec = (timeStop - timeStart) / 1000
+            def durationSec = (timeStop - timeStart) / 1000.0
             tests[TEST_ID]["time"] = durationSec
             pushLogFile("$testName")
             echo "The $testName test was finished!"
@@ -518,7 +534,7 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 3, unit: 'HOURS')
+                timeout(time: 4, unit: 'HOURS')
             }
             parallel {
                 stage('cluster1') {

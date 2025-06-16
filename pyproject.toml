@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--self-contained-html --json-report --json-report-file=e2e-tests/reports/report.json"
+addopts = "--html=e2e-tests/reports/report.html --self-contained-html --json-report --json-report-file=e2e-tests/reports/report.json --junitxml=e2e-tests/reports/report.xml"
 render_collapsed = "all"
 
 [[tool.mypy.overrides]]
