@@ -169,11 +169,12 @@ String formatTime(def time) {
         println("Input time: ${time} (type: ${time.class})")
         def seconds = time as Double
         println("Converted to double: ${seconds}")
+
         if (seconds < 60) {
-            return "${seconds.round(2)}s"
+            return "${Math.round(seconds * 100) / 100}s"
         } else {
             def minutes = (seconds / 60) as Integer
-            def remainingSeconds = (seconds % 60).round(2)
+            def remainingSeconds = Math.round((seconds % 60) * 100) / 100
             return "${minutes}m ${remainingSeconds}s"
         }
     } catch (Exception e) {
@@ -219,6 +220,8 @@ void clusterRunner(String cluster) {
 
     if (clusterCreated >= 1) {
         shutdownCluster(cluster)
+        // Re-check for passed tests after execution
+        markPassedTests()
     }
 }
 
