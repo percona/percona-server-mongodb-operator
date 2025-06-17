@@ -600,16 +600,20 @@ pipeline {
                             source \$HOME/.local/bin/env
                             uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
                             uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            echo 'DEBUG: Files in reports folder'
+                            ls e2e-tests/reports/*.html
+                            ls e2e-tests/reports/*.xml
                             """
                             step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
                             archiveArtifacts 'final_report.xml, final_report.html'
-                            publishHTML (target : [allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: false,
-                                reportDir: '.',
-                                reportFiles: 'final_report.html',
-                                reportName: 'PSMDB Test Report',
-                                reportTitles: 'Test Report'])
+                            // Currently Html Publisher plugin is not available
+                            // publishHTML (target : [allowMissing: true,
+                            //     alwaysLinkToLastBuild: true,
+                            //     keepAll: false,
+                            //     reportDir: '.',
+                            //     reportFiles: 'final_report.html',
+                            //     reportName: 'PSMDB Test Report',
+                            //     reportTitles: 'Test Report'])
                         } else {
                             echo "No report files found in e2e-tests/reports, skipping report generation"
                         }

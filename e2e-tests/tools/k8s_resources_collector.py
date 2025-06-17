@@ -3,6 +3,7 @@
 import os
 import re
 import sys
+import tarfile
 import threading
 import subprocess
 from datetime import datetime
@@ -312,13 +313,8 @@ def collect_k8s_resources(
 
     try:
         collector.collect_all()
-        return {
-            "success": True,
-            "output_dir": collector.output_dir,
-            "error_log": collector.error_log_file,
-            "namespace": namespace,
-            "timestamp": collector.timestamp,
-        }
+        with tarfile.open(f"{collector.output_dir}.tar.gz", "w:gz") as tar:
+            tar.add(collector.output_dir, arcname=os.path.basename(collector.output_dir))
     except Exception as e:
         return {"success": False, "error": str(e), "namespace": namespace}
 

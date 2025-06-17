@@ -44,7 +44,7 @@ def capture_k8s_logs(namespace: str) -> str:
     commands = [
         (
             "PSMDB Operator Logs",
-            f"kubectl logs -l app.kubernetes.io/name=percona-server-mongodb-operator --tail=50 -n psmdb-operator",
+            "kubectl logs -l app.kubernetes.io/name=percona-server-mongodb-operator --tail=50 -n psmdb-operator",
         ),
     ]
     return run_kubectl_commands(commands)
