@@ -143,40 +143,20 @@ void markPassedTests() {
     }
 }
 
-void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
-    sh """
-        export KUBECONFIG=/tmp/$CLUSTER_NAME-$CLUSTER_SUFFIX
-        echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|$CLUSTER_NAME-$CLUSTER_SUFFIX "
-        echo
-        kubectl get nodes
-        echo
-        kubectl top nodes
-        echo
-        kubectl get pods --all-namespaces
-        echo
-        kubectl top pod --all-namespaces
-        echo
-        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
-        echo "======================================================"
-    """
-}
-
 String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
 
     try {
         println("Input time: ${time} (type: ${time.class})")
-        def seconds = time as Double
-        println("Converted to double: ${seconds}")
+        def totalSeconds = time as Double
+        println("Converted to double: ${totalSeconds}")
 
-        if (seconds < 60) {
-            return "${Math.round(seconds * 100) / 100}s"
-        } else {
-            def minutes = (seconds / 60) as Integer
-            def remainingSeconds = Math.round((seconds % 60) * 100) / 100
-            return "${minutes}m ${remainingSeconds}s"
-        }
+        def hours = (totalSeconds / 3600) as Integer
+        def minutes = ((totalSeconds % 3600) / 60) as Integer
+        def seconds = (totalSeconds % 60) as Integer
+
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+
     } catch (Exception e) {
         println("Error converting time: ${e.message}")
         return time.toString()
@@ -256,7 +236,6 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
-            printKubernetesStatus("AFTER","$clusterSuffix")
             echo "Test $testName has failed!"
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
@@ -624,6 +603,13 @@ pipeline {
                             """
                             step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
                             archiveArtifacts 'final_report.xml, final_report.html'
+                            publishHTML (target : [allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: false,
+                                reportDir: '.',
+                                reportFiles: 'final_report.html',
+                                reportName: 'PSMDB Test Report',
+                                reportTitles: 'Test Report'])
                         } else {
                             echo "No report files found in e2e-tests/reports, skipping report generation"
                         }
