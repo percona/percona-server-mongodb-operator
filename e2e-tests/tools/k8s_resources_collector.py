@@ -8,7 +8,7 @@ import threading
 import subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 
 class K8sCollector:
@@ -302,7 +302,7 @@ class K8sCollector:
 
 def collect_k8s_resources(
     namespace: str, custom_resources: Optional[List[str]] = None, output_dir: Optional[str] = None
-) -> Dict[str, Any]:
+) -> None:
     """
     Collect Kubernetes resources for a given namespace.
     """
@@ -316,7 +316,7 @@ def collect_k8s_resources(
         with tarfile.open(f"{collector.output_dir}.tar.gz", "w:gz") as tar:
             tar.add(collector.output_dir, arcname=os.path.basename(collector.output_dir))
     except Exception as e:
-        return {"success": False, "error": str(e), "namespace": namespace}
+        print(f"error collecting from namespace: {namespace} - {str(e)}")
 
 
 def get_namespace(test_log: str) -> str:
