@@ -34,7 +34,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -178,6 +178,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
+	if err = checkStartingDeadline(ctx, cluster, cr); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if cluster != nil {
 		var svr *version.ServerVersion
 		svr, err = version.Server(r.clientcmd)
@@ -187,7 +191,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+			return reconcile.Result{}, errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 		}
 	}
 
@@ -236,7 +240,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if err := cluster.CanBackup(ctx); err != nil {
-		return status, errors.Wrap(err, "failed to run backup")
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
 	}
 
 	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
@@ -599,7 +604,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	errB := bytes.Buffer{}
 	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
 	if err != nil {
-		return errors.Wrap(err, "exec delete-backup")
+		return errors.Wrapf(err, "exec delete-backup: stdout=%s, stderr=%s", outB.String(), errB.String())
 	}
 
 	log.Info("Backup deleted")

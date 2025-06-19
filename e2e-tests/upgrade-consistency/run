@@ -14,22 +14,9 @@ main() {
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "${conf_dir}/client.yml" -f "${conf_dir}/secrets.yml"
 
-	desc "create first PSMDB cluster 1.18.0 $CLUSTER"
+	desc "create first PSMDB cluster 1.19.1 $CLUSTER"
 	apply_cluster "$test_dir/conf/${CLUSTER}-rs0.yml"
 
-	desc 'check if Pod started'
-	wait_for_running "${CLUSTER}-rs0" "3" "true"
-
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1180"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1180"
-
-	desc 'test 1.19.1'
-	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
-        "spec": {"crVersion":"1.19.1"}
-    }'
-	# Wait for at least one reconciliation
-	sleep 10
 	desc 'check if Pod started'
 	wait_for_running "${CLUSTER}-rs0" "3" "true"
 
@@ -49,6 +36,19 @@ main() {
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1201"
 	compare_kubectl statefulset/${CLUSTER}-rs0 "-1201"
+
+	desc 'test 1.21.0'
+	kubectl_bin patch psmdb "${CLUSTER}" --type=merge --patch '{
+        "spec": {"crVersion":"1.21.0"}
+    }'
+	# Wait for at least one reconciliation
+	sleep 10
+	desc 'check if Pod started'
+	wait_for_running "${CLUSTER}-rs0" "3" "true"
+
+	desc 'check if service and statefulset created with expected config'
+	compare_kubectl service/${CLUSTER}-rs0 "-1210"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1210"
 
 	destroy $namespace
 

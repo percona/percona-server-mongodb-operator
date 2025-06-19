@@ -2,6 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: percona-server-mongodb-operator
+  labels:
+    name: percona-server-mongodb-operator
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/instance: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb-operator
+    app.kubernetes.io/part-of: percona-server-mongodb-operator
 spec:
   replicas: 1
   selector:
@@ -11,11 +17,15 @@ spec:
     metadata:
       labels:
         name: percona-server-mongodb-operator
+        app.kubernetes.io/component: operator
+        app.kubernetes.io/instance: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb-operator
+        app.kubernetes.io/part-of: percona-server-mongodb-operator
     spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.20.1
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
@@ -48,3 +58,5 @@ spec:
               value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
+            - name: MAX_CONCURRENT_RECONCILES
+              value: "1"

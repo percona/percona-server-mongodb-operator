@@ -9,7 +9,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestSetSafeDefaultPre116(t *testing.T) {
@@ -88,8 +88,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -106,8 +105,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -124,8 +122,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -142,8 +139,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -160,8 +156,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -178,8 +173,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -196,8 +190,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -214,8 +207,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 				},
 			},
 			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
+				Size: 4,
 				Arbiter: api.Arbiter{
 					Enabled: true,
 					Size:    1,

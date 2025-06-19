@@ -10,7 +10,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestMongosService(t *testing.T) {
@@ -124,7 +124,7 @@ func TestMongosService(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion: version.Version,
+					CRVersion: version.Version(),
 					Sharding: api.Sharding{
 						Mongos: &api.MongosSpec{
 							Expose: api.MongosExpose{
@@ -138,5 +138,4 @@ func TestMongosService(t *testing.T) {
 			assert.Equal(t, tt.expectedSpec, spec)
 		})
 	}
-
 }

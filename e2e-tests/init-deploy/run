@@ -112,6 +112,15 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
+desc 'check if mongod log files exist in pod'
+log_files=$(kubectl exec "${cluster2}-0" -c "mongod" -- ls "/data/db/logs" 2>/dev/null)
+if ! echo "$log_files" | grep -q 'mongod.log' || ! echo "$log_files" | grep -q 'mongod.full.log'; then
+	echo "error, files found:"
+	echo "$log_files"
+	return 1
+fi
+echo "found mongod.log and mongod.full.log in /data/db/logs"
+
 desc 'check for passwords leak'
 check_passwords_leak
 

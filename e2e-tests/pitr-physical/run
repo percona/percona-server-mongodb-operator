@@ -64,7 +64,7 @@ main() {
 	backup_name_minio="backup-minio"
 	run_backup $backup_name_minio 2 physical
 
-	write_document "-2nd" '120'
+	write_document "-2nd" '130'
 
 	last_write=$(date +%s)
 	last_chunk=$(get_latest_oplog_chunk_ts $cluster)

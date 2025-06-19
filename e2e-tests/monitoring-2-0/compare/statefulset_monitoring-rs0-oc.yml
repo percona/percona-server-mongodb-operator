@@ -265,6 +265,9 @@ spec:
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:

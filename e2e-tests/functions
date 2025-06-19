@@ -15,11 +15,14 @@ SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
+IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3.1.0"}
+IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3.1.0"}
 CERT_MANAGER_VER="1.17.2"
 MINIO_VER="5.4.0"
 CHAOS_MESH_VER="2.7.1"
 UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
+SKIP_DELETE=${SKIP_DELETE:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -77,6 +80,14 @@ log() {
 	set_debug
 }
 
+sleep_with_log() {
+	local d=$1
+	local msg=$2
+
+	log "${msg}. sleeping for ${d} seconds"
+	sleep ${d}
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
@@ -104,6 +115,12 @@ apply_s3_storage_secrets() {
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml
 	fi
+}
+
+set_kube_ctx() {
+	local namespace=$1
+
+	kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 }
 
 create_namespace() {
@@ -139,7 +156,7 @@ create_namespace() {
 
 		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
-		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+		set_kube_ctx ${namespace}
 	fi
 }
 
@@ -220,6 +237,10 @@ wait_backup_agent() {
 	set_debug
 }
 
+print_operator_logs() {
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+}
+
 wait_backup() {
 	local backup_name=$1
 	local target_state=${2:-"ready"}
@@ -234,15 +255,10 @@ wait_backup() {
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
 		if [[ $retry -ge 600 || ${current_status} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -200
+			print_operator_logs | tail -n 200
 			kubectl_bin get psmdb-backup
+			kubectl_bin describe psmdb-backup/${backup_name}
 			echo "Backup object psmdb-backup/${backup_name} is in ${current_status} state."
-			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
@@ -341,6 +357,36 @@ simple_data_check() {
 	fi
 }
 
+get_mongod_pods() {
+	local cluster=$1
+
+	kubectl_bin get pod \
+		--no-headers \
+		-l app.kubernetes.io/instance=${cluster} \
+		-l app.kubernetes.io/component=mongod | awk '{print $1}'
+
+}
+
+collect_physical_restore_logs() {
+	local cluster=$1
+	local restore=$2
+
+	for pod in $(get_mongod_pods ${cluster}); do
+		desc "pbm-agent logs from ${pod}"
+		kubectl_bin exec ${pod} -- cat /tmp/pbm-agent.log || echo "failed to get /tmp/pbm-agent.log from ${pod}"
+	done
+}
+
+is_physical_backup() {
+	local backup=$1
+
+	if [[ $(kubectl_bin get psmdb-backup ${backup} -o jsonpath={.status.type}) == "physical" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
 wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
@@ -372,24 +418,27 @@ wait_restore() {
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
 		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
-			echo "OK"
+			echo "OK after ${retry} minutes"
 			break
 		fi
 		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
+			if is_physical_backup ${backup_name}; then
+				collect_physical_restore_logs
+			fi
+
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
+				| grep "restore-${backup_name}" \
 				| tail -100
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
 			kubectl_bin describe psmdb-restore restore-${backup_name}
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
+
+			echo "Restore object restore-${backup_name} is in ${current_state} state after ${retry} minutes."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
-	echo "OK"
+	echo "OK after ${retry} minutes"
 	set_debug
 
 	if [[ $wait_cluster_consistency -eq 1 ]]; then
@@ -630,6 +679,12 @@ wait_for_running() {
 			wait_pod ${name}-nv-${i}
 		done
 	fi
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.size}') - 1))
+		for i in $(seq 0 $last_pod); do
+			wait_pod ${name}-hidden-${i}
+		done
+	fi
 	sleep 10
 	if [[ ${check_cluster_readyness} == "true" ]]; then
 		set +x
@@ -764,9 +819,43 @@ compare_kubectl() {
 	fi
 
 	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
-		diff -u "$expected_result" "$new_result"
+		if ! diff -u "$expected_result" "$new_result"; then
+			log "compare_kubectl ($(caller)) failed with diff"
+			exit 1
+		fi
 	else
 		cp ${new_result} ${expected_result}
+	fi
+}
+
+run_recovery_check() {
+	local backup_name=$1
+	local compare_suffix=${2:-"_restore"}
+	local is_sharded=${3:-""}
+
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
+	echo
+
+	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
+
+	# we don't wait for cluster readiness here because the annotation gets removed then
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
+
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		exit 1
+	fi
+	echo
+
+	wait_cluster_consistency ${cluster}
+	wait_for_pbm_operations ${cluster}
+
+	if [ -n "$is_sharded" ]; then
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded"
+	else
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
 	fi
 }
 
@@ -940,7 +1029,7 @@ compare_mongos_cmd() {
 get_mongo_primary_endpoint() {
 	local uri="$1"
 
-	run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
+	run_mongo 'db.hello().me' "$uri" "mongodb" ":27017" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| grep ":27017$"
@@ -959,6 +1048,15 @@ get_mongo_primary() {
 		kubectl_bin get service -o wide \
 			| grep " ${endpoint/:*/} " \
 			| awk '{print $1}'
+	fi
+}
+
+check_exported_mongos_service_endpoint() {
+	local host=$1
+
+	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+		echo "Exported host is not correct after the restore"
+		exit 1
 	fi
 }
 
@@ -1060,6 +1158,11 @@ delete_backups() {
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
+
+	if [[ ${SKIP_DELETE} == 1 ]]; then
+		echo "SKIP_DELETE=1, not destroying ${namespace}"
+		return
+	fi
 
 	desc 'destroy cluster/operator and all other resources'
 	if [ ${ignore_logs} == "false" ] && [ "${DEBUG_TESTS}" == 1 ]; then
@@ -1855,7 +1958,7 @@ check_recovery() {
 	fi
 
 	# fail faster if we don't reach requested status until some time
-	wait_restore "$backup_name" "$cluster_name" "requested" "0" "900"
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "1200"
 	echo
 	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
 	echo
@@ -1927,13 +2030,31 @@ check_backup_in_storage() {
 		azure)
 			endpoint="engk8soperators.blob.core.windows.net"
 			;;
+		minio)
+			endpoint="minio-service"
+			;;
 		*)
 			echo "unsupported storage type: ${storage_type}"
 			exit 1
+			;;
 	esac
 
-	backup_dest=$(get_backup_dest "$backup")
-	local url="https://${endpoint}/${backup_dest}/${replset}/${file}"
-	log "checking if ${url} exists"
-	curl --fail --head "${url}"
+	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
+	if [[ ${storage_type} == 'minio' ]]; then
+		until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+			/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+			| grep "${file}"; do
+			sleep 1
+			let retry+=1
+			if [ $retry -ge 60 ]; then
+				log "Max retry count $retry reached. Something went wrong with writing backup"
+				exit 1
+			fi
+		done
+	else
+		local url="https://${endpoint}/${backup_dest}/${replset}/${file}"
+		log "checking if ${url} exists"
+		curl --fail --head "${url}"
+	fi
 }

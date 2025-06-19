@@ -13,8 +13,9 @@ spec:
 #  pause: true
 #  unmanaged: false
 #  enableVolumeExpansion: false
-  crVersion: 1.20.1
-  image: percona/percona-server-mongodb:7.0.18-11
+#  enableExternalVolumeAutoscaling: false
+  crVersion: 1.21.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -27,7 +28,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: percona/percona-server-mongodb-operator:1.20.1
+#  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -59,7 +60,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: percona/pmm-client:2.44.1
+    image: perconalab/pmm-client:dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
@@ -256,6 +257,67 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
+    hidden:
+      enabled: false
+#      podSecurityContext: {}
+#      containerSecurityContext: {}
+      size: 3
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#          verbosity: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "0.5G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+#        emptyDir: {}
+#        hostPath:
+#          path: /data
+#          type: Directory
+        persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
 
     nonvoting:
       enabled: false
@@ -622,7 +684,8 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.9.1
+    image: perconalab/percona-server-mongodb-operator:main-backup
+#    startingDeadlineSeconds: 300
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
@@ -709,21 +772,30 @@ spec:
 #      - name: daily-s3-us-west
 #        enabled: true
 #        schedule: "0 0 * * *"
-#        keep: 3
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
 #      - name: weekly-s3-us-west
 #        enabled: false
 #        schedule: "0 0 * * 0"
-#        keep: 5
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
 #      - name: weekly-s3-us-west-physical
 #        enabled: false
 #        schedule: "0 5 * * 0"
-#        keep: 5
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        type: physical
 #        storageName: s3-us-west
 #        compressionType: gzip
@@ -738,8 +810,23 @@ spec:
 #      - name: weekly-s3-us-west-incremental-base
 #        enabled: false
 #        schedule: "0 5 * * 0"
-#        keep: 5
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        type: incremental-base
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
+#    configuration: |
+#      [SERVICE]
+#          Flush        1
+#          Log_Level    error
+#          Daemon       off
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m

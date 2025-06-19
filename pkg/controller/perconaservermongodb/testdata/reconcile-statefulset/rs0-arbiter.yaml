@@ -79,11 +79,13 @@ spec:
           value: "27017"
         - name: MONGODB_REPLSET
           value: rs0
+        - name: LOGCOLLECTOR_ENABLED
+          value: "true"
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: percona/percona-server-mongodb:7.0.18-11
+        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -154,7 +156,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: percona/percona-server-mongodb-operator:1.20.1
+        image: perconalab/percona-server-mongodb-operator:main
         imagePullPolicy: Always
         name: mongo-init
         resources:

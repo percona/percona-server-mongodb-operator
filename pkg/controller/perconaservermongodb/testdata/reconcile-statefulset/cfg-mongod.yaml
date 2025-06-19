@@ -79,11 +79,13 @@ spec:
           value: "27017"
         - name: MONGODB_REPLSET
           value: cfg
+        - name: LOGCOLLECTOR_ENABLED
+          value: "true"
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
-        image: percona/percona-server-mongodb:7.0.18-11
+        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -185,7 +187,7 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        image: percona/percona-backup-mongodb:2.9.1
+        image: perconalab/percona-server-mongodb-operator:main-backup
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
@@ -201,10 +203,64 @@ spec:
           readOnly: true
         - mountPath: /data/db
           name: mongod-data
+      - name: logs
+        image: perconalab/fluentbit:main-logcollector
+        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
+        args: [ "fluent-bit" ]
+        env:
+          - name: LOG_DATA_DIR
+            value: /data/db/logs
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        resources:
+          requests:
+            cpu: 200m
+            memory: 100M
+        volumeMounts:
+          - mountPath: /data/db
+            name: mongod-data
+          - mountPath: /opt/percona
+            name: bin
+      - name: logrotate
+        image: perconalab/fluentbit:main-logcollector
+        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
+        args: [ "logrotate" ]
+        env:
+          - name: MONGODB_HOST
+            value: localhost
+          - name: MONGODB_PORT
+            value: "27017"
+          - name: MONGODB_USER
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
+          - name: MONGODB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
+        resources:
+          requests:
+            cpu: 200m
+            memory: 100M
+        volumeMounts:
+          - mountPath: /data/db
+            name: mongod-data
+          - mountPath: /opt/percona
+            name: bin
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: percona/percona-server-mongodb-operator:1.20.1
+        image: perconalab/percona-server-mongodb-operator:main
         imagePullPolicy: Always
         name: mongo-init
         resources:
