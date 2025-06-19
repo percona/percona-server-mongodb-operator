@@ -437,9 +437,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 	if cluster.CompareVersion("1.19.0") < 0 {
 		for i, v := range pbmEnvVars {
-			pbmEnvVars[i].ValueFrom.SecretKeyRef.Key = strings.TrimSuffix(v.ValueFrom.SecretKeyRef.Key, "_ESCAPED")
-			pbmEnvVars[i].ValueFrom.SecretKeyRef.LocalObjectReference.Name = cluster.Spec.Secrets.Users
-			pbmEnvVars[i].ValueFrom.SecretKeyRef.Optional = nil
+			if v.ValueFrom != nil && v.ValueFrom.SecretKeyRef != nil {
+				pbmEnvVars[i].ValueFrom.SecretKeyRef.Key = strings.TrimSuffix(v.ValueFrom.SecretKeyRef.Key, "_ESCAPED")
+				pbmEnvVars[i].ValueFrom.SecretKeyRef.LocalObjectReference.Name = cluster.Spec.Secrets.Users
+				pbmEnvVars[i].ValueFrom.SecretKeyRef.Optional = nil
+			}
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
@@ -753,6 +755,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	}
 
 	pbmConfig.PITR.Enabled = false
+	// pbm-config default options 'oplogSpanMin' not support
+	if cluster.CompareVersion("1.20.0") < 0 {
+		pbmConfig.Backup = nil
+	}
 
 	confBytes, err := yaml.Marshal(pbmConfig)
 	if err != nil {
