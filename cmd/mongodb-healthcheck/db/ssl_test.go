@@ -16,7 +16,7 @@ func TestSSLNotEnabled(t *testing.T) {
 		},
 	}
 
-	if err := cfg.configureTLS(); err != nil {
+	if err := cfg.configureTLS(t.Context()); err != nil {
 		t.Fatalf("TLS configuration failed: %s", err)
 	}
 
@@ -32,7 +32,7 @@ func TestSSLEnabled(t *testing.T) {
 		},
 	}
 
-	if err := cfg.configureTLS(); err != nil {
+	if err := cfg.configureTLS(t.Context()); err != nil {
 		t.Fatalf("TLS configuration failed: %s", err)
 	}
 
@@ -49,7 +49,7 @@ func TestPEMKeyFileDoesNotExists(t *testing.T) {
 		},
 	}
 
-	err := cfg.configureTLS()
+	err := cfg.configureTLS(t.Context())
 	if err == nil {
 		t.Fatal("Expected TLS config to fail, but it returned no error")
 	}
@@ -71,7 +71,7 @@ func TestCAFileDoesNotExists(t *testing.T) {
 		},
 	}
 
-	err := cfg.configureTLS()
+	err := cfg.configureTLS(t.Context())
 	if err == nil {
 		t.Fatal("Expected TLS config to fail, but it returned no error")
 	}
