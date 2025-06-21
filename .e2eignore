@@ -9,3 +9,5 @@ operator.png
 kubernetes.svg
 release_versions
 .github/**
+.snyk
+.e2eignore
