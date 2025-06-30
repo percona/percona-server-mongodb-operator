@@ -105,6 +105,7 @@ spec:
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
+                        format: int32
                         type: integer
                       prefix:
                         type: string

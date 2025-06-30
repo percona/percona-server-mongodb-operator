@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -296,6 +297,17 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 			},
 		}
 
+		if strings.Contains(stg.S3.EndpointURL, s3.GCSEndpointURL) {
+			conf.Storage = config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket:    stg.S3.Bucket,
+					Prefix:    stg.S3.Prefix,
+					ChunkSize: stg.S3.UploadPartSize,
+				},
+			}
+		}
+
 		if len(stg.S3.CredentialsSecret) != 0 {
 			s3secret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.S3.CredentialsSecret)
 			if err != nil {
@@ -344,9 +356,18 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 					return conf, errors.New("no KmsKeyID specified")
 				}
 			}
-			conf.Storage.S3.Credentials = s3.Credentials{
-				AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
-				SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+
+			switch conf.Storage.Type {
+			case storage.S3:
+				conf.Storage.S3.Credentials = s3.Credentials{
+					AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
+					SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+				}
+			case storage.GCS:
+				conf.Storage.GCS.Credentials = gcs.Credentials{
+					HMACAccessKey: string(s3secret.Data[AWSAccessKeySecretKey]),
+					HMACSecret:    string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+				}
 			}
 		}
 
@@ -671,7 +692,7 @@ func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.Restor
 }
 
 func (b *pbmC) ResyncStorage(ctx context.Context, stg *config.StorageConf) error {
-	return resync.Resync(ctx, b.Client, stg, "")
+	return resync.Resync(ctx, b.Client, stg, "", false)
 }
 
 func (b *pbmC) SendCmd(ctx context.Context, cmd ctrl.Cmd) error {

@@ -332,6 +332,7 @@ spec:
                             insecureSkipTLSVerify:
                               type: boolean
                             maxUploadParts:
+                              format: int32
                               type: integer
                             prefix:
                               type: string
@@ -2803,6 +2804,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -5582,6 +5585,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -7641,6 +7646,8 @@ spec:
                                     - port
                                     type: object
                                 type: object
+                              stopSignal:
+                                type: string
                             type: object
                           livenessProbe:
                             properties:
@@ -10567,6 +10574,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -13346,6 +13355,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -15405,6 +15416,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -18172,6 +18185,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:

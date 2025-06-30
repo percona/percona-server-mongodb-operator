@@ -928,7 +928,7 @@ type BackupStorageS3Spec struct {
 	EndpointURL           string                  `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
-	MaxUploadParts        int                     `json:"maxUploadParts,omitempty"`
+	MaxUploadParts        int32                   `json:"maxUploadParts,omitempty"`
 	StorageClass          string                  `json:"storageClass,omitempty"`
 	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
 	ForcePathStyle        *bool                   `json:"forcePathStyle,omitempty"`
