@@ -503,6 +503,7 @@ type NonVotingSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	ContainerEnv             []corev1.EnvVar            `json:"containerEnv,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -523,6 +524,7 @@ type HiddenSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	ContainerEnv             []corev1.EnvVar            `json:"containerEnv,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -749,6 +751,7 @@ type ReplsetSpec struct {
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
+	ContainerEnv             []corev1.EnvVar              `json:"containerEnv,omitempty"`
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {

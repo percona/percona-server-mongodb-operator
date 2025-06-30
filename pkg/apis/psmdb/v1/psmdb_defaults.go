@@ -744,6 +744,10 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
+	if cr.CompareVersion("1.20.0") >= 0 && rs.ContainerEnv == nil {
+		rs.ContainerEnv = make([]corev1.EnvVar, 0)
+	}
+
 	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
 		log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", rs.Name)
 	}

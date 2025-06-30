@@ -15,7 +15,7 @@ import (
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
 	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
-	containerSecurityContext *corev1.SecurityContext,
+	containerSecurityContext *corev1.SecurityContext, containerEnv []corev1.EnvVar,
 ) (corev1.Container, error) {
 	fvar := false
 
@@ -176,7 +176,13 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 			})
 		}
 	}
-
+	if cr.CompareVersion("1.20.0") >= 0 {
+		if containerEnv != nil {
+			for _, env := range containerEnv {
+				container.Env = append(container.Env, env)
+			}
+		}
+	}
 	return container, nil
 }
 
