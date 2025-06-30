@@ -113,6 +113,35 @@ spec:
                 required:
                 - path
                 type: object
+              gcs:
+                properties:
+                  bucket:
+                    type: string
+                  chunkSize:
+                    type: integer
+                  credentialsSecret:
+                    type: string
+                  prefix:
+                    type: string
+                  retryer:
+                    properties:
+                      backoffInitial:
+                        format: int64
+                        type: integer
+                      backoffMax:
+                        format: int64
+                        type: integer
+                      backoffMultiplier:
+                        type: number
+                    required:
+                    - backoffInitial
+                    - backoffMax
+                    - backoffMultiplier
+                    type: object
+                required:
+                - bucket
+                - credentialsSecret
+                type: object
               lastTransition:
                 format: date-time
                 type: string
@@ -149,6 +178,7 @@ spec:
                   insecureSkipTLSVerify:
                     type: boolean
                   maxUploadParts:
+                    format: int32
                     type: integer
                   prefix:
                     type: string
@@ -277,6 +307,35 @@ spec:
                     required:
                     - path
                     type: object
+                  gcs:
+                    properties:
+                      bucket:
+                        type: string
+                      chunkSize:
+                        type: integer
+                      credentialsSecret:
+                        type: string
+                      prefix:
+                        type: string
+                      retryer:
+                        properties:
+                          backoffInitial:
+                            format: int64
+                            type: integer
+                          backoffMax:
+                            format: int64
+                            type: integer
+                          backoffMultiplier:
+                            type: number
+                        required:
+                        - backoffInitial
+                        - backoffMax
+                        - backoffMultiplier
+                        type: object
+                    required:
+                    - bucket
+                    - credentialsSecret
+                    type: object
                   lastTransition:
                     format: date-time
                     type: string
@@ -313,6 +372,7 @@ spec:
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
+                        format: int32
                         type: integer
                       prefix:
                         type: string
@@ -1052,6 +1112,35 @@ spec:
                           required:
                           - path
                           type: object
+                        gcs:
+                          properties:
+                            bucket:
+                              type: string
+                            chunkSize:
+                              type: integer
+                            credentialsSecret:
+                              type: string
+                            prefix:
+                              type: string
+                            retryer:
+                              properties:
+                                backoffInitial:
+                                  format: int64
+                                  type: integer
+                                backoffMax:
+                                  format: int64
+                                  type: integer
+                                backoffMultiplier:
+                                  type: number
+                              required:
+                              - backoffInitial
+                              - backoffMax
+                              - backoffMultiplier
+                              type: object
+                          required:
+                          - bucket
+                          - credentialsSecret
+                          type: object
                         main:
                           type: boolean
                         s3:
@@ -1069,6 +1158,7 @@ spec:
                             insecureSkipTLSVerify:
                               type: boolean
                             maxUploadParts:
+                              format: int32
                               type: integer
                             prefix:
                               type: string
