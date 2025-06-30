@@ -869,6 +869,7 @@ type MongosSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	ContainerEnv             []corev1.EnvVar            `json:"containerEnv,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }

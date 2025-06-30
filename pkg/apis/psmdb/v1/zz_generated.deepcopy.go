@@ -756,6 +756,13 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ContainerEnv != nil {
+		in, out := &in.ContainerEnv, &out.ContainerEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.HostAliases != nil {
 		in, out := &in.HostAliases, &out.HostAliases
 		*out = make([]corev1.HostAlias, len(*in))

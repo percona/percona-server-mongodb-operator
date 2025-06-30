@@ -202,6 +202,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				}
 			}
 		}
+
+		if cr.CompareVersion("1.20.0") >= 0 && cr.Spec.Sharding.Mongos.ContainerEnv == nil {
+			cr.Spec.Sharding.Mongos.ContainerEnv = make([]corev1.EnvVar, 0)
+		}
+
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		for i := range cr.Spec.Replsets {
@@ -881,6 +886,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
 	}
 
+	if cr.CompareVersion("1.20.0") >= 0 && rs.ContainerEnv == nil {
+		rs.ContainerEnv = make([]corev1.EnvVar, 0)
+	}
+
 	if nv.PodSecurityContext == nil {
 		nv.PodSecurityContext = rs.PodSecurityContext
 	}
@@ -986,6 +995,10 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 
 	if h.ContainerSecurityContext == nil {
 		h.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if cr.CompareVersion("1.20.0") >= 0 && rs.ContainerEnv == nil {
+		rs.ContainerEnv = make([]corev1.EnvVar, 0)
 	}
 
 	if h.PodSecurityContext == nil {
