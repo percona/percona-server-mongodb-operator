@@ -177,7 +177,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}
 	}
 
-	if cr.CompareVersion("1.20.0") >= 0 {
+	if cr.CompareVersion("1.21.0") >= 0 {
 		if containerEnv != nil {
 			for _, env := range containerEnv {
 				container.Env = append(container.Env, env)
