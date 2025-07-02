@@ -136,6 +136,7 @@ type IsMasterResp struct {
 }
 
 type Status struct {
+	InitialSyncStatus       any            `bson:"initialSyncStatus" json:"initialSyncStatus"`
 	Set                     string         `bson:"set" json:"set"`
 	Date                    time.Time      `bson:"date" json:"date"`
 	MyState                 MemberState    `bson:"myState" json:"myState"`
@@ -188,8 +189,10 @@ type StatusOptimes struct {
 	DurableOptime       *Optime `bson:"durableOpTime" json:"durableOpTime"`
 }
 
-type MemberHealth int
-type MemberState int
+type (
+	MemberHealth int
+	MemberState  int
+)
 
 const (
 	MemberHealthDown MemberHealth = iota
