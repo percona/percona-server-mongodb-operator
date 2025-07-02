@@ -87,7 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	cli, err := r.MongoClient().Mongo(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil, nil
@@ -185,7 +185,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		replset.ClusterRole == api.ClusterRoleShardSvr &&
 		len(mongosPods) > 0 && cr.Spec.Sharding.Mongos.Size > 0 {
 
-		mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+		mongosSession, err := r.MongoClient().Mongos(ctx, cr, api.RoleClusterAdmin)
 		if err != nil {
 			return api.AppStateError, nil, errors.Wrap(err, "failed to get mongos connection")
 		}
@@ -569,7 +569,7 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 		return nil
 	}
 
-	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	cli, err := r.MongoClient().Mongos(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Errorf("failed to get mongos connection: %v", err)
 	}
@@ -619,7 +619,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
 
-	cli, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
+	cli, err := r.MongoClient().Mongos(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos client")
 	}
@@ -722,7 +722,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		time.Sleep(time.Second * 5)
 
 		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
-		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
+		userAdmin, err := psmdb.GetCredentials(ctx, r.client, cr, api.RoleUserAdmin)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to get userAdmin credentials")
 		}
@@ -755,7 +755,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 		}
 
 		log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
-		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod)
+		cli, err := r.MongoClient().Standalone(ctx, cr, replset, api.RoleClusterAdmin, pod)
 		if err != nil {
 			return errors.Wrap(err, "get standalone mongo client")
 		}
@@ -920,7 +920,7 @@ func compareRoles(x []mongo.Role, y []mongo.Role) bool {
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	log := logf.FromContext(ctx)
 
-	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleUserAdmin)
+	cli, err := r.MongoClient().Mongo(ctx, cr, replset, api.RoleUserAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongo client")
 	}
@@ -1011,7 +1011,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	for _, role := range users {
-		creds, err := getInternalCredentials(ctx, r.client, cr, role)
+		creds, err := psmdb.GetCredentials(ctx, r.client, cr, role)
 		if err != nil {
 			log.Error(err, "failed to get credentials", "role", role)
 			continue
