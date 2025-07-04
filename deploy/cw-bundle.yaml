@@ -134,6 +134,7 @@ spec:
                   insecureSkipTLSVerify:
                     type: boolean
                   maxUploadParts:
+                    format: int32
                     type: integer
                   prefix:
                     type: string
@@ -288,6 +289,7 @@ spec:
                       insecureSkipTLSVerify:
                         type: boolean
                       maxUploadParts:
+                        format: int32
                         type: integer
                       prefix:
                         type: string
@@ -1028,6 +1030,7 @@ spec:
                             insecureSkipTLSVerify:
                               type: boolean
                             maxUploadParts:
+                              format: int32
                               type: integer
                             prefix:
                               type: string
@@ -3499,6 +3502,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -6278,6 +6283,8 @@ spec:
                                         - port
                                         type: object
                                     type: object
+                                  stopSignal:
+                                    type: string
                                 type: object
                               livenessProbe:
                                 properties:
@@ -8337,6 +8344,8 @@ spec:
                                     - port
                                     type: object
                                 type: object
+                              stopSignal:
+                                type: string
                             type: object
                           livenessProbe:
                             properties:
@@ -11263,6 +11272,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -14042,6 +14053,8 @@ spec:
                                           - port
                                           type: object
                                       type: object
+                                    stopSignal:
+                                      type: string
                                   type: object
                                 livenessProbe:
                                   properties:
@@ -16101,6 +16114,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -18868,6 +18883,8 @@ spec:
                                       - port
                                       type: object
                                   type: object
+                                stopSignal:
+                                  type: string
                               type: object
                             livenessProbe:
                               properties:
@@ -19775,7 +19792,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.19.1
+          image: perconalab/percona-server-mongodb-operator:CUSTOM-218
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

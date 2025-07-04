@@ -25,6 +25,7 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -272,6 +273,28 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
+		}
+
+		if strings.Contains(s3Conf.EndpointURL, s3.GCSEndpointURL) {
+			gcsConf := &gcs.Config{
+				Bucket:    cr.Status.S3.Bucket,
+				Prefix:    cr.Status.S3.Prefix,
+				ChunkSize: cr.Status.S3.UploadPartSize,
+			}
+
+			if cr.Status.S3.CredentialsSecret != "" {
+				gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
+				if err != nil {
+					return nil, errors.Wrap(err, "get s3 credentials secret")
+				}
+
+				gcsConf.Credentials = gcs.Credentials{
+					HMACAccessKey: string(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
+					HMACSecret:    string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+				}
+			}
+
+			return gcs.New(gcsConf, "", nil)
 		}
 
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {

@@ -7,11 +7,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	// "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 	"sigs.k8s.io/yaml"
+
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -19,16 +22,20 @@ import (
 func TestApplyCustomPBMConfig(t *testing.T) {
 	cr := expectedCR(t)
 
-	storage := cr.Spec.Backup.Storages["test-s3-storage"]
+	stg := cr.Spec.Backup.Storages["test-s3-storage"]
 
 	cli := buildFakeClient(t)
 
-	config, err := GetPBMConfig(context.Background(), cli, cr, storage)
+	config, err := GetPBMConfig(context.Background(), cli, cr, stg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedS3Retryer := storage.S3.Retryer
+	if config.Storage.Type != storage.S3 {
+		t.Errorf("expected %s, got %s", storage.S3, config.Storage.Type)
+	}
+
+	expectedS3Retryer := stg.S3.Retryer
 	if expectedS3Retryer.NumMaxRetries != config.Storage.S3.Retryer.NumMaxRetries {
 		t.Errorf("expected %d, got %d", expectedS3Retryer.NumMaxRetries, config.Storage.S3.Retryer.NumMaxRetries)
 	}
