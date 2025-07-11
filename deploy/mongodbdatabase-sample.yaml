@@ -1,0 +1,18 @@
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBDatabase
+metadata:
+  name: testdb
+spec:
+  clusterRef:
+    name: my-cluster-name
+    namespace: default
+  name: testdb
+  collections:
+    - name: mycollection
+      capped: false
+      indexes:
+        - name: idx_field
+          keys:
+            field: 1
+          unique: false
+  # Note: User access is managed separately via MongoDBDatabaseAccess CR 

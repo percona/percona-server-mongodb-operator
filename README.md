@@ -58,6 +58,61 @@ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mongod
 | <br/>Enterprise-grade assistance for your mission-critical MongoDB deployments with the Percona Operator for MongoDB. Get expert guidance for complex tasks like multi-cloud replication, database migration and building platforms.<br/><br/>  | <br/>Connect with our engineers and fellow users for general questions, troubleshooting, and sharing feedback and ideas.<br/><br/>  | 
 | **[Get Percona Support](https://hubs.ly/Q02ZTH830)** | **[Visit our Forum](https://forums.percona.com/c/mongodb/percona-kubernetes-operator-for-mongodb/29)** |
 
+# Dynamic User and Database Management
+
+The Operator now supports dynamic user and database management through Custom Resources (CRs), providing more flexible management than traditional static configuration.
+
+## New Features
+
+- **MongoDBUser CR**: Create and manage MongoDB users with fine-grained permissions
+- **MongoDBDatabase CR**: Manage database structure, collections, and indexes
+- **Multi-cluster support**: Manage users across different MongoDB clusters
+- **Granular permissions**: Support for global roles and database-specific permissions
+
+## Quick Examples
+
+```yaml
+# Create a user with database access
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBUser
+metadata:
+  name: app-user
+spec:
+  clusterRef:
+    name: my-cluster
+  username: appuser
+  passwordSecretRef:
+    name: appuser-secret
+    key: password
+  roles:
+    - name: readAnyDatabase
+      db: admin
+  databaseAccess:
+    - databaseName: myapp
+      roles: ["readWrite", "dbAdmin"]
+```
+
+```yaml
+# Create a database with collections
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBDatabase
+metadata:
+  name: myapp-db
+spec:
+  clusterRef:
+    name: my-cluster
+  name: myapp
+  collections:
+    - name: users
+      indexes:
+        - name: idx_email
+          keys:
+            email: 1
+          unique: true
+```
+
+For detailed documentation and examples, see [Dynamic User and Database Management](docs/dynamic-user-database-management.md).
+
 # Contributing
 
 Percona welcomes and encourages community contributions to help improve Percona Kubernetes Operator for Percona Server for MongoDB.

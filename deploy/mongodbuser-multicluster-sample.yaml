@@ -1,0 +1,79 @@
+# 示例1：开发环境用户
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBUser
+metadata:
+  name: dev-user
+spec:
+  clusterRef:
+    name: dev-cluster
+    namespace: mongodb-dev
+  username: devuser
+  database: admin
+  passwordSecretRef:
+    name: devuser-secret
+    key: password
+  # 全局角色
+  roles:
+    - name: readAnyDatabase
+      db: admin
+  # 数据库级别权限
+  databaseAccess:
+    - databaseName: myapp
+      roles: ["readWrite", "dbAdmin"]
+    - databaseName: logs
+      roles: ["readWrite"]
+      readOnly: false
+
+---
+# 示例2：生产环境用户（同一用户在不同集群）
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBUser
+metadata:
+  name: prod-user
+spec:
+  clusterRef:
+    name: prod-cluster
+    namespace: mongodb-prod
+  username: produser
+  database: admin
+  passwordSecretRef:
+    name: produser-secret
+    key: password
+  # 生产环境权限更严格
+  roles:
+    - name: readAnyDatabase
+      db: admin
+  databaseAccess:
+    - databaseName: myapp
+      roles: ["readWrite"]  # 生产环境不给dbAdmin权限
+      collections: ["users", "orders"]  # 限制特定集合
+    - databaseName: analytics
+      roles: ["read"]
+      readOnly: true
+
+---
+# 示例3：只读用户
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBUser
+metadata:
+  name: readonly-user
+spec:
+  clusterRef:
+    name: prod-cluster
+    namespace: mongodb-prod
+  username: readonlyuser
+  database: admin
+  passwordSecretRef:
+    name: readonlyuser-secret
+    key: password
+  # 只有读取权限
+  roles:
+    - name: readAnyDatabase
+      db: admin
+  databaseAccess:
+    - databaseName: myapp
+      roles: ["read"]
+      readOnly: true
+    - databaseName: analytics
+      roles: ["read"]
+      readOnly: true 

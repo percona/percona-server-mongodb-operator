@@ -1,0 +1,29 @@
+apiVersion: psmdb.percona.com/v1
+kind: MongoDBUser
+metadata:
+  name: test-user
+spec:
+  clusterRef:
+    name: my-cluster-name
+    namespace: default
+  username: testuser
+  database: admin  # 用户创建在admin数据库
+  passwordSecretRef:
+    name: testuser-secret
+    key: password
+  # 全局角色（集群级别权限）
+  roles:
+    - name: readAnyDatabase
+      db: admin
+  # 数据库级别权限
+  databaseAccess:
+    - databaseName: testdb
+      roles: ["readWrite", "dbAdmin"]
+      collections: ["mycollection"]  # 可选：限制特定集合
+      readOnly: false
+    - databaseName: readonlydb
+      roles: ["read"]
+      readOnly: true
+  authenticationRestrictions:
+    - clientSource: ["127.0.0.1"]
+      serverAddress: ["127.0.0.1"] 
