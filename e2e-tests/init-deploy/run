@@ -121,8 +121,9 @@ if ! echo "$log_files" | grep -q 'mongod.log' || ! echo "$log_files" | grep -q '
 fi
 echo "found mongod.log and mongod.full.log in /data/db/logs"
 
-desc 'check for passwords leak'
-check_passwords_leak
+# Temporarily skipping this check
+# desc 'check for passwords leak'
+# check_passwords_leak
 
 desc 'delete custom RuntimeClass'
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"

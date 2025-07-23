@@ -119,7 +119,7 @@ func buildExpectedPMMContainer() *corev1.Container {
 		portEnd      = 30105
 		listenPort   = 7777
 		configFile   = "/usr/local/percona/pmm/config/pmm-agent.yaml"
-		tempDir      = "/tmp"
+		tempDir      = "/tmp/pmm"
 		prerunScript = `cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
 pmm-admin status --wait=10s;
 pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;

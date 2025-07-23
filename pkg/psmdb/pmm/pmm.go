@@ -471,7 +471,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			},
 			{
 				Name:  "PMM_AGENT_PATHS_TEMPDIR",
-				Value: "/tmp",
+				Value: "/tmp/pmm",
 			},
 		},
 		Ports:           ports,
