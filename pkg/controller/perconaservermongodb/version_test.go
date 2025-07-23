@@ -401,6 +401,7 @@ func TestVersionMeta(t *testing.T) {
 						},
 						Tasks: []api.BackupTaskSpec{
 							{
+								Name:    "test",
 								Type:    defs.PhysicalBackup,
 								Enabled: true,
 							},

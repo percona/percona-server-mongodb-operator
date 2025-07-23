@@ -14,6 +14,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -39,10 +40,15 @@ type StatefulSpecSecretParams struct {
 	SSLSecret   *corev1.Secret
 }
 
+type StatefulConfigParams struct {
+	MongoDConf        config.CustomConfig
+	LogCollectionConf config.CustomConfig
+}
+
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	ls map[string]string, initImage string, customConf config.CustomConfig, secrets StatefulSpecSecretParams,
+	ls map[string]string, initImage string, configs StatefulConfigParams, secrets StatefulSpecSecretParams,
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
 	size := replset.Size
@@ -55,6 +61,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
+	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentArbiter:
@@ -121,10 +128,16 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		})
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
+	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: customConf.Type.VolumeSource(configName),
+			VolumeSource: configs.MongoDConf.Type.VolumeSource(configName),
+		})
+	}
+	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         logcollector.VolumeName,
+			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
 	encryptionEnabled, err := replset.IsEncryptionEnabled()
@@ -162,7 +175,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), customConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
@@ -183,8 +196,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = customConf.HashHex
+	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
@@ -249,12 +262,14 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
 		volumes = append(volumes,
-			corev1.Volume{
-				Name: config.MongodDataVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+			[]corev1.Volume{
+				{
+					Name: config.MongodDataVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
 				},
-			},
+			}...,
 		)
 	} else {
 		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
@@ -284,6 +299,14 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			containers = append(containers, *pmmC)
+		}
+
+		if cr.CompareVersion("1.21.0") >= 0 {
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort())
+			if err != nil {
+				log.Error(err, "error preparing logcollector containers")
+			}
+			containers = append(containers, logCollectorCs...)
 		}
 	}
 
@@ -440,7 +463,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 		if cr.CompareVersion("1.20.0") >= 0 {
-			mongoDBURI = buildMongoDBURI(ctx, tlsEnabled, sslSecret)
+			mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
 		}
 
 		c.Env = append(c.Env, corev1.EnvVar{
@@ -471,7 +494,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	return c
 }
 
-func buildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {

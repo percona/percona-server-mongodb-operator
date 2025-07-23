@@ -41,8 +41,12 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	sleep 10
 
+	desc "write data"
+
 	write_initial_data
 	write_document
+
+	desc "wait for pbm agents to start"
 
 	wait_backup_agent $cluster-rs0-0
 	wait_backup_agent $cluster-rs0-1
@@ -54,27 +58,29 @@ main() {
 	wait_backup_agent $cluster-rs2-1
 	wait_backup_agent $cluster-rs2-2
 
-	# The sleep is needed to workaround a bug in PBM, check PBM-1265 for more info
-	echo "Sleeping for 360 seconds"
+	log "Sleeping for 360 seconds to avoid PBM-1265"
 	sleep 360
 
 	backup_name_minio="backup-minio"
 	run_backup $backup_name_minio 2 physical
 
-	write_document "-2nd" '120'
+	write_document "-2nd" '130'
 
-	backup_last_write=$(kubectl_bin exec $cluster-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+	last_write=$(date +%s)
 	last_chunk=$(get_latest_oplog_chunk_ts $cluster)
 
+	log "last write: ${last_write}"
+	log "last chunk: ${last_chunk}"
+
 	retries=0
-	until [[ ${last_chunk} -gt ${backup_last_write} ]]; do
+	until [[ ${last_chunk} -gt ${last_write} ]]; do
 		if [[ $retries -gt 30 ]]; then
-			echo "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${backup_last_write}))"
+			echo "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${last_write}))"
 			exit 1
 		fi
 		last_chunk=$(get_latest_oplog_chunk_ts $cluster)
 		retries=$((retries + 1))
-		echo "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${backup_last_write}))"
+		log "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${last_write}))"
 		sleep 10
 	done
 

@@ -26,6 +26,7 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -178,6 +179,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
+	if err = checkStartingDeadline(ctx, cluster, cr); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if cluster != nil {
 		var svr *version.ServerVersion
 		svr, err = version.Server(r.clientcmd)
@@ -187,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+			return reconcile.Result{}, errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 		}
 	}
 
@@ -236,7 +241,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if err := cluster.CanBackup(ctx); err != nil {
-		return status, errors.Wrap(err, "failed to run backup")
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
 	}
 
 	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
@@ -312,7 +318,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 		azureSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.Azure.CredentialsSecret)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting azure credentials secret name")
+			return nil, errors.Wrap(err, "get azure credentials secret")
 		}
 		azureConf := &azure.Config{
 			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
@@ -324,6 +330,25 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			},
 		}
 		return azure.New(azureConf, "", nil)
+	case cr.Status.GCS != nil:
+		gcsConf := &gcs.Config{
+			Bucket:    cr.Status.GCS.Bucket,
+			Prefix:    cr.Status.GCS.Prefix,
+			ChunkSize: cr.Status.GCS.ChunkSize,
+		}
+
+		if cr.Status.GCS.CredentialsSecret != "" {
+			gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.GCS.CredentialsSecret)
+			if err != nil {
+				return nil, errors.Wrap(err, "get gcs credentials secret")
+			}
+			gcsConf.Credentials = gcs.Credentials{
+				ClientEmail: string(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
+				PrivateKey:  string(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
+			}
+		}
+
+		return gcs.New(gcsConf, "", nil)
 	case cr.Status.S3 != nil:
 		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
@@ -339,12 +364,34 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if cr.Status.S3.CredentialsSecret != "" {
 			s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
 			if err != nil {
-				return nil, errors.Wrap(err, "getting s3 credentials secret name")
+				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
 				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
+		}
+
+		if strings.Contains(s3Conf.EndpointURL, "storage.googleapis.com") {
+			gcsConf := &gcs.Config{
+				Bucket:    cr.Status.S3.Bucket,
+				Prefix:    cr.Status.S3.Prefix,
+				ChunkSize: cr.Status.S3.UploadPartSize,
+			}
+
+			if cr.Status.S3.CredentialsSecret != "" {
+				gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
+				if err != nil {
+					return nil, errors.Wrap(err, "get s3 credentials secret")
+				}
+
+				gcsConf.Credentials = gcs.Credentials{
+					HMACAccessKey: string(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
+					HMACSecret:    string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+				}
+			}
+
+			return gcs.New(gcsConf, "", nil)
 		}
 
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {

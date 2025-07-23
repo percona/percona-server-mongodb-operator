@@ -84,13 +84,17 @@ spec:
               value: "true"
             - name: PBM_AGENT_SIDECAR_SLEEP
               value: "5"
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
+            - name: PBM_MONGODB_PORT
+              value: "27017"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -193,7 +197,7 @@ spec:
         - command:
             - bash
             - -c
-            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent
+            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent && install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint
           imagePullPolicy: Always
           name: pbm-init
           resources: {}
