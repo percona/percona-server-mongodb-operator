@@ -1,0 +1,9 @@
+#SNYK - percona/percona-server-mongodb-operator
+
+exclude:
+  global:
+  - e2e-tests/**
+
+version: v1.25.0
+ignore: {}
+patch: {}
