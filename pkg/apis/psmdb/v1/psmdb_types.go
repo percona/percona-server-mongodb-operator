@@ -1012,7 +1012,7 @@ type S3ServiceSideEncryption struct {
 	SSECustomerKey string `json:"sseCustomerKey,omitempty"`
 }
 
-type Retryer struct {
+type S3Retryer struct {
 	NumMaxRetries int             `json:"numMaxRetries,omitempty"`
 	MinRetryDelay metav1.Duration `json:"minRetryDelay,omitempty"`
 	MaxRetryDelay metav1.Duration `json:"maxRetryDelay,omitempty"`
@@ -1025,13 +1025,27 @@ type BackupStorageS3Spec struct {
 	EndpointURL           string                  `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
-	MaxUploadParts        int                     `json:"maxUploadParts,omitempty"`
+	MaxUploadParts        int32                   `json:"maxUploadParts,omitempty"`
 	StorageClass          string                  `json:"storageClass,omitempty"`
 	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
 	ForcePathStyle        *bool                   `json:"forcePathStyle,omitempty"`
 	DebugLogLevels        string                  `json:"debugLogLevels,omitempty"`
-	Retryer               *Retryer                `json:"retryer,omitempty"`
+	Retryer               *S3Retryer              `json:"retryer,omitempty"`
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
+}
+
+type GCSRetryer struct {
+	BackoffInitial    time.Duration `json:"backoffInitial"`
+	BackoffMax        time.Duration `json:"backoffMax"`
+	BackoffMultiplier float64       `json:"backoffMultiplier"`
+}
+
+type BackupStorageGCSSpec struct {
+	Bucket            string      `json:"bucket"`
+	Prefix            string      `json:"prefix,omitempty"`
+	CredentialsSecret string      `json:"credentialsSecret"`
+	ChunkSize         int         `json:"chunkSize,omitempty"`
+	Retryer           *GCSRetryer `json:"retryer,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
@@ -1050,6 +1064,7 @@ type BackupStorageType string
 const (
 	BackupStorageFilesystem BackupStorageType = "filesystem"
 	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
 )
 
@@ -1057,6 +1072,7 @@ type BackupStorageSpec struct {
 	Type       BackupStorageType           `json:"type"`
 	Main       bool                        `json:"main,omitempty"`
 	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
