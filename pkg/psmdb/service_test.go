@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestMongosHost(t *testing.T) {
@@ -297,12 +297,11 @@ func TestExternalService(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion: version.Version,
+					CRVersion: version.Version(),
 				},
 			}
 			svc := ExternalService(cr, tt.replset, tt.podName)
 			assert.Equal(t, tt.expectedSvc, svc)
 		})
 	}
-
 }

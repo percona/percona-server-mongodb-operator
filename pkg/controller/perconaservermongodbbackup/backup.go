@@ -16,6 +16,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -24,7 +25,7 @@ import (
 const (
 	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
 	pbmStartingDeadline       = time.Duration(120) * time.Second
-	pbmStartingDeadlineErrMsg = "starting deadline exceeded"
+	pbmStartingDeadlineErrMsg = "backup did not progress from 'starting' state within the allowed timeout"
 )
 
 var defaultBackoff = wait.Backoff{
@@ -64,6 +65,13 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		return status, errors.Errorf("unable to get storage '%s'", cr.Spec.StorageName)
 	}
 
+	if cluster.CompareVersion("1.20.0") < 0 {
+		err := b.pbm.GetNSetConfigLegacy(ctx, k8sclient, cluster, stg)
+		if err != nil {
+			return status, errors.Wrapf(err, "set backup config with storage %s", cr.Spec.StorageName)
+		}
+	}
+
 	name := time.Now().UTC().Format(time.RFC3339)
 
 	var compLevel *int
@@ -83,16 +91,18 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		},
 	}
 
-	mainStgName, _, err := b.spec.MainStorage()
-	if err != nil {
-		return status, errors.Wrap(err, "get main storage")
+	if cluster.CompareVersion("1.20.0") >= 0 {
+		mainStgName, _, err := b.spec.MainStorage()
+		if err != nil {
+			return status, errors.Wrap(err, "get main storage")
+		}
+
+		if cr.Spec.StorageName != mainStgName {
+			cmd.Backup.Profile = cr.Spec.StorageName
+		}
 	}
 
-	if cr.Spec.StorageName != mainStgName {
-		cmd.Backup.Profile = cr.Spec.StorageName
-	}
-
-	log.Info("Sending backup command", "backupCmd", cmd)
+	log.Info("Sending backup command", "backupCmd", cmd, "profile", cmd.Backup.Profile)
 
 	if err := b.pbm.SendCmd(ctx, cmd); err != nil {
 		return status, err
@@ -183,9 +193,13 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 			status.Error = "incremental base backup not found"
 		}
 	case defs.StatusDone:
+		status.Size = storage.PrettySize(meta.Size)
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
+		}
+		status.LastWriteAt = &metav1.Time{
+			Time: time.Unix(int64(meta.LastWriteTS.T), 0),
 		}
 	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))

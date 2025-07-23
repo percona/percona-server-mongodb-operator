@@ -26,20 +26,17 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -60,6 +57,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 	return &ReconcilePerconaServerMongoDBBackup{
 		client:     mgr.GetClient(),
+		apiReader:  mgr.GetAPIReader(),
 		scheme:     mgr.GetScheme(),
 		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
@@ -90,6 +88,7 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
+	apiReader client.Reader
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
 
@@ -112,17 +111,26 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
-	err := r.client.Get(ctx, request.NamespacedName, cr)
+
+	// Here we use k8s APIReader to read the k8s object by making the
+	// direct call to k8s apiserver instead of using k8sClient.
+	// The reason is that k8sClient uses a cache and sometimes k8sClient can
+	// return stale copy of object.
+	// It is okay to make direct call to k8s apiserver because we are only
+	// making single read call for complete reconciler loop.
+	err := r.apiReader.Get(ctx, request.NamespacedName, cr)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return rr, nil
+			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return rr, err
 	}
+
+	log.V(1).Info("Got object from API server", "state", cr.Status.State)
 
 	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
 		cr.ObjectMeta.DeletionTimestamp == nil {
@@ -144,6 +152,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			if uerr != nil {
 				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
 			}
+
+			switch cr.Status.State {
+			case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
+				log.Info("Releasing backup lock", "lease", naming.BackupLeaseName(cr.Spec.ClusterName))
+
+				err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cr.Spec.ClusterName), cr.Namespace, naming.BackupHolderId(cr))
+				if err != nil {
+					log.Error(err, "failed to release the lock")
+				}
+			}
 		}
 	}()
 
@@ -161,6 +179,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cluster = nil
 	}
 
+	if err = checkStartingDeadline(ctx, cluster, cr); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if cluster != nil {
 		var svr *version.ServerVersion
 		svr, err = version.Server(r.clientcmd)
@@ -170,7 +192,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 		err = cluster.CheckNSetDefaults(ctx, svr.Platform)
 		if err != nil {
-			return rr, errors.Wrapf(err, "set defaults for %s/%s", cluster.Namespace, cluster.Name)
+			return reconcile.Result{}, errors.Wrapf(err, "invalid cr oprions used for %s/%s", cluster.Namespace, cluster.Name)
 		}
 	}
 
@@ -219,7 +241,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if err := cluster.CanBackup(ctx); err != nil {
-		return status, errors.Wrap(err, "failed to run backup")
+		log.Error(err, "Cluster is not ready for backup")
+		return status, nil
 	}
 
 	cjobs, err := backup.HasActiveJobs(ctx, r.newPBMFunc, r.client, cluster, backup.NewBackupJob(cr.Name), backup.NotPITRLock)
@@ -228,14 +251,28 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	if cjobs {
-		if cr.Status.State != psmdbv1.BackupStateWaiting {
-			log.Info("Waiting to finish another backup/restore.")
-		}
+		log.Info("Waiting to finish another backup/restore.")
 		status.State = psmdbv1.BackupStateWaiting
 		return status, nil
 	}
 
-	switch cr.Status.State {
+	log.Info("Acquiring the backup lock")
+	lease, err := k8s.AcquireLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
+	if err != nil {
+		return status, errors.Wrap(err, "acquire backup lock")
+	}
+
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != naming.BackupHolderId(cr) {
+		log.Info("Another backup is holding the lock", "holder", *lease.Spec.HolderIdentity)
+		status.State = psmdbv1.BackupStateWaiting
+		return status, nil
+	}
+
+	if err := r.ensureReleaseLockFinalizer(ctx, cluster, cr); err != nil {
+		return status, errors.Wrapf(err, "ensure %s finalizer", naming.FinalizerReleaseLock)
+	}
+
+	switch status.State {
 	case psmdbv1.BackupStateNew, psmdbv1.BackupStateWaiting:
 		return bcp.Start(ctx, r.client, cluster, cr)
 	}
@@ -251,6 +288,28 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	return status, err
 }
 
+func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	cr *psmdbv1.PerconaServerMongoDBBackup,
+) error {
+	for _, f := range cr.GetFinalizers() {
+		if f == naming.FinalizerReleaseLock {
+			return nil
+		}
+	}
+
+	orig := cr.DeepCopy()
+	cr.SetFinalizers(append(cr.GetFinalizers(), naming.FinalizerReleaseLock))
+	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch finalizers")
+	}
+
+	logf.FromContext(ctx).V(1).Info("Added finalizer", "finalizer", naming.FinalizerReleaseLock)
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (storage.Storage, error) {
 	switch {
 	case cr.Status.Azure != nil:
@@ -259,7 +318,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 		azureSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.Azure.CredentialsSecret)
 		if err != nil {
-			return nil, errors.Wrap(err, "getting azure credentials secret name")
+			return nil, errors.Wrap(err, "get azure credentials secret")
 		}
 		azureConf := &azure.Config{
 			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
@@ -271,6 +330,25 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			},
 		}
 		return azure.New(azureConf, "", nil)
+	case cr.Status.GCS != nil:
+		gcsConf := &gcs.Config{
+			Bucket:    cr.Status.GCS.Bucket,
+			Prefix:    cr.Status.GCS.Prefix,
+			ChunkSize: cr.Status.GCS.ChunkSize,
+		}
+
+		if cr.Status.GCS.CredentialsSecret != "" {
+			gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.GCS.CredentialsSecret)
+			if err != nil {
+				return nil, errors.Wrap(err, "get gcs credentials secret")
+			}
+			gcsConf.Credentials = gcs.Credentials{
+				ClientEmail: string(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
+				PrivateKey:  string(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
+			}
+		}
+
+		return gcs.New(gcsConf, "", nil)
 	case cr.Status.S3 != nil:
 		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
@@ -286,12 +364,34 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if cr.Status.S3.CredentialsSecret != "" {
 			s3secret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
 			if err != nil {
-				return nil, errors.Wrap(err, "getting s3 credentials secret name")
+				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
 				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
 				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
+		}
+
+		if strings.Contains(s3Conf.EndpointURL, "storage.googleapis.com") {
+			gcsConf := &gcs.Config{
+				Bucket:    cr.Status.S3.Bucket,
+				Prefix:    cr.Status.S3.Prefix,
+				ChunkSize: cr.Status.S3.UploadPartSize,
+			}
+
+			if cr.Status.S3.CredentialsSecret != "" {
+				gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
+				if err != nil {
+					return nil, errors.Wrap(err, "get s3 credentials secret")
+				}
+
+				gcsConf.Credentials = gcs.Credentials{
+					HMACAccessKey: string(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
+					HMACSecret:    string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+				}
+			}
+
+			return gcs.New(gcsConf, "", nil)
 		}
 
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
@@ -379,17 +479,23 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 
 	finalizers := []string{}
 
-	if cr.Status.State == psmdbv1.BackupStateReady {
-		for _, f := range cr.GetFinalizers() {
-			switch f {
-			case "delete-backup":
-				log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
-				fallthrough
-			case naming.FinalizerDeleteBackup:
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-backup":
+			log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
+			fallthrough
+		case naming.FinalizerDeleteBackup:
+			if cr.Status.State == psmdbv1.BackupStateReady {
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
 				}
+			}
+		case naming.FinalizerReleaseLock:
+			err = r.runReleaseLockFinalizer(ctx, cr)
+			if err != nil {
+				log.Error(err, "failed to release backup lock")
+				finalizers = append(finalizers, f)
 			}
 		}
 	}
@@ -398,6 +504,20 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	err = r.client.Update(ctx, cr)
 
 	return err
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) runReleaseLockFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
+	leaseName := naming.BackupLeaseName(cr.Spec.ClusterName)
+	holderId := naming.BackupHolderId(cr)
+	log := logf.FromContext(ctx).WithValues("lease", leaseName, "holder", holderId)
+
+	log.Info("releasing backup lock")
+	err := k8s.ReleaseLease(ctx, r.client, leaseName, cr.Namespace, holderId)
+	if k8serrors.IsNotFound(err) || errors.Is(err, k8s.ErrNotTheHolder) {
+		log.V(1).Info("failed to release backup lock", "error", err)
+		return nil
+	}
+	return errors.Wrap(err, "release backup lock")
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
@@ -460,6 +580,23 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		return nil
 	}
 
+	if cluster.CompareVersion("1.20.0") < 0 {
+		err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete PITR")
+		}
+		log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
+
+		err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete backup")
+		}
+
+		log.Info("Backup deleted")
+
+		return nil
+	}
+
 	mainStgName, _, err := cluster.Spec.Backup.MainStorage()
 	if err != nil {
 		return errors.Wrap(err, "get main storage")
@@ -509,7 +646,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	errB := bytes.Buffer{}
 	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
 	if err != nil {
-		return errors.Wrap(err, "exec delete-backup")
+		return errors.Wrapf(err, "exec delete-backup: stdout=%s, stderr=%s", outB.String(), errB.String())
 	}
 
 	log.Info("Backup deleted")

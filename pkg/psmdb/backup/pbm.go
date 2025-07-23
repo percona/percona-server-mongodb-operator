@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -42,12 +43,14 @@ import (
 )
 
 const (
+	KMSKeyID                         = "KMS_KEY_ID"
+	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
-	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
-	KMSKeyID                         = "KMS_KEY_ID"
+	GCSClientEmailSecretKey          = "GCS_CLIENT_EMAIL"
+	GCSPrivateKeySecretKey           = "GCS_PRIVATE_KEY"
 )
 
 type pbmC struct {
@@ -89,6 +92,7 @@ type PBM interface {
 	GetProfile(ctx context.Context, name string) (*config.Config, error)
 	RemoveProfile(ctx context.Context, name string) error
 	GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error
+	GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error
 	SetConfig(ctx context.Context, cfg *config.Config) error
 	SetConfigVar(ctx context.Context, key, val string) error
 
@@ -411,6 +415,54 @@ func GetPBMStorageS3Config(
 	return storageConf, nil
 }
 
+func GetPBMStorageGCSConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *api.PerconaServerMongoDB,
+	stg api.BackupStorageSpec,
+) (config.StorageConf, error) {
+	storageConf := config.StorageConf{
+		Type: storage.GCS,
+		GCS: &gcs.Config{
+			Bucket:    stg.GCS.Bucket,
+			Prefix:    stg.GCS.Prefix,
+			ChunkSize: stg.GCS.ChunkSize,
+		},
+	}
+
+	if stg.GCS.CredentialsSecret != "" {
+		gcsSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.GCS.CredentialsSecret)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "get GCS credentials secret")
+		}
+
+		if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
+			storageConf.GCS.Credentials = gcs.Credentials{
+				ClientEmail: string(gcsSecret.Data[GCSClientEmailSecretKey]),
+				PrivateKey:  string(gcsSecret.Data[GCSPrivateKeySecretKey]),
+			}
+		}
+
+		// s3 compatibility
+		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
+			storageConf.GCS.Credentials = gcs.Credentials{
+				HMACAccessKey: string(gcsSecret.Data[AWSAccessKeySecretKey]),
+				HMACSecret:    string(gcsSecret.Data[AWSSecretAccessKeySecretKey]),
+			}
+		}
+	}
+
+	if stg.GCS.Retryer != nil {
+		storageConf.GCS.Retryer = &gcs.Retryer{
+			BackoffInitial:    stg.GCS.Retryer.BackoffInitial,
+			BackoffMax:        stg.GCS.Retryer.BackoffMax,
+			BackoffMultiplier: stg.GCS.Retryer.BackoffMultiplier,
+		}
+	}
+
+	return storageConf, nil
+}
+
 func GetPBMStorageAzureConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -450,8 +502,26 @@ func GetPBMStorageConfig(
 ) (config.StorageConf, error) {
 	switch stg.Type {
 	case api.BackupStorageS3:
+		if strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
+			gcs := api.BackupStorageSpec{
+				Type: psmdbv1.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:            stg.S3.Bucket,
+					Prefix:            stg.S3.Prefix,
+					ChunkSize:         stg.S3.UploadPartSize,
+					CredentialsSecret: stg.S3.CredentialsSecret,
+				},
+			}
+
+			conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, gcs)
+			return conf, errors.Wrap(err, "get s3-compatible gcs config")
+		}
+
 		conf, err := GetPBMStorageS3Config(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get s3 config")
+	case api.BackupStorageGCS:
+		conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, stg)
+		return conf, errors.Wrap(err, "get gcs config")
 	case api.BackupStorageAzure:
 		conf, err := GetPBMStorageAzureConfig(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get azure config")
@@ -520,6 +590,26 @@ func (b *pbmC) RemoveProfile(ctx context.Context, name string) error {
 	log.Info("Removing profile", "name", name)
 
 	return config.RemoveProfile(ctx, b.Client, name)
+}
+
+// GetNSetConfigLegacy sets the PBM config with given storage
+func (b *pbmC) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+	log := logf.FromContext(ctx)
+
+	conf, err := GetPBMConfig(ctx, k8sclient, cluster, stg)
+	if err != nil {
+		return errors.Wrap(err, "get PBM config")
+	}
+
+	log.Info("Setting config", "cluster", cluster.Name, "storage", stg)
+
+	if err := config.SetConfig(ctx, b.Client, &conf); err != nil {
+		return errors.Wrap(err, "write config")
+	}
+
+	time.Sleep(11 * time.Second) // give time to init new storage
+
+	return nil
 }
 
 // GetNSetConfig sets the PBM config with main storage defined in the cluster CR
