@@ -5,19 +5,19 @@ tests=[]
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            NODES_NUM=3
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
+            gcloud config set project $GCP_PROJECT
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-                gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} \
                     --cluster-version=1.32 \
                     --machine-type=n1-standard-4 \
-                    --preemptible --disk-size 30 \
-                    --num-nodes=\$NODES_NUM \
+                    --preemptible \
+                    --disk-size 30 \
+                    --num-nodes=3 \
                     --network=jenkins-vpc \
                     --subnetwork=jenkins-${CLUSTER_SUFFIX} \
                     --no-enable-autoupgrade \
@@ -26,6 +26,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --enable-ip-alias \
                     --monitoring=NONE \
                     --logging=NONE \
+                    --no-enable-managed-prometheus \
                     --workload-pool=cloud-dev-112233.svc.id.goog && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
@@ -111,6 +112,17 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
+void pushReportFile() {
+    echo "Push logfile final_report.html file to S3!"
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 ls \$S3_PATH/final_report.html || :
+            aws s3 cp --content-type text/plain --quiet e2e-tests/reports/final_report.html \$S3_PATH/final_report.html || :
+        """
+    }
+}
+
 void initTests() {
     echo "Populating tests into the tests array!"
 
@@ -147,10 +159,7 @@ String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
 
     try {
-        println("Input time: ${time} (type: ${time.class})")
         def totalSeconds = time as Double
-        println("Converted to double: ${totalSeconds}")
-
         def hours = (totalSeconds / 3600) as Integer
         def minutes = ((totalSeconds % 3600) / 60) as Integer
         def seconds = (totalSeconds % 60) as Integer
@@ -168,25 +177,30 @@ TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | -----
 void makeReport() {
     def wholeTestAmount = tests.size()
     def startedTestAmount = 0
+    def totalTestTime = 0
 
-    for (int i = 0; i < tests.size(); i++) {
+    for (int i=0; i<tests.size(); i++) {
         def testName = tests[i]["name"]
         def testResult = tests[i]["result"]
-        def testTime = formatTime(tests[i]["time"])
+        def testTime = tests[i]["time"]
         def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
+
+        if (testTime instanceof Number) {
+            totalTestTime += testTime
+        }
 
         if (tests[i]["result"] != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + testTime + " |"
+        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
     }
-    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount | | |"
+    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount | | " + formatTime(totalTestTime) + " |"
 }
 
 void clusterRunner(String cluster) {
     def clusterCreated=0
 
-    for (int i=0; i<tests.size(); i++) {
+    for (int i = 0; i < tests.size(); i++) {
         if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
             tests[i]["result"] = "failure"
             tests[i]["cluster"] = cluster
@@ -368,7 +382,7 @@ pipeline {
         CLOUDSDK_CORE_DISABLE_PROMPTS = 1
         CLEAN_NAMESPACE = 1
         OPERATOR_NS = 'psmdb-operator'
-        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
+        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
@@ -403,7 +417,7 @@ pipeline {
                 prepareNode()
                 script {
                     if (AUTHOR_NAME == 'null') {
-                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
@@ -600,20 +614,10 @@ pipeline {
                             source \$HOME/.local/bin/env
                             uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
                             uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
-                            echo 'DEBUG: Files in reports folder'
-                            ls e2e-tests/reports/*.html
-                            ls e2e-tests/reports/*.xml
                             """
                             step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
                             archiveArtifacts 'final_report.xml, final_report.html'
-                            // Currently Html Publisher plugin is not available
-                            // publishHTML (target : [allowMissing: true,
-                            //     alwaysLinkToLastBuild: true,
-                            //     keepAll: false,
-                            //     reportDir: '.',
-                            //     reportFiles: 'final_report.html',
-                            //     reportName: 'PSMDB Test Report',
-                            //     reportTitles: 'Test Report'])
+                            pushReportFile()
                         } else {
                             echo "No report files found in e2e-tests/reports, skipping report generation"
                         }
