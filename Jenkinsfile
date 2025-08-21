@@ -118,7 +118,7 @@ void pushReportFile() {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
             aws s3 ls \$S3_PATH/final_report.html || :
-            aws s3 cp --content-type text/plain --quiet e2e-tests/reports/final_report.html \$S3_PATH/final_report.html || :
+            aws s3 cp --content-type text/plain --quiet final_report.html \$S3_PATH/final_report.html || :
         """
     }
 }
@@ -126,7 +126,7 @@ void pushReportFile() {
 void initTests() {
     echo "Populating tests into the tests array!"
 
-    def records = readCSV file: 'e2e-tests/run-pr.csv'
+    def records = readCSV file: 'e2e-tests/run-small.csv'
 
     for (int i=0; i<records.size(); i++) {
         tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
