@@ -126,7 +126,7 @@ void pushReportFile() {
 void initTests() {
     echo "Populating tests into the tests array!"
 
-    def records = readCSV file: 'e2e-tests/run-small.csv'
+    def records = readCSV file: 'e2e-tests/run-pr.csv'
 
     for (int i=0; i<records.size(); i++) {
         tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
