@@ -117,7 +117,6 @@ void pushReportFile() {
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            ls
             aws s3 ls \$S3_PATH/final_report.html || :
             aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
         """
@@ -624,7 +623,7 @@ pipeline {
                         }
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/final_report.html)\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")
