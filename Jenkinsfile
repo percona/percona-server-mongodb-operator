@@ -117,8 +117,9 @@ void pushReportFile() {
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            ls
             aws s3 ls \$S3_PATH/final_report.html || :
-            aws s3 cp --content-type text/plain --quiet final_report.html \$S3_PATH/final_report.html || :
+            aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
         """
     }
 }
