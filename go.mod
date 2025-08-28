@@ -19,7 +19,7 @@ require (
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20250626104900-da3bd6c2c1ec
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.4
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.16.0
