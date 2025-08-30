@@ -62,7 +62,7 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 	return mongo.Dial(conf)
 }
 
-func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
+func mongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
 	hosts, err := GetMongosAddrs(ctx, k8sclient, cr, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
@@ -85,7 +85,7 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 	return mongo.Dial(&conf)
 }
 
-func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
+func standaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
 	conf := mongo.Config{
 		Hosts:    []string{host},
 		Username: c.Username,
