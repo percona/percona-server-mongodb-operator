@@ -1009,7 +1009,7 @@ compare_mongo_cmd() {
 	local tls="${8:-false}"
 
 	local full_command="db.${collection}.${command}()"
-	if [[ ! -z ${sort} ]]; then
+	if [[ -n ${sort} ]]; then
 		full_command="${full_command}.${sort}"
 	fi
 
