@@ -147,7 +147,7 @@ spec:
         - mountPath: /opt/percona
           name: bin
         - mountPath: /etc/mongodb-encryption
-          name: my-cluster-name-mongodb-encryption-key
+          name: reconcile-statefulset-cr-mongodb-encryption-key
           readOnly: true
         - mountPath: /etc/users-secret
           name: users-secret-file
@@ -288,11 +288,11 @@ spec:
           secretName: reconcile-statefulset-cr-mongodb-keyfile
       - emptyDir: {}
         name: bin
-      - name: my-cluster-name-mongodb-encryption-key
+      - name: reconcile-statefulset-cr-mongodb-encryption-key
         secret:
           defaultMode: 288
           optional: false
-          secretName: my-cluster-name-mongodb-encryption-key
+          secretName: reconcile-statefulset-cr-mongodb-encryption-key
       - name: ssl
         secret:
           defaultMode: 288
