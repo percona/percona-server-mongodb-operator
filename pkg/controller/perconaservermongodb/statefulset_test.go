@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -119,6 +121,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      crName + "-ssl-internal",
 					Namespace: tt.cr.Namespace,
+				},
+			}, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      logcollector.ConfigMapName(tt.cr.Name),
+					Namespace: tt.cr.Namespace,
+				},
+				Data: map[string]string{
+					"fluentbit_custom.conf": "config",
 				},
 			})
 

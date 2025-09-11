@@ -201,7 +201,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex + configs.LogCollectionConf.HashHex
+		annotations["percona.com/configuration-hash"] = annotations["percona.com/configuration-hash"] + configs.LogCollectionConf.HashHex
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
