@@ -200,7 +200,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
 	}
 
-	if cr.CompareVersion("1.12.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
+	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex + configs.LogCollectionConf.HashHex
 	}
 
