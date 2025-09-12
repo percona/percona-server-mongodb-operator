@@ -304,6 +304,11 @@ func TestBackup_Status(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus.Error, status.Error)
 			assert.Equal(t, tt.expectedStatus.Type, status.Type)
 			assert.Equal(t, tt.expectedStatus.PBMPods, status.PBMPods)
+			if name == "backup completed successfully" {
+				assert.Equal(t, tt.expectedStatus.Size, status.Size)
+			} else {
+				assert.Empty(t, status.Size)
+			}
 
 			if tt.expectedStatus.StartAt != nil {
 				assert.NotNil(t, status.StartAt)
