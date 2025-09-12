@@ -27,7 +27,6 @@ func TestBackup_Status(t *testing.T) {
 		setupMock      func(*MockPBM)
 		inputCR        *api.PerconaServerMongoDBBackup
 		expectedStatus api.PerconaServerMongoDBBackupStatus
-		expectedError  bool
 	}{
 		"backup metadata not found": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -44,7 +43,6 @@ func TestBackup_Status(t *testing.T) {
 			expectedStatus: api.PerconaServerMongoDBBackupStatus{
 				PBMname: "test-backup",
 			},
-			expectedError: false,
 		},
 		"backup in error state": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -83,7 +81,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:           defs.LogicalBackup,
 				PBMPods:        map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 		"backup completed successfully": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -125,7 +122,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:           defs.LogicalBackup,
 				PBMPods:        map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 		"backup in starting state within deadline": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -162,7 +158,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:    defs.LogicalBackup,
 				PBMPods: map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 		"backup in starting state beyond deadline": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -200,7 +195,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:    defs.LogicalBackup,
 				PBMPods: map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 		"backup in running state": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -237,7 +231,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:           defs.LogicalBackup,
 				PBMPods:        map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 		"incremental backup with base not found error": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -276,7 +269,6 @@ func TestBackup_Status(t *testing.T) {
 				Type:           defs.IncrementalBackup,
 				PBMPods:        map[string]string{"rs0": "node1"},
 			},
-			expectedError: false,
 		},
 	}
 
@@ -293,12 +285,7 @@ func TestBackup_Status(t *testing.T) {
 			}
 
 			status, err := backup.Status(ctx, tt.inputCR)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
+			assert.NoError(t, err)
 
 			assert.Equal(t, tt.expectedStatus.State, status.State)
 			assert.Equal(t, tt.expectedStatus.Error, status.Error)
