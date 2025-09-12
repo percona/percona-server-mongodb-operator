@@ -34,8 +34,6 @@ func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	log := logf.FromContext(ctx)
-
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -48,11 +46,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	} else if err != nil {
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
-	}
-
-	if !cr.Spec.PMM.HasSecret(&sysUsersSecretObj) && cr.Spec.PMM.Enabled {
-		log.Error(errors.New(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
-			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey)), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 	}
 
 	secretName := api.InternalUserSecretName(cr)
