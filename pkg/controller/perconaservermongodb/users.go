@@ -21,7 +21,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
 func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
@@ -35,8 +34,6 @@ func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	log := logf.FromContext(ctx)
-
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -49,14 +46,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	} else if err != nil {
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
-	}
-
-	if (!cr.Spec.PMM.HasSecret(&sysUsersSecretObj) || !pmm.SecretHasToken(&sysUsersSecretObj)) && cr.Spec.PMM.Enabled {
-		log.Error(
-			fmt.Errorf("PMM requires the configuration of either %s for PMM3 or %s for PMM2", api.PMMServerToken, api.PMMAPIKey),
-			"secret is missing the required PMM credentials",
-			"secret", cr.Spec.Secrets.Users,
-		)
 	}
 
 	secretName := api.InternalUserSecretName(cr)
