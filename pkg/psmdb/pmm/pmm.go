@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/sets"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -587,4 +588,16 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 
 	return &pmmC
+}
+
+// SecretHasToken checks if the PMM3 token is configured as part of the given secret.
+func SecretHasToken(secret *corev1.Secret) bool {
+	if len(secret.Data) == 0 {
+		return false
+	}
+	s := sets.StringKeySet(secret.Data)
+	if s.Has(api.PMMServerToken) {
+		return true
+	}
+	return false
 }
