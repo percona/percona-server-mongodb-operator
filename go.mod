@@ -1,6 +1,6 @@
 module github.com/percona/percona-server-mongodb-operator
 
-go 1.24.2
+go 1.25
 
 require (
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230216094301-f9489c81b52a
