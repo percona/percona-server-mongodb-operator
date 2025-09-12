@@ -2,7 +2,6 @@ package tls
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"time"
 
@@ -31,7 +30,7 @@ type CertManagerController interface {
 	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error)
 	ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error
-	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error
+	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificateList []string, secretsList []string) error
 	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
 	Check(ctx context.Context, config *rest.Config, ns string) error
 	IsDryRun() bool
@@ -63,7 +62,7 @@ func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
-func certificateName(cr *api.PerconaServerMongoDB, internal bool) string {
+func CertificateName(cr *api.PerconaServerMongoDB, internal bool) string {
 	if internal {
 		return cr.Name + "-ssl-internal"
 	}
@@ -119,12 +118,7 @@ func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Conte
 
 func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
 	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
-		switch errors.Cause(err).(type) {
-		case *controllerutil.AlreadyOwnedError:
-			fmt.Sprintf("%s", err)
-		default:
-			return "", errors.Wrap(err, "set controller reference")
-		}
+		return "", errors.Wrap(err, "set controller reference")
 	}
 
 	status, err := util.Apply(ctx, c.cl, obj)
@@ -201,7 +195,7 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 
 	certificate := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      certificateName(cr, internal),
+			Name:      CertificateName(cr, internal),
 			Namespace: cr.Namespace,
 			Labels:    naming.ClusterLabels(cr),
 		},
@@ -292,7 +286,7 @@ func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.
 	return c.createOrUpdate(ctx, cr, cert)
 }
 
-func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {
+func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificateList []string, secretsList []string) error {
 	if c.dryRun {
 		return nil
 	}
@@ -306,7 +300,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
 		case <-ticker.C:
 			successCount := 0
-			for _, secretName := range secretsList {
+			for i, secretName := range secretsList {
 				secret := &corev1.Secret{}
 				err := c.cl.Get(ctx, types.NamespacedName{
 					Name:      secretName,
@@ -315,17 +309,24 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
 				} else if err == nil {
+					certName := certificateList[i]
 					successCount++
-					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != secret.Name {
+					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != certName {
+						continue
+					}
+					cert := &cm.Certificate{}
+					err := c.cl.Get(ctx, types.NamespacedName{
+						Name:      certName,
+						Namespace: cr.Namespace,
+					}, cert)
+					if err != nil {
+						return err
+					}
+					if metav1.IsControlledBy(secret, cert) {
 						continue
 					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
-						switch errors.Cause(err).(type) {
-						case *controllerutil.AlreadyOwnedError:
-							fmt.Sprintf("%s", err)
-						default:
-							return errors.Wrap(err, "set controller reference")
-						}
+						return errors.Wrap(err, "set controller reference")
 					}
 					if err = c.cl.Update(ctx, secret); err != nil {
 						return errors.Wrap(err, "failed to update secret")

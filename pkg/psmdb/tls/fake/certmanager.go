@@ -46,7 +46,7 @@ func (c *fakeCertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.C
 	return nil
 }
 
-func (c *fakeCertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {
+func (c *fakeCertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificateList []string, secretsList []string) error {
 	return nil
 }
 

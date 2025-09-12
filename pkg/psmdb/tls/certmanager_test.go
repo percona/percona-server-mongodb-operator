@@ -101,7 +101,7 @@ func TestCreateCertificate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: CertificateName(cr, false)}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +119,7 @@ func TestCreateCertificate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: certificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: CertificateName(cr, false)}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}

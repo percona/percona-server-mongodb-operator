@@ -400,7 +400,7 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 			return "", errors.Wrap(err, "create ca certificate")
 		}
 
-		err = c.WaitForCerts(ctx, cr, tls.CACertificateSecretName(cr))
+		err = c.WaitForCerts(ctx, cr, []string{tls.CACertificateSecretName(cr)}, []string{tls.CACertificateSecretName(cr)})
 		if err != nil {
 			return "", errors.Wrap(err, "failed to wait for ca cert")
 		}
@@ -421,6 +421,7 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 	}
 
 	secretNames := []string{tls.CertificateSecretName(cr, false)}
+	certNames := []string{tls.CertificateName(cr, false)}
 
 	if tls.CertificateSecretName(cr, false) != tls.CertificateSecretName(cr, true) {
 		err = applyFunc(func() (util.ApplyStatus, error) {
@@ -430,9 +431,10 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 			return "", errors.Wrap(err, "create certificate")
 		}
 		secretNames = append(secretNames, tls.CertificateSecretName(cr, true))
+		certNames = append(certNames, tls.CertificateName(cr, true))
 	}
 
-	err = c.WaitForCerts(ctx, cr, secretNames...)
+	err = c.WaitForCerts(ctx, cr, certNames, secretNames)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to wait for certs")
 	}
