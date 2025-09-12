@@ -30,6 +30,8 @@ spec:
   serviceName: reconcile-statefulset-cr-cfg
   template:
     metadata:
+      annotations:
+        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e
       labels:
         app.kubernetes.io/component: cfg
         app.kubernetes.io/instance: reconcile-statefulset-cr
@@ -227,6 +229,8 @@ spec:
             name: mongod-data
           - mountPath: /opt/percona
             name: bin
+          - mountPath: /opt/percona/logcollector/fluentbit/custom
+            name: log-collector-volume
       - name: logrotate
         image: perconalab/fluentbit:main-logcollector
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
@@ -288,6 +292,10 @@ spec:
           secretName: reconcile-statefulset-cr-mongodb-keyfile
       - emptyDir: {}
         name: bin
+      - configMap:
+          name: reconcile-statefulset-cr-log-collector-config
+          optional: true
+        name: log-collector-volume
       - name: my-cluster-name-mongodb-encryption-key
         secret:
           defaultMode: 288
