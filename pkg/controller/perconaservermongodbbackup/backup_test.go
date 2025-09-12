@@ -1,4 +1,4 @@
-//go:generate mockgen -source=../../../pkg/psmdb/backup/pbm.go -destination=mock_pbm.go -package=perconaservermongodbbackup
+//go:generate ../../../bin/mockgen -source=../../../pkg/psmdb/backup/pbm.go -destination=mock_pbm.go -package=perconaservermongodbbackup
 
 package perconaservermongodbbackup
 
@@ -16,7 +16,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
