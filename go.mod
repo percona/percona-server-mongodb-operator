@@ -14,7 +14,7 @@ require (
 	github.com/go-openapi/validate v0.24.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
 	github.com/hashicorp/go-version v1.7.0
-	github.com/onsi/ginkgo/v2 v2.25.1
+	github.com/onsi/ginkgo/v2 v2.25.3
 	github.com/onsi/gomega v1.38.2
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20250626104900-da3bd6c2c1ec
 	github.com/pkg/errors v0.9.1
@@ -26,7 +26,7 @@ require (
 	google.golang.org/grpc v1.75.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.34.0
-	k8s.io/apimachinery v0.34.0
+	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.0
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/mcs-api v0.2.0
