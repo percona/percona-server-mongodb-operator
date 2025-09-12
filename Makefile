@@ -67,7 +67,7 @@ deploy: ## Deploy operator
 undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
-test: envtest ## Run tests.
+test: envtest generate ## Run tests.
 	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
