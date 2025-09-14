@@ -519,6 +519,10 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 
 	if !cr.Spec.PMM.HasSecret(secret) {
+		log.Error(
+			fmt.Errorf("PMM is enabled and requires the configuration of either %s for PMM3 or %s for PMM2", api.PMMServerToken, api.PMMAPIKey),
+			"secret is missing the required PMM credentials",
+		)
 		return nil
 	}
 
