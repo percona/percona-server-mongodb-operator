@@ -350,11 +350,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		}
 	}
 
-	if cr.CompareVersion("1.5.0") >= 0 {
-		err := r.reconcileUsers(ctx, cr, repls)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
-		}
+	err = r.reconcileUsers(ctx, cr, repls)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
 	}
 
 	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)

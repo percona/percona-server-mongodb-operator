@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -203,7 +204,7 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
-	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey {
+	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey || passKey == api.EnvPMMServerToken {
 		return true, nil
 	}
 	su.users = append(su.users, systemUser{
@@ -263,8 +264,14 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 		}, users...)
 	}
 	if cr.Spec.PMM.Enabled && cr.Spec.PMM.HasSecret(newUsersSec) {
-		// insert in front
-		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+		if pmm.SecretHasToken(newUsersSec) {
+			users = append([]user{
+				{
+					nameKey: api.PMMServerToken,
+					passKey: api.PMMServerToken,
+				},
+			}, users...)
+		} else if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
 			users = append([]user{
 				{
 					nameKey: api.EnvPMMServerAPIKey,
@@ -291,7 +298,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			switch u.nameKey {
 			case api.EnvMongoDBBackupUser:
 				containers = append(containers, naming.ContainerBackupAgent)
-			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey:
+			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey, api.EnvPMMServerToken:
 				containers = append(containers, "pmm-client")
 			}
 		}
