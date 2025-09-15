@@ -191,7 +191,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				return nil
 			}
 
-			caSecret, err := r.getSecret(ctx, cr, tls.CACertificateSecretName(cr))
+			caSecret, err := r.getSecret(ctx, cr, tls.CertificateCA(cr).SecretName())
 			if err != nil {
 				if k8serr.IsNotFound(err) {
 					return nil
@@ -393,14 +393,15 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 			return "", errors.Wrap(err, "apply ca issuer")
 		}
 
+		caCert := tls.CertificateCA(cr)
 		err = applyFunc(func() (util.ApplyStatus, error) {
-			return c.ApplyCACertificate(ctx, cr)
+			return c.ApplyCertificate(ctx, cr, caCert)
 		})
 		if err != nil {
 			return "", errors.Wrap(err, "create ca certificate")
 		}
 
-		err = c.WaitForCerts(ctx, cr, []string{tls.CACertificateSecretName(cr)}, []string{tls.CACertificateSecretName(cr)})
+		err = c.WaitForCerts(ctx, cr, caCert)
 		if err != nil {
 			return "", errors.Wrap(err, "failed to wait for ca cert")
 		}
@@ -413,28 +414,27 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		return "", errors.Wrap(err, "create issuer")
 	}
 
+	tlsCert := tls.CertificateTLS(cr, false)
 	err = applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyCertificate(ctx, cr, false)
+		return c.ApplyCertificate(ctx, cr, tlsCert)
 	})
 	if err != nil {
 		return "", errors.Wrap(err, "create certificate")
 	}
 
-	secretNames := []string{tls.CertificateSecretName(cr, false)}
-	certNames := []string{tls.CertificateName(cr, false)}
+	certificates := []tls.Certificate{tlsCert}
 
-	if tls.CertificateSecretName(cr, false) != tls.CertificateSecretName(cr, true) {
+	if internalCert := tls.CertificateTLS(cr, true); tlsCert.SecretName() != internalCert.SecretName() {
 		err = applyFunc(func() (util.ApplyStatus, error) {
-			return c.ApplyCertificate(ctx, cr, true)
+			return c.ApplyCertificate(ctx, cr, internalCert)
 		})
 		if err != nil {
 			return "", errors.Wrap(err, "create certificate")
 		}
-		secretNames = append(secretNames, tls.CertificateSecretName(cr, true))
-		certNames = append(certNames, tls.CertificateName(cr, true))
+		certificates = append(certificates, internalCert)
 	}
 
-	err = c.WaitForCerts(ctx, cr, certNames, secretNames)
+	err = c.WaitForCerts(ctx, cr, certificates...)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to wait for certs")
 	}

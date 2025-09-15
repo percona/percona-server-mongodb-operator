@@ -97,11 +97,12 @@ func TestCreateCertificate(t *testing.T) {
 	cert := &cm.Certificate{}
 
 	t.Run("Create certificate with custom issuer name", func(t *testing.T) {
-		if _, err := r.ApplyCertificate(ctx, cr, false); err != nil {
+		tlsCert := CertificateTLS(cr, false)
+		if _, err := r.ApplyCertificate(ctx, cr, tlsCert); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: CertificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: tlsCert.Name()}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,11 +116,12 @@ func TestCreateCertificate(t *testing.T) {
 		cr.Name = "psmdb-mock-1"
 		cr.Spec.CRVersion = "1.15.0"
 
-		if _, err := r.ApplyCertificate(ctx, cr, false); err != nil {
+		tlsCert := CertificateTLS(cr, false)
+		if _, err := r.ApplyCertificate(ctx, cr, tlsCert); err != nil {
 			t.Fatal(err)
 		}
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: CertificateName(cr, false)}, cert)
+		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: tlsCert.Name()}, cert)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -34,11 +34,7 @@ func (c *fakeCertManagerController) ApplyCAIssuer(ctx context.Context, cr *api.P
 	return util.ApplyStatusUnchanged, nil
 }
 
-func (c *fakeCertManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error) {
-	return util.ApplyStatusUnchanged, nil
-}
-
-func (c *fakeCertManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+func (c *fakeCertManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert tls.Certificate) (util.ApplyStatus, error) {
 	return util.ApplyStatusUnchanged, nil
 }
 
@@ -46,7 +42,7 @@ func (c *fakeCertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.C
 	return nil
 }
 
-func (c *fakeCertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificateList []string, secretsList []string) error {
+func (c *fakeCertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, cert ...tls.Certificate) error {
 	return nil
 }
 
