@@ -263,7 +263,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
-	if cr.Spec.PMM.Enabled && cr.Spec.PMM.HasSecret(newUsersSec) {
+	if cr.Spec.PMM.Enabled {
 		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{
 				{
@@ -271,20 +271,23 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 					passKey: api.PMMServerToken,
 				},
 			}, users...)
-		} else if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
-			users = append([]user{
-				{
-					nameKey: api.EnvPMMServerAPIKey,
-					passKey: api.EnvPMMServerAPIKey,
-				},
-			}, users...)
-		} else {
-			users = append([]user{
-				{
-					nameKey: api.EnvPMMServerUser,
-					passKey: api.EnvPMMServerPassword,
-				},
-			}, users...)
+		}
+		if cr.Spec.PMM.HasSecret(newUsersSec) {
+			if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerAPIKey,
+						passKey: api.EnvPMMServerAPIKey,
+					},
+				}, users...)
+			} else {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerUser,
+						passKey: api.EnvPMMServerPassword,
+					},
+				}, users...)
+			}
 		}
 	}
 
