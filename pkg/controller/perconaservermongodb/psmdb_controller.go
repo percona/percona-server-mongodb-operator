@@ -88,13 +88,14 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDB{
+		MongoProviderBase:      psmdb.NewProviderBase(client, nil),
 		client:                 client,
-		scheme:                 mgr.GetScheme(),
+		scheme:                 client.Scheme(),
+		newPBMFunc:             backup.NewPBM,
 		serverVersion:          sv,
 		reconcileIn:            time.Second * 5,
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
-		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 
@@ -172,21 +173,21 @@ func NewCronRegistry() CronRegistry {
 
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
+	psmdb.MongoProviderBase
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client     client.Client
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	crons               CronRegistry
-	clientcmd           *clientcmd.Client
-	serverVersion       *version.ServerVersion
-	reconcileIn         time.Duration
-	mongoClientProvider MongoClientProvider
+	crons         CronRegistry
+	clientcmd     *clientcmd.Client
+	serverVersion *version.ServerVersion
+	reconcileIn   time.Duration
+
+	newPBMFunc backup.NewPBMFunc
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
-
-	newPBM backup.NewPBMFunc
 
 	initImage string
 
@@ -871,7 +872,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 		return errors.Wrap(err, "failed to set port")
 	}
 
-	mc, err := r.mongoClientWithRole(ctx, cr, rs, api.RoleClusterAdmin)
+	mc, err := r.MongoClient().Mongo(ctx, cr, rs, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "dial:")
 	}

@@ -52,10 +52,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
+		MongoProviderBase: psmdb.NewProviderBase(mgr.GetClient(), nil),
+		client:            mgr.GetClient(),
+		scheme:            mgr.GetScheme(),
+		clientcmd:         cli,
+		newPBMFunc:        backup.NewPBM,
 	}, nil
 }
 
@@ -81,6 +82,8 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBRestore{}
 type ReconcilePerconaServerMongoDBRestore struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
+	psmdb.MongoProviderBase
+
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client

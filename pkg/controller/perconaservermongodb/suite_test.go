@@ -80,11 +80,11 @@ func reconciler() *ReconcilePerconaServerMongoDB {
 	return (&ReconcilePerconaServerMongoDB{
 		client:                 k8sClient,
 		scheme:                 k8sClient.Scheme(),
+		newPBMFunc:             backup.NewPBM,
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		clientcmd:              cli,
 		restConfig:             cfg,
-		newPBM:                 backup.NewPBM,
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		serverVersion: &version.ServerVersion{
 			Platform: version.PlatformKubernetes,

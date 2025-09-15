@@ -59,8 +59,8 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:     mgr.GetClient(),
 		apiReader:  mgr.GetAPIReader(),
 		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
+		newPBMFunc: backup.NewPBM,
 	}, nil
 }
 
