@@ -14,6 +14,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -32,6 +33,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -119,6 +121,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      crName + "-ssl-internal",
 					Namespace: tt.cr.Namespace,
+				},
+			}, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      logcollector.ConfigMapName(tt.cr.Name),
+					Namespace: tt.cr.Namespace,
+				},
+				Data: map[string]string{
+					"fluentbit_custom.conf": "config",
 				},
 			})
 
