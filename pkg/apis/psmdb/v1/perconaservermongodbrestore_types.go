@@ -177,6 +177,8 @@ func (t *PITRestoreDate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.Time.Format("2006-01-02 15:04:05"))
 }
 
+// +kubebuilder:validation:XValidation:rule="self.type != 'date' || (has(self.date) && self.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'))",message="Time should be in format YYYY-MM-DD HH:MM:SS"
+// +kubebuilder:validation:XValidation:rule="self.type != 'latest' || !has(self.date)",message="Date should not be used when 'latest' type is used"
 type PITRestoreSpec struct {
 	Type PITRestoreType  `json:"type,omitempty"`
 	Date *PITRestoreDate `json:"date,omitempty"`
