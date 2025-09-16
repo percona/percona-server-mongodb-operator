@@ -399,6 +399,15 @@ kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_S
 desc 'delete old PMM token'
 delete_pmm_server_token "operator"
 
+desc 'check for authentication errors in PMM client logs'
+for i in {1..3}; do
+    if kubectl logs monitoring-pmm3-rs0-0 pmm-client | grep -q 'Invalid username or password'; then
+        echo "pmm token is not configured properly"
+        exit 1
+    fi
+    sleep 2
+done
+
 desc 'check mongod metrics'
 get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 $NEW_TOKEN
 get_metric_values mongodb_connections $namespace-$cluster-rs0-1 $NEW_TOKEN
@@ -462,6 +471,7 @@ if [[ $(kubectl_bin logs monitoring-pmm3-rs0-0 pmm-client | grep -c 'cannot auto
 	echo "error: cannot auto discover databases and collections"
 	exit 1
 fi
+
 
 # Temporarily skipping this check
 # desc 'check for passwords leak'
