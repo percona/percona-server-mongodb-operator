@@ -414,7 +414,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 		// - `Resync` is called when syncing the main storage (using the operator's `ResyncMainStorageAndWait` method). It syncs the "oplog, backup, and restore meta".
 		// - `SyncBackupList` is called when syncing the profile storage (using the operator's `ResyncProfileAndWait` method). It only syncs backup metadata.
 		//
-		// When we want to perform a restore using PITR, we must configure the profile as the primary storage.
+		// When we want to perform a restore using PITR, we must configure the profile as the main storage.
 		if cr.Spec.PITR != nil || backup.IsErrNoDocuments(err) {
 			log.Info(fmt.Sprintf("PBM config not found, configuring %s as main storage", profileName))
 
