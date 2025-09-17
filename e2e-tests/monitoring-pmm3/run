@@ -400,12 +400,15 @@ desc 'delete old PMM token'
 delete_pmm_server_token "operator"
 
 desc 'check for authentication errors in PMM client logs'
-for i in {1..3}; do
-	if kubectl logs monitoring-pmm3-rs0-0 pmm-client | grep -q 'Invalid username or password'; then
-		echo "pmm token is not configured properly"
-		exit 1
-	fi
-	sleep 2
+pods=$(kubectl get pods --selector=app.kubernetes.io/replset=rs0 -o jsonpath='{.items[*].metadata.name}')
+for pod in $pods; do
+  for i in {1..3}; do
+  	if kubectl logs "$pod" pmm-client | grep -q 'Invalid username or password'; then
+  		echo "pmm token is not configured properly for $pod"
+  		exit 1
+  	fi
+  	sleep 2
+  done
 done
 
 desc 'check mongod metrics'
