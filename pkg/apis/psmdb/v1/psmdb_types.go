@@ -1282,6 +1282,7 @@ const (
 	EnvPMMServerUser                 = PMMUserKey
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey
+	EnvPMMServerToken                = PMMServerToken
 )
 
 type SystemUserRole string

@@ -21,6 +21,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
 func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
@@ -34,8 +35,6 @@ func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	log := logf.FromContext(ctx)
-
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -48,11 +47,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	} else if err != nil {
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
-	}
-
-	if !cr.Spec.PMM.HasSecret(&sysUsersSecretObj) && cr.Spec.PMM.Enabled {
-		log.Error(errors.New(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
-			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey)), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 	}
 
 	secretName := api.InternalUserSecretName(cr)
@@ -210,7 +204,7 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
-	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey {
+	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey || passKey == api.EnvPMMServerToken {
 		return true, nil
 	}
 	su.users = append(su.users, systemUser{
@@ -269,22 +263,31 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
-	if cr.Spec.PMM.Enabled && cr.Spec.PMM.HasSecret(newUsersSec) {
-		// insert in front
-		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+	if cr.Spec.PMM.Enabled {
+		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{
 				{
-					nameKey: api.EnvPMMServerAPIKey,
-					passKey: api.EnvPMMServerAPIKey,
+					nameKey: api.PMMServerToken,
+					passKey: api.PMMServerToken,
 				},
 			}, users...)
-		} else {
-			users = append([]user{
-				{
-					nameKey: api.EnvPMMServerUser,
-					passKey: api.EnvPMMServerPassword,
-				},
-			}, users...)
+		}
+		if cr.Spec.PMM.HasSecret(newUsersSec) {
+			if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerAPIKey,
+						passKey: api.EnvPMMServerAPIKey,
+					},
+				}, users...)
+			} else {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerUser,
+						passKey: api.EnvPMMServerPassword,
+					},
+				}, users...)
+			}
 		}
 	}
 
@@ -298,7 +301,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			switch u.nameKey {
 			case api.EnvMongoDBBackupUser:
 				containers = append(containers, naming.ContainerBackupAgent)
-			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey:
+			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey, api.EnvPMMServerToken:
 				containers = append(containers, "pmm-client")
 			}
 		}
