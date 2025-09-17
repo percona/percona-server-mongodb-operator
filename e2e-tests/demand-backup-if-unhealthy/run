@@ -1,0 +1,96 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+create_secrets() {
+  desc 'create secrets and start client'
+  kubectl_bin apply -f "$test_dir/conf/secrets.yml" -f "$conf_dir/client.yml"
+}
+
+is_sts_ready() {
+  local sts_name="${1:-some-name-rs0}"
+  local replicas ready_replicas
+
+  until kubectl_bin get sts "$sts_name" &>/dev/null; do
+    sleep 2
+  done
+
+  replicas=$(kubectl_bin get sts "$sts_name" -o jsonpath='{.spec.replicas}')
+  ready_replicas=$(kubectl_bin get sts "$sts_name" -o jsonpath='{.status.readyReplicas}')
+
+  [[ "$replicas" -eq "$ready_replicas" ]]
+}
+
+verify_sts_is_unready() {
+  local sts_name="${1:-some-name-rs0}"
+
+  if is_sts_ready "$sts_name"; then
+    desc "StatefulSet $sts_name is ready during the backup, failing..."
+    return 1
+  fi
+
+  return 0
+}
+
+wait_sts_to_become_unready() {
+  local sts_name="${1:-some-name-rs0}"
+  local timeout="${3:-60}"
+  local interval=2
+  local elapsed=0
+
+  echo "Deleting StatefulSet $sts_name in namespace $namespace..."
+  kubectl_bin delete sts "$sts_name" --wait=false
+
+  echo "Wait for StatefulSet $sts_name to become Unready..."
+  until ! is_sts_ready "$sts_name"; do
+    if (( elapsed >= timeout )); then
+      desc "Timeout reached: StatefulSet $sts_name still has Ready replicas"
+      exit 1
+    fi
+    sleep $interval && (( elapsed += interval ))
+    echo .
+  done
+}
+
+create_infra $namespace
+deploy_minio
+create_secrets
+apply_s3_storage_secrets
+
+cluster="some-name"
+desc "create PSMDB cluster $cluster"
+apply_cluster "$test_dir/conf/$cluster.yml"
+wait_for_cluster_state "$cluster" "ready"
+
+desc "Testing physical backup"
+wait_sts_to_become_unready
+
+backup_name_minio_physical="backup-minio-physical"
+run_backup "minio" "$backup_name_minio_physical" "physical"
+
+wait_backup $backup_name_minio_physical running
+verify_sts_is_unready
+
+desc "Verify $backup_name_minio_physical and cluster are back to ready state"
+wait_backup "$backup_name_minio_physical" "ready"
+wait_for_cluster_state "$cluster" "ready"
+
+desc "Testing logical backup"
+wait_sts_to_become_unready
+
+backup_name_minio_logical="backup-minio-logical"
+run_backup "minio" "$backup_name_minio_logical"
+
+wait_backup $backup_name_minio_logical running
+verify_sts_is_unready
+
+desc "Verify $backup_name_minio_logical and cluster are back to ready state"
+wait_backup "$backup_name_minio_logical" "ready"
+wait_for_cluster_state "$cluster" "ready"
+
+destroy $namespace
+desc 'test passed'
