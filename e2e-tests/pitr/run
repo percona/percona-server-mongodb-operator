@@ -56,6 +56,10 @@ check_recovery() {
 	local backupSource=$5
 	local cluster_name=$6
 	local selective_collection=$7
+	local restore_name="restore-${8:-"$backup_name"}"
+
+	local cluster
+	cluster="$cluster_name-rs0"
 
 	desc "write more data before restore by $restore_type"
 	sleep 60
@@ -74,7 +78,7 @@ check_recovery() {
 	desc "check restore by $restore_type"
 	if [ -z "$backupSource" ]; then
 		cat $test_dir/conf/restore.yml \
-			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
 			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
@@ -84,7 +88,7 @@ check_recovery() {
 	else
 		backup_dest=$(get_backup_dest "$backup_name")
 		cat $test_dir/conf/restore.yml \
-			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "/backupName/d" \
 			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
@@ -92,7 +96,7 @@ check_recovery() {
 			| if [ -n "$selective_collection" ]; then yq eval '.spec.selective = {"namespaces": ["myApp.test"], "withUsersAndRoles": true}'; else yq; fi \
 			| kubectl_bin apply -f -
 	fi
-	wait_restore "$backup_name" "$cluster_name"
+	wait_restore "${restore_name/restore-/}" "$cluster_name"
 	echo
 	set -o xtrace
 
@@ -171,6 +175,26 @@ main() {
 	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-3"
 
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${cluster/-rs0/}"
+
+	desc 'restore pitr using backupSource on second cluster with invalid storage'
+
+	second_cluster="cluster2-rs0"
+	apply_cluster "$test_dir/conf/$second_cluster.yml"
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $second_cluster 3
+
+	wait_backup_agent $second_cluster-0
+	wait_backup_agent $second_cluster-1
+	wait_backup_agent $second_cluster-2
+
+	desc 'create user myApp'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$second_cluster.$namespace"
+	sleep 2
+
+	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-4"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
