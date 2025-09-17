@@ -99,12 +99,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 	logf.FromContext(ctx).Info("Secret data changed. Updating users...")
 
-	containers, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
+	containerNames, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	if len(containers) > 0 {
+	if len(containerNames) > 0 {
 		rsPodList, err := r.getMongodPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
@@ -128,8 +128,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			pods = append(pods, cfgPodlist.Items...)
 		}
 
-		for _, name := range containers {
-			err = r.killcontainer(ctx, pods, name)
+		for _, name := range containerNames {
+			err = r.killContainer(ctx, pods, name)
 			if err != nil {
 				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
@@ -148,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
+func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
@@ -174,7 +174,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods 
 			}
 		}
 	}
-
 	return nil
 }
 
