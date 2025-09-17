@@ -205,6 +205,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				if err := r.resyncStorage(ctx, cluster, cr); err != nil {
 					return reconcile.Result{}, errors.Wrap(err, "resync storage")
 				}
+
+				time.Sleep(5 * time.Second)
+
+				// We should validate again to prevent the restore from entering an Error state if the problem is resolved after resync
 				err = r.validate(ctx, cr, cluster)
 				if err != nil {
 					return reconcile.Result{}, err

@@ -80,6 +80,7 @@ check_recovery() {
 		cat $test_dir/conf/restore.yml \
 			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
+			| $sed -e "s/clusterName:/clusterName: $cluster_name/" \
 			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
 			| $sed -e "/backupSource/,+2d" \
@@ -90,6 +91,7 @@ check_recovery() {
 		cat $test_dir/conf/restore.yml \
 			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "/backupName/d" \
+			| $sed -e "s/clusterName:/clusterName: $cluster_name/" \
 			| $sed -e "s/pitrType:/type: $restore_type/" \
 			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $restore_date/"; fi \
 			| $sed -e "s|BACKUP-NAME|$backup_dest|" \
@@ -194,7 +196,7 @@ main() {
 		"userAdmin:userAdmin123456@$second_cluster.$namespace"
 	sleep 2
 
-	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-4"
+	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
