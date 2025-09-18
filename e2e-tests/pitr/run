@@ -199,6 +199,7 @@ main() {
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+	kubectl patch psmdb "$second_cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
 
 	kubectl_bin delete psmdb-backup --all
