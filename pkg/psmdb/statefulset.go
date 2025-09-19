@@ -58,6 +58,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumeSpec := replset.VolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
+	containerEnv := replset.ContainerEnv
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -76,6 +77,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
+		containerEnv = replset.NonVoting.ContainerEnv
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
@@ -87,6 +89,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.Hidden.Resources
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
+		containerEnv = replset.Hidden.ContainerEnv
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
@@ -176,7 +179,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
-		livenessProbe, readinessProbe, containerSecurityContext)
+		livenessProbe, readinessProbe, containerSecurityContext, containerEnv)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
