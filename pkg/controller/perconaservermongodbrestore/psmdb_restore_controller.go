@@ -206,6 +206,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 					return reconcile.Result{}, errors.Wrap(err, "resync storage")
 				}
 
+				backoff := wait.Backoff{
+					Steps:    2,
+					Duration: 5 * time.Second,
+					Factor:   2.0,
+				}
+				// We should validate again to prevent the restore from entering an Error state if the problem is resolved after resync
+				err = retry.OnError(backoff, func(err error) bool { return errors.Is(err, pbmErrors.ErrNotFound) }, func() error {
+					return r.validate(ctx, cr, cluster)
+				})
+
 				return rr, nil
 			}
 
@@ -401,19 +411,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 		profileName := naming.BackupSourceProfileName(cr)
 
 		_, err = pbmC.GetConfig(ctx)
-		if err == nil {
-			if err := pbmC.AddProfile(ctx, r.client, cluster, profileName, stg); err != nil {
-				return errors.Wrap(err, "add backup source as profile")
-			}
-
-			if err := pbmC.ResyncProfileAndWait(ctx, profileName); err != nil {
-				return errors.Wrap(err, "start profile resync")
-			}
-
-			return nil
+		if err != nil && !backup.IsErrNoDocuments(err) {
+			return errors.Wrap(err, "get config")
 		}
 
-		if backup.IsErrNoDocuments(err) {
+		// PBM (v2.10.0) does not resync the oplog metadata when using `ResyncProfileAndWait`.
+		// See `percona-backup-mongodb/pbm/resync/rsync.go`:
+		// - `Resync` is called when syncing the main storage (using the operator's `ResyncMainStorageAndWait` method). It syncs the "oplog, backup, and restore meta".
+		// - `SyncBackupList` is called when syncing the profile storage (using the operator's `ResyncProfileAndWait` method). It only syncs backup metadata.
+		//
+		// When we want to perform a restore using PITR, we must configure the profile as the main storage.
+		if cr.Spec.PITR != nil || backup.IsErrNoDocuments(err) {
 			log.Info(fmt.Sprintf("PBM config not found, configuring %s as main storage", profileName))
 
 			cfg, err := backup.GetPBMConfig(ctx, r.client, cluster, stg)
@@ -428,6 +436,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 			if err := pbmC.ResyncMainStorageAndWait(ctx); err != nil {
 				return errors.Wrap(err, "start resync")
 			}
+			return nil
+		}
+
+		if err := pbmC.AddProfile(ctx, r.client, cluster, profileName, stg); err != nil {
+			return errors.Wrap(err, "add backup source as profile")
+		}
+
+		if err := pbmC.ResyncProfileAndWait(ctx, profileName); err != nil {
+			return errors.Wrap(err, "start profile resync")
 		}
 
 		return nil

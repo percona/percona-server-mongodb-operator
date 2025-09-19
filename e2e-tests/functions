@@ -885,7 +885,6 @@ run_mongosh() {
 		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
 
-
 run_mongo_tls() {
 	local command="$1"
 	local uri="$2"

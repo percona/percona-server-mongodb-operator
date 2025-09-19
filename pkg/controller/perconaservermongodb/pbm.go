@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -88,7 +89,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		}
 
 		return strings.Compare(a.Name, b.Name)
-
 	})
 
 	hash, err := hashPBMConfiguration(c)
