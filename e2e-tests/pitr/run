@@ -57,6 +57,7 @@ check_recovery() {
 	local cluster_name=$6
 	local selective_collection=$7
 	local restore_name="restore-${8:-"$backup_name"}"
+	local restore_file="${9:-"restore.yml"}"
 
 	local cluster
 	cluster="$cluster_name-rs0"
@@ -77,7 +78,7 @@ check_recovery() {
 
 	desc "check restore by $restore_type"
 	if [ -z "$backupSource" ]; then
-		cat $test_dir/conf/restore.yml \
+		cat "$test_dir/conf/$restore_file" \
 			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "s/backupName:/backupName: $backup_name/" \
 			| $sed -e "s/clusterName:/clusterName: $cluster_name/" \
@@ -88,7 +89,7 @@ check_recovery() {
 			| kubectl_bin apply -f -
 	else
 		backup_dest=$(get_backup_dest "$backup_name")
-		cat $test_dir/conf/restore.yml \
+		cat "$test_dir/conf/$restore_file" \
 			| $sed -e "s/name:/name: $restore_name/" \
 			| $sed -e "/backupName/d" \
 			| $sed -e "s/clusterName:/clusterName: $cluster_name/" \
@@ -196,10 +197,10 @@ main() {
 		"userAdmin:userAdmin123456@$second_cluster.$namespace"
 	sleep 2
 
-	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster"
+	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster" "restore2.yml"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
-	kubectl patch psmdb "$second_cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+	kubectl patch psmdb "${second_cluster/-rs0/}" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	sleep 20
 
 	kubectl_bin delete psmdb-backup --all
