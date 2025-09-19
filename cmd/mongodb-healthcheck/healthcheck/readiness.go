@@ -17,6 +17,7 @@ package healthcheck
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
@@ -27,21 +28,56 @@ import (
 )
 
 // MongodReadinessCheck runs a ping on a pmgo.SessionManager to check server readiness
-func MongodReadinessCheck(ctx context.Context, addr string) error {
+func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 	log := logf.FromContext(ctx).WithName("MongodReadinessCheck")
+	ctx = logf.IntoContext(ctx, log)
 
 	var d net.Dialer
 
+	addr := cnf.Hosts[0]
 	log.V(1).Info("Connecting to " + addr)
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
-	return conn.Close()
+	if err := conn.Close(); err != nil {
+		return err
+	}
+
+	s, err := func() (*mongo.Status, error) {
+		cnf.Timeout = time.Second
+		client, err := db.Dial(ctx, cnf)
+		if err != nil {
+			return nil, nil
+		}
+		defer func() {
+			if derr := client.Disconnect(ctx); derr != nil && err == nil {
+				err = errors.Wrap(derr, "failed to disconnect")
+			}
+		}()
+		rs, err := client.RSStatus(ctx)
+		if err != nil {
+			if errors.Is(err, mongo.ErrInvalidReplsetConfig) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return &rs, nil
+	}()
+	if err != nil || s == nil {
+		return err
+	}
+
+	if err := CheckState(*s, 0, 0); err != nil {
+		return errors.Wrap(err, "check state")
+	}
+
+	return nil
 }
 
 func MongosReadinessCheck(ctx context.Context, cnf *db.Config) (err error) {
 	log := logf.FromContext(ctx).WithName("MongosReadinessCheck")
+	ctx = logf.IntoContext(ctx, log)
 
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
