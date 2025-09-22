@@ -14,5 +14,6 @@ spec:
     s3:
       credentialsSecret: minio-secret
       region: us-east-1
+      prefix: pitr-prefix-1
       bucket: operator-testing
       endpointUrl: http://minio-service:9000/

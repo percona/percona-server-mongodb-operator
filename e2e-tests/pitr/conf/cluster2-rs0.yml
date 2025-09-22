@@ -14,6 +14,7 @@ spec:
         s3:
           bucket: invalid-bucket
           credentialsSecret: minio-secret
+          prefix: pitr-prefix-2
           endpointUrl: http://invalid-service:1111/
           insecureSkipTLSVerify: false
           region: us-east-1
