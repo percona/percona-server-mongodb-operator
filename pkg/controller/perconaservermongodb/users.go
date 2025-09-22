@@ -21,6 +21,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
 func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
@@ -98,12 +99,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 	logf.FromContext(ctx).Info("Secret data changed. Updating users...")
 
-	containers, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
+	containerNames, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	if len(containers) > 0 {
+	if len(containerNames) > 0 {
 		rsPodList, err := r.getMongodPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
@@ -127,8 +128,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			pods = append(pods, cfgPodlist.Items...)
 		}
 
-		for _, name := range containers {
-			err = r.killcontainer(ctx, pods, name)
+		for _, name := range containerNames {
+			err = r.killContainer(ctx, pods, name)
 			if err != nil {
 				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
@@ -147,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
+func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
@@ -173,7 +174,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods 
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -203,7 +203,7 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
-	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey {
+	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey || passKey == api.EnvPMMServerToken {
 		return true, nil
 	}
 	su.users = append(su.users, systemUser{
@@ -262,22 +262,31 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
-	if cr.Spec.PMM.Enabled && cr.Spec.PMM.HasSecret(newUsersSec) {
-		// insert in front
-		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+	if cr.Spec.PMM.Enabled {
+		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{
 				{
-					nameKey: api.EnvPMMServerAPIKey,
-					passKey: api.EnvPMMServerAPIKey,
+					nameKey: api.PMMServerToken,
+					passKey: api.PMMServerToken,
 				},
 			}, users...)
-		} else {
-			users = append([]user{
-				{
-					nameKey: api.EnvPMMServerUser,
-					passKey: api.EnvPMMServerPassword,
-				},
-			}, users...)
+		}
+		if cr.Spec.PMM.HasSecret(newUsersSec) {
+			if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerAPIKey,
+						passKey: api.EnvPMMServerAPIKey,
+					},
+				}, users...)
+			} else {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerUser,
+						passKey: api.EnvPMMServerPassword,
+					},
+				}, users...)
+			}
 		}
 	}
 
@@ -291,7 +300,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			switch u.nameKey {
 			case api.EnvMongoDBBackupUser:
 				containers = append(containers, naming.ContainerBackupAgent)
-			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey:
+			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey, api.EnvPMMServerToken:
 				containers = append(containers, "pmm-client")
 			}
 		}
