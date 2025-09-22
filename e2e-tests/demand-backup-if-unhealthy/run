@@ -38,12 +38,13 @@ verify_sts_is_unready() {
 
 wait_sts_to_become_unready() {
   local sts_name="${1:-some-name-rs0}"
-  local timeout="${3:-60}"
+  local timeout="${2:-60}"
+  local pod_name="${sts_name}-1"
   local interval=2
   local elapsed=0
 
-  echo "Deleting StatefulSet $sts_name in namespace $namespace..."
-  kubectl_bin delete sts "$sts_name" --wait=false
+  echo "Deleting Pod $pod_name in namespace $namespace..."
+  kubectl_bin delete pod "$pod_name" --wait=false --force
 
   echo "Wait for StatefulSet $sts_name to become Unready..."
   until ! is_sts_ready "$sts_name"; do
