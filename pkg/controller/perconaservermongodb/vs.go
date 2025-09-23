@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/version_service"
-	"github.com/pkg/errors"
 )
 
 const productName = "psmdb-operator"
