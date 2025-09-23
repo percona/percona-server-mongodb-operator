@@ -842,6 +842,8 @@ run_recovery_check() {
 	# we don't wait for cluster readiness here because the annotation gets removed then
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 
+	log "Physical restore finished: OK"
+
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
@@ -851,6 +853,8 @@ run_recovery_check() {
 	wait_cluster_consistency ${cluster}
 	wait_for_pbm_operations ${cluster}
 
+	log "Operator triggered PBM resync: OK"
+
 	if [ -n "$is_sharded" ]; then
 		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded" "" "" "" "" "$tls"
 	else
@@ -858,6 +862,25 @@ run_recovery_check() {
 		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
 		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
 	fi
+
+	log "Data restored: OK"
+
+	echo "${cluster}-rs0-0:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-0 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-1:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-1 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-2:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-2 -- ls -l /data/db/pbm-restore-logs
+	if [ -n "$is_sharded" ]; then
+		echo "${cluster}-cfg-0:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-0 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-1:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-1 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-2:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-2 -- ls -l /data/db/pbm-restore-logs
+	fi
+
+	log "Restore logs are preserved: OK"
 }
 
 run_mongo() {
