@@ -335,15 +335,20 @@ func (r *ReconcilePerconaServerMongoDB) getNewVersions(ctx context.Context, cr *
 
 	log.V(1).Info("Sending request to version service", "meta", vm)
 
+	isPMM3, err := r.isPMM3Configured(ctx, cr)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get PMM3 config")
+	}
+
 	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != endpoint) {
-		_, err = vs.GetExactVersion(cr, endpoint, vm)
+		_, err = vs.GetExactVersion(cr, endpoint, vm, versionOptions{PMM3Enabled: isPMM3})
 		if err != nil {
 			log.Error(err, "failed to send telemetry to "+api.GetDefaultVersionServiceEndpoint())
 		}
 		return DepVersion{}, nil
 	}
 
-	versions, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
+	versions, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm, versionOptions{PMM3Enabled: isPMM3})
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "failed to check version")
 	}
@@ -510,7 +515,12 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return nil
 	}
 
-	newVersion, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm)
+	isPMM3, err := r.isPMM3Configured(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get PMM3 config")
+	}
+
+	newVersion, err := vs.GetExactVersion(cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, vm, versionOptions{PMM3Enabled: isPMM3})
 	if err != nil {
 		return errors.Wrap(err, "failed to check version")
 	}
@@ -603,4 +613,22 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 	// updating status resets our defaults, so we're passing a copy
 	err = r.client.Status().Update(ctx, cr.DeepCopy())
 	return errors.Wrapf(err, "failed to update CR")
+}
+
+func (r *ReconcilePerconaServerMongoDB) isPMM3Configured(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	secret := new(corev1.Secret)
+	err := r.client.Get(ctx, types.NamespacedName{
+		Name: "internal-" + cr.Name, Namespace: cr.Namespace,
+	}, secret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "get internal secret for determining if pmm3 is configured")
+	}
+
+	if v, exists := secret.Data[api.PMMServerToken]; exists && len(v) != 0 {
+		return true, nil
+	}
+	return false, nil
 }

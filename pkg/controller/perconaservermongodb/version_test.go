@@ -11,6 +11,7 @@ import (
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	appsv1 "k8s.io/api/apps/v1"
@@ -329,6 +330,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 }
 
 func TestVersionMeta(t *testing.T) {
+	ctx := t.Context()
 	tests := []struct {
 		name            string
 		cr              api.PerconaServerMongoDB
@@ -603,14 +605,14 @@ func TestVersionMeta(t *testing.T) {
 				serverVersion: sv,
 			}
 
-			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {
+			if err := r.setCRVersion(ctx, &tt.cr); err != nil {
 				t.Fatal(err, "set CR version")
 			}
-			err := tt.cr.CheckNSetDefaults(context.TODO(), version.PlatformKubernetes)
+			err := tt.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes)
 			if err != nil {
 				t.Fatal(err)
 			}
-			vm, err := r.getVersionMeta(context.TODO(), &tt.cr, &operatorDepl)
+			vm, err := r.getVersionMeta(ctx, &tt.cr, &operatorDepl)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -635,11 +637,9 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 		}
 	}()
 
-	conn, err := grpc.DialContext(
-		context.Background(),
+	conn, err := grpc.NewClient(
 		fmt.Sprintf("dns:///%s", fmt.Sprintf("%s:%d", addr, port)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial server")
@@ -712,7 +712,7 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		KubeVersion:             "kube-version",
 		OperatorVersion:         version.Version(),
 		Platform:                productName,
-		PmmVersion:              "pmm-version",
+		PmmVersion:              "3.1",
 		ShardingEnabled:         true,
 		PmmEnabled:              true,
 		HelmDeployOperator:      true,
@@ -743,8 +743,11 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 						},
 					},
 					Pmm: map[string]*pbVersion.Version{
-						"pmm-version": {
-							ImagePath: "pmm-image",
+						"3.1": {
+							ImagePath: "pmm3-image",
+						},
+						"2.1": {
+							ImagePath: "pmm2-image",
 						},
 					},
 				},
@@ -807,7 +810,7 @@ func TestVersionService(t *testing.T) {
 				MongoVersion:            "database-version",
 				KubeVersion:             "kube-version",
 				Platform:                productName,
-				PMMVersion:              "pmm-version",
+				PMMVersion:              "3.1",
 				BackupVersion:           "backup-version",
 				CRUID:                   "custom-resource-uid",
 				Version:                 version.Version(),
@@ -828,25 +831,27 @@ func TestVersionService(t *testing.T) {
 				MongoVersion:  "mongo-version",
 				BackupImage:   "backup-image",
 				BackupVersion: "backup-version",
-				PMMImage:      "pmm-image",
-				PMMVersion:    "pmm-version",
+				PMMImage:      "pmm3-image",
+				PMMVersion:    "3.1",
 			},
 		},
 	}
 	addr := "127.0.0.1"
 	port := 10000
 	gwPort := 11000
-	if err := startFakeVersionService(t, addr, port, gwPort); err != nil {
-		t.Fatal(err, "failed to start fake version service server")
-	}
+	err := startFakeVersionService(t, addr, port, gwPort)
+	require.NoError(t, err)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm)
+			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm, versionOptions{
+				PMM3Enabled: true,
+			})
 			if err != nil {
 				if tt.shouldErr {
 					return
 				}
-				t.Fatal(err)
+				require.NoError(t, err)
 			}
 			if dv != tt.want {
 				t.Fatal(errors.Errorf("Have: %v; Want: %v", dv, tt.want))
