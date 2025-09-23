@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -617,9 +618,7 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 
 func (r *ReconcilePerconaServerMongoDB) isPMM3Configured(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	secret := new(corev1.Secret)
-	err := r.client.Get(ctx, types.NamespacedName{
-		Name: "internal-" + cr.Name, Namespace: cr.Namespace,
-	}, secret)
+	err := r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, secret)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
@@ -627,7 +626,7 @@ func (r *ReconcilePerconaServerMongoDB) isPMM3Configured(ctx context.Context, cr
 		return false, errors.Wrap(err, "get internal secret for determining if pmm3 is configured")
 	}
 
-	if v, exists := secret.Data[api.PMMServerToken]; exists && len(v) != 0 {
+	if pmm.SecretHasToken(secret) {
 		return true, nil
 	}
 	return false, nil
