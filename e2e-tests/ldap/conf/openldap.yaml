@@ -6,58 +6,6 @@ type: Opaque
 stringData:
   adminpassword: adminpassword
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: percona-ldif
-data:
-  0-base.ldif: |-
-    dn: dc=ldap,dc=local
-    objectClass: top
-    objectClass: dcObject
-    objectClass: organization
-    o: ldap.local
-    dc: ldap
-  1-percona-ous.ldif: |-
-    dn: ou=perconadba,dc=ldap,dc=local
-    objectClass: organizationalUnit
-    ou: perconadba
-  2-percona-users.ldif: |-
-    dn: uid=percona,ou=perconadba,dc=ldap,dc=local
-    objectClass: top
-    objectClass: account
-    objectClass: posixAccount
-    objectClass: shadowAccount
-    cn: percona
-    uid: percona
-    uidNumber: 1100
-    gidNumber: 100
-    homeDirectory: /home/percona
-    loginShell: /bin/bash
-    gecos: percona
-    userPassword: password
-    shadowLastChange: -1
-    shadowMax: -1
-   #userPassword: {crypt}x
-   #shadowWarning: -1 
-  3-group-cn.ldif: |-
-    dn: cn=admin,ou=perconadba,dc=ldap,dc=local
-    cn: admin
-    objectClass: groupOfUniqueNames
-    objectClass: top
-    ou: perconadba
-    uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
-  4-readonly-user.ldif: |-
-    dn: cn=readonly,dc=ldap,dc=local
-    objectClass: top
-    objectClass: person
-    objectClass: organizationalPerson
-    objectClass: inetOrgPerson
-    cn: readonly
-    sn: readonly
-    userPassword: readonlypass
-    description: Read-only user for database-issued user lookups
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -75,33 +23,93 @@ spec:
         app.kubernetes.io/name: openldap
     spec:
       containers:
-        - name: openldap
-          image: docker.io/bitnami/openldap:latest
-          imagePullPolicy: "Always"
+        - name: ldap-setup
+          image: osixia/openldap:latest
+          command: ["/bin/bash"]
+          args:
+            - -c
+            - |
+              echo "Waiting for LDAP server to be ready..."
+              sleep 60
+              
+              echo "Adding LDAP structure..."
+              ldapadd -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=local" -w adminpassword <<EOF
+              dn: ou=perconadba,dc=ldap,dc=local
+              objectClass: organizationalUnit
+              ou: perconadba
+
+              dn: uid=percona,ou=perconadba,dc=ldap,dc=local
+              objectClass: inetOrgPerson
+              uid: percona
+              cn: percona
+              sn: percona
+              userPassword: password
+
+              dn: cn=admin,ou=perconadba,dc=ldap,dc=local
+              objectClass: groupOfUniqueNames
+              cn: admin
+              uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
+              EOF
+              
+              echo "LDAP structure added successfully"
+              sleep infinity
           env:
-            - name: LDAP_ROOT
-              value: "dc=ldap,dc=local"
-            - name: LDAP_ADMIN_USERNAME
-              value: "admin"
+            - name: LDAP_DOMAIN
+              value: "ldap.local"
+            - name: LDAP_ORGANISATION
+              value: "ldap.local"
             - name: LDAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: adminpassword
                   name: openldap
-            - name: LDAP_LOGLEVEL
-              value: "64"
-            - name: BITNAMI_DEBUG
+        - name: openldap
+          image: osixia/openldap:latest
+          imagePullPolicy: "Always"
+          args: ["--copy-service"]
+          env:
+            - name: LDAP_DOMAIN
+              value: "ldap.local"
+            - name: LDAP_ORGANISATION
+              value: "ldap.local"
+            - name: LDAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: adminpassword
+                  name: openldap
+            - name: LDAP_CONFIG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: adminpassword
+                  name: openldap
+            - name: LDAP_READONLY_USER
               value: "true"
+            - name: LDAP_READONLY_USER_USERNAME
+              value: "readonly"
+            - name: LDAP_READONLY_USER_PASSWORD
+              value: "readonlypass"
+            - name: CONTAINER_LOG_LEVEL
+              value: "info"
+            - name: LDAP_PORT_NUMBER
+              value: "389"
           ports:
             - name: tcp-ldap
-              containerPort: 1389
-          volumeMounts:
-            - name: custom-ldif
-              mountPath: /ldifs
-      volumes:
-        - name: custom-ldif
-          configMap:
-            name: percona-ldif
+              containerPort: 389
+          readinessProbe:
+            tcpSocket:
+              port: 389
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            tcpSocket:
+              port: 389
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes: []
 ---
 apiVersion: v1
 kind: Service
@@ -113,7 +121,7 @@ spec:
   type: ClusterIP
   ports:
     - name: tcp-ldap
-      port: 1389
+      port: 389
       targetPort: tcp-ldap
   selector:
     app.kubernetes.io/name: openldap

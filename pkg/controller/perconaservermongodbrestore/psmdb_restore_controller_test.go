@@ -75,7 +75,13 @@ var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 			Expect(unstructured.SetNestedField(obj.Object, "2020-01-01", "spec", "pitr", "date")).To(Succeed())
 
 			err = k8sClient.Create(ctx, obj)
-			Expect(err.Error()).To(Equal(`PerconaServerMongoDBRestore.psmdb.percona.com "date-validation" is invalid: spec.pitr: Invalid value: "object": Time should be in format YYYY-MM-DD HH:MM:SS`))
+			Expect(err.Error()).To(Equal(`PerconaServerMongoDBRestore.psmdb.percona.com "date-validation" is invalid: spec.pitr: Invalid value: "object": Time should be in format YYYY-MM-DD HH:MM:SS with valid ranges (MM: 01-12, DD: 01-31, HH: 00-23, MM/SS: 00-59)`))
+
+			obj = &unstructured.Unstructured{Object: m}
+			Expect(unstructured.SetNestedField(obj.Object, "1992-13-32 25:63:64", "spec", "pitr", "date")).To(Succeed())
+
+			err = k8sClient.Create(ctx, obj)
+			Expect(err.Error()).To(Equal(`PerconaServerMongoDBRestore.psmdb.percona.com "date-validation" is invalid: spec.pitr: Invalid value: "object": Time should be in format YYYY-MM-DD HH:MM:SS with valid ranges (MM: 01-12, DD: 01-31, HH: 00-23, MM/SS: 00-59)`))
 		})
 		It("Should create restore", func() {
 			Expect(unstructured.SetNestedField(obj.Object, "2020-01-01 10:10:10", "spec", "pitr", "date")).To(Succeed())
