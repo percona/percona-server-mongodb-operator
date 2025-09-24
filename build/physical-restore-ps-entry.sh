@@ -42,9 +42,9 @@ set +o xtrace
 log "Physical restore in progress... pbm-agent logs: ${PBM_AGENT_LOG} mongod logs: ${MONGOD_LOG}"
 log "Script PID: $$, pbm-agent PID: $pbm_pid, mongod PID: $mongod_pid"
 while true; do
-    sleep 30
-    log "Still in progress"
-    ps -eFH
-    log "Last 10 lines of ${PBM_AGENT_LOG}:"
-    tail -n 10 ${PBM_AGENT_LOG}
+	sleep 30
+	log "Still in progress"
+	ps -eFH
+	log "Last 10 lines of ${PBM_AGENT_LOG}:"
+	tail -n 10 ${PBM_AGENT_LOG}
 done
