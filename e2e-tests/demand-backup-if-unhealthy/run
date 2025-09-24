@@ -7,8 +7,84 @@ test_dir=$(realpath $(dirname $0))
 set_debug
 
 create_secrets() {
-  desc 'create secrets and start client'
+  echo 'Creating secrets and start client'
   kubectl_bin apply -f "$test_dir/conf/secrets.yml" -f "$conf_dir/client.yml"
+}
+
+until_with_timeout() {
+  local timeout="$1"
+  shift
+
+  local elapsed=0
+  until "$@"; do
+    if (( elapsed >= timeout )); then
+      echo "Timeout after ${timeout}s: command '$*' did not succeed"
+      exit 1
+    fi
+    sleep 1 && elapsed=$((elapsed + interval))
+  done
+
+  return 0
+}
+
+check_user() {
+  run_mongo 'db.getUser("myApp")' \
+    "userAdmin:userAdmin123456@$cluster-rs0.$namespace" \
+    | grep -q '"user" : "myApp"'
+}
+
+add_data() {
+  local data="$1"
+
+  run_mongo \
+    "use myApp\n db.test.insertOne({ x: \"$data\" })" \
+    "myApp:myPass@$cluster-rs0.$namespace"
+}
+
+verify_data() {
+  local data="$1"
+
+  result=$(run_mongo "use myApp\n db.test.findOne({ x: \"$data\" })" \
+    "myApp:myPass@$cluster-rs0.$namespace")
+  
+  if ! echo "$result" | grep -q "$data"; then
+    echo "Data { x: \"$data\" } not found, failing..."
+    exit 1
+  fi
+}
+
+delete_data() {
+  local data="$1"
+
+  run_mongo \
+    "use myApp\n db.test.deleteOne({ x: \"$data\" })" \
+    "myApp:myPass@$cluster-rs0.$namespace"
+}
+
+update_with_invalid_db_image() {
+  local cluster_name="${1:-some-name}"
+
+  yq "$test_dir/conf/$cluster_name.yml" \
+		| yq ".spec.image=\"invalid-image:invalid-tag\"" \
+    | kubectl_bin apply -f -
+}
+
+rollback_invalid_image() {
+  local cluster_name="${1:-some-name}"
+  local timeout=
+
+  apply_cluster "$test_dir/conf/$cluster_name.yml"
+  echo -n "Waiting new statefulset version..."
+  until ! kubectl_bin get statefulset "$cluster_name-rs0" \
+    -o jsonpath='{range .spec.template.spec.containers[*]}{.image}{"\n"}{end}' \
+    | grep -q "invalid-image:invalid-tag"; do
+    echo -n .
+    sleep 1
+  done
+  
+  echo
+  echo "Deleting crashing pod $cluster_name-rs0-2"
+  kubectl_bin delete pod "$cluster_name-rs0-2"
 }
 
 is_sts_ready() {
@@ -25,35 +101,33 @@ is_sts_ready() {
   [[ "$replicas" -eq "$ready_replicas" ]]
 }
 
-verify_sts_is_unready() {
+verify_sts_not_ready() {
   local sts_name="${1:-some-name-rs0}"
 
   if is_sts_ready "$sts_name"; then
-    desc "StatefulSet $sts_name is ready during the backup, failing..."
-    return 1
+    echo "StatefulSet $sts_name is ready during the backup, failing..."
+    exit 1
   fi
-
-  return 0
 }
 
-wait_sts_to_become_unready() {
+wait_sts_to_become_not_ready() {
   local sts_name="${1:-some-name-rs0}"
   local timeout="${2:-60}"
   local pod_name="${sts_name}-1"
   local interval=2
   local elapsed=0
 
-  echo "Deleting Pod $pod_name in namespace $namespace..."
-  kubectl_bin delete pod "$pod_name" --wait=false --force
+  echo "Updating cluster with invalid image..."
+  update_with_invalid_db_image
 
-  echo "Wait for StatefulSet $sts_name to become Unready..."
+  echo -n "Wait for statefulset $sts_name to become not ready..."
   until ! is_sts_ready "$sts_name"; do
     if (( elapsed >= timeout )); then
-      desc "Timeout reached: StatefulSet $sts_name still has Ready replicas"
+      echo "Timeout reached: statefulSet $sts_name still has ready replicas"
       exit 1
     fi
     sleep $interval && (( elapsed += interval ))
-    echo .
+    echo -n .
   done
 }
 
@@ -67,31 +141,32 @@ desc "create PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster.yml"
 wait_for_cluster_state "$cluster" "ready"
 
-desc "Testing physical backup"
-wait_sts_to_become_unready
+desc "Adding new user"
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
+echo -n "Verifying user creation..."
+until_with_timeout 10 check_user
 
-backup_name_minio_physical="backup-minio-physical"
-run_backup "minio" "$backup_name_minio_physical" "physical"
-
-wait_backup $backup_name_minio_physical running
-verify_sts_is_unready
-
-desc "Verify $backup_name_minio_physical and cluster are back to ready state"
-wait_backup "$backup_name_minio_physical" "ready"
-wait_for_cluster_state "$cluster" "ready"
-
-desc "Testing logical backup"
-wait_sts_to_become_unready
-
-backup_name_minio_logical="backup-minio-logical"
-run_backup "minio" "$backup_name_minio_logical"
-
-wait_backup $backup_name_minio_logical running
-verify_sts_is_unready
-
-desc "Verify $backup_name_minio_logical and cluster are back to ready state"
-wait_backup "$backup_name_minio_logical" "ready"
-wait_for_cluster_state "$cluster" "ready"
+for type in "logical"; do
+  desc "Testing $type backup with unhealthy container"
+  add_data "$type"
+  wait_sts_to_become_not_ready
+  backup_name_minio="backup-minio-$type"
+  run_backup "minio" "$backup_name_minio" "$type"
+  wait_backup $backup_name_minio running
+  verify_sts_not_ready
+  desc "Verifying $backup_name_minio and update cluster back to ready state"
+  wait_backup "$backup_name_minio" "ready"
+  verify_sts_not_ready
+  rollback_invalid_image
+  wait_for_cluster_state "$cluster" "ready"
+  delete_data "$type"
+  run_restore "$backup_name_minio"
+  wait_restore "$backup_name_minio" "$cluster"
+  wait_for_cluster_state "$cluster" "ready"
+  verify_data "$type"
+done
 
 destroy $namespace
 desc 'test passed'
