@@ -33,24 +33,14 @@ check_user() {
     | grep -q '"user" : "myApp"'
 }
 
-add_data() {
-  local data="$1"
+write_data() {
+	local data=$1
+	local find_prefix=${2-""}
 
-  run_mongo \
-    "use myApp\n db.test.insertOne({ x: \"$data\" })" \
-    "myApp:myPass@$cluster-rs0.$namespace"
-}
-
-verify_data() {
-  local data="$1"
-
-  result=$(run_mongo "use myApp\n db.test.findOne({ x: \"$data\" })" \
-    "myApp:myPass@$cluster-rs0.$namespace")
-  
-  if ! echo "$result" | grep -q "$data"; then
-    echo "Data { x: \"$data\" } not found, failing..."
-    exit 1
-  fi
+	run_mongo \
+		"use myApp\n db.test.insert({ x: \"${data}\" })" \
+		"myApp:myPass@${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
 }
 
 delete_data() {
@@ -148,30 +138,33 @@ run_mongo \
 echo -n "Verifying user creation..."
 until_with_timeout 10 check_user
 
-desc "Testing logical backup with unhealthy container"
+desc "Testing logical backup with an unhealthy container"
 type="logical"
-add_data "$type"
+write_data "This is some data for backup if unhealthy"
 wait_sts_to_become_not_ready
+wait_for_cluster_state "$cluster" "initializing|error"
 
 backup_name_minio="backup-minio-$type"
 run_backup "minio" "$backup_name_minio" "$type"
 wait_backup $backup_name_minio running
 verify_sts_not_ready
+wait_for_cluster_state "$cluster" "initializing|error"
 
 desc "Verifying $backup_name_minio and update cluster back to ready state"
 wait_backup "$backup_name_minio" "ready"
 verify_sts_not_ready
+wait_for_cluster_state "$cluster" "initializing|error"
 rollback_invalid_image
 wait_for_cluster_state "$cluster" "ready"
 
 desc "Delete data and run restore of $backup_name_minio"
-delete_data "$type"
+delete_data "This is some data for backup if unhealthy"
 run_restore "$backup_name_minio"
 wait_restore "$backup_name_minio" "$cluster"
 wait_for_cluster_state "$cluster" "ready"
 
 desc "Verify data is back to the cluster"
-verify_data "$type"
+simple_data_check "$cluster" 3 1 "-rs0"
 
 destroy $namespace
 desc 'test passed'
