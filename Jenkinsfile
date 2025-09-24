@@ -5,17 +5,17 @@ tests = []
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
-                gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
                     --preemptible \
                     --zone=${region} \
-                    --machine-type='n1-standard-2' \
+                    --machine-type='n1-standard-4' \
                     --cluster-version='1.30' \
                     --num-nodes=3 \
                     --labels='delete-cluster-after-hours=6' \
@@ -35,7 +35,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
                 exit 1
             fi
         """
@@ -45,7 +45,7 @@ void createCluster(String CLUSTER_SUFFIX) {
 void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
@@ -57,7 +57,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone ${region} $CLUSTER_NAME-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         """
    }
 }
@@ -148,9 +148,9 @@ void markPassedTests() {
 
 void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
     sh """
-        export KUBECONFIG=/tmp/$CLUSTER_NAME-$CLUSTER_SUFFIX
+        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|$CLUSTER_NAME-$CLUSTER_SUFFIX "
+        gcloud container clusters list|grep -E "NAME|${CLUSTER_NAME}-${CLUSTER_SUFFIX} "
         echo
         kubectl get nodes
         echo
@@ -206,7 +206,9 @@ void makeReport() {
         TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
         TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
-    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount | | " + formatTime(totalTestTime) + " |"
+    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReport = TestsReport + "\r\n| Job duration |" + currentBuild.durationString + " |"
+    TestsReport = TestsReport + "\r\n| Total Test Time |"  + formatTime(totalTestTime) + " |"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 
     sh """
@@ -242,7 +244,7 @@ void runTest(Integer TEST_ID) {
     waitUntil {
         def timeStart = new Date().getTime()
         try {
-            echo "The $testName test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
+            echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
             tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -252,7 +254,7 @@ void runTest(Integer TEST_ID) {
                     else
                         export DEBUG_TESTS=1
                     fi
-                    export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
+                    export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
                     time ./e2e-tests/$testName/run
                 """
             }
