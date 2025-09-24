@@ -10,8 +10,17 @@ import subprocess
 
 from deepdiff import DeepDiff
 from pathlib import Path
+from typing import Callable, Optional, Any
 
 logger = logging.getLogger(__name__)
+
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+CYAN = "\033[36m"
+RESET = "\033[0m"
 
 
 def kubectl_bin(*args, check: bool = True, input_data: str = "") -> str:
@@ -289,21 +298,13 @@ def clean_all_namespaces() -> None:
         logger.error("Failed to clean namespaces")
 
 
-def destroy(namespace: str) -> None:
-    """Destroy test infrastructure"""
-    try:
-        kubectl_bin("delete", "namespace", namespace, "--ignore-not-found")
-    except subprocess.CalledProcessError:
-        pass
-
-
 def wait_pod(pod_name: str, timeout: str = "360") -> None:
     """Wait for pod to be ready."""
-    logger.info(f"Waiting for pod/{pod_name} to be ready...")
-    time.sleep(2)
+    logger.info(f"Waiting for {CYAN}pod/{pod_name}{RESET} to be ready...")
+    time.sleep(4)
     try:
         kubectl_bin("wait", f"pod/{pod_name}", "--for=condition=ready", f"--timeout={timeout}s")
-        logger.info(f"Pod {pod_name} is ready")
+        logger.info(f"Pod {CYAN}{pod_name}{RESET} is ready")
     except subprocess.CalledProcessError as e:
         raise TimeoutError(f"Pod {pod_name} did not become ready within {timeout}s") from e
 
@@ -339,17 +340,17 @@ def wait_for_running(
     cluster_name = cluster_name.replace(f"-{rs_name}", "")
     if check_cluster_readyness:
         start_time = time.time()
-        logger.info(f"Waiting for Cluster {cluster_name} readiness")
+        logger.info(f"Waiting for cluster {CYAN}{cluster_name}{RESET} readiness")
         while time.time() - start_time < timeout:
             try:
                 result = kubectl_bin(
                     "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
                 ).strip("'")
                 if result == "ready":
-                    logger.info(f"Cluster {cluster_name} is ready")
+                    logger.info(f"Cluster {CYAN}{cluster_name}{RESET} is ready")
                     return
             except subprocess.CalledProcessError:
-                logger.error(f"Error checking cluster {cluster_name} readiness")
+                logger.error(f"Error checking cluster {CYAN}{cluster_name}{RESET} readiness")
                 pass
             time.sleep(1)
         raise TimeoutError(f"Timeout waiting for {cluster_name} to be ready")
@@ -357,7 +358,7 @@ def wait_for_running(
 
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
-    logger.info(f"Waiting for {resource} to be deleted")
+    logger.info(f"Waiting for {CYAN}{resource}{RESET} to be deleted")
     time.sleep(1)
     try:
         kubectl_bin("wait", "--for=delete", resource, f"--timeout={timeout}s")
@@ -395,127 +396,6 @@ def compare_kubectl(test_dir: str, resource: str, namespace: str, postfix: str =
 
     except subprocess.CalledProcessError as e:
         raise ValueError(f"Failed to process resource {resource}: {e}")
-
-
-def get_mongo_primary(uri: str, cluster_name: str) -> str:
-    """Get current MongoDB primary node"""
-    primary_endpoint = run_mongosh("EJSON.stringify(db.hello().me)", uri)
-
-    if cluster_name in primary_endpoint:
-        return primary_endpoint.split(".")[0].replace('"', "")
-    else:
-        endpoint_host = primary_endpoint.split(":")[0]
-        result = kubectl_bin("get", "service", "-o", "wide")
-
-        for line in result.splitlines():
-            if endpoint_host in line:
-                return line.split()[0].replace('"', "")
-        raise ValueError("Primary node not found in service list")
-
-
-def compare_mongo_cmd(
-    command: str,
-    uri: str,
-    postfix: str = "",
-    suffix: str = "",
-    database: str = "myApp",
-    collection: str = "test",
-    sort: str = "",
-    test_file: str = "",
-) -> None:
-    """Compare MongoDB command output"""
-    full_cmd = f"{collection}.{command}"
-    if sort:
-        full_cmd = f"{collection}.{command}.{sort}"
-
-    logger.info(f"Running command: {full_cmd} on database: {database}")
-
-    mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
-    result = json.loads(run_mongosh(mongo_expr, uri, "mongodb"))
-
-    logger.info(f"MongoDB command output: {result}")
-
-    with open(test_file) as file:
-        expected = json.load(file)
-
-    diff = DeepDiff(expected, result)
-    assert not diff, f"MongoDB command output differs: {diff.pretty()}"
-
-
-def compare_mongo_user(uri: str, expected_role: str, test_dir) -> None:
-    """Compare MongoDB user permissions"""
-
-    def get_expected_file(test_dir, user):
-        """Get the appropriate expected file based on MongoDB version"""
-        base_path = Path(test_dir) / "compare"
-        base_file = base_path / f"{user}.json"
-
-        # Check for version-specific files
-        image_mongod = os.environ.get("IMAGE_MONGOD", "")
-        version_mappings = [("8.0", "-80"), ("7.0", "-70"), ("6.0", "-60")]
-
-        for version, suffix in version_mappings:
-            if version in image_mongod:
-                version_file = base_path / f"{user}{suffix}.json"
-                if version_file.exists():
-                    logger.info(f"Using version-specific file: {version_file}")
-                    with open(version_file) as f:
-                        return json.load(f)
-
-        # Fall back to base file
-        if base_file.exists():
-            logger.info(f"Using base file: {base_file}")
-            with open(base_file) as f:
-                return json.load(f)
-        else:
-            raise FileNotFoundError(f"Expected file not found: {base_file}")
-
-    def clean_mongo_json(data):
-        """Remove timestamps and metadata from MongoDB response"""
-
-        def remove_timestamps(obj):
-            if isinstance(obj, dict):
-                return {
-                    k: remove_timestamps(v)
-                    for k, v in obj.items()
-                    if k not in {"ok", "$clusterTime", "operationTime"}
-                }
-            elif isinstance(obj, list):
-                return [remove_timestamps(v) for v in obj]
-            elif isinstance(obj, str):
-                # Remove ISO timestamp patterns
-                return re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[\+\-]\d{4}", "", obj)
-            else:
-                return obj
-
-        return remove_timestamps(data)
-
-    # TODO: consider a different approach to ignore order when comparing
-    def ordered(obj):
-        if isinstance(obj, dict):
-            return sorted((k, ordered(v)) for k, v in obj.items())
-        if isinstance(obj, list):
-            return sorted(ordered(x) for x in obj)
-        else:
-            return obj
-
-    # Get actual MongoDB user permissions
-    try:
-        result = run_mongosh(
-            "EJSON.stringify(db.runCommand({connectionStatus:1,showPrivileges:true}))",
-            uri,
-        )
-        actual_data = clean_mongo_json(json.loads(result))
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to get MongoDB user permissions: {e}")
-
-    expected_data = get_expected_file(test_dir, expected_role)
-    expected_data = ordered(expected_data)
-    actual_data = ordered(actual_data)
-
-    diff = DeepDiff(expected_data, actual_data, ignore_order=True)
-    assert not diff, f"MongoDB user permissions differ: {diff.pretty()}"
 
 
 def apply_runtime_class(test_dir: str) -> None:
@@ -661,35 +541,6 @@ def filter_yaml_with_yq(
     return filtered_yaml
 
 
-def run_mongosh(
-    command: str,
-    uri: str,
-    driver: str = "mongodb+srv",
-    suffix: str = ".svc.cluster.local",
-    mongo_flag: str = "",
-) -> str:
-    """Execute mongosh command in PSMDB client container."""
-    client_container = get_client_container()
-
-    replica_set = "cfg" if "cfg" in uri else "rs0"
-    connection_string = f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
-    if mongo_flag:
-        connection_string += f" {mongo_flag}"
-
-    result = kubectl_bin(
-        "exec",
-        client_container,
-        "--",
-        "mongosh",
-        f"{connection_string}",
-        "--eval",
-        command,
-        "--quiet",
-        check=False,
-    )
-    return result
-
-
 def get_kubernetes_versions() -> tuple[str, str]:
     """Get Kubernetes git version and semantic version."""
     output = kubectl_bin("version", "-o", "json")
@@ -703,16 +554,184 @@ def get_kubernetes_versions() -> tuple[str, str]:
     return git_version, kube_version
 
 
-# TODO: Cache the client container name to avoid repeated kubectl calls.
-def get_client_container():
-    """Get the client container name once per test session."""
-    result = kubectl_bin(
-        "get", "pods", "--selector=name=psmdb-client", "-o", "jsonpath={.items[].metadata.name}"
-    )
-    return result.strip()
-
-
 # TODO: implement this function
 def check_passwords_leak(namespace=None):
     """Check for password leaks in Kubernetes pod logs."""
     pass
+
+
+def retry(
+    func: Callable[[], Any],
+    max_attempts: int = 5,
+    delay: int = 1,
+    condition: Optional[Callable[[Any], bool]] = None,
+) -> Any:
+    """Retry a function until it succeeds or max attempts reached."""
+    for attempt in range(max_attempts):
+        try:
+            result = func()
+            if condition is None or condition(result):
+                return result
+        except Exception:
+            if attempt == max_attempts - 1:
+                raise
+
+        time.sleep(delay)
+
+    raise Exception(f"Max attempts ({max_attempts}) reached")
+
+
+class MongoManager:
+    def __init__(self, client: str):
+        self.client = client
+
+    def run_mongosh(
+        self,
+        command: str,
+        uri: str,
+        driver: str = "mongodb+srv",
+        suffix: str = ".svc.cluster.local",
+        mongo_flag: str = "",
+        timeout: int = 30,
+    ) -> str:
+        """Execute mongosh command in PSMDB client container."""
+        replica_set = "cfg" if "cfg" in uri else "rs0"
+        connection_string = f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
+        if mongo_flag:
+            connection_string += f" {mongo_flag}"
+
+        result = kubectl_bin(
+            "exec",
+            self.client,
+            "--",
+            "timeout",
+            str(timeout),
+            "mongosh",
+            f"{connection_string}",
+            "--eval",
+            command,
+            "--quiet",
+            check=False,
+        )
+        return result
+
+    def compare_mongo_user(self, uri: str, expected_role: str, test_dir) -> None:
+        """Compare MongoDB user permissions"""
+
+        def get_expected_file(test_dir, user):
+            """Get the appropriate expected file based on MongoDB version"""
+            base_path = Path(test_dir) / "compare"
+            base_file = base_path / f"{user}.json"
+
+            # Check for version-specific files
+            image_mongod = os.environ.get("IMAGE_MONGOD", "")
+            version_mappings = [("8.0", "-80"), ("7.0", "-70"), ("6.0", "-60")]
+
+            for version, suffix in version_mappings:
+                if version in image_mongod:
+                    version_file = base_path / f"{user}{suffix}.json"
+                    if version_file.exists():
+                        logger.info(f"Using version-specific file: {version_file}")
+                        with open(version_file) as f:
+                            return json.load(f)
+
+            # Fall back to base file
+            if base_file.exists():
+                logger.info(f"Using base file: {base_file}")
+                with open(base_file) as f:
+                    return json.load(f)
+            else:
+                raise FileNotFoundError(f"Expected file not found: {base_file}")
+
+        def clean_mongo_json(data):
+            """Remove timestamps and metadata from MongoDB response"""
+
+            def remove_timestamps(obj):
+                if isinstance(obj, dict):
+                    return {
+                        k: remove_timestamps(v)
+                        for k, v in obj.items()
+                        if k not in {"ok", "$clusterTime", "operationTime"}
+                    }
+                elif isinstance(obj, list):
+                    return [remove_timestamps(v) for v in obj]
+                elif isinstance(obj, str):
+                    # Remove ISO timestamp patterns
+                    return re.sub(
+                        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[\+\-]\d{4}", "", obj
+                    )
+                else:
+                    return obj
+
+            return remove_timestamps(data)
+
+        # TODO: consider a different approach to ignore order when comparing
+        def ordered(obj):
+            if isinstance(obj, dict):
+                return sorted((k, ordered(v)) for k, v in obj.items())
+            if isinstance(obj, list):
+                return sorted(ordered(x) for x in obj)
+            else:
+                return obj
+
+        # Get actual MongoDB user permissions
+        try:
+            result = self.run_mongosh(
+                "EJSON.stringify(db.runCommand({connectionStatus:1,showPrivileges:true}))",
+                uri,
+            )
+            actual_data = clean_mongo_json(json.loads(result))
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to get MongoDB user permissions: {e}")
+
+        expected_data = get_expected_file(test_dir, expected_role)
+        expected_data = ordered(expected_data)
+        actual_data = ordered(actual_data)
+
+        diff = DeepDiff(expected_data, actual_data, ignore_order=True)
+        assert not diff, f"MongoDB user permissions differ: {diff.pretty()}"
+
+    def compare_mongo_cmd(
+        self,
+        command: str,
+        uri: str,
+        postfix: str = "",
+        suffix: str = "",
+        database: str = "myApp",
+        collection: str = "test",
+        sort: str = "",
+        test_file: str = "",
+    ) -> None:
+        """Compare MongoDB command output"""
+        full_cmd = f"{collection}.{command}"
+        if sort:
+            full_cmd = f"{collection}.{command}.{sort}"
+
+        logger.info(f"Running: {CYAN}{full_cmd}{RESET} on db {CYAN}{database}{RESET}")
+
+        mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
+        result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
+
+        logger.info(f"MongoDB output: {CYAN}{result}{RESET}")
+
+        with open(test_file) as file:
+            expected = json.load(file)
+
+        diff = DeepDiff(expected, result)
+        assert not diff, f"MongoDB command output differs: {diff.pretty()}"
+
+    def get_mongo_primary(self, uri: str, cluster_name: str) -> str:
+        """Get current MongoDB primary node"""
+        primary_endpoint = self.run_mongosh("EJSON.stringify(db.hello().me)", uri)
+
+        if cluster_name in primary_endpoint:
+            return primary_endpoint.split(".")[0].replace('"', "")
+        else:
+            endpoint_host = primary_endpoint.split(":")[0]
+            result = kubectl_bin("get", "service", "-o", "wide")
+
+            for line in result.splitlines():
+                if endpoint_host in line:
+                    return line.split()[0].replace('"', "")
+            raise ValueError("Primary node not found in service list")

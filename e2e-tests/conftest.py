@@ -139,6 +139,8 @@ def create_namespace():
 
 @pytest.fixture(scope="class")
 def create_infra(test_paths, create_namespace):
+    created_namespaces = []
+
     def _create_infra(test_name):
         """Create the necessary infrastructure for the tests."""
         logger.info("Creating test environment")
@@ -154,91 +156,90 @@ def create_infra(test_paths, create_namespace):
             namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
             tools.deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
 
+        # Track created namespace for cleanup
+        created_namespaces.append(namespace)
         return namespace
 
-    return _create_infra
+    yield _create_infra
 
+    # Teardown code
+    if os.environ.get("SKIP_DELETE") == "1":
+        logger.info("SKIP_DELETE = 1. Skipping test environment cleanup")
+        return
 
-@pytest.fixture(scope="class")
-def destroy_infra(test_paths):
-    """Destroy the infrastructure created for the tests."""
+    def run_cmd(cmd):
+        try:
+            tools.kubectl_bin(*cmd)
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+            logger.debug(f"Command failed (continuing cleanup): {' '.join(cmd)}, error: {e}")
 
-    def _destroy_infra(namespace):
-        if os.environ.get("SKIP_DELETE") == "1":
-            logger.info("SKIP_DELETE = 1. Skipping test environment cleanup")
-            return
+    def cleanup_crd():
+        crd_file = f"{test_paths['src_dir']}/deploy/crd.yaml"
+        run_cmd(["delete", "-f", crd_file, "--ignore-not-found", "--wait=false"])
 
-        def run_cmd(cmd):
-            try:
-                tools.kubectl_bin(*cmd)
-            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
-                logger.debug(f"Command failed (continuing cleanup): {' '.join(cmd)}, error: {e}")
+        try:
+            with open(crd_file, "r") as f:
+                for doc in f.read().split("---"):
+                    if not doc.strip():
+                        continue
+                    crd_name = yaml.safe_load(doc)["metadata"]["name"]
+                    run_cmd(
+                        [
+                            "patch",
+                            "crd",
+                            crd_name,
+                            "--type=merge",
+                            "-p",
+                            '{"metadata":{"finalizers":[]}}',
+                        ]
+                    )
+                    run_cmd(["wait", "--for=delete", "crd", crd_name, "--timeout=60s"])
+        except (FileNotFoundError, yaml.YAMLError, KeyError, TypeError) as e:
+            logger.debug(f"CRD cleanup failed (continuing): {e}")
 
-        def cleanup_crd():
-            crd_file = f"{test_paths['src_dir']}/deploy/crd.yaml"
-            run_cmd(["delete", "-f", crd_file, "--ignore-not-found", "--wait=false"])
+    logger.info("Cleaning up test environment")
 
-            try:
-                with open(crd_file, "r") as f:
-                    for doc in f.read().split("---"):
-                        if not doc.strip():
-                            continue
-                        crd_name = yaml.safe_load(doc)["metadata"]["name"]
-                        run_cmd(
-                            [
-                                "patch",
-                                crd_name,
-                                "--all-namespaces",
-                                "--type=merge",
-                                "-p",
-                                '{"metadata":{"finalizers":[]}}',
-                            ]
-                        )
-                        run_cmd(["wait", "--for=delete", "crd", crd_name])
-            except (FileNotFoundError, yaml.YAMLError, KeyError, TypeError) as e:
-                logger.debug(f"CRD cleanup failed (continuing): {e}")
+    commands = [
+        ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
+        [
+            "delete",
+            "-f",
+            f"{test_paths['test_dir']}/../conf/container-rc.yaml",
+            "--ignore-not-found",
+        ],
+        [
+            "delete",
+            "-f",
+            f"{test_paths['src_dir']}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml",
+            "--ignore-not-found",
+        ],
+    ]
 
-        logger.info("Cleaning up test environment")
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(run_cmd, cmd) for cmd in commands]
+        futures.append(executor.submit(cleanup_crd))
 
-        commands = [
-            ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
-            [
-                "delete",
-                "-f",
-                f"{test_paths['test_dir']}/../conf/container-rc.yaml",
-                "--ignore-not-found",
-            ],
-            [
-                "delete",
-                "-f",
-                f"{test_paths['src_dir']}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml",
-                "--ignore-not-found",
-            ],
-        ]
-
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(run_cmd, cmd) for cmd in commands]
-            futures.append(executor.submit(cleanup_crd))
-
-        namespace_commands = [
+    # Clean up all created namespaces
+    namespace_commands = []
+    for namespace in created_namespaces:
+        namespace_commands.append(
             ["delete", "--grace-period=0", "--force", "namespace", namespace, "--ignore-not-found"]
-        ]
-        if os.environ.get("OPERATOR_NS"):
-            namespace_commands.append(
-                [
-                    "delete",
-                    "--grace-period=0",
-                    "--force",
-                    "namespace",
-                    os.environ.get("OPERATOR_NS"),
-                    "--ignore-not-found",
-                ]
-            )
+        )
 
-        for cmd in namespace_commands:
-            run_cmd(cmd)
+    if os.environ.get("OPERATOR_NS"):
+        namespace_commands.append(
+            [
+                "delete",
+                "--grace-period=0",
+                "--force",
+                "namespace",
+                os.environ.get("OPERATOR_NS"),
+                "--ignore-not-found",
+            ]
+        )
 
-    return _destroy_infra
+    for cmd in namespace_commands:
+        run_cmd(cmd)
 
 
 @pytest.fixture(scope="class")
@@ -344,3 +345,23 @@ def deploy_cert_manager():
         tools.kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
     except Exception as e:
         logger.error(f"Failed to cleanup cert-manager: {e}")
+
+
+@pytest.fixture(scope="class")
+def psmdb_client(test_paths):
+    """Deploy and get the client pod name."""
+    tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
+
+    result = tools.retry(
+        lambda: tools.kubectl_bin(
+            "get",
+            "pods",
+            "--selector=name=psmdb-client",
+            "-o",
+            "jsonpath={.items[].metadata.name}",
+        ),
+        condition=lambda result: "container not found" not in result,
+    )
+
+    pod_name = result.strip()
+    return tools.MongoManager(pod_name)
