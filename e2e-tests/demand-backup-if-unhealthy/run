@@ -148,25 +148,30 @@ run_mongo \
 echo -n "Verifying user creation..."
 until_with_timeout 10 check_user
 
-for type in "logical"; do
-  desc "Testing $type backup with unhealthy container"
-  add_data "$type"
-  wait_sts_to_become_not_ready
-  backup_name_minio="backup-minio-$type"
-  run_backup "minio" "$backup_name_minio" "$type"
-  wait_backup $backup_name_minio running
-  verify_sts_not_ready
-  desc "Verifying $backup_name_minio and update cluster back to ready state"
-  wait_backup "$backup_name_minio" "ready"
-  verify_sts_not_ready
-  rollback_invalid_image
-  wait_for_cluster_state "$cluster" "ready"
-  delete_data "$type"
-  run_restore "$backup_name_minio"
-  wait_restore "$backup_name_minio" "$cluster"
-  wait_for_cluster_state "$cluster" "ready"
-  verify_data "$type"
-done
+desc "Testing logical backup with unhealthy container"
+type="logical"
+add_data "$type"
+wait_sts_to_become_not_ready
+
+backup_name_minio="backup-minio-$type"
+run_backup "minio" "$backup_name_minio" "$type"
+wait_backup $backup_name_minio running
+verify_sts_not_ready
+
+desc "Verifying $backup_name_minio and update cluster back to ready state"
+wait_backup "$backup_name_minio" "ready"
+verify_sts_not_ready
+rollback_invalid_image
+wait_for_cluster_state "$cluster" "ready"
+
+desc "Delete data and run restore of $backup_name_minio"
+delete_data "$type"
+run_restore "$backup_name_minio"
+wait_restore "$backup_name_minio" "$cluster"
+wait_for_cluster_state "$cluster" "ready"
+
+desc "Verify data is back to the cluster"
+verify_data "$type"
 
 destroy $namespace
 desc 'test passed'
