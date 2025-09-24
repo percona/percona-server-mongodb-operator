@@ -7,13 +7,17 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -32,6 +36,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +125,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl-internal",
 					Namespace: tt.cr.Namespace,
 				},
+			}, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      logcollector.ConfigMapName(tt.cr.Name),
+					Namespace: tt.cr.Namespace,
+				},
+				Data: map[string]string{
+					"fluentbit_custom.conf": "config",
+				},
 			})
 
 			rs := tt.cr.Spec.Replset(tt.rsName)
@@ -142,6 +155,15 @@ func TestReconcileStatefulSet(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reconcileStatefulSet() error = %v", err)
 			}
+
+			// Since version v0.22.0 of the runtime controller, it does not return the GVK for a type.
+			// Github issue: https://github.com/kubernetes-sigs/controller-runtime/issues/3302
+			gvk, err := apiutil.GVKForObject(sts, scheme.Scheme)
+			require.NoError(t, err)
+			require.False(t, gvk.Empty())
+
+			sts.Kind = gvk.Kind
+			sts.APIVersion = gvk.GroupVersion().String()
 
 			compareSts(t, sts, tt.expectedSts)
 		})
