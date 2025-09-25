@@ -50,6 +50,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		return nil
 	}
 
+	// Restore will resync the storage. We shouldn't change config during the restore
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "checking if restore running on pbm update")
+	}
+
+	if isRestoring {
+		return nil
+	}
+
 	mainStgName, mainStg, err := cr.Spec.Backup.MainStorage()
 	if err != nil {
 		// no storage found
@@ -96,12 +106,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		return errors.Wrap(err, "hash config")
 	}
 
-	if cr.Status.BackupConfigHash == hash {
-		return nil
-	}
-
-	log.Info("configuration changed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
-
 	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
@@ -111,6 +115,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	if err != nil && !backup.IsErrNoDocuments(err) {
 		return errors.Wrap(err, "get current config")
 	}
+
+	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
+		return nil
+	}
+
+	log.Info("configuration changed or resync is needed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
 
 	if currentCfg == nil {
 		currentCfg = new(config.Config)

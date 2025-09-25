@@ -11,20 +11,20 @@ spec:
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       minio:
+        type: s3
         s3:
-          bucket: invalid-bucket
           credentialsSecret: minio-secret
           prefix: pitr-prefix-2
-          endpointUrl: http://invalid-service:1111/
-          insecureSkipTLSVerify: false
           region: us-east-1
-        type: s3
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
     pitr:
-      compressionLevel: 6
-      compressionType: gzip
       enabled: true
-      oplogOnly: false
       oplogSpanMin: 2
+      oplogOnly: false
+      compressionType: gzip
+      compressionLevel: 6
   replsets:
   - name: rs0
     affinity:
