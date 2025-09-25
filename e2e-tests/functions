@@ -673,8 +673,8 @@ wait_for_running() {
 			wait_pod ${name}-${i}
 		fi
 	done
-	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.enabled}') == "true" ]]; then
-		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.size}') - 1))
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].nonvoting.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].nonvoting.size}') - 1))
 		for i in $(seq 0 $last_pod); do
 			wait_pod ${name}-nv-${i}
 		done
@@ -826,6 +826,8 @@ compare_kubectl() {
 	else
 		cp ${new_result} ${expected_result}
 	fi
+
+	log "compare_kubectl: ${resource} OK"
 }
 
 run_recovery_check() {
@@ -842,6 +844,8 @@ run_recovery_check() {
 	# we don't wait for cluster readiness here because the annotation gets removed then
 	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
 
+	log "Physical restore finished: OK"
+
 	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
 		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
 		exit 1
@@ -851,6 +855,8 @@ run_recovery_check() {
 	wait_cluster_consistency ${cluster}
 	wait_for_pbm_operations ${cluster}
 
+	log "Operator triggered PBM resync: OK"
+
 	if [ -n "$is_sharded" ]; then
 		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded" "" "" "" "" "$tls"
 	else
@@ -858,6 +864,25 @@ run_recovery_check() {
 		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
 		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
 	fi
+
+	log "Data restored: OK"
+
+	echo "${cluster}-rs0-0:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-0 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-1:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-1 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-2:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-2 -- ls -l /data/db/pbm-restore-logs
+	if [ -n "$is_sharded" ]; then
+		echo "${cluster}-cfg-0:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-0 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-1:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-1 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-2:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-2 -- ls -l /data/db/pbm-restore-logs
+	fi
+
+	log "Restore logs are preserved: OK"
 }
 
 run_mongo() {
@@ -1851,7 +1876,7 @@ wait_for_cluster_state() {
 	local cluster_name=$1
 	local target_state=$2
 
-	echo -n "Waiting for cluster to reach ${target_state} state"
+	echo -n "Waiting for psmdb/${cluster_name} to reach ${target_state} state"
 	local timeout=0
 	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
 		sleep 1
@@ -1864,6 +1889,7 @@ wait_for_cluster_state() {
 		fi
 	done
 	echo
+	log "psmdb/${cluster_name} is ${target_state}: OK"
 }
 
 urlencode() {
