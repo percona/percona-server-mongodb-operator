@@ -1116,34 +1116,57 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			}
 		}
 
-		if !rs.NonVoting.Enabled {
-			continue
-		}
+		if rs.NonVoting.Enabled {
+			name = naming.NonVotingConfigMapName(cr, rs)
+			if rs.NonVoting.Configuration == "" {
+				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+					return errors.Wrap(err, "failed to delete nonvoting config map")
+				}
 
-		name = naming.NonVotingConfigMapName(cr, rs)
-		if rs.NonVoting.Configuration == "" {
-			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
-				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
+				continue
 			}
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+					Labels:    naming.RSLabels(cr, rs),
+				},
+				Data: map[string]string{
+					"mongod.conf": string(rs.NonVoting.Configuration),
+				},
+			}
+			if cr.CompareVersion("1.17.0") < 0 {
+				cm.Labels = nil
+			}
+			err := r.createOrUpdateConfigMap(ctx, cr, cm)
+			if err != nil {
+				return errors.Wrap(err, "create or update nonvoting config map")
+			}
+		}
 
-			continue
-		}
-		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.RSLabels(cr, rs),
-			},
-			Data: map[string]string{
-				"mongod.conf": string(rs.NonVoting.Configuration),
-			},
-		}
-		if cr.CompareVersion("1.17.0") < 0 {
-			cm.Labels = nil
-		}
-		err := r.createOrUpdateConfigMap(ctx, cr, cm)
-		if err != nil {
-			return errors.Wrap(err, "create or update nonvoting config map")
+		if rs.Hidden.Enabled {
+			name = naming.HiddenConfigMapName(cr, rs)
+			if rs.Hidden.Configuration == "" {
+				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+					return errors.Wrap(err, "failed to delete hidden config map")
+				}
+
+				continue
+			}
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+					Labels:    naming.RSLabels(cr, rs),
+				},
+				Data: map[string]string{
+					"mongod.conf": string(rs.Hidden.Configuration),
+				},
+			}
+			err := r.createOrUpdateConfigMap(ctx, cr, cm)
+			if err != nil {
+				return errors.Wrap(err, "create or update hidden config map")
+			}
 		}
 	}
 
