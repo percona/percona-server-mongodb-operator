@@ -116,7 +116,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 
 	rsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
-		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+		if err := r.deleteReplset(ctx, cr, rs); err != nil {
 			rsDeleted = false
 			switch err {
 			case errWaitingTermination, errWaitingFirstPrimary:
@@ -133,14 +133,30 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		if err := r.deleteRSPods(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
+		if err := r.deleteReplset(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) deleteReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+	// It's okay to delete arbiter + non-voting + hidden at the same time.
+	// None of them can be the primary.
+	if rs.Arbiter.Enabled {
+		rs.Arbiter.Size = 0
+	}
+	if rs.NonVoting.Enabled {
+		rs.NonVoting.Size = 0
+	}
+	if rs.Hidden.Enabled {
+		rs.Hidden.Size = 0
+	}
+
+	return r.deleteReplsetPods(ctx, cr, rs)
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteReplsetPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
 	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -161,7 +177,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "get rs statefulset")
+		return errors.Wrap(err, "get rs pods")
 	}
 
 	// `k8sclient.List` returns unsorted list of pods
@@ -179,7 +195,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		return errWaitingTermination
 	case 1:
 		rs.Size = 1
-		// If there is one pod left, we should be sure that it's the primary
+		// If there is one pod left, we need to be sure that it's the primary.
 		if len(pods.Items) != 1 {
 			return errWaitingTermination
 		}
