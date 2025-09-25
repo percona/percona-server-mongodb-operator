@@ -45,23 +45,18 @@ def cat_config(config_file: str) -> str:
     if "spec" in config:
         spec = config["spec"]
 
-        # Set mongod image if not present
         if "image" not in spec or spec["image"] is None:
             spec["image"] = os.environ.get("IMAGE_MONGOD")
 
-        # Set PMM client image
         if "pmm" in spec:
             spec["pmm"]["image"] = os.environ.get("IMAGE_PMM_CLIENT")
 
-        # Set init image
         if "initImage" in spec:
             spec["initImage"] = os.environ.get("IMAGE")
 
-        # Set backup image
         if "backup" in spec:
             spec["backup"]["image"] = os.environ.get("IMAGE_BACKUP")
 
-        # Set upgrade options
         if "upgradeOptions" not in spec:
             spec["upgradeOptions"] = {}
         spec["upgradeOptions"]["apply"] = "Never"
@@ -127,7 +122,6 @@ def delete_crd_rbac(src_dir: Path) -> None:
                     '{"metadata":{"finalizers":[]}}',
                 )
         except subprocess.CalledProcessError:
-            # Kind may not exist or no instances exist; ignore
             pass
 
     for name in crd_names:
@@ -298,15 +292,27 @@ def clean_all_namespaces() -> None:
         logger.error("Failed to clean namespaces")
 
 
-def wait_pod(pod_name: str, timeout: str = "360") -> None:
+def wait_pod(pod_name: str, timeout: int = 360) -> None:
     """Wait for pod to be ready."""
+    start_time = time.time()
     logger.info(f"Waiting for {CYAN}pod/{pod_name}{RESET} to be ready...")
-    time.sleep(4)
-    try:
-        kubectl_bin("wait", f"pod/{pod_name}", "--for=condition=ready", f"--timeout={timeout}s")
-        logger.info(f"Pod {CYAN}{pod_name}{RESET} is ready")
-    except subprocess.CalledProcessError as e:
-        raise TimeoutError(f"Pod {pod_name} did not become ready within {timeout}s") from e
+    while time.time() - start_time < timeout:
+        try:
+            result = kubectl_bin(
+                "get",
+                "pod",
+                pod_name,
+                "-o",
+                "jsonpath={.status.conditions[?(@.type=='Ready')].status}",
+            ).strip("'")
+            if result == "True":
+                logger.info(f"Pod {CYAN}{pod_name}{RESET} is ready")
+                return
+        except subprocess.CalledProcessError:
+            # Pod likely not created yet
+            pass
+        time.sleep(1)
+    raise TimeoutError(f"Timeout waiting for {pod_name} to be ready")
 
 
 def wait_for_running(
@@ -385,8 +391,8 @@ def compare_kubectl(test_dir: str, resource: str, namespace: str, postfix: str =
         with open(expected_result, "r") as f:
             expected_yaml = f.read()
 
-        filtered_actual = filter_yaml_with_yq(actual_yaml, namespace)
-        filtered_expected = filter_yaml_with_yq(expected_yaml, namespace)
+        filtered_actual = filter_yaml(actual_yaml, namespace)
+        filtered_expected = filter_yaml(expected_yaml, namespace)
 
         actual_data = yaml.safe_load(filtered_actual)
         expected_data = yaml.safe_load(filtered_expected)
@@ -419,6 +425,19 @@ def detect_k8s_provider(provider: str) -> str:
     except Exception as e:
         logger.error(f"Failed to detect Kubernetes provider: {e}")
         return "0"
+
+
+def get_k8s_versions() -> tuple[str, str]:
+    """Get Kubernetes git version and semantic version."""
+    output = kubectl_bin("version", "-o", "json")
+    version_info = json.loads(output)["serverVersion"]
+
+    git_version = version_info["gitVersion"]
+    major = version_info["major"]
+    minor = version_info["minor"].rstrip("+")
+    kube_version = f"{major}.{minor}"
+
+    return git_version, kube_version
 
 
 def get_git_commit() -> str:
@@ -476,7 +495,7 @@ def get_user_data(secret_name: str, data_key: str) -> str:
     return urllib.parse.quote(secret_data, safe="")
 
 
-def filter_yaml_with_yq(
+def filter_yaml(
     yaml_content: str, namespace: str, resource: str = "", skip_generation_check: bool = False
 ) -> str:
     """Filter YAML content using yq command"""
@@ -539,19 +558,6 @@ def filter_yaml_with_yq(
         filtered_yaml = result.stdout
 
     return filtered_yaml
-
-
-def get_kubernetes_versions() -> tuple[str, str]:
-    """Get Kubernetes git version and semantic version."""
-    output = kubectl_bin("version", "-o", "json")
-    version_info = json.loads(output)["serverVersion"]
-
-    git_version = version_info["gitVersion"]
-    major = version_info["major"]
-    minor = version_info["minor"].rstrip("+")
-    kube_version = f"{major}.{minor}"
-
-    return git_version, kube_version
 
 
 # TODO: implement this function
@@ -675,15 +681,13 @@ class MongoManager:
                 return obj
 
         # Get actual MongoDB user permissions
-        try:
-            result = self.run_mongosh(
+        result = retry(
+            lambda: self.run_mongosh(
                 "EJSON.stringify(db.runCommand({connectionStatus:1,showPrivileges:true}))",
                 uri,
             )
-            actual_data = clean_mongo_json(json.loads(result))
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to get MongoDB user permissions: {e}")
+        )
+        actual_data = clean_mongo_json(json.loads(result))
 
         expected_data = get_expected_file(test_dir, expected_role)
         expected_data = ordered(expected_data)

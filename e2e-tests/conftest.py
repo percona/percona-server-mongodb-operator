@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def setup_env_vars():
     """Setup environment variables for the test session."""
     git_branch = tools.get_git_branch()
-    git_version, kube_version = tools.get_kubernetes_versions()
+    git_version, kube_version = tools.get_k8s_versions()
 
     os.environ.setdefault("KUBE_VERSION", kube_version)
     os.environ.setdefault("EKS", "1" if "eks" in git_version else "0")
