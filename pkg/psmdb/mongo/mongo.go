@@ -901,6 +901,11 @@ func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
 	return false
 }
 
+func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
+	(*m)[i].Votes = votes
+	(*m)[i].Priority = priority
+}
+
 // SetVotes sets voting parameters for members list
 func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 	cm := make(map[string]int, len(compareWith))
@@ -924,49 +929,42 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 		case isNonVoting:
 			// Non voting member is a regular ReplSet member with
 			// votes and priority equals to 0.
-			[]ConfigMember(*m)[i].Votes = 0
-			[]ConfigMember(*m)[i].Priority = 0
+			m.setMemberVoteAndPriority(i, 0, 0)
 		case isExternal:
-			[]ConfigMember(*m)[i].Votes = member.Votes
-			[]ConfigMember(*m)[i].Priority = member.Priority
-
+			m.setMemberVoteAndPriority(i, member.Votes, member.Priority)
 			if member.Votes == 1 {
 				votes++
 			}
 		case member.Hidden:
 			// Hidden member is a voting ReplSet member
 			// but it is not listed in hello command.
-			[]ConfigMember(*m)[i].Votes = DefaultVotes
-			[]ConfigMember(*m)[i].Priority = 0
+			m.setMemberVoteAndPriority(i, DefaultVotes, 0)
 			lastVoteIdx = i
 			votes++
 		case member.ArbiterOnly:
 			// Arbiter should always have a vote
-			[]ConfigMember(*m)[i].Votes = DefaultVotes
 			// Arbiter should never have priority
-			[]ConfigMember(*m)[i].Priority = 0
+			m.setMemberVoteAndPriority(i, DefaultVotes, 0)
 			votes++
 		default:
-			[]ConfigMember(*m)[i].Votes = DefaultVotes
-			lastVoteIdx = i
-			votes++
+			// Priority can be any number in range [0,1000].
+			// We're setting it to 2 as default, to allow
+			// users to configure external nodes with lower
+			// priority than local nodes.
+			priority := DefaultPriority
 
 			// In unsafe PSA (Primary with a Secondary and an Arbiter),
 			// we are unable to set the votes and the priority simultaneously.
 			// Therefore, setting only the priority.
 			if !unsafePSA || member.Votes == DefaultVotes {
-				// Priority can be any number in range [0,1000].
-				// We're setting it to 2 as default, to allow
-				// users to configure external nodes with lower
-				// priority than local nodes.
-				priority := DefaultPriority
-
 				if c, ok := cm[member.Host]; ok {
 					priority = c
 				}
-
-				[]ConfigMember(*m)[i].Priority = priority
 			}
+
+			m.setMemberVoteAndPriority(i, DefaultVotes, priority)
+			lastVoteIdx = i
+			votes++
 		}
 
 		if votes > MaxVotingMembers {
@@ -976,15 +974,13 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 						continue
 					}
 
-					[]ConfigMember(*m)[j].Votes = 0
-					[]ConfigMember(*m)[j].Priority = 0
+					m.setMemberVoteAndPriority(j, 0, 0)
 					lastVoteIdx = j - 1
 					votes--
 					break
 				}
 			} else {
-				[]ConfigMember(*m)[i].Votes = 0
-				[]ConfigMember(*m)[i].Priority = 0
+				m.setMemberVoteAndPriority(i, 0, 0)
 				votes--
 			}
 		}
@@ -1000,8 +996,7 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 				continue
 			}
 
-			[]ConfigMember(*m)[j].Votes = 0
-			[]ConfigMember(*m)[j].Priority = 0
+			m.setMemberVoteAndPriority(j, 0, 0)
 			break
 		}
 	}
