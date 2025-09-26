@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Regression test for K8SPSMDB-1425
+
+set -o errexit
+set -o pipefail
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+create_user() {
+	local cluster=$1
+
+	log 'create user myApp'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+write_document() {
+	local cluster=$1
+	local x=$2
+
+	log "write document: ${x}"
+	run_mongo \
+		"use myApp\n db.test.insert({ x: ${x} })" \
+		"myApp:myPass@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+run_backup() {
+	local cluster=$1
+	local name=$2
+	local type=$3
+
+	desc "run backup ${name}-${type}"
+	cat ${test_dir}/conf/backup.yml \
+		| $sed -e "s/name:/name: ${name}-${type}/" \
+		| $sed -e "s/clusterName:/clusterName: ${cluster}/" \
+		| $sed -e "s/type:/type: ${type}/" \
+		| kubectl_bin apply -f -
+
+	wait_backup "${name}-${type}"
+}
+
+run_restore() {
+	local cluster=$1
+	local backup_name=$2
+	local backup_type=$3
+	local destination=$(get_backup_dest ${backup_name}-${backup_type})
+
+	cat ${test_dir}/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-${backup_name}-${backup_type}/" \
+		| $sed -e "s/clusterName:/clusterName: ${cluster}/" \
+		| $sed -e "s/type:/type: ${backup_type}/" \
+		| $sed -e "s/pitrType:/type:/" \
+		| $sed -e "s|DESTINATION|${destination}|" \
+		| kubectl_bin apply -f -
+}
+
+compare_pbm_config() {
+	local cluster=$1
+
+	kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm config > ${tmp_dir}/pbm_config.yml
+
+	diff -u ${test_dir}/compare/pbm_config.yml ${tmp_dir}/pbm_config.yml
+}
+
+source_cluster="some-name-source"
+target_cluster="some-name-target"
+
+create_infra $namespace
+deploy_minio
+
+desc 'create secrets and start client'
+kubectl_bin apply \
+	-f ${conf_dir}/secrets.yml \
+	-f ${conf_dir}/client.yml \
+	-f ${conf_dir}/minio-secret.yml
+
+desc "create PSMDB cluster: ${source_cluster}"
+apply_cluster ${test_dir}/conf/${source_cluster}.yml
+
+wait_for_running ${source_cluster}-rs0 3
+
+wait_backup_agent ${source_cluster}-rs0-0
+wait_backup_agent ${source_cluster}-rs0-1
+wait_backup_agent ${source_cluster}-rs0-2
+
+create_user ${source_cluster}
+write_document ${source_cluster} 100500
+
+sleep_with_log 360 "wait for PBM-1265 workaround"
+
+compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}"
+
+backup_name_minio="backup-minio"
+
+run_backup ${source_cluster} ${backup_name_minio} logical
+
+sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
+run_backup ${source_cluster} ${backup_name_minio} physical
+
+write_document ${source_cluster} 100501
+write_document ${source_cluster} 100502
+write_document ${source_cluster} 100503
+
+sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
+compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}" "-2nd"
+
+desc "create PSMDB cluster: ${target_cluster}"
+apply_cluster ${test_dir}/conf/${target_cluster}.yml
+
+wait_for_running ${target_cluster}-rs0 3
+
+wait_backup_agent ${target_cluster}-rs0-0
+wait_backup_agent ${target_cluster}-rs0-1
+wait_backup_agent ${target_cluster}-rs0-2
+
+run_restore ${target_cluster} ${backup_name_minio} logical
+wait_restore "${backup_name_minio}-logical" "${target_cluster}" "ready"
+
+compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+log "Data is restored from ${backup_name_minio}-logical: OK"
+
+compare_pbm_config ${target_cluster}
+log "Main storage is reverted after ${backup_name_minio}-logical: OK"
+
+run_restore ${target_cluster} ${backup_name_minio} physical
+wait_restore "${backup_name_minio}-physical" "${target_cluster}" "ready"
+
+compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+log "Data is restored from ${backup_name_minio}-physical: OK"
+
+compare_pbm_config ${target_cluster}
+log "Main storage is reverted after ${backup_name_minio}-physical: OK"
+
+desc "test passed"
+
+destroy $namespace
