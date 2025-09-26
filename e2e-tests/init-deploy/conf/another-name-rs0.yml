@@ -17,7 +17,7 @@ spec:
 #    tasks:
   replsets:
   - name: rs0
-    terminationGracePeriodSeconds: 300
+    terminationGracePeriodSeconds: 30
     configuration: |
       operationProfiling:
         mode: slowOp
