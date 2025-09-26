@@ -105,6 +105,9 @@ type PBM interface {
 }
 
 func IsErrNoDocuments(err error) bool {
+	if err == nil {
+		return false
+	}
 	return errors.Is(err, mongo.ErrNoDocuments) || strings.Contains(err.Error(), "no documents in result")
 }
 
@@ -554,7 +557,6 @@ func GetPBMProfile(
 		Storage:   stgConf,
 		IsProfile: true,
 	}, nil
-
 }
 
 func (b *pbmC) AddProfile(

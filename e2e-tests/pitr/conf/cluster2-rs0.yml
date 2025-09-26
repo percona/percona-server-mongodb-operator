@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: some-name
+  name: cluster2
 spec:
   #platform: openshift
   image:
@@ -14,7 +14,7 @@ spec:
         type: s3
         s3:
           credentialsSecret: minio-secret
-          prefix: pitr-prefix-1
+          prefix: pitr-prefix-2
           region: us-east-1
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/

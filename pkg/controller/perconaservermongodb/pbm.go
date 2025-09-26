@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -46,6 +47,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	log := logf.FromContext(ctx)
 
 	if cr.Status.State != psmdbv1.AppStateReady {
+		return nil
+	}
+
+	// Restore will resync the storage. We shouldn't change config during the restore
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "checking if restore running on pbm update")
+	}
+
+	if isRestoring {
 		return nil
 	}
 
@@ -88,19 +99,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		}
 
 		return strings.Compare(a.Name, b.Name)
-
 	})
 
 	hash, err := hashPBMConfiguration(c)
 	if err != nil {
 		return errors.Wrap(err, "hash config")
 	}
-
-	if cr.Status.BackupConfigHash == hash {
-		return nil
-	}
-
-	log.Info("configuration changed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
 
 	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
@@ -111,13 +115,31 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	if err != nil && !backup.IsErrNoDocuments(err) {
 		return errors.Wrap(err, "get current config")
 	}
-
 	if currentCfg == nil {
 		currentCfg = new(config.Config)
 	}
 
+	// Hashes can be equal even if the actual PBM configuration differs from the one that was hashed
+	// For example, a restore can modify the PBM config
+	// We should use `isResyncNeeded` to compare the current configuration with the one we need
+	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
+		return nil
+	}
+
+	log.Info("configuration changed or resync is needed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
+
 	if err := pbm.GetNSetConfig(ctx, r.client, cr); err != nil {
 		return errors.Wrap(err, "set config")
+	}
+
+	// After applying the new configuration,
+	// we should get it again to use in `isResyncNeeded`
+	currentCfg, err = pbm.GetConfig(ctx)
+	if err != nil && !backup.IsErrNoDocuments(err) {
+		return errors.Wrap(err, "get current config")
+	}
+	if currentCfg == nil {
+		currentCfg = new(config.Config)
 	}
 
 	if isResyncNeeded(currentCfg, &main) {
