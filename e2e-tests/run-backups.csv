@@ -1,6 +1,7 @@
 demand-backup
 demand-backup-eks-credentials-irsa
 demand-backup-fs
+demand-backup-if-unhealthy
 demand-backup-incremental
 demand-backup-incremental-sharded
 demand-backup-physical-parallel
