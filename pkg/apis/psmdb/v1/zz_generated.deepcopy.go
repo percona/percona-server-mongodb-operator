@@ -477,6 +477,13 @@ func (in *HiddenSpec) DeepCopyInto(out *HiddenSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ContainerEnv != nil {
+		in, out := &in.ContainerEnv, &out.ContainerEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 }
 
@@ -785,6 +792,13 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ContainerEnv != nil {
+		in, out := &in.ContainerEnv, &out.ContainerEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.HostAliases != nil {
 		in, out := &in.HostAliases, &out.HostAliases
 		*out = make([]corev1.HostAlias, len(*in))
@@ -968,6 +982,13 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 		in, out := &in.ContainerSecurityContext, &out.ContainerSecurityContext
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.ContainerEnv != nil {
+		in, out := &in.ContainerEnv, &out.ContainerEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 }
@@ -1762,6 +1783,13 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = make(PrimaryPreferTagSelectorSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
+		}
+	}
+	if in.ContainerEnv != nil {
+		in, out := &in.ContainerEnv, &out.ContainerEnv
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }
