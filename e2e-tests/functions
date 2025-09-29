@@ -262,7 +262,7 @@ wait_backup() {
 			exit 1
 		fi
 	done
-	echo
+	echo '.OK'
 	set_debug
 }
 
@@ -280,7 +280,7 @@ wait_for_pbm_operations() {
 		echo -n .
 		sleep 5
 	done
-	echo
+	echo '.OK'
 	set_debug
 }
 
@@ -408,7 +408,7 @@ wait_restore() {
 		fi
 		sleep 1
 	done
-	echo "OK"
+	echo ".OK"
 
 	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
 	retry=0
@@ -418,7 +418,7 @@ wait_restore() {
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
 		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
-			echo "OK after ${retry} minutes"
+			echo ".OK after ${retry} minutes"
 			break
 		fi
 		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
@@ -438,7 +438,7 @@ wait_restore() {
 			exit 1
 		fi
 	done
-	echo "OK after ${retry} minutes"
+	echo ".OK after ${retry} minutes"
 	set_debug
 
 	if [[ $wait_cluster_consistency -eq 1 ]]; then
@@ -1495,7 +1495,7 @@ wait_cluster_consistency() {
 		echo -n .
 		sleep 10
 	done
-	echo
+	echo '.OK'
 }
 
 run_backup() {

@@ -62,82 +62,144 @@ run_restore() {
 
 compare_pbm_config() {
 	local cluster=$1
+	local compare_suffix=$2
+	local container=${3:-"backup-agent"}
 
-	kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm config > ${tmp_dir}/pbm_config.yml
+	local pbm_binary=pbm
+	if [[ ${container} == "mongod" ]]; then
+		pbm_binary=/opt/percona/pbm
+	fi
 
-	diff -u ${test_dir}/compare/pbm_config.yml ${tmp_dir}/pbm_config.yml
+	kubectl_bin exec ${cluster}-rs0-0 -c ${container} -- ${pbm_binary} config > ${tmp_dir}/pbm_config.yml
+
+	diff -u ${test_dir}/compare/pbm_config_${compare_suffix}.yml ${tmp_dir}/pbm_config.yml
 }
 
 source_cluster="some-name-source"
 target_cluster="some-name-target"
-
-create_infra $namespace
-deploy_minio
-
-desc 'create secrets and start client'
-kubectl_bin apply \
-	-f ${conf_dir}/secrets.yml \
-	-f ${conf_dir}/client.yml \
-	-f ${conf_dir}/minio-secret.yml
-
-desc "create PSMDB cluster: ${source_cluster}"
-apply_cluster ${test_dir}/conf/${source_cluster}.yml
-
-wait_for_running ${source_cluster}-rs0 3
-
-wait_backup_agent ${source_cluster}-rs0-0
-wait_backup_agent ${source_cluster}-rs0-1
-wait_backup_agent ${source_cluster}-rs0-2
-
-create_user ${source_cluster}
-write_document ${source_cluster} 100500
-
-sleep_with_log 360 "wait for PBM-1265 workaround"
-
-compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}"
-
 backup_name_minio="backup-minio"
 
-run_backup ${source_cluster} ${backup_name_minio} logical
+setup_infra() {
+	create_infra $namespace
+	deploy_minio
 
-sleep_with_log 70 "wait for oplog chunks to be uploaded"
+	desc 'create secrets and start client'
+	kubectl_bin apply \
+		-f ${conf_dir}/secrets.yml \
+		-f ${conf_dir}/client.yml \
+		-f ${conf_dir}/minio-secret.yml
+}
 
-run_backup ${source_cluster} ${backup_name_minio} physical
+setup_source_cluster() {
+	desc "create PSMDB cluster: ${source_cluster}"
+	apply_cluster ${test_dir}/conf/${source_cluster}.yml
 
-write_document ${source_cluster} 100501
-write_document ${source_cluster} 100502
-write_document ${source_cluster} 100503
+	wait_for_running ${source_cluster}-rs0 3
 
-sleep_with_log 70 "wait for oplog chunks to be uploaded"
+	wait_backup_agent ${source_cluster}-rs0-0
+	wait_backup_agent ${source_cluster}-rs0-1
+	wait_backup_agent ${source_cluster}-rs0-2
 
-compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}" "-2nd"
+	create_user ${source_cluster}
+	write_document ${source_cluster} 100500
 
-desc "create PSMDB cluster: ${target_cluster}"
-apply_cluster ${test_dir}/conf/${target_cluster}.yml
+	sleep_with_log 360 "wait for PBM-1265 workaround"
 
-wait_for_running ${target_cluster}-rs0 3
+	compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}"
 
-wait_backup_agent ${target_cluster}-rs0-0
-wait_backup_agent ${target_cluster}-rs0-1
-wait_backup_agent ${target_cluster}-rs0-2
+	run_backup ${source_cluster} ${backup_name_minio} logical
 
-run_restore ${target_cluster} ${backup_name_minio} logical
-wait_restore "${backup_name_minio}-logical" "${target_cluster}" "ready"
+	sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
-log "Data is restored from ${backup_name_minio}-logical: OK"
+	run_backup ${source_cluster} ${backup_name_minio} physical
 
-compare_pbm_config ${target_cluster}
-log "Main storage is reverted after ${backup_name_minio}-logical: OK"
+	write_document ${source_cluster} 100501
+	write_document ${source_cluster} 100502
+	write_document ${source_cluster} 100503
 
-run_restore ${target_cluster} ${backup_name_minio} physical
-wait_restore "${backup_name_minio}-physical" "${target_cluster}" "ready"
+	sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
-log "Data is restored from ${backup_name_minio}-physical: OK"
+	compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}" "-2nd"
+}
 
-compare_pbm_config ${target_cluster}
-log "Main storage is reverted after ${backup_name_minio}-physical: OK"
+setup_target_cluster() {
+	desc "create PSMDB cluster: ${target_cluster}"
+	apply_cluster ${test_dir}/conf/${target_cluster}.yml
+
+	wait_for_running ${target_cluster}-rs0 3
+
+	wait_backup_agent ${target_cluster}-rs0-0
+	wait_backup_agent ${target_cluster}-rs0-1
+	wait_backup_agent ${target_cluster}-rs0-2
+
+	wait_for_pbm_operations ${target_cluster}
+}
+
+cleanup_target_cluster() {
+	desc "Cleanup ${target_cluster}"
+
+	kubectl_bin delete --wait \
+		psmdb/${target_cluster} \
+		pvc/mongod-data-${target_cluster}-rs0-0 \
+		pvc/mongod-data-${target_cluster}-rs0-1 \
+		pvc/mongod-data-${target_cluster}-rs0-2
+
+
+	kubectl_bin delete --wait psmdb-restore --all
+}
+
+test_case_1() {
+	desc "Case 1: Logical restore"
+
+	run_restore ${target_cluster} ${backup_name_minio} logical
+
+	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "requested" 0
+	compare_pbm_config ${target_cluster} source
+	log "Backup source is set as main storage during restore: OK"
+
+	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "ready"
+	compare_pbm_config ${target_cluster} target
+	log "Main storage is reverted after ${backup_name_minio}-logical: OK"
+
+	wait_for_pbm_operations ${target_cluster}
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+	log "Data is restored from ${backup_name_minio}-logical: OK"
+
+	desc "Case 1: Logical restore: OK"
+}
+
+test_case_2() {
+	desc "Case 2: Physical restore"
+
+	run_restore ${target_cluster} ${backup_name_minio} physical
+
+	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "requested" 0
+	compare_pbm_config ${target_cluster} source mongod
+	log "Backup source is set as main storage during restore: OK"
+
+	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "ready"
+	compare_pbm_config ${target_cluster} target
+	log "Main storage is reverted after ${backup_name_minio}-physical: OK"
+
+	wait_for_pbm_operations ${target_cluster}
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+	log "Data is restored from ${backup_name_minio}-physical: OK"
+
+	desc "Case 2: Physical restore: OK"
+}
+
+setup_infra
+setup_source_cluster
+
+setup_target_cluster
+test_case_1
+cleanup_target_cluster
+
+setup_target_cluster
+test_case_2
+cleanup_target_cluster
 
 desc "test passed"
 
