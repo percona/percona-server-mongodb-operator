@@ -1,0 +1,19 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  name:
+spec:
+  clusterName:
+  pitr:
+    pitrType: latest
+  backupSource:
+    type:
+    destination: s3://DESTINATION
+    s3:
+      credentialsSecret: minio-secret
+      bucket: operator-testing
+      prefix: some-name-source
+      endpointUrl: http://minio-service:9000/
+      region: us-east-1
+      insecureSkipTLSVerify: false
+
