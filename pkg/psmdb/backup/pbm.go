@@ -505,7 +505,7 @@ func GetPBMStorageConfig(
 ) (config.StorageConf, error) {
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
+		if cluster.CompareVersion("1.21.0") >= 0 && strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
 			gcs := api.BackupStorageSpec{
 				Type: psmdbv1.BackupStorageGCS,
 				GCS: api.BackupStorageGCSSpec{

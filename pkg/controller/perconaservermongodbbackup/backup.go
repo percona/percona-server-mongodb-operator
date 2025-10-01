@@ -136,6 +136,17 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
 			status.Destination = "s3://" + status.Destination
 		}
+	case api.BackupStorageGCS:
+		status.GCS = &stg.GCS
+
+		status.Destination = stg.GCS.Bucket
+
+		if stg.GCS.Prefix != "" {
+			status.Destination = stg.GCS.Bucket + "/" + stg.GCS.Prefix
+		}
+		if !strings.HasPrefix(stg.GCS.Bucket, "gs://") {
+			status.Destination = "gs://" + status.Destination
+		}
 	case api.BackupStorageAzure:
 		status.Azure = &stg.Azure
 
