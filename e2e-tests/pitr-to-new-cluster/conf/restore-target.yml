@@ -1,0 +1,10 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  name: restore-target-backup-minio-logical
+spec:
+  clusterName: some-name-target
+  backupName: target-backup-minio-logical
+  pitr:
+    type: date
+    date:
