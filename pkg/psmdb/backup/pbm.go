@@ -105,6 +105,9 @@ type PBM interface {
 }
 
 func IsErrNoDocuments(err error) bool {
+	if err == nil {
+		return false
+	}
 	return errors.Is(err, mongo.ErrNoDocuments) || strings.Contains(err.Error(), "no documents in result")
 }
 
@@ -502,7 +505,7 @@ func GetPBMStorageConfig(
 ) (config.StorageConf, error) {
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
+		if cluster.CompareVersion("1.21.0") >= 0 && strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
 			gcs := api.BackupStorageSpec{
 				Type: psmdbv1.BackupStorageGCS,
 				GCS: api.BackupStorageGCSSpec{
@@ -554,7 +557,6 @@ func GetPBMProfile(
 		Storage:   stgConf,
 		IsProfile: true,
 	}, nil
-
 }
 
 func (b *pbmC) AddProfile(
