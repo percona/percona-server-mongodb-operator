@@ -1791,6 +1791,12 @@ start_cluster() {
 	wait_cluster_consistency "${cluster_name}"
 }
 
+format_pitr_target() {
+	local target=$1
+
+	echo ${target} | sed 's/T/ /' | sed 's/Z//'
+}
+
 get_latest_restorable_time() {
 	local cluster=$1
 	local first_timestamp

@@ -9,6 +9,10 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+source_cluster="some-name-source"
+target_cluster="some-name-target"
+backup_name_minio="backup-minio"
+
 create_user() {
 	local cluster=$1
 
@@ -51,7 +55,7 @@ run_restore() {
 	local backup_type=$3
 	local destination=$(get_backup_dest ${backup_name}-${backup_type})
 
-	cat ${test_dir}/conf/restore.yml \
+	cat ${test_dir}/conf/restore-backupsource.yml \
 		| $sed -e "s/name:/name: restore-${backup_name}-${backup_type}/" \
 		| $sed -e "s/clusterName:/clusterName: ${cluster}/" \
 		| $sed -e "s/type:/type: ${backup_type}/" \
@@ -75,9 +79,20 @@ compare_pbm_config() {
 	diff -u ${test_dir}/compare/pbm_config_${compare_suffix}.yml ${tmp_dir}/pbm_config.yml
 }
 
-source_cluster="some-name-source"
-target_cluster="some-name-target"
-backup_name_minio="backup-minio"
+check_if_resync_triggered() {
+	local cluster=$1
+	local ts=$2
+
+	log "checking if resync is triggered after ${ts}"
+	local count=$(run_mongo \
+		"use admin\n db.pbmCmd.countDocuments({cmd: 'resync', ts: { '\$gt': ${ts} }})" \
+		"backup:backup123456@${target_cluster}-rs0.${namespace}")
+
+	if [[ ${count} -lt 1 ]]; then
+		echo "No resync command found in admin.pbmCmd"
+		exit 1
+	fi
+}
 
 setup_infra() {
 	create_infra $namespace
@@ -113,13 +128,17 @@ setup_source_cluster() {
 
 	run_backup ${source_cluster} ${backup_name_minio} physical
 
+	desc "write data for PiTR"
+
 	write_document ${source_cluster} 100501
 	write_document ${source_cluster} 100502
 	write_document ${source_cluster} 100503
 
 	sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-	compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}" "-2nd"
+	compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "PiTR data is ready: OK"
 }
 
 setup_target_cluster() {
@@ -135,72 +154,105 @@ setup_target_cluster() {
 	wait_for_pbm_operations ${target_cluster}
 }
 
-cleanup_target_cluster() {
-	desc "Cleanup ${target_cluster}"
-
-	kubectl_bin delete --wait \
-		psmdb/${target_cluster} \
-		pvc/mongod-data-${target_cluster}-rs0-0 \
-		pvc/mongod-data-${target_cluster}-rs0-1 \
-		pvc/mongod-data-${target_cluster}-rs0-2
-
-
-	kubectl_bin delete --wait psmdb-restore --all
-}
-
 test_case_1() {
-	desc "Case 1: Logical restore"
-
 	run_restore ${target_cluster} ${backup_name_minio} logical
 
 	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "requested" 0
 	compare_pbm_config ${target_cluster} source
 	log "Backup source is set as main storage during restore: OK"
 
+	local now_ts=$(date +%s)
+
 	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "ready"
 	compare_pbm_config ${target_cluster} target
 	log "Main storage is reverted after ${backup_name_minio}-logical: OK"
 
 	wait_for_pbm_operations ${target_cluster}
+	check_if_resync_triggered ${target_cluster} ${now_ts}
 
-	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
 	log "Data is restored from ${backup_name_minio}-logical: OK"
-
-	desc "Case 1: Logical restore: OK"
 }
 
 test_case_2() {
-	desc "Case 2: Physical restore"
-
 	run_restore ${target_cluster} ${backup_name_minio} physical
 
 	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "requested" 0
 	compare_pbm_config ${target_cluster} source mongod
 	log "Backup source is set as main storage during restore: OK"
 
+	local now_ts=$(date +%s)
+
 	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "ready"
 	compare_pbm_config ${target_cluster} target
 	log "Main storage is reverted after ${backup_name_minio}-physical: OK"
 
 	wait_for_pbm_operations ${target_cluster}
+	check_if_resync_triggered ${target_cluster} ${now_ts}
 
-	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
 	log "Data is restored from ${backup_name_minio}-physical: OK"
+}
 
-	desc "Case 2: Physical restore: OK"
+test_case_3() {
+	local backup_name=target-${backup_name_minio}
+
+	write_document ${target_cluster} 100504
+
+	run_backup ${target_cluster} ${backup_name} logical
+	log "checking ${backup_name}-logical in storage"
+	check_backup_in_storage ${backup_name}-logical minio rs0 myApp.test.gz
+	log "${backup_name} is uploaded to correct storage: OK"
+
+	log "enabling PiTR on ${target_cluster}"
+	kubectl_bin patch psmdb "${target_cluster}" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": true}}}}'
+
+	write_document ${target_cluster} 100505
+	write_document ${target_cluster} 100506
+	write_document ${target_cluster} 100507
+
+	sleep_with_log 3 "wait for data to be replicated"
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-3rd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "Data is ready for PiTR: OK"
+
+	sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
+	local pitrTarget=$(format_pitr_target $(get_latest_restorable_time ${target_cluster}-rs0))
+
+	log 'dropping collection: myApp.test'
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${target_cluster}-rs0.${namespace}"
+
+	log "PiTR target is ${pitrTarget}"
+	cat ${test_dir}/conf/restore-target.yml \
+		| $sed -e "s/date:/date: ${pitrTarget}/" \
+		| kubectl_bin apply -f -
+	wait_restore ${backup_name}-logical ${target_cluster} ready
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-3rd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "Data is restored from ${backup_name}-logical: OK"
 }
 
 setup_infra
 setup_source_cluster
-
 setup_target_cluster
+
+desc "Case 1: Logical restore"
 test_case_1
-cleanup_target_cluster
+desc "Case 1: Logical restore: OK"
 
-setup_target_cluster
+desc "Case 2: Physical restore"
 test_case_2
-cleanup_target_cluster
+desc "Case 2: Physical restore: OK"
+
+desc "Case 3: Backup and restore on ${target_cluster}"
+test_case_3
+desc "Case 3: Backup and restore on ${target_cluster}: OK"
 
 desc "test passed"
 
-destroy $namespace
+destroy ${namespace}
