@@ -164,7 +164,7 @@ wait_restore "$backup_name_minio" "$cluster"
 wait_for_cluster_state "$cluster" "ready"
 
 desc "Verify data is back to the cluster"
-simple_data_check "$cluster" 3 1 "-rs0"
+simple_data_check "$cluster" 3 0 "-rs0"
 
 destroy $namespace
 desc 'test passed'
