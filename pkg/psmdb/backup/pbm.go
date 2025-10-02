@@ -23,6 +23,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -951,8 +952,111 @@ func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.Backu
 	return backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
 }
 
+// deleteBackup deletes backup with the given name from the current storage and pbm database
+// deleteBackup, deleteBackupImpl and deleteIncremetalChainImpl is copied from PBM v2.11.0 to fix PBM-1633
+// we need to stop maintaining these in operator v1.24.0
+func deleteBackup(ctx context.Context, conn connect.Client, name, node string, event pbmLog.LogEvent) error {
+	bcp, err := backup.NewDBManager(conn).GetBackupByName(ctx, name)
+	if err != nil {
+		return errors.Wrap(err, "get backup meta")
+	}
+
+	if bcp.Type == defs.IncrementalBackup {
+		return deleteIncremetalChainImpl(ctx, conn, bcp, node, event)
+	}
+
+	return deleteBackupImpl(ctx, conn, bcp, node, event)
+}
+
+func deleteBackupImpl(
+	ctx context.Context,
+	conn connect.Client,
+	bcp *BackupMeta,
+	node string,
+	event pbmLog.LogEvent,
+) error {
+	err := backup.CanDeleteBackup(ctx, conn, bcp)
+	if err != nil {
+		return err
+	}
+
+	conf := bcp.Store.StorageConf
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+		gcs := gcs.Config{
+			Bucket:    conf.S3.Bucket,
+			Prefix:    conf.S3.Prefix,
+			ChunkSize: conf.S3.UploadPartSize,
+			Credentials: gcs.Credentials{
+				HMACAccessKey: conf.S3.Credentials.AccessKeyID,
+				HMACSecret:    conf.S3.Credentials.SecretAccessKey,
+			},
+		}
+		conf = config.StorageConf{
+			Type: storage.GCS,
+			GCS:  &gcs,
+		}
+	}
+
+	stg, err := util.StorageFromConfig(&conf, node, event)
+	if err != nil {
+		return errors.Wrap(err, "get storage")
+	}
+
+	err = backup.DeleteBackupFiles(stg, bcp.Name)
+	if err != nil {
+		return errors.Wrap(err, "delete files from storage")
+	}
+
+	_, err = conn.BcpCollection().DeleteOne(ctx, bson.M{"name": bcp.Name})
+	if err != nil {
+		return errors.Wrap(err, "delete metadata from db")
+	}
+
+	return nil
+}
+
+func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *BackupMeta, node string, event pbmLog.LogEvent) error {
+	increments, err := backup.FetchAllIncrements(ctx, conn, bcp)
+	if err != nil {
+		return err
+	}
+
+	err = backup.CanDeleteIncrementalChain(ctx, conn, bcp, increments)
+	if err != nil {
+		return err
+	}
+
+	all := []*BackupMeta{bcp}
+	for _, bcps := range increments {
+		all = append(all, bcps...)
+	}
+
+	stg, err := util.StorageFromConfig(&bcp.Store.StorageConf, node, event)
+	if err != nil {
+		return errors.Wrap(err, "get storage")
+	}
+
+	for i := len(all) - 1; i >= 0; i-- {
+		bcp := all[i]
+
+		err = backup.DeleteBackupFiles(stg, bcp.Name)
+		if err != nil {
+			return errors.Wrap(err, "delete files from storage")
+		}
+
+		_, err = conn.BcpCollection().DeleteOne(ctx, bson.M{"name": bcp.Name})
+		if err != nil {
+			return errors.Wrap(err, "delete metadata from db")
+		}
+
+	}
+
+	return nil
+}
+
 func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
-	return backup.DeleteBackup(ctx, b.Client, name, "")
+	e := b.Logger().NewEvent(string(ctrl.CmdDeleteBackup), "", "", primitive.Timestamp{})
+	return deleteBackup(ctx, b.Client, name, "", e)
 }
 
 func (b *pbmC) GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error) {
