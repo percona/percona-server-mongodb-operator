@@ -1884,7 +1884,7 @@ wait_for_cluster_state() {
 
 	echo -n "Waiting for psmdb/${cluster_name} to reach ${target_state} state"
 	local timeout=0
-	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) =~ ${target_state} ]]; do
 		sleep 1
 		timeout=$((timeout + 1))
 		echo -n '.'
