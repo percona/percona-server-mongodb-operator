@@ -40,6 +40,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 		return errors.Wrap(err, "resync PBM if needed")
 	}
 
+	if err := r.reconcileBackupVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup version")
+	}
+
 	return nil
 }
 

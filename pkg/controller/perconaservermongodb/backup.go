@@ -1,15 +1,16 @@
 package perconaservermongodb
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,9 +19,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
@@ -364,11 +367,115 @@ func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName
 	var secret corev1.Secret
 	err := cl.Get(ctx, nn, &secret)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
 
 	return true, nil
+}
+
+func isPodUpToDate(pod *corev1.Pod, stsRevision, image string) bool {
+	if pod.Labels["controller-revision-hash"] != stsRevision {
+		return false
+	}
+
+	for _, ct := range pod.Spec.Containers {
+		if ct.Name == naming.ContainerBackupAgent {
+			if ct.Image != image {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if cr.Status.State != api.AppStateReady {
+		return nil
+	}
+
+	if cr.Status.BackupVersion != "" && cr.Status.BackupImage == cr.Spec.Backup.Image {
+		return nil
+	}
+
+	var rs *api.ReplsetSpec
+	for _, r := range cr.Spec.Replsets {
+		rs = r
+		break
+	}
+
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := psmdb.NewStatefulSet(stsName, cr.Namespace)
+	err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), sts)
+	if err != nil {
+		return errors.Wrapf(err, "get statefulset/%s", stsName)
+	}
+
+	matchLabels := naming.RSLabels(cr, rs)
+	label, ok := sts.Labels[naming.LabelKubernetesComponent]
+	if ok {
+		matchLabels[naming.LabelKubernetesComponent] = label
+	}
+
+	podList := corev1.PodList{}
+	if err := r.client.List(ctx,
+		&podList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
+		},
+	); err != nil {
+		return errors.Wrap(err, "get pod list")
+	}
+
+	var pod *corev1.Pod
+	for _, p := range podList.Items {
+		if !isPodUpToDate(&p, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
+			continue
+		}
+
+		pod = &p
+		break
+	}
+	if pod == nil {
+		log.V(1).Error(nil, "no ready pods to get pbm-agent version")
+		return nil
+	}
+
+	stderr := &bytes.Buffer{}
+	cmd := []string{"pbm-agent", "version", "--short"}
+
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, nil, stderr, false)
+	if err != nil {
+		return errors.Wrap(err, "get pbm-agent version")
+	}
+
+	cr.Status.BackupVersion = strings.TrimSpace(stderr.String())
+	cr.Status.BackupImage = cr.Spec.Backup.Image
+
+	log.Info("pbm-agent version", "version", cr.Status.BackupVersion, "image", cr.Status.BackupImage, "pod", pod.Name)
+
+	pbmInfo := pbmVersion.Current()
+
+	compare, err := cr.ComparePBMAgentVersion(pbmInfo.Version)
+	if err != nil {
+		return errors.Wrap(err, "compare pbm-agent version with go module")
+	}
+
+	if compare != 0 {
+		log.Info("pbm-agent version is different than the go module, this might create problems",
+			"pbmAgentVersion", cr.Status.BackupVersion,
+			"goModuleVersion", pbmInfo.Version)
+	}
+
+	return nil
 }

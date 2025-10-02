@@ -321,8 +321,8 @@ type PerconaServerMongoDBStatus struct {
 	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
 	Mongos             *MongosStatus            `json:"mongos,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
-	BackupStatus       AppState                 `json:"backup,omitempty"`
 	BackupVersion      string                   `json:"backupVersion,omitempty"`
+	BackupImage        string                   `json:"backupImage,omitempty"`
 	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
 	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
 	PMMVersion         string                   `json:"pmmVersion,omitempty"`
@@ -1254,6 +1254,20 @@ func (cr *PerconaServerMongoDB) CompareMongoDBVersion(version string) (int, erro
 	}
 
 	return mongoVer.Compare(compare), nil
+}
+
+func (cr *PerconaServerMongoDB) ComparePBMAgentVersion(version string) (int, error) {
+	backupVer, err := v.NewVersion(cr.Status.BackupVersion)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse status.backupVersion")
+	}
+
+	compare, err := v.NewVersion(version)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse version")
+	}
+
+	return backupVer.Compare(compare), nil
 }
 
 const (

@@ -466,6 +466,30 @@ func GetPBMStorageGCSConfig(
 	return storageConf, nil
 }
 
+func GetPBMStorageS3CompatibleGCSConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *api.PerconaServerMongoDB,
+	stg api.BackupStorageSpec,
+) (config.StorageConf, error) {
+	gcs := api.BackupStorageSpec{
+		Type: psmdbv1.BackupStorageGCS,
+		GCS: api.BackupStorageGCSSpec{
+			Bucket:            stg.S3.Bucket,
+			Prefix:            stg.S3.Prefix,
+			ChunkSize:         stg.S3.UploadPartSize,
+			CredentialsSecret: stg.S3.CredentialsSecret,
+		},
+	}
+
+	conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, gcs)
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "get gcs config")
+	}
+
+	return conf, nil
+}
+
 func GetPBMStorageAzureConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -503,23 +527,17 @@ func GetPBMStorageConfig(
 	cluster *api.PerconaServerMongoDB,
 	stg api.BackupStorageSpec,
 ) (config.StorageConf, error) {
+	pbm210Plus, err := cluster.ComparePBMAgentVersion("2.10.0")
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "compare pbm-agent version")
+	}
+
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if cluster.CompareVersion("1.21.0") >= 0 && strings.Contains(stg.S3.EndpointURL, "storage.googleapis.com") {
-			gcs := api.BackupStorageSpec{
-				Type: psmdbv1.BackupStorageGCS,
-				GCS: api.BackupStorageGCSSpec{
-					Bucket:            stg.S3.Bucket,
-					Prefix:            stg.S3.Prefix,
-					ChunkSize:         stg.S3.UploadPartSize,
-					CredentialsSecret: stg.S3.CredentialsSecret,
-				},
-			}
-
-			conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, gcs)
+		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, s3.GCSEndpointURL) {
+			conf, err := GetPBMStorageS3CompatibleGCSConfig(ctx, k8sclient, cluster, stg)
 			return conf, errors.Wrap(err, "get s3-compatible gcs config")
 		}
-
 		conf, err := GetPBMStorageS3Config(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get s3 config")
 	case api.BackupStorageGCS:
