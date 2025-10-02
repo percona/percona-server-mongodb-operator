@@ -244,7 +244,7 @@ spec:
         fsGroup: 1001
       serviceAccount: default
       serviceAccountName: default
-      terminationGracePeriodSeconds: 300
+      terminationGracePeriodSeconds: 30
       volumes:
         - name: another-name-mongodb-keyfile
           secret:
