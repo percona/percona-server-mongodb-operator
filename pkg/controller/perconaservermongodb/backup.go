@@ -22,6 +22,7 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -447,6 +448,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 
 	var pod *corev1.Pod
 	for _, p := range podList.Items {
+		if !k8s.IsPodReady(p) {
+			continue
+		}
+
 		if !isPodUpToDate(&p, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
 			continue
 		}
