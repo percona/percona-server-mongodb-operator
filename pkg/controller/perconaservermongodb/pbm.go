@@ -136,19 +136,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		return errors.Wrap(err, "set config")
 	}
 
-	// After applying the new configuration,
-	// we should get it again to use in `isResyncNeeded`
-	currentCfg, err = pbm.GetConfig(ctx)
-	if err != nil && !backup.IsErrNoDocuments(err) {
-		return errors.Wrap(err, "get current config")
-	}
-	if currentCfg == nil {
-		currentCfg = new(config.Config)
-	}
-
 	if isResyncNeeded(currentCfg, &main) {
-		log.Info("resync storage", "storage", mainStgName)
-		log.V(1).Info("main storage changed", "old", currentCfg.Storage, "new", main.Storage)
+		log.Info("main storage changed. starting resync", "old", currentCfg.Storage, "new", main.Storage)
 
 		if err := pbm.ResyncMainStorage(ctx); err != nil {
 			return errors.Wrap(err, "resync")
