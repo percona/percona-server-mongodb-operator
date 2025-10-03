@@ -377,6 +377,10 @@ func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName
 }
 
 func isPodUpToDate(pod *corev1.Pod, stsRevision, image string) bool {
+	if pod == nil {
+		return false
+	}
+
 	if pod.Labels["controller-revision-hash"] != stsRevision {
 		return false
 	}
