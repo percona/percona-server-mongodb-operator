@@ -27,7 +27,7 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
-      gcp-cs:
+      gcp-cs-s3:
         type: s3
         s3:
           credentialsSecret: gcp-cs-secret
