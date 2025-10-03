@@ -1257,17 +1257,17 @@ func (cr *PerconaServerMongoDB) CompareMongoDBVersion(version string) (int, erro
 }
 
 func (cr *PerconaServerMongoDB) ComparePBMAgentVersion(version string) (int, error) {
-	backupVer, err := v.NewVersion(cr.Status.BackupVersion)
+	existing, err := v.NewVersion(cr.Status.BackupVersion)
 	if err != nil {
 		return 0, errors.Wrap(err, "parse status.backupVersion")
 	}
 
-	compare, err := v.NewVersion(version)
+	expected, err := v.NewVersion(version)
 	if err != nil {
 		return 0, errors.Wrap(err, "parse version")
 	}
 
-	return backupVer.Compare(compare), nil
+	return existing.Compare(expected), nil
 }
 
 const (
