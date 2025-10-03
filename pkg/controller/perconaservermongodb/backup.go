@@ -411,6 +411,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 		return nil
 	}
 
+	if len(cr.Spec.Replsets) < 1 {
+		return errors.New("no replsets found")
+	}
+
 	var rs *api.ReplsetSpec
 	for _, r := range cr.Spec.Replsets {
 		rs = r
