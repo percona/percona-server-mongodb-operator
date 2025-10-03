@@ -1,0 +1,19 @@
+storage:
+  type: gcs
+  gcs:
+    bucket: operator-testing
+    prefix: psmdb-demand-backup
+    credentials:
+      clientEmail: '***'
+      privateKey: '***'
+    retryer:
+      backoffInitial: 1ns
+      backoffMax: 30ns
+      backoffMultiplier: 2
+pitr:
+  enabled: false
+  compression: s2
+backup:
+  oplogSpanMin: 0
+  compression: s2
+restore: {}

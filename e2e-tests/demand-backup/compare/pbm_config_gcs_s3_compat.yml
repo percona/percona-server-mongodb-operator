@@ -1,0 +1,15 @@
+storage:
+  type: gcs
+  gcs:
+    bucket: operator-testing
+    prefix: psmdb-demand-backup
+    credentials:
+      hmacAccessKey: '***'
+      hmacSecret: '***'
+pitr:
+  enabled: false
+  compression: s2
+backup:
+  oplogSpanMin: 0
+  compression: s2
+restore: {}

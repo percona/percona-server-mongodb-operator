@@ -110,6 +110,7 @@ apply_s3_storage_secrets() {
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml \
+			-f $conf_dir/cloud-secret-gcs-sa.yml \
 			-f $conf_dir/cloud-secret.yml
 	else
 		kubectl_bin apply \
@@ -1275,7 +1276,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||"
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||"
 }
 
 get_service_endpoint() {

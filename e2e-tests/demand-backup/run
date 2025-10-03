@@ -176,6 +176,7 @@ backup_name_minio="backup-minio"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws="backup-aws-s3"
 	backup_name_gcp="backup-gcp-cs"
+	backup_name_gcp_sa="backup-gcp-cs-sa"
 	backup_name_azure="backup-azure-blob"
 fi
 
@@ -183,6 +184,7 @@ desc 'run backups'
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
 	run_backup gcp-cs
+	run_backup gcp-cs-sa
 	run_backup azure-blob
 fi
 run_backup "minio"
@@ -190,6 +192,7 @@ run_backup "minio"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
 fi
 wait_backup "$backup_name_minio"
@@ -206,6 +209,11 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
 	check_backup_in_storage ${backup_name_gcp} gcs rs0 'myApp.test.gz'
 	run_recovery_check "$backup_name_gcp" "$cluster"
+
+	desc 'check backup and restore -- gcp-cs-sa'
+	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
+	check_backup_in_storage ${backup_name_gcp_sa} gcs rs0 'myApp.test.gz'
+	run_recovery_check "$backup_name_gcp_sa" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
@@ -258,6 +266,7 @@ fi
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
 	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_sa}" "gcp-cs-sa"
 	check_backup_deletion "${backup_dest_azure}" "azure-blob"
 fi
 
@@ -266,6 +275,7 @@ run_backup minio
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
 	run_backup gcp-cs
+	run_backup gcp-cs-sa
 	run_backup azure-blob
 fi
 
@@ -273,9 +283,11 @@ wait_backup "$backup_name_minio"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
+	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
+	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 fi
 
@@ -296,6 +308,7 @@ fi
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
 	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
+	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_sa}" "gcp-cs-sa"
 	check_backup_deletion "${backup_dest_azure}" "azure-blob"
 fi
 
