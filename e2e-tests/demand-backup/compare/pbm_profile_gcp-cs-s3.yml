@@ -1,3 +1,5 @@
+name: gcp-cs-s3
+profile: true
 storage:
   type: gcs
   gcs:
@@ -6,10 +8,3 @@ storage:
     credentials:
       hmacAccessKey: '***'
       hmacSecret: '***'
-pitr:
-  enabled: false
-  compression: s2
-backup:
-  oplogSpanMin: 0
-  compression: s2
-restore: {}
