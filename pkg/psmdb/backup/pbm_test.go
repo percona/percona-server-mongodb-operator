@@ -21,6 +21,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -28,6 +29,7 @@ import (
 
 func TestApplyCustomPBMConfig(t *testing.T) {
 	cr := expectedCR(t)
+	cr.Status.BackupVersion = pbmVersion.Current().Version
 
 	storage := cr.Spec.Backup.Storages["test-s3-storage"]
 
@@ -117,6 +119,9 @@ func TestPBMStorageConfig(t *testing.T) {
 		},
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: pbmVersion.Current().Version,
 		},
 	}
 

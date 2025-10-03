@@ -25621,9 +25621,9 @@ spec:
             type: object
           status:
             properties:
-              backup:
-                type: string
               backupConfigHash:
+                type: string
+              backupImage:
                 type: string
               backupVersion:
                 type: string

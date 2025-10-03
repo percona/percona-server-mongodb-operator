@@ -26,6 +26,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 	log := logf.FromContext(ctx).WithName("PBM")
 	ctx = logf.IntoContext(ctx, log)
 
+	if err := r.reconcileBackupVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup version")
+	}
+
 	if cr.CompareVersion("1.20.0") >= 0 {
 		if err := r.reconcilePBMConfig(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile configuration")
