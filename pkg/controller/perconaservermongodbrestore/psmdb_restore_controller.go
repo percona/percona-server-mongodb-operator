@@ -207,7 +207,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				}
 
 				backoff := wait.Backoff{
-					Steps:    2,
+					Steps:    5,
 					Duration: 5 * time.Second,
 					Factor:   2.0,
 				}
