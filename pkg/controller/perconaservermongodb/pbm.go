@@ -50,6 +50,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if cr.Status.BackupVersion == "" {
+		return nil
+	}
+
 	if cr.Status.State != psmdbv1.AppStateReady {
 		return nil
 	}
