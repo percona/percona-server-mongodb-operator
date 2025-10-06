@@ -1,0 +1,21 @@
+storage:
+  type: s3
+  s3:
+    region: us-east-1
+    endpointUrl: http://minio-service:9000/
+    forcePathStyle: true
+    bucket: operator-testing
+    prefix: some-name-source
+    credentials:
+      access-key-id: '***'
+      secret-access-key: '***'
+    maxUploadParts: 10000
+    storageClass: STANDARD
+    insecureSkipTLSVerify: false
+pitr:
+  enabled: false
+  compression: s2
+backup:
+  oplogSpanMin: 0
+  compression: s2
+restore: {}
