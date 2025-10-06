@@ -419,6 +419,18 @@ func GetPBMStorageS3Config(
 	return storageConf, nil
 }
 
+func getGCSFromS3CompatibleConfig(cfg *s3.Config) *gcs.Config {
+	return &gcs.Config{
+		Bucket:    cfg.Bucket,
+		Prefix:    cfg.Prefix,
+		ChunkSize: cfg.UploadPartSize,
+		Credentials: gcs.Credentials{
+			HMACAccessKey: cfg.Credentials.AccessKeyID,
+			HMACSecret:    cfg.Credentials.SecretAccessKey,
+		},
+	}
+}
+
 func GetPBMStorageGCSConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -982,18 +994,9 @@ func deleteBackupImpl(
 
 	conf := bcp.Store.StorageConf
 	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
-		gcs := gcs.Config{
-			Bucket:    conf.S3.Bucket,
-			Prefix:    conf.S3.Prefix,
-			ChunkSize: conf.S3.UploadPartSize,
-			Credentials: gcs.Credentials{
-				HMACAccessKey: conf.S3.Credentials.AccessKeyID,
-				HMACSecret:    conf.S3.Credentials.SecretAccessKey,
-			},
-		}
 		conf = config.StorageConf{
 			Type: storage.GCS,
-			GCS:  &gcs,
+			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
 		}
 	}
 
@@ -1159,9 +1162,22 @@ func (b *pbmC) PITRChunksCollection() *mongo.Collection {
 func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
 	e := b.Logger().NewEvent(string(ctrl.CmdDeletePITR), "", "", primitive.Timestamp{})
 
-	stg, err := b.GetStorage(ctx, e)
+	cfg, err := b.GetConfig(ctx)
 	if err != nil {
-		return errors.Wrap(err, "get storage")
+		return errors.Wrap(err, "get config")
+	}
+
+	stgConf := cfg.Storage
+	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, s3.GCSEndpointURL) {
+		stgConf = config.StorageConf{
+			Type: storage.GCS,
+			GCS:  getGCSFromS3CompatibleConfig(stgConf.S3),
+		}
+	}
+
+	stg, err := util.StorageFromConfig(&stgConf, "", e)
+	if err != nil {
+		return errors.Wrap(err, "storage from config")
 	}
 
 	chunks, err := b.PITRGetChunksSlice(ctx, "", primitive.Timestamp{}, until)
