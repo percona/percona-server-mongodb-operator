@@ -199,4 +199,6 @@ test_exposed_single_replset
 desc 'testing exposed two replsets sharded cluster'
 test_exposed_sharded_cluster
 
+desc 'test passed'
+
 destroy ${namespace}

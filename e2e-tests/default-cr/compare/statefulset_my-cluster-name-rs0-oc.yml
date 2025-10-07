@@ -236,13 +236,13 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
-                  name: internal-another-name-users
+                  name: internal-my-cluster-name-users
                   optional: false
             - name: MONGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
-                  name: internal-another-name-users
+                  name: internal-my-cluster-name-users
                   optional: false
           imagePullPolicy: IfNotPresent
           name: logrotate
