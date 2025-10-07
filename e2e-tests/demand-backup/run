@@ -122,7 +122,7 @@ compare_pbm_profile_setup() {
 		pbm_binary=/opt/percona/pbm
 	fi
 
-	kubectl_bin exec ${cluster}-rs0-0 -c ${container} -- ${pbm_binary} profile show ${profile} > ${tmp_dir}/pbm_profile_${profile}.yml
+	kubectl_bin exec ${cluster}-rs0-0 -c ${container} -- ${pbm_binary} profile show ${profile} >${tmp_dir}/pbm_profile_${profile}.yml
 
 	diff -u ${test_dir}/compare/pbm_profile_${profile}.yml ${tmp_dir}/pbm_profile_${profile}.yml
 }
