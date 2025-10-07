@@ -396,10 +396,9 @@ pipeline {
                         }
                     }
                 }
-                withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE'), file(credentialsId: 'cloud-secret-gcs-sa-file', variable: 'CLOUD_GCS_SA_SECRET_FILE')]) {
+                withCredentials([file(credentialsId: 'cloud-secret-file-psmdb', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
                         cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml
-                        cp $CLOUD_GCS_SA_SECRET_FILE e2e-tests/conf/cloud-secret-gcs-sa.yml
                     '''
                 }
                 deleteOldClusters("jen-psmdb-$CHANGE_ID")

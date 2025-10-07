@@ -110,7 +110,6 @@ apply_s3_storage_secrets() {
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
 			-f $conf_dir/minio-secret.yml \
-			-f $conf_dir/cloud-secret-gcs-sa.yml \
 			-f $conf_dir/cloud-secret.yml
 	else
 		kubectl_bin apply \
