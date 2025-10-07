@@ -1,0 +1,239 @@
+#!/bin/bash
+
+# This test upgrades operator from previous version to current version
+# and tests backup/restore operations + delete-backup finalizer using GCS
+
+set -o errexit
+set -o pipefail
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+if [ -n "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	desc "This test requires ${conf_dir}/cloud-secret.yml. Skipping..."
+	exit 0
+fi
+
+CLUSTER="some-name"
+BACKUP_NAME_MINIO="backup-minio"
+
+TARGET_OPERATOR_VER="${OPERATOR_VERSION}"
+
+INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator \
+	| jq -r '.versions[].operator' | sort -V | tail -n1)
+
+# if testing on release branch and version service is already updated with new operator images
+# use the older version of operator as initial point for test
+if [[ ${INIT_OPERATOR_VER} == "${TARGET_OPERATOR_VER}" ]]; then
+	INIT_OPERATOR_VER=$(curl -s https://check.percona.com/versions/v1/psmdb-operator \
+		| jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
+fi
+
+GIT_TAG="v${INIT_OPERATOR_VER}"
+
+setup_infra() {
+	create_infra_gh ${namespace} ${GIT_TAG}
+
+	desc 'create secrets and start client'
+	kubectl_bin apply \
+		-f ${conf_dir}/secrets.yml \
+		-f ${conf_dir}/client.yml \
+		-f ${conf_dir}/cloud-secret.yml
+}
+
+upgrade_operator() {
+	deploy_operator
+}
+
+create_user() {
+	local cluster=$1
+
+	log 'create user myApp'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+write_document() {
+	local cluster=$1
+	local x=$2
+
+	log "write document: ${x}"
+	run_mongo \
+		"use myApp\n db.test.insert({ x: ${x} })" \
+		"myApp:myPass@${cluster}-rs0.${namespace}" \
+		"mongodb"
+}
+
+run_backup() {
+	local cluster=$1
+	local name=$2
+	local type=$3
+	local storage=${4:-"gcp-cs"}
+
+	log "run backup ${name}-${type} storage: ${storage}"
+	cat ${test_dir}/conf/backup.yml \
+		| $sed -e "s/name:/name: ${name}-${type}/" \
+		| $sed -e "s/clusterName:/clusterName: ${cluster}/" \
+		| $sed -e "s/storageName:/storageName: ${storage}/" \
+		| $sed -e "s/type:/type: ${type}/" \
+		| kubectl_bin apply -f -
+
+	wait_backup "${name}-${type}"
+}
+
+run_restore() {
+	local cluster=$1
+	local backup_name=$2
+	local pitr_target=$3
+
+	cat ${test_dir}/conf/restore.yml \
+		| $sed -e "s/name:/name: restore-${backup_name}/" \
+		| $sed -e "s/clusterName:/clusterName: ${cluster}/" \
+		| $sed -e "s/backupName:/backupName: ${backup_name}/" >${tmp_dir}/restore.yml
+
+	if [[ -n ${pitr_target} ]]; then
+		target="${pitr_target}" yq -i eval \
+			'.spec.pitr = {"type": "date", "date": strenv(target)}' \
+			${tmp_dir}/restore.yml
+	fi
+
+	kubectl_bin apply -f ${tmp_dir}/restore.yml
+
+	wait_restore ${backup_name} ${cluster} ready
+}
+
+
+setup_cluster() {
+	local cluster=$1
+
+	desc "create PSMDB cluster: ${cluster}"
+	get_cluster_gh ${GIT_TAG} \
+		| sed "s/my-cluster-name/${cluster}/g" \
+		| yq '.spec.secrets.users="some-users"' \
+		| yq '.spec.sharding.enabled=false' \
+		| yq '.spec.backup.pitr.enabled=true' \
+		| yq '.spec.backup.pitr.oplogSpanMin=1' \
+		| yq eval '.spec.backup.storages.gcp-cs = {
+		  "type": "s3",
+		  "s3": {
+		    "bucket": "operator-testing",
+		    "prefix": "upgrade-partial-backup",
+		    "region": "us-east-1",
+		    "credentialsSecret": "gcp-cs-secret",
+		    "endpointUrl": "https://storage.googleapis.com"
+		  }
+		}' \
+		| kubectl_bin apply -f -
+
+	wait_for_running ${cluster}-rs0 3
+
+	wait_backup_agent ${cluster}-rs0-0
+	wait_backup_agent ${cluster}-rs0-1
+	wait_backup_agent ${cluster}-rs0-2
+
+	create_user ${cluster}
+	write_document ${cluster} 100500
+
+	sleep_with_log 3 "wait for data to be replicated"
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}"
+}
+
+test_backups() {
+	local cluster=$1
+
+	desc "prepare backups"
+
+	run_backup ${cluster} ${BACKUP_NAME_MINIO} logical
+
+	sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
+	run_backup ${cluster} ${BACKUP_NAME_MINIO} incremental-base
+
+	log "write data for PiTR"
+	write_document ${cluster} 100501
+	write_document ${cluster} 100502
+	write_document ${cluster} 100503
+
+	sleep_with_log 70 "wait for oplog chunks to be uploaded"
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "PiTR data is ready: OK"
+
+	run_backup ${cluster} ${BACKUP_NAME_MINIO} incremental
+}
+
+test_logical_restore() {
+	local cluster=$1
+
+	desc "Testing logical restore with PiTR"
+
+	local pitr_target=$(format_pitr_target $(get_latest_restorable_time ${cluster}-rs0))
+
+	log 'dropping collection: myApp.test'
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	log "PiTR target is ${pitr_target}"
+	run_restore ${cluster} "${BACKUP_NAME_MINIO}-logical" "${pitr_target}"
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "Data is restored successfully: OK"
+}
+
+test_incremental_restore() {
+	local cluster=$1
+
+	desc "Testing incremental restore with PiTR"
+
+	log 'dropping collection: myApp.test'
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	run_restore ${cluster} "${BACKUP_NAME_MINIO}-incremental"
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "-2nd" \
+		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
+	log "Data is restored successfully: OK"
+}
+
+test_backup_deletion() {
+	local cluster=$1
+	local incremental_base_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-incremental-base")
+	local logical_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-logical")
+
+	kubectl delete psmdb-backup ${BACKUP_NAME_MINIO}-incremental-base
+	check_backup_deletion "https://storage.googleapis.com/${incremental_base_dest}" "gcp-cs"
+
+	# base backup can only be deleted if PiTR is disabled
+	log "disabling PiTR on ${cluster}"
+	kubectl_bin patch psmdb "${cluster}" --type='merge' \
+		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+
+	kubectl delete psmdb-backup ${BACKUP_NAME_MINIO}-logical
+	check_backup_deletion "https://storage.googleapis.com/${logical_dest}" "gcp-cs"
+}
+
+
+setup_infra
+setup_cluster ${CLUSTER}
+upgrade_operator
+
+test_backups ${CLUSTER}
+desc "Backups are ready: OK"
+
+test_logical_restore ${CLUSTER}
+desc "Logical restore is ready: OK"
+
+test_incremental_restore ${CLUSTER}
+desc "Incremental restore is ready: OK"
+
+test_backup_deletion ${CLUSTER}
+desc "Backups are deleted: OK"
+
+desc "test passed"
+
+destroy ${namespace}
