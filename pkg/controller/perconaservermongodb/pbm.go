@@ -189,6 +189,16 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		}
 	}
 
+	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
+		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
+			return true
+		}
+	}
+
 	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
 		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
 			return true
