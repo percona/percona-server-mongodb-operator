@@ -21,3 +21,4 @@ pitr-physical-backup-source
 pitr-sharded
 pitr-to-new-cluster
 scheduled-backup
+upgrade-partial-backup
