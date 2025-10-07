@@ -1034,7 +1034,15 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 		all = append(all, bcps...)
 	}
 
-	stg, err := util.StorageFromConfig(&bcp.Store.StorageConf, node, event)
+	conf := bcp.Store.StorageConf
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+		conf = config.StorageConf{
+			Type: storage.GCS,
+			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
+		}
+	}
+
+	stg, err := util.StorageFromConfig(&conf, node, event)
 	if err != nil {
 		return errors.Wrap(err, "get storage")
 	}
