@@ -33,7 +33,7 @@ fi
 GIT_TAG="v${INIT_OPERATOR_VER}"
 
 setup_infra() {
-	create_infra_gh ${namespace} ${GIT_TAG}
+	create_infra_gh_release ${namespace} ${GIT_TAG}
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
@@ -109,9 +109,12 @@ run_restore() {
 setup_cluster() {
 	local cluster=$1
 
+	local init_image=$(kubectl_bin get pod $(get_operator_pod) -o jsonpath='{.spec.containers[0].image}')
+
 	desc "create PSMDB cluster: ${cluster}"
 	get_cluster_gh ${GIT_TAG} \
 		| sed "s/my-cluster-name/${cluster}/g" \
+		| yq '.spec.initImage="'${init_image}'"' \
 		| yq '.spec.secrets.users="some-users"' \
 		| yq '.spec.sharding.enabled=false' \
 		| yq '.spec.backup.pitr.enabled=true' \
@@ -205,7 +208,7 @@ test_backup_deletion() {
 	local incremental_base_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-incremental-base")
 	local logical_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-logical")
 
-	kubectl delete psmdb-backup ${BACKUP_NAME_MINIO}-incremental-base
+	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-incremental-base
 	check_backup_deletion "https://storage.googleapis.com/${incremental_base_dest}" "gcp-cs"
 
 	# base backup can only be deleted if PiTR is disabled
@@ -213,7 +216,7 @@ test_backup_deletion() {
 	kubectl_bin patch psmdb "${cluster}" --type='merge' \
 		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 
-	kubectl delete psmdb-backup ${BACKUP_NAME_MINIO}-logical
+	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-logical
 	check_backup_deletion "https://storage.googleapis.com/${logical_dest}" "gcp-cs"
 }
 

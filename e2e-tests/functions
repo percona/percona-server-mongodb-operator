@@ -456,7 +456,7 @@ apply_rbac() {
 }
 
 deploy_operator() {
-	desc 'start PSMDB operator'
+	desc "start PSMDB operator: ${IMAGE}"
 
 	local cr_file
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
@@ -481,7 +481,7 @@ deploy_operator() {
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
 			| kubectl_bin apply -f -
 	fi
-	sleep 2
+	sleep 20
 	wait_pod $(get_operator_pod)
 	echo "Print operator info from log"
 	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
@@ -503,6 +503,31 @@ deploy_operator_gh() {
 
 	yq eval '
 		(.spec.template.spec.containers[].image = "'${IMAGE}'") |
+		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
+		| kubectl_bin apply -f -
+
+	sleep 2
+	wait_pod "$(get_operator_pod)"
+	echo "Print operator info from log"
+	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+}
+
+deploy_operator_gh_release() {
+	local git_tag="$1"
+
+	desc "start operator ${git_tag}"
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml" --server-side
+	local rbac_yaml="rbac"
+	local operator_yaml="operator"
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac_yaml="cw-rbac"
+		operator_yaml="cw-operator"
+	fi
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+
+	yq eval '
 		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
 		| kubectl_bin apply -f -
@@ -1554,6 +1579,21 @@ create_infra() {
 	else
 		create_namespace $ns
 		deploy_operator
+	fi
+}
+
+create_infra_gh_release() {
+	local ns="$1"
+	local git_tag="$2"
+
+	check_crd_for_deletion "${git_tag}"
+	if [ -n "${OPERATOR_NS}" ]; then
+		create_namespace "${OPERATOR_NS}"
+		deploy_operator_gh_release "${git_tag}"
+		create_namespace "${ns}"
+	else
+		create_namespace "${ns}"
+		deploy_operator_gh_release "${git_tag}"
 	fi
 }
 
