@@ -245,11 +245,11 @@ spec:
 #      externalTrafficPolicy: Local
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "600m"
+        memory: "1Gi"
       requests:
         cpu: "300m"
-        memory: "0.5G"
+        memory: "1Gi"
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:
@@ -306,11 +306,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -367,11 +367,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -417,11 +417,11 @@ spec:
 #    schedulerName: "default"
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
@@ -520,11 +520,11 @@ spec:
 #        externalTrafficPolicy: Local
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -613,11 +613,11 @@ spec:
         maxUnavailable: 1
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       expose:
         type: ClusterIP
 #        servicePerPod: true
@@ -699,10 +699,10 @@ spec:
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "1.2G"
+#        memory: "1.2Gi"
 #      requests:
 #        cpu: "300m"
-#        memory: "1G"
+#        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
