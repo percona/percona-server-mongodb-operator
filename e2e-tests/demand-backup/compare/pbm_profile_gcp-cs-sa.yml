@@ -1,0 +1,15 @@
+name: gcp-cs-sa
+profile: true
+storage:
+  type: gcs
+  gcs:
+    bucket: operator-testing
+    prefix: psmdb-demand-backup
+    credentials:
+      clientEmail: '***'
+      privateKey: '***'
+    chunkSize: 10485760
+    retryer:
+      backoffInitial: 1ns
+      backoffMax: 30ns
+      backoffMultiplier: 2
