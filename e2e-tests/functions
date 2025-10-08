@@ -166,6 +166,27 @@ get_operator_pod() {
 		-o 'jsonpath={.items[].metadata.name}' ${OPERATOR_NS:+-n $OPERATOR_NS}
 }
 
+wait_operator_pod() {
+	local pod=$1
+
+	set +o xtrace
+	retry=0
+	echo -n "waiting for pod/$pod to be ready"
+	until kubectl_bin get pod/$pod ${OPERATOR_NS:+-n $OPERATOR_NS} -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep --quiet 'true'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [[ $retry -ge 360 ]]; then
+			kubectl_bin describe pod/$pod
+			kubectl_bin logs $pod ${OPERATOR_NS:+-n $OPERATOR_NS}
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo ".OK"
+	set_debug
+}
+
 wait_pod() {
 	local pod=$1
 
@@ -472,7 +493,7 @@ deploy_operator() {
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 	else
 		apply_rbac rbac
 		yq eval '
@@ -482,9 +503,9 @@ deploy_operator() {
 			| kubectl_bin apply -f -
 	fi
 	sleep 20
-	wait_pod $(get_operator_pod)
+	wait_operator_pod $(get_operator_pod)
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_operator_gh() {
@@ -505,12 +526,12 @@ deploy_operator_gh() {
 		(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
-		| kubectl_bin apply -f -
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 	sleep 2
-	wait_pod "$(get_operator_pod)"
+	wait_operator_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_operator_gh_release() {
@@ -530,12 +551,12 @@ deploy_operator_gh_release() {
 	yq eval '
 		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
-		| kubectl_bin apply -f -
-
-	sleep 2
-	wait_pod "$(get_operator_pod)"
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+ 
+	sleep 20
+	wait_operator_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_minio() {

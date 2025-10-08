@@ -109,7 +109,7 @@ run_restore() {
 setup_cluster() {
 	local cluster=$1
 
-	local init_image=$(kubectl_bin get pod $(get_operator_pod) -o jsonpath='{.spec.containers[0].image}')
+	local init_image=$(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) -o jsonpath='{.spec.containers[0].image}')
 
 	desc "create PSMDB cluster: ${cluster}"
 	get_cluster_gh ${GIT_TAG} \
