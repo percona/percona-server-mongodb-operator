@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cluster-name-backup-gcs
+type: Opaque
+data:
+  GCS_CLIENT_EMAIL: UkVQTEFDRS1XSVRILUdDU19DTElFTlRfRU1BSUw=
+  GCS_PRIVATE_KEY: UkVQTEFDRS1XSVRILUdDU19QUklWQVRFX0tFWQ==
