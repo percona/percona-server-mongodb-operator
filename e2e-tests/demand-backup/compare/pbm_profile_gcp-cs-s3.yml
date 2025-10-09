@@ -1,0 +1,10 @@
+name: gcp-cs-s3
+profile: true
+storage:
+  type: gcs
+  gcs:
+    bucket: operator-testing
+    prefix: psmdb-demand-backup
+    credentials:
+      hmacAccessKey: '***'
+      hmacSecret: '***'

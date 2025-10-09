@@ -2,17 +2,19 @@ demand-backup
 demand-backup-eks-credentials
 demand-backup-eks-credentials-irsa
 demand-backup-fs
+demand-backup-if-unhealthy
 demand-backup-incremental
 demand-backup-incremental-sharded
 demand-backup-physical-parallel
 demand-backup-physical-aws
 demand-backup-physical-azure
-demand-backup-physical-gcp
+demand-backup-physical-gcp-s3
+demand-backup-physical-gcp-native
 demand-backup-physical-minio
 demand-backup-physical-sharded-parallel
 demand-backup-physical-sharded-aws
 demand-backup-physical-sharded-azure
-demand-backup-physical-sharded-gcp
+demand-backup-physical-sharded-gcp-native
 demand-backup-physical-sharded-minio
 demand-backup-sharded
 pitr-physical
@@ -20,3 +22,4 @@ pitr-physical-backup-source
 pitr-sharded
 pitr-to-new-cluster
 scheduled-backup
+upgrade-partial-backup

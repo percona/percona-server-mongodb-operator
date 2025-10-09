@@ -166,6 +166,27 @@ get_operator_pod() {
 		-o 'jsonpath={.items[].metadata.name}' ${OPERATOR_NS:+-n $OPERATOR_NS}
 }
 
+wait_operator_pod() {
+	local pod=$1
+
+	set +o xtrace
+	retry=0
+	echo -n "waiting for pod/$pod to be ready"
+	until kubectl_bin get pod/$pod ${OPERATOR_NS:+-n $OPERATOR_NS} -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep --quiet 'true'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [[ $retry -ge 360 ]]; then
+			kubectl_bin describe pod/$pod
+			kubectl_bin logs $pod ${OPERATOR_NS:+-n $OPERATOR_NS}
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo ".OK"
+	set_debug
+}
+
 wait_pod() {
 	local pod=$1
 
@@ -456,7 +477,7 @@ apply_rbac() {
 }
 
 deploy_operator() {
-	desc 'start PSMDB operator'
+	desc "start PSMDB operator: ${IMAGE}"
 
 	local cr_file
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
@@ -472,7 +493,7 @@ deploy_operator() {
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 	else
 		apply_rbac rbac
 		yq eval '
@@ -481,10 +502,10 @@ deploy_operator() {
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
 			| kubectl_bin apply -f -
 	fi
-	sleep 2
-	wait_pod $(get_operator_pod)
+	sleep 20
+	wait_operator_pod $(get_operator_pod)
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_operator_gh() {
@@ -501,13 +522,41 @@ deploy_operator_gh() {
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
-	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
-	kubectl_bin apply -f "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+	yq eval '
+		(.spec.template.spec.containers[].image = "'${IMAGE}'") |
+		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 	sleep 2
-	wait_pod "$(get_operator_pod)"
+	wait_operator_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
-	kubectl_bin logs $(get_operator_pod) | grep 'Manager starting up'
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
+}
+
+deploy_operator_gh_release() {
+	local git_tag="$1"
+
+	desc "start operator ${git_tag}"
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml" --server-side
+	local rbac_yaml="rbac"
+	local operator_yaml="operator"
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac_yaml="cw-rbac"
+		operator_yaml="cw-operator"
+	fi
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+
+	yq eval '
+		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+ 
+	sleep 20
+	wait_operator_pod "$(get_operator_pod)"
+	echo "Print operator info from log"
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_minio() {
@@ -1275,7 +1324,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||"
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||"
 }
 
 get_service_endpoint() {
@@ -1406,6 +1455,14 @@ apply_cluster() {
 	fi
 }
 
+# get_cluster_gh echoes the default cr.yaml on github
+# so caller can do intended modifications and apply it
+get_cluster_gh() {
+	local git_tag=$1
+
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/cr.yaml"
+}
+
 spinup_psmdb() {
 	local cluster=$1
 	local config=$2
@@ -1513,9 +1570,10 @@ run_backup() {
 }
 
 check_backup_deletion() {
-	path=$1
-	storage_name=$2
-	retry=0
+	local path=$1
+	local storage_name=$2
+	local retry=0
+
 	until [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 403 ]] || [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 404 ]]; do
 		if [ $retry -ge 10 ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
@@ -1542,6 +1600,21 @@ create_infra() {
 	else
 		create_namespace $ns
 		deploy_operator
+	fi
+}
+
+create_infra_gh_release() {
+	local ns="$1"
+	local git_tag="$2"
+
+	check_crd_for_deletion "${git_tag}"
+	if [ -n "${OPERATOR_NS}" ]; then
+		create_namespace "${OPERATOR_NS}"
+		deploy_operator_gh_release "${git_tag}"
+		create_namespace "${ns}"
+	else
+		create_namespace "${ns}"
+		deploy_operator_gh_release "${git_tag}"
 	fi
 }
 
@@ -1884,7 +1957,7 @@ wait_for_cluster_state() {
 
 	echo -n "Waiting for psmdb/${cluster_name} to reach ${target_state} state"
 	local timeout=0
-	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) =~ ${target_state} ]]; do
 		sleep 1
 		timeout=$((timeout + 1))
 		echo -n '.'

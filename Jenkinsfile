@@ -396,7 +396,7 @@ pipeline {
                         }
                     }
                 }
-                withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
+                withCredentials([file(credentialsId: 'cloud-secret-file-psmdb', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
                         cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml
                     '''
