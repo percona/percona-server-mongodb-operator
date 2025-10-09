@@ -26,6 +26,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 	log := logf.FromContext(ctx).WithName("PBM")
 	ctx = logf.IntoContext(ctx, log)
 
+	if err := r.reconcileBackupVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup version")
+	}
+
 	if cr.CompareVersion("1.20.0") >= 0 {
 		if err := r.reconcilePBMConfig(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile configuration")
@@ -45,6 +49,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
+
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if cr.Status.BackupVersion == "" {
+		return nil
+	}
 
 	if cr.Status.State != psmdbv1.AppStateReady {
 		return nil
@@ -173,6 +185,16 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		}
 
 		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
+			return true
+		}
+	}
+
+	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
+		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
 			return true
 		}
 	}
