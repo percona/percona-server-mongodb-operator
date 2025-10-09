@@ -149,7 +149,7 @@ after-release: manifests
 		-e "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" \
 		-e "s|$(IMAGE_BACKUP)|perconalab/percona-server-mongodb-operator:main-backup|g" \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mongodb-operator:main|g" \
-		-e "s$(IMAGE_LOGCOLLECTOR)|perconalab/fluentbit:main-logcollector|g" \
+		-e "s|$(IMAGE_LOGCOLLECTOR)|perconalab/fluentbit:main-logcollector|g" \
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 
