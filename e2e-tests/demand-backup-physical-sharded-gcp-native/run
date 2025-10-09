@@ -52,9 +52,9 @@ echo 'Waiting 60 seconds for stable timestamp in wiredtiger'
 sleep 80
 
 echo 'Running GCP storage backups'
-backup_name_gcp="backup-gcp-cs-sharded"
+backup_name_gcp="backup-gcp-cs-sa-sharded"
 
-run_backup gcp-cs ${backup_name_gcp} 'physical'
+run_backup gcp-cs-sa ${backup_name_gcp} 'physical'
 
 wait_backup "${backup_name_gcp}"
 check_backup_in_storage ${backup_name_gcp} gcs rs0
@@ -62,7 +62,7 @@ check_backup_in_storage ${backup_name_gcp} gcs cfg
 
 echo "Drop collection"
 run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
-echo 'Check backup and restore -- gcp-cs'
+echo 'Check backup and restore -- gcp-cs-sa'
 run_restore ${backup_name_gcp} "_restore_sharded"
 run_recovery_check ${backup_name_gcp} "_restore_sharded" 'sharded'
 check_exported_mongos_service_endpoint "$lbEndpoint"

@@ -13,15 +13,12 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      gcp-cs:
-        type: s3
-        s3:
-          credentialsSecret: gcp-cs-secret
-          region: us-east-1
+      gcp-cs-sa:
+        type: gcs
+        gcs:
+          credentialsSecret:  gcp-cs-sa-key-secret
           bucket: operator-testing
           prefix: psmdb-demand-backup-physical
-          endpointUrl: https://storage.googleapis.com
-          insecureSkipTLSVerify: false
   replsets:
   - name: rs0
     affinity:
