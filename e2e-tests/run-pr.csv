@@ -67,5 +67,6 @@ upgrade
 upgrade-consistency
 upgrade-consistency-sharded-tls
 upgrade-sharded
+upgrade-partial-backup
 users
 version-service
