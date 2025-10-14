@@ -43,7 +43,7 @@ deploy_cert_manager
 desc 'install PMM Server'
 
 deploy_pmm_server
-sleep 20
+sleep 40
 until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 	echo "Retry $retry"
 	sleep 5
