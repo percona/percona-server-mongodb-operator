@@ -177,7 +177,7 @@ spec:
                   fieldPath: metadata.name
           imagePullPolicy: IfNotPresent
           name: logs
-          resources: { }
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -208,7 +208,7 @@ spec:
                   optional: false
           imagePullPolicy: IfNotPresent
           name: logrotate
-          resources: { }
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:

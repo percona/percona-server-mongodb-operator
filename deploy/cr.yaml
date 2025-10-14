@@ -60,7 +60,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: percona/pmm-client:3.4.0
+    image: percona/pmm-client:3.4.1
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster

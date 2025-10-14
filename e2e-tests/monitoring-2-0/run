@@ -43,12 +43,12 @@ deploy_cert_manager
 desc 'install PMM Server'
 
 deploy_pmm_server
-sleep 20
+sleep 40
 until kubectl_bin exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 	echo "Retry $retry"
 	sleep 5
 	let retry+=1
-	if [ $retry -ge 20 ]; then
+	if [ $retry -ge 30 ]; then
 		echo "Max retry count $retry reached. Pmm-server can't start"
 		exit 1
 	fi

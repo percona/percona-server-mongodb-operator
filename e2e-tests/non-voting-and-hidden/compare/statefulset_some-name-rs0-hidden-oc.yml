@@ -1,28 +1,27 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations:
-    percona.com/restore-in-progress: "true"
-  generation: 2
+  annotations: {}
+  generation: 1
   labels:
-    app.kubernetes.io/component: mongod
+    app.kubernetes.io/component: hidden
     app.kubernetes.io/instance: some-name
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: some-name-rs0
+  name: some-name-rs0-hidden
   ownerReferences:
     - controller: true
       kind: PerconaServerMongoDB
       name: some-name
 spec:
   podManagementPolicy: OrderedReady
-  replicas: 3
+  replicas: 2
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: mongod
+      app.kubernetes.io/component: hidden
       app.kubernetes.io/instance: some-name
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
@@ -33,13 +32,25 @@ spec:
     metadata:
       annotations: {}
       labels:
-        app.kubernetes.io/component: mongod
+        app.kubernetes.io/component: hidden
         app.kubernetes.io/instance: some-name
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: hidden
+                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
@@ -52,15 +63,13 @@ spec:
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
-            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
-            - --config=/etc/mongodb-config/mongod.conf
             - --quiet
           command:
-            - /opt/percona/physical-restore-ps-entry.sh
+            - /opt/percona/ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: some-name
@@ -68,33 +77,6 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
-            - name: PBM_AGENT_MONGODB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_USER_ESCAPED
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_AGENT_MONGODB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
-                  name: internal-some-name-users
-                  optional: false
-            - name: PBM_AGENT_SIDECAR
-              value: "true"
-            - name: PBM_AGENT_SIDECAR_SLEEP
-              value: "5"
-            - name: PBM_AGENT_TLS_ENABLED
-              value: "true"
-            - name: PBM_MONGODB_PORT
-              value: "27017"
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.name
-            - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -119,7 +101,7 @@ spec:
             periodSeconds: 30
             successThreshold: 1
             timeoutSeconds: 10
-          name: mongod
+          name: mongod-hidden
           ports:
             - containerPort: 27017
               name: mongodb
@@ -139,11 +121,11 @@ spec:
             timeoutSeconds: 2
           resources:
             limits:
-              cpu: 500m
-              memory: 1G
+              cpu: 300m
+              memory: 500M
             requests:
-              cpu: 100m
-              memory: 100M
+              cpu: 300m
+              memory: 500M
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
@@ -160,8 +142,6 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
-            - mountPath: /etc/mongodb-config
-              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /etc/mongodb-encryption
@@ -169,10 +149,57 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
-            - mountPath: /etc/pbm/
-              name: pbm-config
-              readOnly: true
           workingDir: /data/db
+        - args:
+            - pbm-agent-entrypoint
+          command:
+            - /opt/percona/pbm-entry.sh
+          env:
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_MONGODB_REPLSET
+              value: rs0
+            - name: PBM_MONGODB_PORT
+              value: "27017"
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
+          imagePullPolicy: Always
+          name: backup-agent
+          resources: {}
+          securityContext:
+            runAsNonRoot: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
+            - mountPath: /opt/percona
+              name: bin
+              readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -181,25 +208,11 @@ spec:
           name: mongo-init
           resources:
             limits:
-              cpu: 500m
-              memory: 1G
+              cpu: 300m
+              memory: 500M
             requests:
-              cpu: 100m
-              memory: 100M
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
-            - mountPath: /opt/percona
-              name: bin
-        - command:
-            - bash
-            - -c
-            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent && install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint
-          imagePullPolicy: Always
-          name: pbm-init
-          resources: {}
+              cpu: 300m
+              memory: 500M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -221,11 +234,6 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
-        - configMap:
-            defaultMode: 420
-            name: some-name-rs0-mongod
-            optional: true
-          name: config
         - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
@@ -245,10 +253,6 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
-        - name: pbm-config
-          secret:
-            defaultMode: 420
-            secretName: some-name-pbm-config
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
