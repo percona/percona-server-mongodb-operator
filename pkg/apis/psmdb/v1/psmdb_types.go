@@ -1302,6 +1302,8 @@ const (
 type SystemUserRole string
 
 const (
+	// RoleDatabaseAdmin is general-purpose superuser account for cluster administration.
+	// This user is not used by the operator; it is intended for end-user access and management tasks.
 	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
 	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
 	RoleUserAdmin      SystemUserRole = "userAdmin"
