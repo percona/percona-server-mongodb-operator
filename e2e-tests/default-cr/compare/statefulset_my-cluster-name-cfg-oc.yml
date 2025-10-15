@@ -135,6 +135,8 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: my-cluster-name-mongodb-encryption-key
               readOnly: true
@@ -291,6 +293,8 @@ spec:
             secretName: my-cluster-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - name: my-cluster-name-mongodb-encryption-key
           secret:
             defaultMode: 288
