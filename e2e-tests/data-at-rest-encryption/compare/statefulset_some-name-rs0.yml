@@ -135,6 +135,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-vault
               name: vault-secret
               readOnly: true
@@ -229,6 +231,8 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod
