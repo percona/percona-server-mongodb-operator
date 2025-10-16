@@ -1,7 +1,6 @@
 package mcs
 
 import (
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -36,7 +35,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 func Register(dc *discovery.DiscoveryClient) error {
 	resources, err := dc.ServerPreferredResources()
 	if err != nil {
-		return errors.Wrap(err, "get api groups and resources")
+		// MCS is optional functionality - if discovery fails for any reason,
+		// mark it as unavailable and continue without crashing the operator
+		available = false
+		return nil
 	}
 
 outer:
