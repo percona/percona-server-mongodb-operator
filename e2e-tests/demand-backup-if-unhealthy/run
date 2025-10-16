@@ -146,7 +146,7 @@ wait_for_cluster_state "$cluster" "initializing|error"
 
 backup_name_minio="backup-minio-$type"
 run_backup "minio" "$backup_name_minio" "$type"
-wait_backup $backup_name_minio running
+#wait_backup $backup_name_minio running #disabling this check temporarily as backup can be very fast in some platforms
 verify_sts_not_ready
 wait_for_cluster_state "$cluster" "initializing|error"
 
