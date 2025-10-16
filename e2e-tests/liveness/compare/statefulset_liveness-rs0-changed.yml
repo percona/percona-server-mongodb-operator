@@ -131,6 +131,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: liveness-mongodb-encryption-key
               readOnly: true
@@ -223,6 +225,8 @@ spec:
             secretName: liveness-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: liveness-rs0-mongod

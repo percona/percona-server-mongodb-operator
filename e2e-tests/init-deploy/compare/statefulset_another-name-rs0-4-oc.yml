@@ -132,6 +132,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: another-name-mongodb-encryption-key
               readOnly: true
@@ -177,7 +179,7 @@ spec:
                   fieldPath: metadata.name
           imagePullPolicy: IfNotPresent
           name: logs
-          resources: { }
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -208,7 +210,7 @@ spec:
                   optional: false
           imagePullPolicy: IfNotPresent
           name: logrotate
-          resources: { }
+          resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -251,6 +253,8 @@ spec:
             secretName: another-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: another-name-rs0-mongod

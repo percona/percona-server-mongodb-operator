@@ -49,7 +49,17 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 	}
 
 	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.BinVolumeName,
+			MountPath: config.BinMountPath,
+		})
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.MongoshHomeVolumeName,
+			MountPath: config.MongoshHomeMountPath,
+		})
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
