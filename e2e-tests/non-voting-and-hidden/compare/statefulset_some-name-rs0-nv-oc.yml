@@ -238,7 +238,7 @@ spec:
           name: bin
         - emptyDir: {}
           name: mongosh
-        - name: nonvoting-mongodb-encryption-key
+        - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
             optional: false
