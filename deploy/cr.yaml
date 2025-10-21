@@ -14,8 +14,8 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: false
 #  enableExternalVolumeAutoscaling: false
-  crVersion: 1.21.0
-  image: percona/percona-server-mongodb:8.0.12-4
+  crVersion: 1.22.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -28,7 +28,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: percona/percona-server-mongodb-operator:1.21.0
+#  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -60,7 +60,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: percona/pmm-client:3.4.1
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
@@ -692,7 +692,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.11.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
@@ -839,7 +839,7 @@ spec:
 #        compressionLevel: 6
   logcollector:
     enabled: true
-    image: percona/fluentbit:4.0.1
+    image: perconalab/fluentbit:main-logcollector
 #    configuration: |
 #      [SERVICE]
 #          Flush        1
