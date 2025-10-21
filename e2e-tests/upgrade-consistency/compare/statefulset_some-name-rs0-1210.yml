@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 2
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -136,6 +136,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
@@ -177,6 +179,8 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod

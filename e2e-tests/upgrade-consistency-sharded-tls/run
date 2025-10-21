@@ -102,6 +102,12 @@ main() {
 	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
 	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
 
+	renew_certificate "some-name-ssl"
+	sleep 20
+	wait_cluster
+	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
