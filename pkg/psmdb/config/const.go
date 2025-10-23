@@ -22,6 +22,9 @@ const (
 	BinVolumeName              = "bin"
 	BinMountPath               = "/opt/percona"
 
+	MongoshHomeVolumeName = "mongosh"
+	MongoshHomeMountPath  = "/.mongodb"
+
 	LDAPConfVolClaimName = "ldap"
 	LDAPConfDir          = "/etc/openldap"
 	LDAPTLSVolClaimName  = "ldap-tls"
