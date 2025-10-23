@@ -548,6 +548,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Wrapf(err, "reconcile replset %s", replset.Name)
 		}
 
+		// TODO: why do we do it for each replset??
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
 			return "", errors.Wrap(err, "update mongo version")
 		}

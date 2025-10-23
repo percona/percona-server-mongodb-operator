@@ -23,10 +23,15 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
-func (r *ReconcilePerconaServerMongoDB) smartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet,
+func (r *ReconcilePerconaServerMongoDB) smartUpdate(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec,
 ) error {
-	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name, "replset", replset.Name)
+	log := logf.FromContext(ctx).
+		WithName("SmartUpdate").
+		WithValues("statefulset", sfs.Name, "replset", replset.Name)
 
 	if replset.Size == 0 {
 		return nil

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -25,4 +27,17 @@ func GetOperatorNamespace() (string, error) {
 	}
 
 	return strings.TrimSpace(string(nsBytes)), nil
+}
+
+func IsPodReady(pod corev1.Pod) bool {
+	if pod.Status.Phase != corev1.PodRunning || pod.DeletionTimestamp != nil {
+		return false
+	}
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
 }
