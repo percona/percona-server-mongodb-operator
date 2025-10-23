@@ -112,11 +112,11 @@ spec:
             timeoutSeconds: 2
           resources:
             limits:
-              cpu: 300m
-              memory: 500M
+              cpu: 600m
+              memory: 1Gi
             requests:
               cpu: 300m
-              memory: 500M
+              memory: 1Gi
           securityContext:
             runAsNonRoot: true
           terminationMessagePath: /dev/termination-log
@@ -267,11 +267,11 @@ spec:
           name: mongo-init
           resources:
             limits:
-              cpu: 300m
-              memory: 500M
+              cpu: 600m
+              memory: 1Gi
             requests:
               cpu: 300m
-              memory: 500M
+              memory: 1Gi
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
