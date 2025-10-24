@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: false
 #  enableExternalVolumeAutoscaling: false
-  crVersion: 1.21.0
+  crVersion: 1.22.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -60,7 +60,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
