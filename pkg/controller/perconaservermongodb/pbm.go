@@ -122,6 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer pbm.Close(ctx)
 
 	currentCfg, err := pbm.GetConfig(ctx)
 	if err != nil && !backup.IsErrNoDocuments(err) {
@@ -594,6 +595,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			log.Error(err, "failed to open PBM connection")
 			return
 		}
+		defer pbm.Close(ctx)
 
 		log.Info("starting resync for main storage")
 

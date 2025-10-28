@@ -810,6 +810,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer pbmC.Close(ctx)
 
 	// PBM uses main storage to store restore metadata
 	// regardless of backup storage. See PBM-1503.

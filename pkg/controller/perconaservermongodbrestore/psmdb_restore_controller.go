@@ -406,6 +406,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer pbmC.Close(ctx)
 
 	// restore: backupSource
 	if len(cr.Spec.BackupName) == 0 {
