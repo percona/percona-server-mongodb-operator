@@ -94,6 +94,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
 
 desc 'check if possible to create second cluster'
 cluster2="another-name-rs0"
+apply_s3_storage_secrets
 apply_cluster $test_dir/conf/$cluster2.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster2 3
@@ -111,6 +112,14 @@ run_mongo \
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
+
+desc 'check number of connections with backup'
+max_conn=50
+sleep 300
+conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster2.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
+if [ ${conn_count} -gt ${max_conn} ]; then
+	exit 1
+fi
 
 desc 'check if mongod log files exist in pod'
 log_files=$(kubectl exec "${cluster2}-0" -c "mongod" -- ls "/data/db/logs" 2>/dev/null)

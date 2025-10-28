@@ -800,6 +800,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
+	log := logf.FromContext(ctx)
+
 	secret := corev1.Secret{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: r.pbmConfigName(cluster), Namespace: cluster.Namespace}, &secret)
 	if client.IgnoreNotFound(err) != nil {
@@ -810,7 +812,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
-	defer pbmC.Close(ctx)
+	defer func() {
+		if err := pbmC.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	// PBM uses main storage to store restore metadata
 	// regardless of backup storage. See PBM-1503.
