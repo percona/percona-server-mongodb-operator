@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.21.1
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -238,7 +238,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.21.1
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -479,7 +479,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.21.1
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
