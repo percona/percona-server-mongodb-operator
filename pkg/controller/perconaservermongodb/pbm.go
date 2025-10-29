@@ -329,7 +329,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
-	defer pbm.Close(ctx)
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	if err := enablePiTRIfNeeded(ctx, pbm, cr); err != nil {
 		if backup.IsErrNoDocuments(err) {
