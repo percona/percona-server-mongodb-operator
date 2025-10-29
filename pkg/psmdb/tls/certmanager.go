@@ -6,7 +6,6 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/cert-manager/cert-manager/pkg/util/cmapichecker"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -27,10 +26,9 @@ import (
 type CertManagerController interface {
 	ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
-	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error)
-	ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error)
 	DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error
-	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error
+	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificates ...Certificate) error
 	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
 	Check(ctx context.Context, config *rest.Config, ns string) error
 	IsDryRun() bool
@@ -62,21 +60,6 @@ func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
-func certificateName(cr *api.PerconaServerMongoDB, internal bool) string {
-	if internal {
-		return cr.Name + "-ssl-internal"
-	}
-	return cr.Name + "-ssl"
-}
-
-func CertificateSecretName(cr *api.PerconaServerMongoDB, internal bool) string {
-	if internal {
-		return api.SSLInternalSecretName(cr)
-	}
-
-	return api.SSLSecretName(cr)
-}
-
 func deprecatedIssuerName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-psmdb-ca"
 }
@@ -95,10 +78,6 @@ func issuerName(cr *api.PerconaServerMongoDB) string {
 
 func caIssuerName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-psmdb-ca-issuer"
-}
-
-func CACertificateSecretName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-ca-cert"
 }
 
 func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -138,7 +117,7 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
 				CA: &cm.CAIssuer{
-					SecretName: CACertificateSecretName(cr),
+					SecretName: CertificateCA(cr).SecretName(),
 				},
 			},
 		},
@@ -180,47 +159,8 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
-func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, internal bool) (util.ApplyStatus, error) {
-	issuerKind := cm.IssuerKind
-	issuerGroup := ""
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-		issuerKind = cr.Spec.TLS.IssuerConf.Kind
-		issuerGroup = cr.Spec.TLS.IssuerConf.Group
-
-	}
-	isCA := false
-	if cr.CompareVersion("1.15.0") < 0 {
-		isCA = true
-	}
-
-	certificate := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      certificateName(cr, internal),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.CertificateSpec{
-			Subject: &cm.X509Subject{
-				Organizations: []string{"PSMDB"},
-			},
-			CommonName: cr.Name,
-			SecretName: CertificateSecretName(cr, internal),
-			DNSNames:   GetCertificateSans(cr),
-			IsCA:       isCA,
-			Duration:   &cr.Spec.TLS.CertValidityDuration,
-			IssuerRef: cmmeta.ObjectReference{
-				Name:  issuerName(cr),
-				Kind:  issuerKind,
-				Group: issuerGroup,
-			},
-		},
-	}
-
-	if cr.CompareVersion("1.17.0") < 0 {
-		certificate.Labels = nil
-	}
-
-	return c.createOrUpdate(ctx, cr, certificate)
+func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
+	return c.createOrUpdate(ctx, cr, cert.Object())
 }
 
 var (
@@ -260,33 +200,7 @@ func translateCheckError(err error) error {
 	return cmapichecker.TranslateToSimpleError(err)
 }
 
-func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
-	cert := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      CACertificateSecretName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: CACertificateSecretName(cr),
-			CommonName: cr.Name + "-ca",
-			IsCA:       true,
-			IssuerRef: cmmeta.ObjectReference{
-				Name: caIssuerName(cr),
-				Kind: cm.IssuerKind,
-			},
-			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
-			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
-		},
-	}
-	if cr.CompareVersion("1.17.0") < 0 {
-		cert.Labels = nil
-	}
-
-	return c.createOrUpdate(ctx, cr, cert)
-}
-
-func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, secretsList ...string) error {
+func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificates ...Certificate) error {
 	if c.dryRun {
 		return nil
 	}
@@ -297,20 +211,28 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 	for {
 		select {
 		case <-timeoutTimer.C:
-			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
+			return errors.Errorf("timeout: can't get tls certificates from certmanager, %v", certificates)
 		case <-ticker.C:
 			successCount := 0
-			for _, secretName := range secretsList {
+			for _, cert := range certificates {
 				secret := &corev1.Secret{}
 				err := c.cl.Get(ctx, types.NamespacedName{
-					Name:      secretName,
+					Name:      cert.SecretName(),
 					Namespace: cr.Namespace,
 				}, secret)
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
 				} else if err == nil {
 					successCount++
-					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != secret.Name {
+					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != cert.Name() {
+						continue
+					}
+					certificate := &cm.Certificate{}
+					err := c.cl.Get(ctx, client.ObjectKeyFromObject(cert.Object()), certificate)
+					if err != nil {
+						return err
+					}
+					if metav1.IsControlledBy(secret, certificate) {
 						continue
 					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
@@ -321,7 +243,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					}
 				}
 			}
-			if successCount == len(secretsList) {
+			if successCount == len(certificates) {
 				return nil
 			}
 		}
