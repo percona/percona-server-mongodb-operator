@@ -127,14 +127,12 @@ release: manifests
 		-e "s|perconalab/fluentbit:main-logcollector|$(IMAGE_LOGCOLLECTOR)|g" \
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
-	
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
 MINOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
 after-release: manifests
-	$(SED) -i "/Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" version/version.go
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod8.0#}" deploy/cr-minimal.yaml
@@ -144,7 +142,7 @@ after-release: manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-backup#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mongodb-operator:main#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" deploy/cr.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" \
 		-e "s|$(IMAGE_BACKUP)|perconalab/percona-server-mongodb-operator:main-backup|g" \
