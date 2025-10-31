@@ -127,7 +127,6 @@ release: manifests
 		-e "s|perconalab/fluentbit:main-logcollector|$(IMAGE_LOGCOLLECTOR)|g" \
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
-	
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
