@@ -109,10 +109,10 @@ main() {
 	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl service/${CLUSTER}-rs0 "-1211"
-	compare_kubectl service/${CLUSTER}-cfg "-1211"
-	compare_kubectl statefulset/${CLUSTER}-rs0 "-1211"
-	compare_kubectl statefulset/${CLUSTER}-cfg "-1211"
+	compare_kubectl service/${CLUSTER}-rs0 "-1220"
+	compare_kubectl service/${CLUSTER}-cfg "-1220"
+	compare_kubectl statefulset/${CLUSTER}-rs0 "-1220"
+	compare_kubectl statefulset/${CLUSTER}-cfg "-1220"
 
 	destroy "$namespace"
 
