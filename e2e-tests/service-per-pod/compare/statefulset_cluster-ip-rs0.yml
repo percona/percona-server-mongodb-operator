@@ -129,6 +129,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: cluster-ip-mongodb-encryption-key
               readOnly: true
@@ -215,6 +217,8 @@ spec:
             secretName: cluster-ip-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: cluster-ip-rs0-mongod
