@@ -11,10 +11,18 @@ spec:
   tls:
     mode: disabled
   backup:
-    enabled: false
-    image: perconalab/percona-server-mongodb-operator:0.4.0-backup
-#    storages:
-#    tasks:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      gcp-cs-s3:
+        type: s3
+        s3:
+          credentialsSecret: gcp-cs-secret
+          region: us-east-1
+          bucket: operator-testing
+          prefix: psmdb-demand-backup-physical
+          endpointUrl: https://storage.googleapis.com
+          insecureSkipTLSVerify: false
   replsets:
   - name: rs0
     terminationGracePeriodSeconds: 300

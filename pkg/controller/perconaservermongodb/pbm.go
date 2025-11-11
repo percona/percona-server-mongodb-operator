@@ -122,6 +122,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	currentCfg, err := pbm.GetConfig(ctx)
 	if err != nil && !backup.IsErrNoDocuments(err) {
@@ -134,6 +139,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	// Hashes can be equal even if the actual PBM configuration differs from the one that was hashed
 	// For example, a restore can modify the PBM config
 	// We should use `isResyncNeeded` to compare the current configuration with the one we need
+	// Also, storage credentials are not hashed since they are excluded from JSON representation. `isResyncNeeded` will handle it.
 	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
 		return nil
 	}
@@ -187,6 +193,15 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
 			return true
 		}
+
+		if currentCfg.Storage.S3.Credentials.AccessKeyID != newCfg.Storage.S3.Credentials.AccessKeyID {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
+			return true
+		}
+
 	}
 
 	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
@@ -195,6 +210,22 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		}
 
 		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.ClientEmail != newCfg.Storage.GCS.Credentials.ClientEmail {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.PrivateKey != newCfg.Storage.GCS.Credentials.PrivateKey {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.HMACAccessKey != newCfg.Storage.GCS.Credentials.HMACAccessKey {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.HMACSecret != newCfg.Storage.GCS.Credentials.HMACSecret {
 			return true
 		}
 	}
@@ -209,6 +240,10 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		}
 
 		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Credentials.Key != newCfg.Storage.Azure.Credentials.Key {
 			return true
 		}
 	}
@@ -324,7 +359,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
-	defer pbm.Close(ctx)
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	if err := enablePiTRIfNeeded(ctx, pbm, cr); err != nil {
 		if backup.IsErrNoDocuments(err) {
@@ -594,6 +633,11 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			log.Error(err, "failed to open PBM connection")
 			return
 		}
+		defer func() {
+			if err := pbm.Close(ctx); err != nil {
+				log.Error(err, "failed to close PBM connection")
+			}
+		}()
 
 		log.Info("starting resync for main storage")
 

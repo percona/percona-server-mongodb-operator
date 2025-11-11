@@ -464,18 +464,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 		return nil
 	}
 
+	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	cmd := []string{"pbm-agent", "version", "--short"}
 
-	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, nil, stderr, false)
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, stdout, stderr, false)
 	if err != nil {
 		return errors.Wrap(err, "get pbm-agent version")
 	}
 
-	cr.Status.BackupVersion = strings.TrimSpace(stderr.String())
+	// PBM v2.9.0 and above prints version to stderr, below prints it to stdout
+	stdoutStr := strings.TrimSpace(stdout.String())
+	stderrStr := strings.TrimSpace(stderr.String())
+	if stdoutStr != "" && stderrStr != "" {
+		log.V(1).Info("pbm-agent version found in both stdout and stderr; using stdout",
+			"stdout", stdoutStr, "stderr", stderrStr)
+		cr.Status.BackupVersion = stdoutStr
+	} else if stdoutStr != "" {
+		cr.Status.BackupVersion = stdoutStr
+	} else if stderrStr != "" {
+		cr.Status.BackupVersion = stderrStr
+	} else {
+		return errors.New("pbm-agent version not found in stdout or stderr")
+	}
+
 	cr.Status.BackupImage = cr.Spec.Backup.Image
 
-	log.Info("pbm-agent version", "version", cr.Status.BackupVersion, "image", cr.Status.BackupImage, "pod", pod.Name)
+	log.Info("pbm-agent version",
+		"pod", pod.Name,
+		"image", cr.Status.BackupImage,
+		"version", cr.Status.BackupVersion)
 
 	pbmInfo := pbmVersion.Current()
 
