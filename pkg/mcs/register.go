@@ -1,6 +1,7 @@
 package mcs
 
 import (
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,12 +33,13 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	return nil
 }
 
-func Register(dc *discovery.DiscoveryClient) error {
+func Register(dc *discovery.DiscoveryClient, log logr.Logger) error {
 	resources, err := dc.ServerPreferredResources()
 	if err != nil {
 		// MCS is optional functionality - if discovery fails for any reason,
 		// mark it as unavailable and continue without crashing the operator
 		available = false
+		log.Info("Multi-cluster services (MCS) are not available: failed to discover API resources", "error", err)
 		return nil
 	}
 
@@ -55,6 +57,7 @@ outer:
 
 	if MCSSchemeGroupVersion.Group == "" {
 		available = false
+		log.Info("Multi-cluster services (MCS) are not available: ServiceExport resource not found in cluster")
 		return nil
 	}
 
