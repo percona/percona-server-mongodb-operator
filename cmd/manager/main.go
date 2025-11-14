@@ -148,7 +148,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mcs.Register(discovery.NewDiscoveryClientForConfigOrDie(config)); err != nil {
+	if err := mcs.Register(discovery.NewDiscoveryClientForConfigOrDie(config), setupLog); err != nil {
 		setupLog.Error(err, "failed to register multicluster service")
 		os.Exit(1)
 	}
