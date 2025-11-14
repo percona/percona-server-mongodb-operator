@@ -5,13 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-func readDefaultRestore(t *testing.T, name, namespace string) *api.PerconaServerMongoDBRestore {
+func readDefaultRestore(t GinkgoTInterface, name, namespace string) *api.PerconaServerMongoDBRestore {
 	t.Helper()
 
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup", "restore.yaml"))

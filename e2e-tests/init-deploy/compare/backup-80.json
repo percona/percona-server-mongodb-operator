@@ -449,6 +449,7 @@
           "cluster": true
         },
         "actions": [
+          "listClusterCatalog",
           "allCollectionStats",
           "appendOplogNote",
           "bypassWriteBlockingMode",
