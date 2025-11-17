@@ -283,9 +283,17 @@ void azureAuth() {
 void installAzureCLI() {
     sh """
         if ! command -v az &>/dev/null; then
-            curl -s -L https://azurecliprod.blob.core.windows.net/install.py -o install.py
-            printf "/usr/azure-cli\\n/usr/bin" | sudo python3 install.py
-            sudo /usr/azure-cli/bin/python -m pip install "urllib3<2.0.0" > /dev/null
+            echo "Installing Azure CLI for Hetzner instances..."
+            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+            cat <<EOF | sudo tee /etc/yum.repos.d/azure-cli.repo
+[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
+            sudo dnf install azure-cli -y
         fi
     """
 }
