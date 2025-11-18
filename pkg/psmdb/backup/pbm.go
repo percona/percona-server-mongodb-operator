@@ -367,7 +367,7 @@ func GetPBMStorageMinioConfig(
 	}
 
 	if stg.Minio.Retryer != nil {
-		storageConf.S3.Retryer = &s3.Retryer{
+		storageConf.Minio.Retryer = &mio.Retryer{
 			NumMaxRetries: stg.Minio.Retryer.NumMaxRetries,
 		}
 	}
