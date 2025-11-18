@@ -547,7 +547,7 @@ func GetPBMStorageConfig(
 
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, s3.GCSEndpointURL) {
+		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.GCSEndpointURL) {
 			conf, err := GetPBMStorageS3CompatibleGCSConfig(ctx, k8sclient, cluster, stg)
 			return conf, errors.Wrap(err, "get s3-compatible gcs config")
 		}
@@ -993,7 +993,7 @@ func deleteBackupImpl(
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
 		conf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
@@ -1035,7 +1035,7 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
 		conf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
@@ -1176,7 +1176,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) 
 	}
 
 	stgConf := cfg.Storage
-	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, naming.GCSEndpointURL) {
 		stgConf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(stgConf.S3),

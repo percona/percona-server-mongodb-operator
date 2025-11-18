@@ -372,7 +372,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		if strings.Contains(s3Conf.EndpointURL, s3.GCSEndpointURL) {
+		if strings.Contains(s3Conf.EndpointURL, naming.GCSEndpointURL) {
 			gcsConf := &gcs.Config{
 				Bucket:    cr.Status.S3.Bucket,
 				Prefix:    cr.Status.S3.Prefix,
