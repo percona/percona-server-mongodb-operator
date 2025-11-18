@@ -1594,7 +1594,7 @@ function check_backup_deletion_gcs() {
     backup_dest_gcp=$1
     storage_name="gcp-cs"
     retry=0
-    gcs_path="gs://${backup_dest_gcp}.sst_info/sst_info.00000000000000000000"
+    gcs_path="gs://${backup_dest_gcp}"
 
     while gsutil ls "$gcs_path" >/dev/null 2>&1; do
         if [ $retry -ge 15 ]; then
@@ -2400,41 +2400,40 @@ check_backup_in_storage() {
 	local file=${4:-"filelist.pbm"}
 
 	local endpoint
+	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
 	case ${storage_type} in
 		s3)
 			endpoint="s3.amazonaws.com"
+			setup_aws_credentials
+			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
+			setup_gcs_credentials
+			check_backup_existence_gcs "$backup_dest"  "/${replset}/${file}"
 			;;
 		azure)
 			endpoint="engk8soperators.blob.core.windows.net"
+			setup_azure_credentials
+			check_backup_existence_azure "$backup_dest" "/${replset}/${file}"
 			;;
 		minio)
 			endpoint="minio-service"
+			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+				/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+				| grep "${file}"; do
+				sleep 1
+				let retry+=1
+				if [ $retry -ge 60 ]; then
+					log "Max retry count $retry reached. Something went wrong with writing backup"
+					exit 1
+				fi
+			done
 			;;
 		*)
 			echo "unsupported storage type: ${storage_type}"
 			exit 1
 			;;
 	esac
-
-	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
-	if [[ ${storage_type} == 'minio' ]]; then
-		until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-			/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
-			| grep "${file}"; do
-			sleep 1
-			let retry+=1
-			if [ $retry -ge 60 ]; then
-				log "Max retry count $retry reached. Something went wrong with writing backup"
-				exit 1
-			fi
-		done
-	else
-		local url="https://${endpoint}/${backup_dest}/${replset}/${file}"
-		log "checking if ${url} exists"
-		curl --fail --head "${url}"
-	fi
 }

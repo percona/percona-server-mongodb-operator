@@ -224,24 +224,24 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 	setup_aws_credentials
-	check_backup_existence_aws ${backup_name_aws} 'rs0/myApp.test.gz'
+	check_backup_existence_aws ${backup_name_aws} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-s3'
 	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
 	setup_gcs_credentials
-	check_backup_existence_gcs ${backup_name_gcp_s3} 'rs0/myApp.test.gz'
+	check_backup_existence_gcs ${backup_name_gcp_s3} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_gcp_s3" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-sa'
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
-	check_backup_existence_gcs ${backup_name_gcp_sa} 'rs0/myApp.test.gz'
+	check_backup_existence_gcs ${backup_name_gcp_sa} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_gcp_sa" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 	setup_azure_credentials
-	check_backup_in_azure ${backup_name_azure} 'rs0/myApp.test.gz'
+	check_backup_in_azure ${backup_name_azure} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
 fi
 
