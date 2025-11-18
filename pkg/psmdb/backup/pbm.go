@@ -32,6 +32,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -334,6 +335,45 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	return conf, nil
 }
 
+func GetPBMStorageMinioConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *api.PerconaServerMongoDB,
+	stg api.BackupStorageSpec,
+) (config.StorageConf, error) {
+	storageConf := config.StorageConf{
+		Type: storage.Minio,
+		Minio: &mio.Config{
+			Region:                stg.Minio.Region,
+			Endpoint:              stg.Minio.EndpointURL,
+			Bucket:                stg.Minio.Bucket,
+			Prefix:                stg.Minio.Prefix,
+			InsecureSkipTLSVerify: stg.Minio.InsecureSkipTLSVerify,
+			DebugTrace:            stg.Minio.DebugTrace,
+			PartSize:              stg.Minio.PartSize,
+		},
+	}
+
+	if len(stg.Minio.CredentialsSecret) != 0 {
+		s3secret, err := getSecret(ctx, k8sclient, cluster.GetNamespace(), stg.Minio.CredentialsSecret)
+		if err != nil {
+			return storageConf, errors.Wrap(err, "get minio credentials secret")
+		}
+
+		storageConf.Minio.Credentials = mio.Credentials{
+			AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
+			SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+		}
+	}
+
+	if stg.Minio.Retryer != nil {
+		storageConf.S3.Retryer = &s3.Retryer{
+			NumMaxRetries: stg.Minio.Retryer.NumMaxRetries,
+		}
+	}
+	return storageConf, nil
+}
+
 func GetPBMStorageS3Config(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -553,6 +593,9 @@ func GetPBMStorageConfig(
 		}
 		conf, err := GetPBMStorageS3Config(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get s3 config")
+	case api.BackupStorageMinio:
+		conf, err := GetPBMStorageMinioConfig(ctx, k8sclient, cluster, stg)
+		return conf, errors.Wrap(err, "get minio config")
 	case api.BackupStorageGCS:
 		conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get gcs config")

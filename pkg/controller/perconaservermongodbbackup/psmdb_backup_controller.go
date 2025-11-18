@@ -569,6 +569,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.S3 != nil:
 		storage.Type = psmdbv1.BackupStorageS3
 		storage.S3 = *cr.Status.S3
+	case cr.Status.Minio != nil:
+		storage.Type = psmdbv1.BackupStorageMinio
+		storage.Minio = *cr.Status.Minio
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure
