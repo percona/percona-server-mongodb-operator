@@ -2341,12 +2341,12 @@ function check_backup_existence_aws() {
 			echo "Backup was not found in bucket -- $storage_name"
 			exit 1
 		fi
-		echo "waiting for backup in $storage_name"
+		echo "waiting for backup $bucket/$key_prefix/$key in $storage_name"
 		sleep 10
 		((retry += 1))
 	done
 	
-	echo "Backup ${key_prefix}${key} found in bucket $bucket in $storage_name"
+	echo "Backup $bucket/$key_prefix/$key found in $storage_name"
 }
 
 function check_backup_existence_gcs() {
@@ -2363,17 +2363,19 @@ function check_backup_existence_gcs() {
 			echo "Backup was not found in bucket -- $storage_name"
 			exit 1
 		fi
-		echo "Waiting for backup in $storage_name ($gcs_path)..."
+		echo "Waiting for backup $gcs_path in $storage_name"
 		sleep 10
 		((retry += 1))
 	done
 	
-	echo "Backup found in $storage_name: $gcs_path"
+	echo "Backup $gcs_path found in $storage_name"
 }
 
 function check_backup_existence_azure() {
-	container=$(echo "$1" | cut -d'/' -f1)
-	blob_prefix=$(echo "$1" | cut -d'/' -f2-)
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
 	blob=$2
 	storage_name="azure-blob"
 	retry=0
@@ -2385,12 +2387,12 @@ function check_backup_existence_azure() {
 			echo "Backup was not found in container -- $storage_name"
 			exit 1
 		fi
-		echo "waiting for backup in $storage_name"
+		echo "waiting for backup $blob_path in $storage_name"
 		sleep 10
 		((retry += 1))
 	done
 	
-	echo "Backup ${blob_path} found in container $container in $storage_name"
+	echo "Backup $blob_path found in $storage_name"
 }
 
 check_backup_in_storage() {

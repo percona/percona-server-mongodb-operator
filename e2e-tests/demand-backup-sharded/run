@@ -137,9 +137,9 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 	setup_azure_credentials
-	check_backup_existence_azure "$backup_dest_azure" "/rs0/myApp.test.gz" | gunzip >/dev/null
-	check_backup_existence_azure "$backup_dest_azure" "/rs1/myApp1.test.gz" | gunzip >/dev/null
-	check_backup_existence_azure "$backup_dest_azure" "/rs2/myApp2.test.gz" | gunzip >/dev/null
+	check_backup_existence_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_existence_azure "$backup_dest_azure" "/rs1/myApp1.test.gz"
+	check_backup_existence_azure "$backup_dest_azure" "/rs2/myApp2.test.gz"
 	insert_data_mongos "100501" "myApp" "" "$custom_port"
 	insert_data_mongos "100501" "myApp1" "" "$custom_port"
 	insert_data_mongos "100501" "myApp2" "" "$custom_port"
@@ -172,9 +172,9 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion_aws "$backup_dest_aws"
-	check_backup_deletion_gcs "$backup_dest_gcp"
-	check_backup_deletion_azure "$backup_dest_azure"
+	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
+	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 fi
 
 # Temporarily skipping this check
@@ -183,3 +183,4 @@ fi
 
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy "$namespace"
+desc 'test passed'
