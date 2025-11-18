@@ -151,6 +151,37 @@ spec:
               latestRestorableTime:
                 format: date-time
                 type: string
+              minio:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  debugTrace:
+                    type: boolean
+                  endpointUrl:
+                    type: string
+                  forcePathStyle:
+                    type: boolean
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  partSize:
+                    format: int64
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      numMaxRetries:
+                        type: integer
+                    required:
+                    - numMaxRetries
+                    type: object
+                required:
+                - bucket
+                type: object
               pbmName:
                 type: string
               pbmPod:
@@ -345,6 +376,37 @@ spec:
                   latestRestorableTime:
                     format: date-time
                     type: string
+                  minio:
+                    properties:
+                      bucket:
+                        type: string
+                      credentialsSecret:
+                        type: string
+                      debugTrace:
+                        type: boolean
+                      endpointUrl:
+                        type: string
+                      forcePathStyle:
+                        type: boolean
+                      insecureSkipTLSVerify:
+                        type: boolean
+                      partSize:
+                        format: int64
+                        type: integer
+                      prefix:
+                        type: string
+                      region:
+                        type: string
+                      retryer:
+                        properties:
+                          numMaxRetries:
+                            type: integer
+                        required:
+                        - numMaxRetries
+                        type: object
+                    required:
+                    - bucket
+                    type: object
                   pbmName:
                     type: string
                   pbmPod:
@@ -1150,6 +1212,37 @@ spec:
                           type: object
                         main:
                           type: boolean
+                        minio:
+                          properties:
+                            bucket:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            debugTrace:
+                              type: boolean
+                            endpointUrl:
+                              type: string
+                            forcePathStyle:
+                              type: boolean
+                            insecureSkipTLSVerify:
+                              type: boolean
+                            partSize:
+                              format: int64
+                              type: integer
+                            prefix:
+                              type: string
+                            region:
+                              type: string
+                            retryer:
+                              properties:
+                                numMaxRetries:
+                                  type: integer
+                              required:
+                              - numMaxRetries
+                              type: object
+                          required:
+                          - bucket
+                          type: object
                         s3:
                           properties:
                             bucket:
