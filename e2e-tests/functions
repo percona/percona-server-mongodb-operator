@@ -10,7 +10,7 @@ IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-server-mongodb-operator:2.11.0"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
@@ -1592,9 +1592,10 @@ function check_backup_deletion_aws() {
 
 function check_backup_deletion_gcs() {
     backup_dest_gcp=$1
-    storage_name="gcp-cs"
-    retry=0
-    gcs_path="gs://${backup_dest_gcp}"
+	obj=$2
+	storage_name="gcp-cs"
+	retry=0
+	gcs_path="gs://${backup_dest_gcp}${obj}"
 
     while gsutil ls "$gcs_path" >/dev/null 2>&1; do
         if [ $retry -ge 15 ]; then
@@ -1611,8 +1612,10 @@ function check_backup_deletion_gcs() {
 }
 
 function check_backup_deletion_azure() {
-	container=$(echo "$1" | cut -d'/' -f1)
-	blob_prefix=$(echo "$1" | cut -d'/' -f2-)
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
 	blob=$2
 	storage_name="azure-blob"
 	retry=0
@@ -2412,7 +2415,7 @@ check_backup_in_storage() {
 		gcs)
 			endpoint="storage.googleapis.com"
 			setup_gcs_credentials
-			check_backup_existence_gcs "$backup_dest"  "/${replset}/${file}"
+			check_backup_existence_gcs "$backup_dest" "/${replset}/${file}"
 			;;
 		azure)
 			endpoint="engk8soperators.blob.core.windows.net"
