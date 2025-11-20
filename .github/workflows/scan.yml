@@ -36,7 +36,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64'
-          args: --platform=linux/arm64 --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
+          args: --platform=linux/arm64 --org=${{ secrets.SNYK_ORG_ID }} --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
 
       - name: Build an image from Dockerfile (linux/amd64)
         run: |
@@ -52,5 +52,5 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64'
-          args: --platform=linux/amd64 --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
+          args: --platform=linux/amd64 --org=${{ secrets.SNYK_ORG_ID }} --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
 
