@@ -218,22 +218,24 @@ void makeReport() {
 }
 
 void clusterRunner(String cluster) {
-    def clusterCreated=0
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]){
+        def clusterCreated=0
 
-    for (int i=0; i<tests.size(); i++) {
-        if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
-            tests[i]["result"] = "failure"
-            tests[i]["cluster"] = cluster
-            if (clusterCreated == 0) {
-                createCluster(cluster)
-                clusterCreated++
+        for (int i=0; i<tests.size(); i++) {
+            if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
+                tests[i]["result"] = "failure"
+                tests[i]["cluster"] = cluster
+                if (clusterCreated == 0) {
+                    createCluster(cluster)
+                    clusterCreated++
+                }
+                runTest(i)
             }
-            runTest(i)
         }
-    }
 
-    if (clusterCreated >= 1) {
-        shutdownCluster(cluster)
+        if (clusterCreated >= 1) {
+            shutdownCluster(cluster)
+        }
     }
 }
 
@@ -305,6 +307,35 @@ EOF
         sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+    """
+    installAzureCLI()
+    azureAuth()
+}
+
+void azureAuth() {
+    withCredentials([azureServicePrincipal('PERCONA-OPERATORS-SP')]) {
+        sh '''
+            az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" -t "$AZURE_TENANT_ID"  --allow-no-subscriptions
+            az account set -s "$AZURE_SUBSCRIPTION_ID"
+        '''
+    }
+}
+
+void installAzureCLI() {
+    sh """
+        if ! command -v az &>/dev/null; then
+            echo "Installing Azure CLI for Hetzner instances..."
+            sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+            cat <<EOF | sudo tee /etc/yum.repos.d/azure-cli.repo
+[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
+            sudo dnf install azure-cli -y
+        fi
     """
 }
 

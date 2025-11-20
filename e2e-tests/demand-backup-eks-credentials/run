@@ -57,7 +57,8 @@ sleep 5
 
 desc 'check backup and restore -- aws-s3'
 backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+setup_aws_credentials
+check_backup_existence_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -70,7 +71,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 
 desc 'delete backup and check if it is removed from bucket -- aws-s3'
 kubectl_bin delete psmdb-backup --all
-check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
+check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
 
 destroy $namespace
 
