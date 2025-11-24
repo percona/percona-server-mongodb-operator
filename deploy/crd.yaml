@@ -179,6 +179,8 @@ spec:
                     required:
                     - numMaxRetries
                     type: object
+                  secure:
+                    type: boolean
                 required:
                 - bucket
                 type: object
@@ -404,6 +406,8 @@ spec:
                         required:
                         - numMaxRetries
                         type: object
+                      secure:
+                        type: boolean
                     required:
                     - bucket
                     type: object
@@ -1240,6 +1244,8 @@ spec:
                               required:
                               - numMaxRetries
                               type: object
+                            secure:
+                              type: boolean
                           required:
                           - bucket
                           type: object

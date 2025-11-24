@@ -351,6 +351,7 @@ func GetPBMStorageMinioConfig(
 			InsecureSkipTLSVerify: stg.Minio.InsecureSkipTLSVerify,
 			DebugTrace:            stg.Minio.DebugTrace,
 			PartSize:              stg.Minio.PartSize,
+			Secure:                stg.Minio.Secure,
 		},
 	}
 
