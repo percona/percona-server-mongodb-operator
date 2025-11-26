@@ -7,7 +7,7 @@ require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
 	github.com/cert-manager/cert-manager v1.19.1
 	github.com/go-logr/logr v1.4.3
-	github.com/go-openapi/errors v0.22.3
+	github.com/go-openapi/errors v0.22.4
 	github.com/go-openapi/runtime v0.29.0
 	github.com/go-openapi/strfmt v0.24.0
 	github.com/go-openapi/swag v0.25.1
