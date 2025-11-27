@@ -33,8 +33,11 @@ func New(ctx context.Context, cr *api.PerconaServerMongoDB) (*Vault, error) {
 		return nil, errors.Wrap(err, "unable to initialize Vault client")
 	}
 
-	// TODO: WithServiceAccountTokenPath
-	k8sAuth, err := auth.NewKubernetesAuth(spec.Role)
+	var opts []auth.LoginOption
+	if spec.ServiceAccountTokenPath != "" {
+		opts = append(opts, auth.WithServiceAccountTokenPath(spec.ServiceAccountTokenPath))
+	}
+	k8sAuth, err := auth.NewKubernetesAuth(spec.Role, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to initialize Kubernetes auth method")
 	}

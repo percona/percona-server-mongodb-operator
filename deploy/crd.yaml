@@ -12297,6 +12297,8 @@ spec:
                         type: string
                       secret:
                         type: string
+                      serviceAccountTokenPath:
+                        type: string
                     type: object
                 type: object
               sharding:
