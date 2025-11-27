@@ -8,8 +8,7 @@ import (
 
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
-
-	"github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/pkg/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
