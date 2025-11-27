@@ -11494,6 +11494,15 @@ spec:
                     type: string
                   vault:
                     type: string
+                  vaultSpec:
+                    properties:
+                      address:
+                        type: string
+                      role:
+                        type: string
+                      secret:
+                        type: string
+                    type: object
                 type: object
               sharding:
                 properties:

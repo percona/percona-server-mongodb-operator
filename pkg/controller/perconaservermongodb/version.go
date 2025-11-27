@@ -266,7 +266,7 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		BackupsEnabled:         cr.Spec.Backup.Enabled && len(cr.Spec.Backup.Storages) > 0,
 		ShardingEnabled:        cr.Spec.Sharding.Enabled,
 		ClusterWideEnabled:     len(watchNs) == 0 || len(strings.Split(watchNs, ",")) > 1,
-		HashicorpVaultEnabled:  len(cr.Spec.Secrets.Vault) > 0,
+		HashicorpVaultEnabled:  len(cr.Spec.Secrets.VaultSpec.Secret) > 0,
 		RoleManagementEnabled:  len(cr.Spec.Roles) > 0,
 		UserManagementEnabled:  len(cr.Spec.Users) > 0,
 		VolumeExpansionEnabled: cr.Spec.VolumeExpansionEnabled,

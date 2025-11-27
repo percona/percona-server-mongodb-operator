@@ -834,9 +834,17 @@ type SecretsSpec struct {
 	InternalKey string `json:"keyFile,omitempty"`
 
 	EncryptionKey string `json:"encryptionKey,omitempty"`
-	Vault         string `json:"vault,omitempty"`
-	SSE           string `json:"sse,omitempty"`
-	LDAPSecret    string `json:"ldapSecret,omitempty"`
+	// Deprecated: use VaultSpec.Secret instead
+	Vault      string    `json:"vault,omitempty"`
+	SSE        string    `json:"sse,omitempty"`
+	LDAPSecret string    `json:"ldapSecret,omitempty"`
+	VaultSpec  VaultSpec `json:"vaultSpec,omitempty"`
+}
+
+type VaultSpec struct {
+	Address string `json:"address,omitempty"`
+	Role    string `json:"role,omitempty"`
+	Secret  string `json:"secret,omitempty"`
 }
 
 func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {

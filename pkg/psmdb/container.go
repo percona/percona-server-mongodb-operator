@@ -81,10 +81,10 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		return corev1.Container{}, err
 	}
 	if encryptionEnabled {
-		if len(cr.Spec.Secrets.Vault) != 0 {
+		if len(cr.Spec.Secrets.VaultSpec.Secret) != 0 {
 			volumes = append(volumes,
 				corev1.VolumeMount{
-					Name:      cr.Spec.Secrets.Vault,
+					Name:      cr.Spec.Secrets.VaultSpec.Secret,
 					MountPath: config.VaultDir,
 					ReadOnly:  true,
 				},

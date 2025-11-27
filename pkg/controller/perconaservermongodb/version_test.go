@@ -411,7 +411,9 @@ func TestVersionMeta(t *testing.T) {
 						},
 					},
 					Secrets: &api.SecretsSpec{
-						Vault: "vault-secret",
+						VaultSpec: api.VaultSpec{
+							Secret: "vault-secret",
+						},
 					},
 					Sharding: api.Sharding{
 						Enabled: true,

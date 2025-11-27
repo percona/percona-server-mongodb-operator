@@ -91,6 +91,15 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
+	if cr.Spec.Secrets.VaultSpec.Role == "" {
+		cr.Spec.Secrets.VaultSpec.Role = "operator"
+	}
+
+	cr.Spec.Secrets.VaultSpec.Secret = cr.Spec.Secrets.Vault
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Secrets.Vault != "" {
+		log.Info(".spec.secrets.vault is deprecated. Use .spec.secrets.vaultSpec.secret instead")
+	}
+
 	t := true
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &TLSSpec{

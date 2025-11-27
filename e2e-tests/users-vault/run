@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+setup_vault() {
+	deploy_vault
+
+	kubectl_bin exec vault-service-0 -- vault auth enable kubernetes
+	cat "$test_dir"/conf/role-binding.yml \
+		| yq ".metadata.namespace=\"$namespace\"" \
+		| yq ".subjects[0].namespace=\"$namespace\"" \
+		| kubectl_bin apply -f -
+
+	kubectl_bin exec vault-service-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT'
+
+	kubectl_bin exec vault-service-0 -- sh -c 'vault policy write operator - <<EOF
+    # KVv1
+    path "secret/psmdb/operator/*" {
+      capabilities = ["read"]
+    }
+
+    # KVv2
+    path "secret/data/psmdb/operator/*" {
+      capabilities = ["read"]
+    }
+EOF
+'
+
+	issuer=$(kubectl_bin get --raw /.well-known/openid-configuration | jq -r .issuer)
+
+	kubectl_bin exec vault-service-0 -- vault write auth/kubernetes/role/operator \
+		bound_service_account_names=percona-server-mongodb-operator \
+		bound_service_account_namespaces="$namespace" \
+		policies=operator \
+		audience="$issuer" \
+		ttl=1h
+}
+
+vault_append() {
+	key=$1
+	value=$2
+
+	tmp_json=$(mktemp)
+	new_tmp_json=$(mktemp)
+
+	#kubectl_bin exec vault-service-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users $kv"
+	kubectl_bin exec vault-service-0 -- sh -c "vault kv get -format=json -mount=secret psmdb/operator/$namespace/$psmdb/users" | jq '.data.data' >"$tmp_json"
+
+	if [ ! -s "$tmp_json" ]; then
+		echo '{}' >"$tmp_json"
+	fi
+
+	jq --arg key "$key" --arg value "$value" \
+		'(. // {}) + {($key): $value}' \
+		"$tmp_json" >"$new_tmp_json"
+
+	kubectl_bin cp "$new_tmp_json" vault-service-0:/tmp/data_new.json
+	kubectl_bin exec vault-service-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users @\"/tmp/data_new.json\""
+}
+
+main() {
+	psmdb="some-name"
+	cluster="$psmdb-rs0"
+
+	create_infra "$namespace"
+	desc 'start client'
+	kubectl_bin apply -f "$conf_dir/client.yml"
+	setup_vault
+
+	newpass="test-password"
+	vault_append "MONGODB_USER_ADMIN_PASSWORD" "$newpass"
+
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+	desc 'Check if all 3 Pods started'
+	wait_for_running $cluster 3
+
+	desc 'check MONGODB_USER_ADMIN_PASSWORD'
+	user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_USER_ADMIN_USER'
+	newname="someUserAdminUser"
+	vault_append "MONGODB_USER_ADMIN_USER" "$newname"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	check_mongo_auth "$newname:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$newname:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$newname:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
+	vault_append "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpass"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	user=$(getUserData "some-users" "MONGODB_DATABASE_ADMIN_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_BACKUP_PASSWORD'
+	vault_append "MONGODB_BACKUP_PASSWORD" "$newpass"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_BACKUP_USER'
+	newname="someBackupUser"
+	vault_append "MONGODB_BACKUP_USER" "$newname"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	check_mongo_auth "$newname:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$newname:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$newname:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_CLUSTER_ADMIN_PASSWORD'
+	vault_append "MONGODB_CLUSTER_ADMIN_PASSWORD" "$newpass"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	user=$(getUserData "some-users" "MONGODB_CLUSTER_ADMIN_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'change MONGODB_CLUSTER_MONITOR_PASSWORD'
+	vault_append "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpass"
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+	user=$(getUserData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'remove users secret'
+	kubectl_bin delete secret some-users
+	sleep 35
+	wait_cluster_consistency $psmdb
+	sleep 15
+	user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
+	pass=$(getUserData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
+	check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
+
+	if [[ $user != "someUserAdminUser" ]]; then
+		echo "Wrong username. Operator should get it from vault"
+		exit 1
+	fi
+
+	if [[ $pass != "$newpass" ]]; then
+		echo "Wrong password. Operator should get it from vault"
+		exit 1
+	fi
+
+	destroy "$namespace"
+	desc 'test passed'
+}
+
+main
