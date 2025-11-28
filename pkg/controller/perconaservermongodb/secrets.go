@@ -129,7 +129,7 @@ func fillSecretData(ctx context.Context, cl client.Client, cr *api.PerconaServer
 		data = make(map[string][]byte)
 	}
 
-	v, err := vault.New(ctx, cr)
+	v, err := vault.New(ctx, cl, cr)
 	if err != nil {
 		log.Error(err, "failed to connect to vault")
 	}

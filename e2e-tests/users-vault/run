@@ -6,18 +6,53 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-setup_vault() {
-	deploy_vault
+vault_name="vault-service"
 
-	kubectl_bin exec vault-service-0 -- vault auth enable kubernetes
+setup_vault() {
+	local tls_secret_name="vault-server-tls"
+	create_tls_secret $tls_secret_name $vault_name
+	deploy_vault $vault_name \
+		--set "global.enabled=true" \
+		--set "global.tlsDisable=false" \
+		\
+		--set "server.extraEnvironmentVars.VAULT_CACERT=/vault/userconfig/tls_secret_name/ca.crt" \
+		\
+		--set "server.volumes[0].name=userconfig-$tls_secret_name" \
+		--set "server.volumes[0].secret.defaultMode=420" \
+		--set "server.volumes[0].secret.secretName=$tls_secret_name" \
+		\
+		--set "server.volumeMounts[0].mountPath=/vault/userconfig/$tls_secret_name" \
+		--set "server.volumeMounts[0].name=userconfig-$tls_secret_name" \
+		--set "server.volumeMounts[0].readOnly=true" \
+		\
+		--set "server.standalone.enabled=true" \
+		--set-string 'server.standalone.config=listener "tcp" {
+  address            = "[::]:8200"
+  cluster_address    = "[::]:8201"
+  tls_cert_file      = "/vault/userconfig/'"$tls_secret_name"'/tls.crt"
+  tls_key_file       = "/vault/userconfig/'"$tls_secret_name"'/tls.key"
+  tls_client_ca_file = "/vault/userconfig/'"$tls_secret_name"'/ca.crt"
+}
+
+storage "file" {
+  path = "/vault/data"
+}'
+	sleep 10
+
+	until kubectl_bin get pod/$vault_name-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
+		sleep 1
+	done
+
+	kubectl_bin exec $vault_name-0 -- vault auth enable kubernetes
 	cat "$test_dir"/conf/role-binding.yml \
 		| yq ".metadata.namespace=\"$namespace\"" \
 		| yq ".subjects[0].namespace=\"$namespace\"" \
 		| kubectl_bin apply -f -
 
-	kubectl_bin exec vault-service-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT'
+	# shellcheck disable=SC2016
+	kubectl_bin exec $vault_name-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
 
-	kubectl_bin exec vault-service-0 -- sh -c 'vault policy write operator - <<EOF
+	kubectl_bin exec $vault_name-0 -- sh -c 'vault policy write operator - <<EOF
     # KVv1
     path "secret/psmdb/operator/*" {
       capabilities = ["read"]
@@ -32,7 +67,7 @@ EOF
 
 	issuer=$(kubectl_bin get --raw /.well-known/openid-configuration | jq -r .issuer)
 
-	kubectl_bin exec vault-service-0 -- vault write auth/kubernetes/role/operator \
+	kubectl_bin exec $vault_name-0 -- vault write auth/kubernetes/role/operator \
 		bound_service_account_names=percona-server-mongodb-operator \
 		bound_service_account_namespaces="$namespace" \
 		policies=operator \
@@ -41,14 +76,15 @@ EOF
 }
 
 vault_append() {
-	key=$1
-	value=$2
+	local key=$1
+	local value=$2
 
+	local tmp_json
 	tmp_json=$(mktemp)
+	local new_tmp_json
 	new_tmp_json=$(mktemp)
 
-	#kubectl_bin exec vault-service-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users $kv"
-	kubectl_bin exec vault-service-0 -- sh -c "vault kv get -format=json -mount=secret psmdb/operator/$namespace/$psmdb/users" | jq '.data.data' >"$tmp_json"
+	kubectl_bin exec $vault_name-0 -- sh -c "vault kv get -format=json -mount=secret psmdb/operator/$namespace/$psmdb/users" | jq '.data.data' >"$tmp_json"
 
 	if [ ! -s "$tmp_json" ]; then
 		echo '{}' >"$tmp_json"
@@ -58,8 +94,77 @@ vault_append() {
 		'(. // {}) + {($key): $value}' \
 		"$tmp_json" >"$new_tmp_json"
 
-	kubectl_bin cp "$new_tmp_json" vault-service-0:/tmp/data_new.json
-	kubectl_bin exec vault-service-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users @\"/tmp/data_new.json\""
+	kubectl_bin cp "$new_tmp_json" $vault_name-0:/tmp/data_new.json
+	kubectl_bin exec $vault_name-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users @\"/tmp/data_new.json\""
+}
+
+create_tls_secret() {
+	local name=$1
+	local service_name=$2
+
+	local csr_name="$name-csr-$RANDOM"
+
+	local tmp_dir
+	tmp_dir=$(mktemp -d)
+
+	openssl genrsa -out "${tmp_dir}/vault.key" 2048
+
+	cat <<EOF >"${tmp_dir}/csr.conf"
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = ${service_name}
+DNS.2 = *.${service_name}
+DNS.3 = *.${service_name}.${namespace}
+DNS.4 = *.${service_name}.${namespace}.svc
+DNS.5 = *.${service_name}.${namespace}.svc.cluster.local
+IP.1 = 127.0.0.1
+EOF
+	openssl req -new \
+		-key "${tmp_dir}"/vault.key \
+		-subj "/CN=system:node:${service_name}.${namespace}.svc;/O=system:nodes" \
+		-out "${tmp_dir}"/server.csr \
+		-config "${tmp_dir}"/csr.conf
+
+	cat <<EOF >"${tmp_dir}"/csr.yaml
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: ${csr_name}
+spec:
+  signerName: kubernetes.io/kubelet-serving
+  groups:
+  - system:authenticated
+  request: $(base64 "${tmp_dir}"/server.csr | tr -d '\n')
+  signerName: kubernetes.io/kubelet-serving
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+EOF
+	kubectl create -f "${tmp_dir}"/csr.yaml
+	sleep 10
+
+	kubectl certificate approve "${csr_name}"
+
+	local serverCert
+	serverCert=$(kubectl get csr "${csr_name}" -o jsonpath='{.status.certificate}')
+
+	echo "${serverCert}" | openssl base64 -d -A -out "${tmp_dir}"/vault.crt
+
+	kubectl get cm kube-root-ca.crt -o jsonpath="{['data']['ca\.crt']}" >"${tmp_dir}"/vault.ca
+
+	kubectl create secret generic "$name" \
+		--from-file=tls.key="${tmp_dir}"/vault.key \
+		--from-file=tls.crt="${tmp_dir}"/vault.crt \
+		--from-file=ca.crt="${tmp_dir}"/vault.ca
 }
 
 main() {

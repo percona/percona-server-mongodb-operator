@@ -49,5 +49,6 @@ spec:
   secrets:
     users: some-users
     vaultSpec:
-      address: http://vault-service:8200
+      address: https://vault-service:8200
+      tlsSecret: vault-server-tls
       role: operator

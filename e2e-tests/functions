@@ -552,7 +552,7 @@ deploy_operator_gh_release() {
 		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
 		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
- 
+
 	sleep 20
 	wait_operator_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
@@ -602,6 +602,9 @@ create_minio_bucket() {
 
 deploy_vault() {
 	name=${1:-vault-service}
+	if [[ $# -gt 0 ]]; then
+		shift
+	fi
 
 	desc "install Vault $name"
 	helm uninstall vault-service || :
@@ -613,17 +616,17 @@ deploy_vault() {
 	if [[ -n ${OPENSHIFT} ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
 
-		retry 10 60 helm install $name hashicorp/vault \
+		retry 10 60 helm install "$name" hashicorp/vault \
 			--disable-openapi-validation \
 			--set dataStorage.enabled=false \
 			--set global.openshift=true \
 			--set injector.image.repository="docker.io/hashicorp/vault-k8s" \
 			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
-			--set server.image.repository="docker.io/hashicorp/vault"
+			--set server.image.repository="docker.io/hashicorp/vault" "$@"
 	else
-		retry 10 60 helm install $name hashicorp/vault \
+		retry 10 60 helm install "$name" hashicorp/vault \
 			--disable-openapi-validation \
-			--set dataStorage.enabled=false
+			--set dataStorage.enabled=false "$@"
 	fi
 
 	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do

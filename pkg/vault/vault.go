@@ -9,6 +9,9 @@ import (
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -19,7 +22,7 @@ type Vault struct {
 	cr *api.PerconaServerMongoDB
 }
 
-func New(ctx context.Context, cr *api.PerconaServerMongoDB) (*Vault, error) {
+func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*Vault, error) {
 	spec := cr.Spec.Secrets.VaultSpec
 	if spec.Address == "" {
 		return nil, nil
@@ -27,6 +30,27 @@ func New(ctx context.Context, cr *api.PerconaServerMongoDB) (*Vault, error) {
 
 	config := vault.DefaultConfig()
 	config.Address = spec.Address
+
+	if spec.TLSSecret != "" {
+		secret := new(corev1.Secret)
+		if err := cl.Get(ctx, types.NamespacedName{
+			Name:      spec.TLSSecret,
+			Namespace: cr.Namespace,
+		}, secret); err != nil {
+			return nil, errors.Wrap(err, "get vault tls secret")
+		}
+
+		ca, ok := secret.Data["ca.crt"]
+		if !ok {
+			return nil, errors.New("tls secret doesn't have ca.crt key")
+		}
+
+		if err := config.ConfigureTLS(&vault.TLSConfig{
+			CACertBytes: ca,
+		}); err != nil {
+			return nil, errors.Wrap(err, "configure TLS")
+		}
+	}
 
 	client, err := vault.NewClient(config)
 	if err != nil {

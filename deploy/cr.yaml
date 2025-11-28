@@ -56,10 +56,11 @@ spec:
 #    sslInternal: my-cluster-name-ssl-internal
 #    keyFile: my-cluster-name-mongodb-keyfile
 #    vaultSpec:
-#      address: http://vault-service:8200
+#      address: https://vault-service:8200
 #      role: operator
 #      secret: my-cluster-name-vault
 #      serviceAccountTokenPath: /var/run/secrets/kubernetes.io/serviceaccount/token
+#      tlsSecret: my-tls-vault-secret
 #    ldapSecret: my-ldap-secret
 #    sse: my-cluster-name-sse
   pmm:

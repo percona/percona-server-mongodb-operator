@@ -11504,6 +11504,8 @@ spec:
                         type: string
                       serviceAccountTokenPath:
                         type: string
+                      tlsSecret:
+                        type: string
                     type: object
                 type: object
               sharding:

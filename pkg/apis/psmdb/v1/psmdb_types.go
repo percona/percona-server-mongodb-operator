@@ -847,6 +847,7 @@ type VaultSpec struct {
 	Role                    string `json:"role,omitempty"`
 	Secret                  string `json:"secret,omitempty"`
 	ServiceAccountTokenPath string `json:"serviceAccountTokenPath,omitempty"`
+	TLSSecret               string `json:"tlsSecret,omitempty"`
 }
 
 func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
