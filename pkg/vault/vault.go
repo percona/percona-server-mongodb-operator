@@ -3,7 +3,6 @@ package vault
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"path"
 
 	vault "github.com/hashicorp/vault/api"
@@ -118,7 +117,7 @@ func (v *Vault) getUsersSecret(ctx context.Context) (map[string]any, error) {
 		if errors.Is(err, vault.ErrSecretNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("unable to read secret: %w", err)
+		return nil, errors.Wrap(err, "unable to read secret")
 	}
 	return secret.Data, nil
 }
