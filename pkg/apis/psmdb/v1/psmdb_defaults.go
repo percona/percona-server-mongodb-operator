@@ -95,11 +95,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Secrets.VaultSpec.Role = "operator"
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Secrets.Vault != "" && cr.Spec.Secrets.VaultSpec.Secret == "" {
+		log.Info(".spec.secrets.vault is deprecated. Use .spec.secrets.vaultSpec.secret instead")
+	}
 	if cr.Spec.Secrets.VaultSpec.Secret == "" {
 		cr.Spec.Secrets.VaultSpec.Secret = cr.Spec.Secrets.Vault
-	}
-	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Secrets.Vault != "" {
-		log.Info(".spec.secrets.vault is deprecated. Use .spec.secrets.vaultSpec.secret instead")
 	}
 
 	t := true
