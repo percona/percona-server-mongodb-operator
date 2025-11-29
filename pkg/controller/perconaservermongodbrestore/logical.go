@@ -36,7 +36,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 		status.State = psmdbv1.RestoreStateWaiting
 		return status, nil
 	}
-	defer pbmc.Close(ctx)
+	defer func() {
+		if err := pbmc.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	if status.State == psmdbv1.RestoreStateNew || status.State == psmdbv1.RestoreStateWaiting {
 		// Disable PITR before restore

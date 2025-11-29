@@ -136,6 +136,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: smart-update-mongodb-encryption-key
               readOnly: true
@@ -177,6 +179,8 @@ spec:
             secretName: smart-update-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: smart-update-rs0-mongod
