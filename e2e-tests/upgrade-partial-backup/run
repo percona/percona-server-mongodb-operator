@@ -209,7 +209,7 @@ test_backup_deletion() {
 	local logical_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-logical")
 
 	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-incremental-base
-	check_backup_deletion "https://storage.googleapis.com/${incremental_base_dest}" "gcp-cs"
+	check_backup_deletion_gcs "$incremental_base_dest"
 
 	# base backup can only be deleted if PiTR is disabled
 	log "disabling PiTR on ${cluster}"
@@ -217,7 +217,7 @@ test_backup_deletion() {
 		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 
 	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-logical
-	check_backup_deletion "https://storage.googleapis.com/${logical_dest}" "gcp-cs"
+	check_backup_deletion_gcs "$logical_dest"
 }
 
 
