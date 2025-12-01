@@ -15,8 +15,32 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-type Vault struct {
+type kvClient interface {
+	KVv2(mountPath string) kvReader
+}
+
+type kvReader interface {
+	Get(ctx context.Context, path string) (*vault.KVSecret, error)
+}
+
+type vaultClient struct {
 	c *vault.Client
+}
+
+func (r *vaultClient) KVv2(mountPath string) kvReader {
+	return &vaultReader{kv: r.c.KVv2(mountPath)}
+}
+
+type vaultReader struct {
+	kv *vault.KVv2
+}
+
+func (r *vaultReader) Get(ctx context.Context, path string) (*vault.KVSecret, error) {
+	return r.kv.Get(ctx, path)
+}
+
+type Vault struct {
+	c kvClient
 
 	cr *api.PerconaServerMongoDB
 }
@@ -75,7 +99,7 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 
 	return &Vault{
 		cr: cr,
-		c:  client,
+		c:  &vaultClient{c: client},
 	}, nil
 }
 
@@ -113,10 +137,9 @@ func (v *Vault) getUsersSecret(ctx context.Context) (map[string]any, error) {
 
 	spec := v.cr.Spec.Secrets.VaultSpec
 	secret, err := v.c.KVv2("secret").Get(ctx, path.Join("psmdb", spec.Role, v.cr.Namespace, v.cr.Name, "users"))
-	if err != nil {
-		if errors.Is(err, vault.ErrSecretNotFound) {
-			return nil, nil
-		}
+	if errors.Is(err, vault.ErrSecretNotFound) {
+		return nil, nil
+	} else if err != nil {
 		return nil, errors.Wrap(err, "unable to read secret")
 	}
 	return secret.Data, nil
