@@ -15,7 +15,7 @@ setup_vault() {
 		--set "global.enabled=true" \
 		--set "global.tlsDisable=false" \
 		\
-		--set "server.extraEnvironmentVars.VAULT_CACERT=/vault/userconfig/tls_secret_name/ca.crt" \
+		--set "server.extraEnvironmentVars.VAULT_CACERT=/vault/userconfig/$tls_secret_name/ca.crt" \
 		\
 		--set "server.volumes[0].name=userconfig-$tls_secret_name" \
 		--set "server.volumes[0].secret.defaultMode=420" \
