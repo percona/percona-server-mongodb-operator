@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 	r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
 		BackupTaskSpec: task,
 		JobID:          jobID,
-		ClusterName:    cr.NamespacedNameString(),
+		ClusterName:    cr.NamespacedName().String(),
 	})
 	return nil
 }
@@ -96,7 +96,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 	r.crons.backupJobs.Range(func(k, v interface{}) bool {
 		item := v.(BackupScheduleJob)
 
-		if item.ClusterName != cr.NamespacedNameString() {
+		if item.ClusterName != "" && item.ClusterName != cr.NamespacedName().String() {
 			return true
 		}
 

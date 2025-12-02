@@ -1463,7 +1463,3 @@ type LogCollectorSpec struct {
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
-
-func (cr *PerconaServerMongoDB) NamespacedNameString() string {
-	return cr.Namespace + "/" + cr.Name
-}
