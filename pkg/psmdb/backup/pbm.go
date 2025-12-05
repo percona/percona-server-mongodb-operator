@@ -361,9 +361,18 @@ func GetPBMStorageMinioConfig(
 			return storageConf, errors.Wrap(err, "get minio credentials secret")
 		}
 
+		accessKey, ok := s3secret.Data[AWSAccessKeySecretKey]
+		if !ok {
+			return storageConf, errors.New("access key not found in credentials secret")
+		}
+		secretAccessKey, ok := s3secret.Data[AWSSecretAccessKeySecretKey]
+		if !ok {
+			return storageConf, errors.New("secret access key not found in credentials secret")
+		}
+
 		storageConf.Minio.Credentials = mio.Credentials{
-			AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+			AccessKeyID:     string(accessKey),
+			SecretAccessKey: string(secretAccessKey),
 		}
 	}
 
