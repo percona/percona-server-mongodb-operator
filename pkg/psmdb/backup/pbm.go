@@ -358,16 +358,16 @@ func GetPBMStorageMinioConfig(
 	if len(stg.Minio.CredentialsSecret) != 0 {
 		s3secret, err := getSecret(ctx, k8sclient, cluster.GetNamespace(), stg.Minio.CredentialsSecret)
 		if err != nil {
-			return storageConf, errors.Wrap(err, "get minio credentials secret")
+			return config.StorageConf{}, errors.Wrap(err, "get minio credentials secret")
 		}
 
 		accessKey, ok := s3secret.Data[AWSAccessKeySecretKey]
 		if !ok {
-			return storageConf, errors.New("access key not found in credentials secret")
+			return config.StorageConf{}, errors.New("access key not found in credentials secret")
 		}
 		secretAccessKey, ok := s3secret.Data[AWSSecretAccessKeySecretKey]
 		if !ok {
-			return storageConf, errors.New("secret access key not found in credentials secret")
+			return config.StorageConf{}, errors.New("secret access key not found in credentials secret")
 		}
 
 		storageConf.Minio.Credentials = mio.Credentials{
