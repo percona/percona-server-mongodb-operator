@@ -1031,9 +1031,11 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageMinioSpec struct {
-	Region                string        `json:"region,omitempty"`
-	EndpointURL           string        `json:"endpointUrl,omitempty"`
+	//+kubebuilder:validation:Required
+	EndpointURL string `json:"endpointUrl,omitempty"`
+	//+kubebuilder:validation:Required
 	Bucket                string        `json:"bucket"`
+	Region                string        `json:"region,omitempty"`
 	Prefix                string        `json:"prefix,omitempty"`
 	Secure                bool          `json:"secure,omitempty"`
 	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`

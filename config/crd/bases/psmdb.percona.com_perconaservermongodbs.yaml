@@ -387,6 +387,7 @@ spec:
                               type: boolean
                           required:
                           - bucket
+                          - endpointUrl
                           type: object
                         s3:
                           properties:
