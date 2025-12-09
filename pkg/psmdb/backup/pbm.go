@@ -341,6 +341,10 @@ func GetPBMStorageMinioConfig(
 	cluster *api.PerconaServerMongoDB,
 	stg api.BackupStorageSpec,
 ) (config.StorageConf, error) {
+	if err := stg.Minio.Validate(); err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "invalid minio storage config")
+	}
+
 	storageConf := config.StorageConf{
 		Type: storage.Minio,
 		Minio: &mio.Config{

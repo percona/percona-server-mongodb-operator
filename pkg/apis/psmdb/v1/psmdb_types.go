@@ -1031,19 +1031,30 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageMinioSpec struct {
-	//+kubebuilder:validation:Required
-	EndpointURL string `json:"endpointUrl,omitempty"`
-	//+kubebuilder:validation:Required
 	Bucket                string        `json:"bucket"`
-	Region                string        `json:"region,omitempty"`
 	Prefix                string        `json:"prefix,omitempty"`
-	Secure                bool          `json:"secure,omitempty"`
+	Region                string        `json:"region,omitempty"`
+	EndpointURL           string        `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
+	PartSize              int64         `json:"partSize,omitempty"`
 	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
 	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
 	DebugTrace            bool          `json:"debugTrace,omitempty"`
-	PartSize              int64         `json:"partSize,omitempty"`
 	Retryer               *MinioRetryer `json:"retryer,omitempty"`
+	Secure                bool          `json:"secure,omitempty"`
+}
+
+func (spec BackupStorageMinioSpec) Validate() error {
+	if spec.EndpointURL == "" {
+		return errors.New("endpointURL is required")
+	}
+	if spec.Bucket == "" {
+		return errors.New("bucket is required")
+	}
+	if spec.CredentialsSecret == "" {
+		return errors.New("credentialsSecret is required")
+	}
+	return nil
 }
 
 type MinioRetryer struct {

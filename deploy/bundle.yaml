@@ -183,7 +183,6 @@ spec:
                     type: boolean
                 required:
                 - bucket
-                - endpointUrl
                 type: object
               pbmName:
                 type: string
@@ -411,7 +410,6 @@ spec:
                         type: boolean
                     required:
                     - bucket
-                    - endpointUrl
                     type: object
                   pbmName:
                     type: string
@@ -1250,7 +1248,6 @@ spec:
                               type: boolean
                           required:
                           - bucket
-                          - endpointUrl
                           type: object
                         s3:
                           properties:
