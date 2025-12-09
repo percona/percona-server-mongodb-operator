@@ -140,8 +140,6 @@ spec:
                         type: object
                       secure:
                         type: boolean
-                    required:
-                    - bucket
                     type: object
                   pbmName:
                     type: string

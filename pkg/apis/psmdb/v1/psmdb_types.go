@@ -1031,7 +1031,7 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageMinioSpec struct {
-	Bucket                string        `json:"bucket"`
+	Bucket                string        `json:"bucket,omitempty"`
 	Prefix                string        `json:"prefix,omitempty"`
 	Region                string        `json:"region,omitempty"`
 	EndpointURL           string        `json:"endpointUrl,omitempty"`
