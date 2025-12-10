@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -91,8 +92,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
-	if cr.Spec.Secrets.VaultSpec.Role == "" {
-		cr.Spec.Secrets.VaultSpec.Role = "operator"
+	if cr.Spec.Secrets.VaultSpec.Address != "" {
+		if cr.Spec.Secrets.VaultSpec.Role == "" {
+			cr.Spec.Secrets.VaultSpec.Role = "operator"
+		}
+
+		if strings.HasPrefix(cr.Spec.Secrets.VaultSpec.Address, "https://") {
+			if cr.Spec.Secrets.VaultSpec.TLSSecret == "" {
+				return errors.New("spec.secrets.vaultSpec.tlsSecret must be set when spec.secrets.vaultSpec.address uses https")
+			}
+		}
 	}
 
 	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Secrets.Vault != "" && cr.Spec.Secrets.VaultSpec.Secret == "" {
