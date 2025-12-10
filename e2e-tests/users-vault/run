@@ -39,9 +39,7 @@ storage "file" {
 }'
 	sleep 10
 
-	until kubectl_bin get pod/$vault_name-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
-		sleep 1
-	done
+	wait_pod $vault_name-0
 
 	kubectl_bin exec $vault_name-0 -- vault auth enable kubernetes
 	cat "$test_dir"/conf/role-binding.yml \
