@@ -149,6 +149,7 @@ func TestFillSecretData(t *testing.T) {
 		expectedData   map[string][]byte
 		expectedUpdate bool
 		expectedErr    string
+		nilVault       bool
 	}{
 		{
 			name: "no changes",
@@ -194,6 +195,21 @@ func TestFillSecretData(t *testing.T) {
 			initialData: map[string][]byte{},
 			expectedErr: "value type assertion failed",
 		},
+		{
+			name:      "empty vault data",
+			vaultData: map[string]any{},
+			initialData: map[string][]byte{
+				"user": []byte("password"),
+			},
+			expectedData: map[string][]byte{
+				"user": []byte("password"),
+			},
+			expectedUpdate: false,
+		},
+		{
+			name:     "nil vault",
+			nilVault: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -208,6 +224,9 @@ func TestFillSecretData(t *testing.T) {
 			v := &Vault{
 				cr: cr,
 				c:  fc,
+			}
+			if tt.nilVault {
+				v = nil
 			}
 
 			updated, err := v.FillSecretData(t.Context(), tt.initialData)
