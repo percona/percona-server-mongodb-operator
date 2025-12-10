@@ -19,11 +19,13 @@ demand-backup-physical-azure
 demand-backup-physical-gcp-s3
 demand-backup-physical-gcp-native
 demand-backup-physical-minio
+demand-backup-physical-minio-native
 demand-backup-physical-sharded-parallel
 demand-backup-physical-sharded-aws
 demand-backup-physical-sharded-azure
 demand-backup-physical-sharded-gcp-native
 demand-backup-physical-sharded-minio
+demand-backup-physical-sharded-minio-native
 demand-backup-sharded
 expose-sharded
 finalizer
