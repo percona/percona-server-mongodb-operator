@@ -74,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		&secretObj,
 	)
 	if err == nil {
-		shouldUpdate, err := fillSecretData(ctx, r.client, cr, secretObj.Data)
+		shouldUpdate, err := fillSecretData(ctx, r.client, cr, secretObj.Data, r.vault)
 		if err != nil {
 			return errors.Wrap(err, "failed to fill secret data")
 		}
@@ -98,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	}
 
 	data := make(map[string][]byte)
-	_, err = fillSecretData(ctx, r.client, cr, data)
+	_, err = fillSecretData(ctx, r.client, cr, data, r.vault)
 	if err != nil {
 		return errors.Wrap(err, "fill users secret")
 	}
@@ -122,20 +122,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
+func fillSecretData(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *vault.CachedVault) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if data == nil {
 		data = make(map[string][]byte)
 	}
 
-	v, err := vault.New(ctx, cl, cr)
-	if err != nil {
-		log.Error(err, "failed to connect to vault")
-	}
-	changes, err := v.FillSecretData(ctx, data)
-	if err != nil {
-		log.Error(err, "failed to fill secret from vault")
+	var changes bool
+	var err error
+
+	if vault != nil {
+		changes, err = vault.FillSecretData(ctx, data)
+		if err != nil {
+			log.Error(err, "failed to fill secret from vault")
+		}
 	}
 
 	userMap := map[string]string{

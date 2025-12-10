@@ -44,6 +44,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+	"github.com/percona/percona-server-mongodb-operator/pkg/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -97,6 +98,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
+		vault:                  new(vault.CachedVault),
 
 		initImage: initImage,
 
@@ -183,6 +185,7 @@ type ReconcilePerconaServerMongoDB struct {
 	serverVersion       *version.ServerVersion
 	reconcileIn         time.Duration
 	mongoClientProvider MongoClientProvider
+	vault               *vault.CachedVault
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
@@ -302,6 +305,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
+	}
+
+	if err := r.vault.Update(ctx, r.client, cr); err != nil {
+		log.Error(err, "failed to update vault client")
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {

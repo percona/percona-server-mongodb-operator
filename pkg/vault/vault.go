@@ -3,6 +3,8 @@ package vault
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/json"
 	"path"
 
 	vault "github.com/hashicorp/vault/api"
@@ -43,6 +45,42 @@ type Vault struct {
 	c kvClient
 
 	cr *api.PerconaServerMongoDB
+}
+
+type CachedVault struct {
+	hash [16]byte
+
+	*Vault
+}
+
+func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
+	changed, err := cv.updateHash(cr)
+	if err != nil {
+		return errors.Wrap(err, "update hash")
+	}
+	if !changed {
+		return nil
+	}
+
+	cv.Vault, err = New(ctx, cl, cr)
+	if err != nil {
+		return errors.Wrap(err, "new vault")
+	}
+
+	return nil
+}
+
+func (cv *CachedVault) updateHash(cr *api.PerconaServerMongoDB) (bool, error) {
+	spec := cr.Spec.Secrets.VaultSpec
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return false, err
+	}
+
+	newHash := md5.Sum(data)
+	changed := !bytes.Equal(newHash[:], cv.hash[:])
+	cv.hash = newHash
+	return changed, nil
 }
 
 func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*Vault, error) {
