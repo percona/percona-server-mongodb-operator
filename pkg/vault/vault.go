@@ -124,7 +124,6 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 		if !ok || !bytes.Equal(secretPass, []byte(value)) {
 			shouldUpdate = true
 			data[k] = []byte(value)
-			continue
 		}
 	}
 	return shouldUpdate, nil

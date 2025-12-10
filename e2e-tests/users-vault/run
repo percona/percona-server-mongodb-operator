@@ -96,6 +96,8 @@ vault_append() {
 
 	kubectl_bin cp "$new_tmp_json" $vault_name-0:/tmp/data_new.json
 	kubectl_bin exec $vault_name-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$psmdb/users @\"/tmp/data_new.json\""
+
+	rm -f "$tmp_json" "$new_tmp_json"
 }
 
 create_tls_secret() {
