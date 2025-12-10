@@ -1030,6 +1030,38 @@ type BackupStorageS3Spec struct {
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
+type BackupStorageMinioSpec struct {
+	Bucket                string        `json:"bucket,omitempty"`
+	Prefix                string        `json:"prefix,omitempty"`
+	Region                string        `json:"region,omitempty"`
+	EndpointURL           string        `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
+	PartSize              int64         `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
+	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool          `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer `json:"retryer,omitempty"`
+	Secure                bool          `json:"secure,omitempty"`
+}
+
+func (spec BackupStorageMinioSpec) Validate() error {
+	if spec.EndpointURL == "" {
+		return errors.New("endpointURL is required")
+	}
+	if spec.Bucket == "" {
+		return errors.New("bucket is required")
+	}
+	if spec.CredentialsSecret == "" {
+		return errors.New("credentialsSecret is required")
+	}
+	return nil
+}
+
+type MinioRetryer struct {
+	// NumMaxRetries is the number of max retries that will be performed.
+	NumMaxRetries int `json:"numMaxRetries"`
+}
+
 type GCSRetryer struct {
 	BackoffInitial    time.Duration `json:"backoffInitial"`
 	BackoffMax        time.Duration `json:"backoffMax"`
@@ -1062,12 +1094,17 @@ const (
 	BackupStorageS3         BackupStorageType = "s3"
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageMinio      BackupStorageType = "minio"
 )
 
 type BackupStorageSpec struct {
-	Type       BackupStorageType           `json:"type"`
-	Main       bool                        `json:"main,omitempty"`
-	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Type BackupStorageType   `json:"type"`
+	Main bool                `json:"main,omitempty"`
+	S3   BackupStorageS3Spec `json:"s3,omitempty"`
+	// Not all S3-compatible storage services support Signature Version 4 (SigV4) used in AWS SDK v2,
+	// which may result in compatibility and connectivity issues.
+	// PBM (v2.12.0+) allows setting a `minio` backup storage type which uses the MinIo Go client.
+	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`

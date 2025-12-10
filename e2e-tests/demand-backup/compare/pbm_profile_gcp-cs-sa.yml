@@ -13,3 +13,5 @@ storage:
       backoffInitial: 1ns
       backoffMax: 30ns
       backoffMultiplier: 2
+      maxAttempts: 5
+      chunkRetryDeadline: 32s

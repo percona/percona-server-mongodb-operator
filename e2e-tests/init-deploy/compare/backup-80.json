@@ -470,6 +470,7 @@
           "operationMetrics",
           "queryStatsRead",
           "queryStatsReadTransformed",
+          "readBackupFile",
           "replSetGetConfig",
           "replSetGetStatus",
           "serverStatus",
