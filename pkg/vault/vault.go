@@ -54,6 +54,10 @@ type CachedVault struct {
 }
 
 func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
+	if cv == nil {
+		return nil
+	}
+
 	changed, err := cv.updateHash(cr)
 	if err != nil {
 		return errors.Wrap(err, "update hash")
