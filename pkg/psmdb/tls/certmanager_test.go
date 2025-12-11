@@ -133,7 +133,7 @@ func TestCreateCertificate(t *testing.T) {
 	})
 }
 
-func TestWaitForCertsWithCertManagerManagedSecret(t *testing.T) {
+func TestWaitForCerts(t *testing.T) {
 	ctx := context.Background()
 
 	cr := &api.PerconaServerMongoDB{
@@ -148,60 +148,116 @@ func TestWaitForCertsWithCertManagerManagedSecret(t *testing.T) {
 	}
 
 	certName := CACertificateSecretName(cr)
-	certificate := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      certName,
-			Namespace: cr.Namespace,
-			UID:       "cert-uid-456",
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: certName,
-		},
-	}
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      certName,
-			Namespace: cr.Namespace,
-			Annotations: map[string]string{
-				cm.CertificateNameKey: certName,
+	tests := map[string]struct {
+		certificate *cm.Certificate
+		secret      *corev1.Secret
+	}{
+		"with cert-manager managed secret": {
+			certificate: &cm.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: cr.Namespace,
+					UID:       "cert-uid-456",
+				},
+				Spec: cm.CertificateSpec{
+					SecretName: certName,
+				},
 			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: cm.SchemeGroupVersion.String(),
-					Kind:       cm.CertificateKind,
-					Name:       certificate.Name,
-					UID:        certificate.UID,
-					Controller: pointer(true),
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: cr.Namespace,
+					Annotations: map[string]string{
+						cm.CertificateNameKey: certName,
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: cm.SchemeGroupVersion.String(),
+							Kind:       cm.CertificateKind,
+							Name:       certName,
+							UID:        "cert-uid-456",
+							Controller: pointer(true),
+						},
+					},
+				},
+				Data: map[string][]byte{
+					"ca.crt":  []byte("fake-ca-cert"),
+					"tls.crt": []byte("fake-tls-cert"),
+					"tls.key": []byte("fake-tls-key"),
 				},
 			},
 		},
-		Data: map[string][]byte{
-			"ca.crt":  []byte("fake-ca-cert"),
-			"tls.crt": []byte("fake-tls-cert"),
-			"tls.key": []byte("fake-tls-key"),
+		"with cert-manager managed secret but without OwnerReferences": {
+			certificate: &cm.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: cr.Namespace,
+					UID:       "cert-uid-456",
+				},
+				Spec: cm.CertificateSpec{
+					SecretName: certName,
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: cr.Namespace,
+					Annotations: map[string]string{
+						cm.CertificateNameKey: certName,
+					},
+				},
+				Data: map[string][]byte{
+					"ca.crt":  []byte("fake-ca-cert"),
+					"tls.crt": []byte("fake-tls-cert"),
+					"tls.key": []byte("fake-tls-key"),
+				},
+			},
+		},
+		"without cert-manager": {
+			certificate: nil,
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: cr.Namespace,
+				},
+				Data: map[string][]byte{
+					"ca.crt":  []byte("fake-ca-cert"),
+					"tls.crt": []byte("fake-tls-cert"),
+					"tls.key": []byte("fake-tls-key"),
+				},
+			},
 		},
 	}
 
-	s := scheme.Scheme
-	s.AddKnownTypes(api.SchemeGroupVersion, new(api.PerconaServerMongoDB))
-	s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.Certificate))
-	s.AddKnownTypes(corev1.SchemeGroupVersion, new(corev1.Secret))
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := scheme.Scheme
+			s.AddKnownTypes(api.SchemeGroupVersion, new(api.PerconaServerMongoDB))
+			s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.Certificate))
+			s.AddKnownTypes(corev1.SchemeGroupVersion, new(corev1.Secret))
 
-	cl := fake.NewClientBuilder().
-		WithScheme(s).
-		WithObjects(cr, certificate, secret).
-		WithStatusSubresource(cr).
-		Build()
+			objects := []client.Object{cr, tc.secret}
+			if tc.certificate != nil {
+				objects = append(objects, tc.certificate)
+			}
 
-	controller := &certManagerController{
-		cl:     cl,
-		scheme: s,
-		dryRun: false,
+			cl := fake.NewClientBuilder().
+				WithScheme(s).
+				WithObjects(objects...).
+				WithStatusSubresource(cr).
+				Build()
+
+			controller := &certManagerController{
+				cl:     cl,
+				scheme: s,
+				dryRun: false,
+			}
+
+			err := controller.WaitForCerts(ctx, cr, certName)
+			assert.NoError(t, err)
+		})
 	}
-
-	err := controller.WaitForCerts(ctx, cr, certName)
-	assert.NoError(t, err)
 }
 
 func pointer(b bool) *bool {
