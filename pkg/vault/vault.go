@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"path"
+	"time"
 
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
@@ -51,6 +52,9 @@ type Vault struct {
 type CachedVault struct {
 	hash [16]byte
 
+	lastUpdatedAt  time.Time
+	reinitInterval time.Duration
+
 	*Vault
 }
 
@@ -59,11 +63,15 @@ func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.Per
 		return nil
 	}
 
+	if cv.reinitInterval == 0 {
+		cv.reinitInterval = 30 * time.Minute
+	}
+
 	changed, err := cv.updateHash(cr)
 	if err != nil {
 		return errors.Wrap(err, "update hash")
 	}
-	if !changed {
+	if !changed || time.Since(cv.lastUpdatedAt) > cv.reinitInterval {
 		return nil
 	}
 
@@ -71,6 +79,8 @@ func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.Per
 	if err != nil {
 		return errors.Wrap(err, "new vault")
 	}
+
+	cv.lastUpdatedAt = time.Now()
 
 	return nil
 }
@@ -108,7 +118,7 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 
 		ca, ok := secret.Data["ca.crt"]
 		if !ok {
-			return nil, errors.New("tls secret doesn't have ca.crt key")
+			return nil, errors.New("tls secret does not have ca.crt key")
 		}
 
 		if err := config.ConfigureTLS(&vault.TLSConfig{
