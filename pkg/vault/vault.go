@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
-	"fmt"
 	"path"
 
 	vault "github.com/hashicorp/vault/api"
@@ -163,7 +162,6 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 
 func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (bool, error) {
 	if v == nil {
-		fmt.Println("TEST: nil fill secret data")
 		return false, nil
 	}
 
@@ -174,7 +172,6 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 
 	shouldUpdate := false
 	for k, v := range vaultData {
-		fmt.Println("TEST: vauldData", k, v)
 		value, ok := v.(string)
 		if !ok {
 			return false, errors.Errorf("value type assertion failed: %T %#v", v, v)
@@ -191,13 +188,11 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 
 func (v *Vault) getUsersSecret(ctx context.Context) (map[string]any, error) {
 	if v == nil {
-		fmt.Println("TEST: nil getUsersSecret")
 		return nil, nil
 	}
 
 	secret, err := v.c.KVv2(v.mountPath).Get(ctx, v.keyPath)
 	if errors.Is(err, vault.ErrSecretNotFound) {
-		fmt.Println("TEST: not found")
 		return nil, nil
 	} else if err != nil {
 		return nil, errors.Wrap(err, "unable to read secret")
