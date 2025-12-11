@@ -25721,8 +25721,6 @@ spec:
                         type: string
                       role:
                         type: string
-                      serviceAccountTokenPath:
-                        type: string
                       tokenSecret:
                         type: string
                     type: object
