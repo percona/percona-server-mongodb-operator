@@ -15,7 +15,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
-	github.com/hashicorp/go-version v1.7.0
+	github.com/hashicorp/go-version v1.8.0
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20251104101930-05ab6d7e1004
