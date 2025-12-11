@@ -146,7 +146,6 @@ spec:
   groups:
   - system:authenticated
   request: $(base64 "${tmp_dir}"/server.csr | tr -d '\n')
-  signerName: kubernetes.io/kubelet-serving
   usages:
   - digital signature
   - key encipherment
@@ -168,6 +167,8 @@ EOF
 		--from-file=tls.key="${tmp_dir}"/vault.key \
 		--from-file=tls.crt="${tmp_dir}"/vault.crt \
 		--from-file=ca.crt="${tmp_dir}"/vault.ca
+
+	rm -rf "$tmp_dir"
 }
 
 main() {
