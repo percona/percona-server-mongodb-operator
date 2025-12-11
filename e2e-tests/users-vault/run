@@ -47,6 +47,9 @@ storage "file" {
 		| yq ".subjects[0].namespace=\"$namespace\"" \
 		| kubectl_bin apply -f -
 
+	token=$(kubectl_bin exec -it $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
+	kubectl_bin create secret generic vault-sync-secret --from-literal=token="${token}"
+
 	# shellcheck disable=SC2016
 	kubectl_bin exec $vault_name-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
 
@@ -199,6 +202,12 @@ main() {
 	check_mongo_auth "$newname:$newpass@$cluster-0.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-1.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'removing tokenSecret to check kubernetes auth'
+	kubectl_bin patch psmdb $psmdb \
+		--type='json' \
+		-p='[{"op":"remove","path":"/spec/vault/syncUsers/tokenSecret"}]'
+	kubectl_bin delete secret vault-sync-secret
 
 	desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
 	vault_append "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpass"

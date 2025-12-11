@@ -155,14 +155,14 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if encryptionEnabled {
-		if len(cr.Spec.Secrets.VaultSpec.Secret) != 0 {
+		if len(cr.Spec.Secrets.Vault) != 0 {
 			volumes = append(volumes,
 				corev1.Volume{
-					Name: cr.Spec.Secrets.VaultSpec.Secret,
+					Name: cr.Spec.Secrets.Vault,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
 							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.Secrets.VaultSpec.Secret,
+							SecretName:  cr.Spec.Secrets.Vault,
 							Optional:    &fvar,
 						},
 					},

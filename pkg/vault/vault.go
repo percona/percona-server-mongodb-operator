@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
+	"fmt"
 	"path"
 
 	vault "github.com/hashicorp/vault/api"
@@ -44,7 +45,8 @@ func (r *vaultReader) Get(ctx context.Context, path string) (*vault.KVSecret, er
 type Vault struct {
 	c kvClient
 
-	cr *api.PerconaServerMongoDB
+	mountPath string
+	keyPath   string
 }
 
 type CachedVault struct {
@@ -54,7 +56,7 @@ type CachedVault struct {
 }
 
 func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
-	if cv == nil {
+	if cv == nil || cr.Spec.VaultSpec.EndpointURL == "" {
 		return nil
 	}
 
@@ -75,7 +77,7 @@ func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.Per
 }
 
 func (cv *CachedVault) updateHash(cr *api.PerconaServerMongoDB) (bool, error) {
-	spec := cr.Spec.Secrets.VaultSpec
+	spec := cr.Spec.VaultSpec
 	data, err := json.Marshal(spec)
 	if err != nil {
 		return false, err
@@ -88,13 +90,13 @@ func (cv *CachedVault) updateHash(cr *api.PerconaServerMongoDB) (bool, error) {
 }
 
 func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*Vault, error) {
-	spec := cr.Spec.Secrets.VaultSpec
-	if spec.Address == "" {
+	spec := cr.Spec.VaultSpec
+	if spec.EndpointURL == "" {
 		return nil, nil
 	}
 
 	config := vault.DefaultConfig()
-	config.Address = spec.Address
+	config.Address = spec.EndpointURL
 
 	if spec.TLSSecret != "" {
 		secret := new(corev1.Secret)
@@ -122,31 +124,46 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 		return nil, errors.Wrap(err, "unable to initialize Vault client")
 	}
 
-	var opts []auth.LoginOption
-	if spec.ServiceAccountTokenPath != "" {
-		opts = append(opts, auth.WithServiceAccountTokenPath(spec.ServiceAccountTokenPath))
-	}
-	k8sAuth, err := auth.NewKubernetesAuth(spec.Role, opts...)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to initialize Kubernetes auth method")
+	if spec.SyncUsersSpec.TokenSecret != "" {
+		tokenSecret := new(corev1.Secret)
+		if err := cl.Get(ctx, types.NamespacedName{Name: spec.SyncUsersSpec.TokenSecret, Namespace: cr.Namespace}, tokenSecret); err != nil {
+			return nil, errors.Wrap(err, "failed to get tokenSecret")
+		}
+		client.SetToken(string(tokenSecret.Data["token"]))
+	} else {
+		var opts []auth.LoginOption
+		k8sAuth, err := auth.NewKubernetesAuth(spec.SyncUsersSpec.Role, opts...)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to initialize Kubernetes auth method")
+		}
+
+		authSecret, err := client.Auth().Login(ctx, k8sAuth)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to log in with Kubernetes auth")
+		}
+		if authSecret == nil {
+			return nil, errors.New("no auth secret was returned after login")
+		}
 	}
 
-	authSecret, err := client.Auth().Login(ctx, k8sAuth)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to log in with Kubernetes auth")
+	mountPath := "secret"
+	keyPath := path.Join("psmdb", spec.SyncUsersSpec.Role, cr.Namespace, cr.Name, "users")
+	if spec.SyncUsersSpec.MountPath != "" {
+		mountPath = spec.SyncUsersSpec.MountPath
 	}
-	if authSecret == nil {
-		return nil, errors.New("no auth secret was returned after login")
+	if spec.SyncUsersSpec.KeyPath != "" {
+		keyPath = spec.SyncUsersSpec.KeyPath
 	}
-
 	return &Vault{
-		cr: cr,
-		c:  &vaultClient{c: client},
+		keyPath:   keyPath,
+		mountPath: mountPath,
+		c:         &vaultClient{c: client},
 	}, nil
 }
 
 func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (bool, error) {
 	if v == nil {
+		fmt.Println("TEST: nil fill secret data")
 		return false, nil
 	}
 
@@ -157,6 +174,7 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 
 	shouldUpdate := false
 	for k, v := range vaultData {
+		fmt.Println("TEST: vauldData", k, v)
 		value, ok := v.(string)
 		if !ok {
 			return false, errors.Errorf("value type assertion failed: %T %#v", v, v)
@@ -173,12 +191,13 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 
 func (v *Vault) getUsersSecret(ctx context.Context) (map[string]any, error) {
 	if v == nil {
+		fmt.Println("TEST: nil getUsersSecret")
 		return nil, nil
 	}
 
-	spec := v.cr.Spec.Secrets.VaultSpec
-	secret, err := v.c.KVv2("secret").Get(ctx, path.Join("psmdb", spec.Role, v.cr.Namespace, v.cr.Name, "users"))
+	secret, err := v.c.KVv2(v.mountPath).Get(ctx, v.keyPath)
 	if errors.Is(err, vault.ErrSecretNotFound) {
+		fmt.Println("TEST: not found")
 		return nil, nil
 	} else if err != nil {
 		return nil, errors.Wrap(err, "unable to read secret")

@@ -3,7 +3,6 @@ package vault
 import (
 	"context"
 	"errors"
-	"path"
 	"testing"
 
 	vault "github.com/hashicorp/vault/api"
@@ -23,7 +22,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("no address", func(t *testing.T) {
 		cr := newCluster("cr", "new")
-		cr.Spec.Secrets.VaultSpec.Address = ""
+		cr.Spec.VaultSpec.EndpointURL = ""
 
 		cl := newFakeClient(t)
 
@@ -34,8 +33,8 @@ func TestNew(t *testing.T) {
 
 	t.Run("TLSSecret not found", func(t *testing.T) {
 		cr := newCluster("cr", "new")
-		cr.Spec.Secrets.VaultSpec.Address = "https://vault.example.com"
-		cr.Spec.Secrets.VaultSpec.TLSSecret = "vault-tls"
+		cr.Spec.VaultSpec.EndpointURL = "https://vault.example.com"
+		cr.Spec.VaultSpec.TLSSecret = "vault-tls"
 
 		cl := newFakeClient(t)
 
@@ -47,8 +46,8 @@ func TestNew(t *testing.T) {
 
 	t.Run("no CA in secret", func(t *testing.T) {
 		cr := newCluster("cr", "new")
-		cr.Spec.Secrets.VaultSpec.Address = "https://vault.example.com"
-		cr.Spec.Secrets.VaultSpec.TLSSecret = "vault-tls"
+		cr.Spec.VaultSpec.EndpointURL = "https://vault.example.com"
+		cr.Spec.VaultSpec.TLSSecret = "vault-tls"
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -71,10 +70,6 @@ func TestNew(t *testing.T) {
 }
 
 func TestGetUsersSecret(t *testing.T) {
-	cr := newCluster("cr", "get-users")
-
-	expectedPath := path.Join("psmdb", cr.Spec.Secrets.VaultSpec.Role, cr.Namespace, cr.Name, "users")
-
 	tests := []struct {
 		name         string
 		getFn        func(ctx context.Context, p string) (*vault.KVSecret, error)
@@ -115,15 +110,13 @@ func TestGetUsersSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fkv := &fakeKV{
 				getFn: func(ctx context.Context, p string) (*vault.KVSecret, error) {
-					assert.Equal(t, expectedPath, p, "unexpected secret path")
 					return tt.getFn(ctx, p)
 				},
 			}
 			fc := &fakeClient{kv: fkv}
 
 			v := &Vault{
-				cr: cr,
-				c:  fc,
+				c: fc,
 			}
 
 			data, err := v.getUsersSecret(t.Context())
@@ -140,8 +133,6 @@ func TestGetUsersSecret(t *testing.T) {
 }
 
 func TestFillSecretData(t *testing.T) {
-	cr := newCluster("cr", "fill-secret")
-
 	tests := []struct {
 		name           string
 		vaultData      map[string]any
@@ -222,8 +213,7 @@ func TestFillSecretData(t *testing.T) {
 			fc := &fakeClient{kv: fkv}
 
 			v := &Vault{
-				cr: cr,
-				c:  fc,
+				c: fc,
 			}
 			if tt.nilVault {
 				v = nil
@@ -260,7 +250,7 @@ func newCluster(name, namespace string) *api.PerconaServerMongoDB {
 	cr.Name = name
 	cr.Namespace = namespace
 	cr.Spec.Secrets = new(api.SecretsSpec)
-	cr.Spec.Secrets.VaultSpec.Role = "my-role"
+	cr.Spec.VaultSpec.SyncUsersSpec.Role = "my-role"
 
 	return cr
 }

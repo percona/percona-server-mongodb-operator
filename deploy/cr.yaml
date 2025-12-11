@@ -49,18 +49,21 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    ssl: my-cluster-name-ssl
 #    sslInternal: my-cluster-name-ssl-internal
 #    keyFile: my-cluster-name-mongodb-keyfile
-#    vaultSpec:
-#      address: https://vault-service:8200
-#      role: operator
-#      secret: my-cluster-name-vault
-#      serviceAccountTokenPath: /var/run/secrets/kubernetes.io/serviceaccount/token
-#      tlsSecret: my-tls-vault-secret
+#    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
 #    sse: my-cluster-name-sse
   pmm:

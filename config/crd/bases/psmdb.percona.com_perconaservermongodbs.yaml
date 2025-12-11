@@ -11525,19 +11525,6 @@ spec:
                     type: string
                   vault:
                     type: string
-                  vaultSpec:
-                    properties:
-                      address:
-                        type: string
-                      role:
-                        type: string
-                      secret:
-                        type: string
-                      serviceAccountTokenPath:
-                        type: string
-                      tlsSecret:
-                        type: string
-                    type: object
                 type: object
               sharding:
                 properties:
@@ -24865,6 +24852,26 @@ spec:
                   - roles
                   type: object
                 type: array
+              vault:
+                properties:
+                  endpointURL:
+                    type: string
+                  syncUsers:
+                    properties:
+                      keyPath:
+                        type: string
+                      mountPath:
+                        type: string
+                      role:
+                        type: string
+                      serviceAccountTokenPath:
+                        type: string
+                      tokenSecret:
+                        type: string
+                    type: object
+                  tlsSecret:
+                    type: string
+                type: object
             required:
             - image
             type: object

@@ -99,6 +99,7 @@ type PerconaServerMongoDBSpec struct {
 	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
 	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
+	VaultSpec                       VaultSpec                            `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -834,20 +835,23 @@ type SecretsSpec struct {
 	InternalKey string `json:"keyFile,omitempty"`
 
 	EncryptionKey string `json:"encryptionKey,omitempty"`
-	// Deprecated: use VaultSpec.Secret instead
-	Vault      string `json:"vault,omitempty"`
-	SSE        string `json:"sse,omitempty"`
-	LDAPSecret string `json:"ldapSecret,omitempty"`
-	// +optional
-	VaultSpec VaultSpec `json:"vaultSpec"`
+	Vault         string `json:"vault,omitempty"`
+	SSE           string `json:"sse,omitempty"`
+	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
 type VaultSpec struct {
-	Address                 string `json:"address,omitempty"`
-	Role                    string `json:"role,omitempty"`
-	Secret                  string `json:"secret,omitempty"`
-	ServiceAccountTokenPath string `json:"serviceAccountTokenPath,omitempty"`
-	TLSSecret               string `json:"tlsSecret,omitempty"`
+	EndpointURL string `json:"endpointURL,omitempty"`
+	TLSSecret   string `json:"tlsSecret,omitempty"`
+	//+optional
+	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+}
+
+type SyncUsersSpec struct {
+	Role        string `json:"role,omitempty"`
+	TokenSecret string `json:"tokenSecret,omitempty"`
+	MountPath   string `json:"mountPath,omitempty"`
+	KeyPath     string `json:"keyPath,omitempty"`
 }
 
 func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {

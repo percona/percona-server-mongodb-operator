@@ -92,23 +92,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
-	if cr.Spec.Secrets.VaultSpec.Address != "" {
-		if cr.Spec.Secrets.VaultSpec.Role == "" {
-			cr.Spec.Secrets.VaultSpec.Role = "operator"
+	if cr.Spec.VaultSpec.EndpointURL != "" {
+		if cr.Spec.VaultSpec.SyncUsersSpec.Role == "" {
+			cr.Spec.VaultSpec.SyncUsersSpec.Role = "operator"
 		}
 
-		if strings.HasPrefix(cr.Spec.Secrets.VaultSpec.Address, "https://") {
-			if cr.Spec.Secrets.VaultSpec.TLSSecret == "" {
+		if strings.HasPrefix(cr.Spec.VaultSpec.EndpointURL, "https://") {
+			if cr.Spec.VaultSpec.TLSSecret == "" {
 				return errors.New("spec.secrets.vaultSpec.tlsSecret must be set when spec.secrets.vaultSpec.address uses https")
 			}
 		}
-	}
-
-	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Secrets.Vault != "" && cr.Spec.Secrets.VaultSpec.Secret == "" {
-		log.Info(".spec.secrets.vault is deprecated. Use .spec.secrets.vaultSpec.secret instead")
-	}
-	if cr.Spec.Secrets.VaultSpec.Secret == "" {
-		cr.Spec.Secrets.VaultSpec.Secret = cr.Spec.Secrets.Vault
 	}
 
 	t := true
