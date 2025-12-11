@@ -23,7 +23,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.6
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/sync v0.18.0
 	google.golang.org/grpc v1.77.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
