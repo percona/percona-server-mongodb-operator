@@ -6,6 +6,9 @@ import (
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -128,6 +131,81 @@ func TestCreateCertificate(t *testing.T) {
 			t.Fatalf("Expected issuer name %s, got %s", issuerName(cr), cert.Spec.IssuerRef.Name)
 		}
 	})
+}
+
+func TestWaitForCertsWithCertManagerManagedSecret(t *testing.T) {
+	ctx := context.Background()
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+			UID:       "test-uid-123",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+	}
+
+	certName := CACertificateSecretName(cr)
+	certificate := &cm.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      certName,
+			Namespace: cr.Namespace,
+			UID:       "cert-uid-456",
+		},
+		Spec: cm.CertificateSpec{
+			SecretName: certName,
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      certName,
+			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				cm.CertificateNameKey: certName,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: cm.SchemeGroupVersion.String(),
+					Kind:       cm.CertificateKind,
+					Name:       certificate.Name,
+					UID:        certificate.UID,
+					Controller: pointer(true),
+				},
+			},
+		},
+		Data: map[string][]byte{
+			"ca.crt":  []byte("fake-ca-cert"),
+			"tls.crt": []byte("fake-tls-cert"),
+			"tls.key": []byte("fake-tls-key"),
+		},
+	}
+
+	s := scheme.Scheme
+	s.AddKnownTypes(api.SchemeGroupVersion, new(api.PerconaServerMongoDB))
+	s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.Certificate))
+	s.AddKnownTypes(corev1.SchemeGroupVersion, new(corev1.Secret))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(cr, certificate, secret).
+		WithStatusSubresource(cr).
+		Build()
+
+	controller := &certManagerController{
+		cl:     cl,
+		scheme: s,
+		dryRun: false,
+	}
+
+	err := controller.WaitForCerts(ctx, cr, certName)
+	assert.NoError(t, err)
+}
+
+func pointer(b bool) *bool {
+	return &b
 }
 
 // creates a fake client to mock API calls with the mock objects
