@@ -1354,11 +1354,18 @@ const (
 type SystemUserRole string
 
 const (
-	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
-	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
-	RoleUserAdmin      SystemUserRole = "userAdmin"
+	// RoleDatabaseAdmin is general-purpose superuser account for cluster administration.
+	// This user is not used by the operator; it is intended for end-user access and management tasks.
+	RoleDatabaseAdmin SystemUserRole = "databaseAdmin"
+	// RoleClusterAdmin is used by the operator to perform cluster management operations
+	// such as adding/removing replica set members and managing sharded cluster topology.
+	RoleClusterAdmin SystemUserRole = "clusterAdmin"
+	// RoleUserAdmin is used by the operator to manage MongoDB users and their permissions.
+	RoleUserAdmin SystemUserRole = "userAdmin"
+	// RoleClusterMonitor is used for monitoring purposes, including PMM (Percona Monitoring and Management).
 	RoleClusterMonitor SystemUserRole = "clusterMonitor"
-	RoleBackup         SystemUserRole = "backup"
+	// RoleBackup is used by the operator for backup and restore operations via PBM (Percona Backup for MongoDB).
+	RoleBackup SystemUserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
