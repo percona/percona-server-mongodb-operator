@@ -65,7 +65,7 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, v, "expected Vault to be nil on error")
 		require.Error(t, err)
 
-		assert.Equal(t, "tls secret doesn't have ca.crt key", err.Error())
+		assert.Equal(t, "tls secret does not have ca.crt key", err.Error())
 	})
 }
 
@@ -270,6 +270,6 @@ type fakeClient struct {
 	kv kvReader
 }
 
-func (f *fakeClient) KVv2(mountPath string) kvReader {
+func (f *fakeClient) KVv2(_ string) kvReader {
 	return f.kv
 }
