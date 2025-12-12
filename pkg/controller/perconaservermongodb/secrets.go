@@ -74,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		&secretObj,
 	)
 	if err == nil {
-		shouldUpdate, err := fillSecretData(ctx, r.client, cr, secretObj.Data, r.vault)
+		shouldUpdate, err := fillSecretData(ctx, cr, secretObj.Data, r.vault)
 		if err != nil {
 			return errors.Wrap(err, "failed to fill secret data")
 		}
@@ -98,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	}
 
 	data := make(map[string][]byte)
-	_, err = fillSecretData(ctx, r.client, cr, data, r.vault)
+	_, err = fillSecretData(ctx, cr, data, r.vault)
 	if err != nil {
 		return errors.Wrap(err, "fill users secret")
 	}
@@ -122,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *vault.CachedVault) (bool, error) {
+func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *vault.CachedVault) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if data == nil {

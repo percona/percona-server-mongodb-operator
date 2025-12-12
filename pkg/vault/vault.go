@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
+	"net/url"
 	"path"
 	"time"
 
@@ -103,6 +104,10 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 	if spec.EndpointURL == "" {
 		return nil, nil
 	}
+	_, err := url.Parse(spec.EndpointURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse endpointURL")
+	}
 
 	config := vault.DefaultConfig()
 	config.Address = spec.EndpointURL
@@ -137,6 +142,9 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 		tokenSecret := new(corev1.Secret)
 		if err := cl.Get(ctx, types.NamespacedName{Name: spec.SyncUsersSpec.TokenSecret, Namespace: cr.Namespace}, tokenSecret); err != nil {
 			return nil, errors.Wrap(err, "failed to get tokenSecret")
+		}
+		if _, ok := tokenSecret.Data["token"]; !ok {
+			return nil, errors.New("expected `token` key is not present in the .syncUsers.tokenSecret data")
 		}
 		client.SetToken(string(tokenSecret.Data["token"]))
 	} else {
