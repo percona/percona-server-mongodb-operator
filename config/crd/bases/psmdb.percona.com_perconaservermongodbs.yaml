@@ -24852,6 +24852,24 @@ spec:
                   - roles
                   type: object
                 type: array
+              vault:
+                properties:
+                  endpointURL:
+                    type: string
+                  syncUsers:
+                    properties:
+                      keyPath:
+                        type: string
+                      mountPath:
+                        type: string
+                      role:
+                        type: string
+                      tokenSecret:
+                        type: string
+                    type: object
+                  tlsSecret:
+                    type: string
+                type: object
             required:
             - image
             type: object
