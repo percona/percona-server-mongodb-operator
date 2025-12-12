@@ -136,6 +136,7 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 		changes, err = vault.FillSecretData(ctx, data)
 		if err != nil {
 			log.Error(err, "failed to fill secret from vault")
+			return false, nil
 		}
 	}
 
