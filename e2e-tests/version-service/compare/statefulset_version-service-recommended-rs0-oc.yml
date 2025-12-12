@@ -141,6 +141,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: version-service-recommended-mongodb-encryption-key
               readOnly: true
@@ -181,6 +183,8 @@ spec:
             secretName: version-service-recommended-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: version-service-recommended-rs0-mongod

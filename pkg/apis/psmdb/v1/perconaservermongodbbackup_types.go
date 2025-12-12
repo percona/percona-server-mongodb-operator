@@ -39,6 +39,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	Destination  string                       `json:"destination,omitempty"`
 	StorageName  string                       `json:"storageName,omitempty"`
 	S3           *BackupStorageS3Spec         `json:"s3,omitempty"`
+	Minio        *BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS          *BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`

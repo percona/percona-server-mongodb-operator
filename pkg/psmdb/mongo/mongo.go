@@ -910,11 +910,13 @@ func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
 	return false
 }
 
+func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
+	(*m)[i].Votes = votes
+	(*m)[i].Priority = priority
+}
+
 // SetVotes sets voting parameters for members list
 func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
-	votes := 0
-	lastVoteIdx := -1
-
 	cm := make(map[string]int, len(compareWith))
 
 	for _, member := range compareWith {
@@ -925,74 +927,70 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 		cm[member.Host] = member.Priority
 	}
 
-	for i, member := range *m {
-		if _, ok := member.Tags["external"]; ok {
-			[]ConfigMember(*m)[i].Votes = member.Votes
-			[]ConfigMember(*m)[i].Priority = member.Priority
+	votes := 0
+	lastVoteIdx := -1
 
+	for i, member := range *m {
+		_, isNonVoting := member.Tags["nonVoting"]
+		_, isExternal := member.Tags["external"]
+
+		switch {
+		case isNonVoting:
+			// Non voting member is a regular ReplSet member with
+			// votes and priority equals to 0.
+			m.setMemberVoteAndPriority(i, 0, 0)
+		case isExternal:
+			m.setMemberVoteAndPriority(i, member.Votes, member.Priority)
 			if member.Votes == 1 {
 				votes++
 			}
-
-			continue
-		}
-
-		if _, ok := member.Tags["nonVoting"]; ok {
-			// Non voting member is a regular ReplSet member with
-			// votes and priority equals to 0.
-
-			[]ConfigMember(*m)[i].Votes = 0
-			[]ConfigMember(*m)[i].Priority = 0
-
-			continue
-		}
-
-		if _, ok := member.Tags["hidden"]; ok {
+		case member.Hidden:
 			// Hidden member is a voting ReplSet member
 			// but it is not listed in hello command.
-
-			[]ConfigMember(*m)[i].Votes = 1
-			[]ConfigMember(*m)[i].Priority = 0
-			votes++
-
-			continue
-		}
-
-		if member.ArbiterOnly {
-			// Arbiter should always have a vote
-			[]ConfigMember(*m)[i].Votes = DefaultVotes
-			// Arbiter should never have priority
-			[]ConfigMember(*m)[i].Priority = 0
-		} else {
-			[]ConfigMember(*m)[i].Votes = DefaultVotes
+			m.setMemberVoteAndPriority(i, DefaultVotes, 0)
 			lastVoteIdx = i
+			votes++
+		case member.ArbiterOnly:
+			// Arbiter should always have a vote
+			// Arbiter should never have priority
+			m.setMemberVoteAndPriority(i, DefaultVotes, 0)
+			votes++
+		default:
+			// Priority can be any number in range [0,1000].
+			// We're setting it to 2 as default, to allow
+			// users to configure external nodes with lower
+			// priority than local nodes.
+			priority := DefaultPriority
 
 			// In unsafe PSA (Primary with a Secondary and an Arbiter),
 			// we are unable to set the votes and the priority simultaneously.
 			// Therefore, setting only the priority.
 			if !unsafePSA || member.Votes == DefaultVotes {
-				// Priority can be any number in range [0,1000].
-				// We're setting it to 2 as default, to allow
-				// users to configure external nodes with lower
-				// priority than local nodes.
-				priority := DefaultPriority
-
 				if c, ok := cm[member.Host]; ok {
 					priority = c
 				}
-
-				[]ConfigMember(*m)[i].Priority = priority
 			}
+
+			m.setMemberVoteAndPriority(i, DefaultVotes, priority)
+			lastVoteIdx = i
+			votes++
 		}
-		votes++
 
 		if votes > MaxVotingMembers {
 			if member.ArbiterOnly {
-				[]ConfigMember(*m)[lastVoteIdx].Votes = 0
-				[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+				for j := lastVoteIdx; j >= 0; j-- {
+					if []ConfigMember(*m)[j].Votes == 0 {
+						continue
+					}
+
+					m.setMemberVoteAndPriority(j, 0, 0)
+					lastVoteIdx = j - 1
+					votes--
+					break
+				}
 			} else {
-				[]ConfigMember(*m)[i].Votes = 0
-				[]ConfigMember(*m)[i].Priority = 0
+				m.setMemberVoteAndPriority(i, 0, 0)
+				votes--
 			}
 		}
 	}
@@ -1002,8 +1000,14 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 	}
 
 	if votes%2 == 0 {
-		[]ConfigMember(*m)[lastVoteIdx].Votes = 0
-		[]ConfigMember(*m)[lastVoteIdx].Priority = 0
+		for j := lastVoteIdx; j >= 0; j-- {
+			if []ConfigMember(*m)[j].Votes == 0 {
+				continue
+			}
+
+			m.setMemberVoteAndPriority(j, 0, 0)
+			break
+		}
 	}
 }
 

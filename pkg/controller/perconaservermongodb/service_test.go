@@ -38,6 +38,11 @@ func TestReconcileReplsetServices(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		for i := range svcList.Items {
+			svcList.Items[i].APIVersion = "v1"
+			svcList.Items[i].Kind = "Service"
+		}
+
 		yamlCompare(t, ns, filename, svcList)
 	}
 

@@ -84,13 +84,17 @@ spec:
               value: "true"
             - name: PBM_AGENT_SIDECAR_SLEEP
               value: "5"
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
+            - name: PBM_MONGODB_PORT
+              value: "27017"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -166,6 +170,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: some-name-mongodb-encryption-key
               readOnly: true
@@ -223,6 +229,8 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: some-name-rs0-mongod

@@ -128,6 +128,15 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		})
 	}
 
+	if cr.CompareVersion("1.21.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: config.MongoshHomeVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+
 	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
@@ -175,7 +184,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
+	c, err := container(ctx, cr, replset, containerName, resources,
+		cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
 		livenessProbe, readinessProbe, containerSecurityContext)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
@@ -196,8 +206,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
+	if configs.MongoDConf.Type.IsUsable() {
 		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
+		annotations["percona.com/configuration-hash"] = annotations["percona.com/configuration-hash"] + configs.LogCollectionConf.HashHex
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}

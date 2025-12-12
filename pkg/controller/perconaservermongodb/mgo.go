@@ -323,6 +323,7 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		member.Priority = 0
 		member.Votes = 0
 	case naming.ComponentHidden:
+		member.Hidden = true
 		member.Tags = util.MapMerge(mongo.ReplsetTags{
 			naming.ComponentHidden: "true",
 		}, tags)

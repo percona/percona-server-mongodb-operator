@@ -150,6 +150,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/users-secret
               name: users-secret-file
           workingDir: /data/db
@@ -237,6 +239,8 @@ spec:
             secretName: one-pod-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: one-pod-rs0-mongod
