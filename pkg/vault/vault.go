@@ -72,7 +72,7 @@ func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.Per
 	if err != nil {
 		return errors.Wrap(err, "update hash")
 	}
-	if !changed || time.Since(cv.lastUpdatedAt) > cv.reinitInterval {
+	if !changed && time.Since(cv.lastUpdatedAt) <= cv.reinitInterval {
 		return nil
 	}
 
