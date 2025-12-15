@@ -628,6 +628,27 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	return b
 }
 
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// If `authorization` or `security` sections are not present, returns true (enabled by default).
+// The authorization can be set to "enabled" or "disabled" as per MongoDB documentation.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
+}
+
 // GetPort returns the net.port of the mongo configuration.
 // https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port
 func (conf MongoConfiguration) GetPort() (int32, error) {

@@ -195,17 +195,29 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
-		"--auth",
-		"--dbpath=" + config.MongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(replset.GetPort())),
-		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(replset.Storage.Engine),
-		"--relaxPermChecks",
 	}
+
+	if replset.Configuration.IsAuthorizationEnabled() {
+		args = append(args, "--auth")
+	}
+
+	args = append(args,
+		"--dbpath="+config.MongodContainerDataDir,
+		"--port="+strconv.Itoa(int(replset.GetPort())),
+		"--replSet="+replset.Name,
+		"--storageEngine="+string(replset.Storage.Engine),
+		"--relaxPermChecks",
+	)
 
 	name, err := replset.CustomReplsetName()
 	if err == nil {
-		args[4] = "--replSet=" + name
+		// Update the replSet argument with the custom name
+		for i, arg := range args {
+			if len(arg) >= 9 && arg[:9] == "--replSet" {
+				args[i] = "--replSet=" + name
+				break
+			}
+		}
 	}
 
 	if *cr.Spec.TLS.AllowInvalidCertificates || cr.CompareVersion("1.16.0") < 0 {
