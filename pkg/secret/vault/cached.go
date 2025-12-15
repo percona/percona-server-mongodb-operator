@@ -22,6 +22,10 @@ type cachedClient struct {
 	*vaultClient
 }
 
+func (cv *cachedClient) Name() string {
+	return "vault"
+}
+
 func (cv *cachedClient) Close() error {
 	return nil
 }

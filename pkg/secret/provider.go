@@ -10,6 +10,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -17,6 +18,8 @@ import (
 const cleanupInterval = 5 * time.Minute
 
 type Client interface {
+	Name() string
+
 	Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error
 
 	FillSecretData(ctx context.Context, data map[string][]byte) (bool, error)
@@ -79,6 +82,8 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 		return false, nil
 	}
 
+	log := logf.FromContext(ctx)
+
 	changed := false
 	var errs []error
 	for _, p := range clients {
@@ -89,6 +94,7 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 		}
 		if c {
 			changed = true
+			log.Info("Changes in the secret provider detected. Updating users secret", "cluster", cr.Name, "namespace", cr.Namespace, "secret provider", p.Name())
 		}
 	}
 	return changed, stderrors.Join(errs...)
