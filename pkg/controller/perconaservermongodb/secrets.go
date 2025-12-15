@@ -122,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *pkgSecret.ProviderHandler) (bool, error) {
+func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, ph *pkgSecret.ProviderHandler) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if data == nil {
@@ -132,10 +132,13 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 	var changes bool
 	var err error
 
-	if vault != nil {
-		changes, err = vault.FillSecretData(ctx, cr, data)
+	if ph != nil {
+		changes, err = ph.FillSecretData(ctx, cr, data)
 		if err != nil {
-			log.Error(err, "failed to fill secret from vault")
+			if pkgSecret.IsCriticalErr(err) {
+				return false, errors.Wrap(err, "failed to fill secret from secret provider")
+			}
+			log.Error(err, "failed to fill secret from secret provider")
 			return false, nil
 		}
 	}

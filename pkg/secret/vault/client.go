@@ -5,15 +5,19 @@ import (
 	"context"
 	"net/url"
 	"path"
+	"strings"
 
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/secret"
 )
 
 type vaultClient struct {
@@ -30,24 +34,28 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	}
 	_, err := url.Parse(spec.EndpointURL)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse endpointURL")
+		return nil, secret.NewCriticalErr(errors.Wrap(err, "failed to parse endpointURL"))
 	}
 
 	config := vault.DefaultConfig()
 	config.Address = spec.EndpointURL
 
 	if spec.TLSSecret != "" {
-		secret := new(corev1.Secret)
+		sec := new(corev1.Secret)
 		if err := cl.Get(ctx, types.NamespacedName{
 			Name:      spec.TLSSecret,
 			Namespace: cr.Namespace,
-		}, secret); err != nil {
+		}, sec); err != nil {
+			werr := errors.Wrap(err, "get vault tls secret")
+			if k8serrors.IsNotFound(werr) {
+				return nil, secret.NewCriticalErr(err)
+			}
 			return nil, errors.Wrap(err, "get vault tls secret")
 		}
 
-		ca, ok := secret.Data["ca.crt"]
+		ca, ok := sec.Data["ca.crt"]
 		if !ok {
-			return nil, errors.New("tls secret does not have ca.crt key")
+			return nil, secret.NewCriticalErr(errors.New("tls secret does not have ca.crt key"))
 		}
 
 		if err := config.ConfigureTLS(&vault.TLSConfig{
@@ -65,10 +73,14 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	if spec.SyncUsersSpec.TokenSecret != "" {
 		tokenSecret := new(corev1.Secret)
 		if err := cl.Get(ctx, types.NamespacedName{Name: spec.SyncUsersSpec.TokenSecret, Namespace: cr.Namespace}, tokenSecret); err != nil {
-			return nil, errors.Wrap(err, "failed to get tokenSecret")
+			werr := errors.Wrap(err, "failed to get tokenSecret")
+			if k8serrors.IsNotFound(werr) {
+				return nil, secret.NewCriticalErr(err)
+			}
+			return nil, err
 		}
 		if _, ok := tokenSecret.Data["token"]; !ok {
-			return nil, errors.New("expected `token` key is not present in the .syncUsers.tokenSecret data")
+			return nil, secret.NewCriticalErr(errors.New("expected `token` key is not present in the .syncUsers.tokenSecret data"))
 		}
 		client.SetToken(string(tokenSecret.Data["token"]))
 	} else {
@@ -132,12 +144,16 @@ func (v *vaultClient) getUsersSecret(ctx context.Context) (map[string]any, error
 	if v == nil {
 		return nil, nil
 	}
+	log := logf.FromContext(ctx)
 
-	secret, err := v.c.KVv2(v.mountPath).Get(ctx, v.keyPath)
+	sec, err := v.c.KVv2(v.mountPath).Get(ctx, v.keyPath)
 	if errors.Is(err, vault.ErrSecretNotFound) {
+		log.Info("secret is not found in the vault", "mountPath", v.mountPath, "keyPath", v.keyPath)
 		return nil, nil
+	} else if strings.Contains(err.Error(), "configured Vault token contains non-printable characters and cannot be used") {
+		return nil, secret.NewCriticalErr(err)
 	} else if err != nil {
 		return nil, errors.Wrap(err, "unable to read secret")
 	}
-	return secret.Data, nil
+	return sec.Data, nil
 }

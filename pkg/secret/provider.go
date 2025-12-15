@@ -31,6 +31,8 @@ type Provider interface {
 	NewClient() Client
 }
 
+// ProviderHandler manages all secret providers supported by the operator.
+// On Update, it initializes or refreshes a secret-provider client for each cluster that has a provider configured.
 type ProviderHandler struct {
 	providers []Provider
 	clients   map[string][]Client
@@ -47,6 +49,19 @@ func NewProviderHandler(providers ...Provider) *ProviderHandler {
 		providers: providers,
 		clients:   make(map[string][]Client),
 	}
+}
+
+// criticalError is an error that should be joined with errors to cause the controller to stop the reconcile loop.
+// Secret providers should not block reconciliation for errors unrelated to user actions (for example, connection issues).
+// However, reconciliation should be blocked when the user provides incorrect configuration or fails to create a required resource.
+var criticalError error = errors.New("critical")
+
+func NewCriticalErr(err error) error {
+	return stderrors.Join(criticalError, err)
+}
+
+func IsCriticalErr(err error) bool {
+	return errors.Is(err, criticalError)
 }
 
 func (h *ProviderHandler) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {

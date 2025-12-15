@@ -312,7 +312,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	if err := r.secretProviderHandler.Update(ctx, r.client, cr); err != nil {
-		log.Error(err, "failed to update vault client")
+		if pkgSecret.IsCriticalErr(err); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "update secret providers")
+		}
+		log.Error(err, "failed update secret providers")
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
