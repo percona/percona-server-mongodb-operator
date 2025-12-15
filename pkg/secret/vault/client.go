@@ -150,7 +150,7 @@ func (v *vaultClient) getUsersSecret(ctx context.Context) (map[string]any, error
 	if errors.Is(err, vault.ErrSecretNotFound) {
 		log.Info("secret is not found in the vault", "mountPath", v.mountPath, "keyPath", v.keyPath)
 		return nil, nil
-	} else if strings.Contains(err.Error(), "configured Vault token contains non-printable characters and cannot be used") {
+	} else if err != nil && strings.Contains(err.Error(), "configured Vault token contains non-printable characters and cannot be used") {
 		return nil, secret.NewCriticalErr(err)
 	} else if err != nil {
 		return nil, errors.Wrap(err, "unable to read secret")
