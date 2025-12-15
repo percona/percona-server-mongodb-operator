@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 
 		cl := newFakeClient(t)
 
-		v, err := New(ctx, cl, cr)
+		v, err := newClient(ctx, cl, cr)
 		require.NoError(t, err)
 		assert.Nil(t, v, "expected Vault to be nil when Address is empty")
 	})
@@ -38,7 +38,7 @@ func TestNew(t *testing.T) {
 
 		cl := newFakeClient(t)
 
-		v, err := New(ctx, cl, cr)
+		v, err := newClient(ctx, cl, cr)
 		assert.Nil(t, v, "expected Vault to be nil on error")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "get vault tls secret")
@@ -61,7 +61,7 @@ func TestNew(t *testing.T) {
 
 		cl := newFakeClient(t, secret)
 
-		v, err := New(ctx, cl, cr)
+		v, err := newClient(ctx, cl, cr)
 		assert.Nil(t, v, "expected Vault to be nil on error")
 		require.Error(t, err)
 
@@ -115,7 +115,7 @@ func TestGetUsersSecret(t *testing.T) {
 			}
 			fc := &fakeClient{kv: fkv}
 
-			v := &Vault{
+			v := &vaultClient{
 				c: fc,
 			}
 
@@ -212,7 +212,7 @@ func TestFillSecretData(t *testing.T) {
 			}
 			fc := &fakeClient{kv: fkv}
 
-			v := &Vault{
+			v := &vaultClient{
 				c: fc,
 			}
 			if tt.nilVault {

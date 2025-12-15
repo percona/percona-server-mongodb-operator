@@ -17,7 +17,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
-	"github.com/percona/percona-server-mongodb-operator/pkg/vault"
+	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
 )
 
 func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
@@ -74,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		&secretObj,
 	)
 	if err == nil {
-		shouldUpdate, err := fillSecretData(ctx, cr, secretObj.Data, r.vault)
+		shouldUpdate, err := fillSecretData(ctx, cr, secretObj.Data, r.secretProviderHandler)
 		if err != nil {
 			return errors.Wrap(err, "failed to fill secret data")
 		}
@@ -98,7 +98,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	}
 
 	data := make(map[string][]byte)
-	_, err = fillSecretData(ctx, cr, data, r.vault)
+	_, err = fillSecretData(ctx, cr, data, r.secretProviderHandler)
 	if err != nil {
 		return errors.Wrap(err, "fill users secret")
 	}
@@ -122,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *vault.CachedVault) (bool, error) {
+func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, vault *pkgSecret.ProviderHandler) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if data == nil {
@@ -133,7 +133,7 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 	var err error
 
 	if vault != nil {
-		changes, err = vault.FillSecretData(ctx, data)
+		changes, err = vault.FillSecretData(ctx, cr, data)
 		if err != nil {
 			log.Error(err, "failed to fill secret from vault")
 			return false, nil

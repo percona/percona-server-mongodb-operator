@@ -3,11 +3,8 @@ package vault
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/json"
 	"net/url"
 	"path"
-	"time"
 
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
@@ -19,87 +16,14 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-type kvClient interface {
-	KVv2(mountPath string) kvReader
-}
-
-type kvReader interface {
-	Get(ctx context.Context, path string) (*vault.KVSecret, error)
-}
-
 type vaultClient struct {
-	c *vault.Client
-}
-
-func (r *vaultClient) KVv2(mountPath string) kvReader {
-	return &vaultReader{kv: r.c.KVv2(mountPath)}
-}
-
-type vaultReader struct {
-	kv *vault.KVv2
-}
-
-func (r *vaultReader) Get(ctx context.Context, path string) (*vault.KVSecret, error) {
-	return r.kv.Get(ctx, path)
-}
-
-type Vault struct {
 	c kvClient
 
 	mountPath string
 	keyPath   string
 }
 
-type CachedVault struct {
-	hash [16]byte
-
-	lastUpdatedAt  time.Time
-	reinitInterval time.Duration
-
-	*Vault
-}
-
-func (cv *CachedVault) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
-	if cv == nil || cr.Spec.VaultSpec.EndpointURL == "" {
-		return nil
-	}
-
-	if cv.reinitInterval == 0 {
-		cv.reinitInterval = 30 * time.Minute
-	}
-
-	changed, err := cv.updateHash(cr)
-	if err != nil {
-		return errors.Wrap(err, "update hash")
-	}
-	if !changed && time.Since(cv.lastUpdatedAt) <= cv.reinitInterval {
-		return nil
-	}
-
-	cv.Vault, err = New(ctx, cl, cr)
-	if err != nil {
-		return errors.Wrap(err, "new vault")
-	}
-
-	cv.lastUpdatedAt = time.Now()
-
-	return nil
-}
-
-func (cv *CachedVault) updateHash(cr *api.PerconaServerMongoDB) (bool, error) {
-	spec := cr.Spec.VaultSpec
-	data, err := json.Marshal(spec)
-	if err != nil {
-		return false, err
-	}
-
-	newHash := md5.Sum(data)
-	changed := !bytes.Equal(newHash[:], cv.hash[:])
-	cv.hash = newHash
-	return changed, nil
-}
-
-func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*Vault, error) {
+func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*vaultClient, error) {
 	spec := cr.Spec.VaultSpec
 	if spec.EndpointURL == "" {
 		return nil, nil
@@ -171,14 +95,14 @@ func New(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*
 	if spec.SyncUsersSpec.KeyPath != "" {
 		keyPath = spec.SyncUsersSpec.KeyPath
 	}
-	return &Vault{
+	return &vaultClient{
 		keyPath:   keyPath,
 		mountPath: mountPath,
-		c:         &vaultClient{c: client},
+		c:         &rawClient{c: client},
 	}, nil
 }
 
-func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (bool, error) {
+func (v *vaultClient) FillSecretData(ctx context.Context, data map[string][]byte) (bool, error) {
 	if v == nil {
 		return false, nil
 	}
@@ -204,7 +128,7 @@ func (v *Vault) FillSecretData(ctx context.Context, data map[string][]byte) (boo
 	return shouldUpdate, nil
 }
 
-func (v *Vault) getUsersSecret(ctx context.Context) (map[string]any, error) {
+func (v *vaultClient) getUsersSecret(ctx context.Context) (map[string]any, error) {
 	if v == nil {
 		return nil, nil
 	}

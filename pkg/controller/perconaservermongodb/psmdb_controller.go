@@ -43,8 +43,9 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
-	"github.com/percona/percona-server-mongodb-operator/pkg/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -87,6 +88,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create client")
 	}
+	secretProviders := []pkgSecret.Provider{
+		new(vault.Provider),
+	}
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 client,
@@ -98,7 +102,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
-		vault:                  new(vault.CachedVault),
+		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
 		initImage: initImage,
 
@@ -180,12 +184,12 @@ type ReconcilePerconaServerMongoDB struct {
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	crons               CronRegistry
-	clientcmd           *clientcmd.Client
-	serverVersion       *version.ServerVersion
-	reconcileIn         time.Duration
-	mongoClientProvider MongoClientProvider
-	vault               *vault.CachedVault
+	crons                 CronRegistry
+	clientcmd             *clientcmd.Client
+	serverVersion         *version.ServerVersion
+	reconcileIn           time.Duration
+	mongoClientProvider   MongoClientProvider
+	secretProviderHandler *pkgSecret.ProviderHandler
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
@@ -307,7 +311,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	if err := r.vault.Update(ctx, r.client, cr); err != nil {
+	if err := r.secretProviderHandler.Update(ctx, r.client, cr); err != nil {
 		log.Error(err, "failed to update vault client")
 	}
 
