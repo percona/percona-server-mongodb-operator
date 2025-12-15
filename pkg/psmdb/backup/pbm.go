@@ -32,6 +32,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -334,6 +335,59 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *api.Per
 	return conf, nil
 }
 
+func GetPBMStorageMinioConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *api.PerconaServerMongoDB,
+	stg api.BackupStorageSpec,
+) (config.StorageConf, error) {
+	if err := stg.Minio.Validate(); err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "invalid minio storage config")
+	}
+
+	storageConf := config.StorageConf{
+		Type: storage.Minio,
+		Minio: &mio.Config{
+			Region:                stg.Minio.Region,
+			Endpoint:              stg.Minio.EndpointURL,
+			Bucket:                stg.Minio.Bucket,
+			Prefix:                stg.Minio.Prefix,
+			InsecureSkipTLSVerify: stg.Minio.InsecureSkipTLSVerify,
+			DebugTrace:            stg.Minio.DebugTrace,
+			PartSize:              stg.Minio.PartSize,
+			Secure:                stg.Minio.Secure,
+		},
+	}
+
+	if len(stg.Minio.CredentialsSecret) != 0 {
+		s3secret, err := getSecret(ctx, k8sclient, cluster.GetNamespace(), stg.Minio.CredentialsSecret)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "get minio credentials secret")
+		}
+
+		accessKey, ok := s3secret.Data[AWSAccessKeySecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.New("access key not found in credentials secret")
+		}
+		secretAccessKey, ok := s3secret.Data[AWSSecretAccessKeySecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.New("secret access key not found in credentials secret")
+		}
+
+		storageConf.Minio.Credentials = mio.Credentials{
+			AccessKeyID:     string(accessKey),
+			SecretAccessKey: string(secretAccessKey),
+		}
+	}
+
+	if stg.Minio.Retryer != nil {
+		storageConf.Minio.Retryer = &mio.Retryer{
+			NumMaxRetries: stg.Minio.Retryer.NumMaxRetries,
+		}
+	}
+	return storageConf, nil
+}
+
 func GetPBMStorageS3Config(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -547,12 +601,15 @@ func GetPBMStorageConfig(
 
 	switch stg.Type {
 	case api.BackupStorageS3:
-		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, s3.GCSEndpointURL) {
+		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.GCSEndpointURL) {
 			conf, err := GetPBMStorageS3CompatibleGCSConfig(ctx, k8sclient, cluster, stg)
 			return conf, errors.Wrap(err, "get s3-compatible gcs config")
 		}
 		conf, err := GetPBMStorageS3Config(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get s3 config")
+	case api.BackupStorageMinio:
+		conf, err := GetPBMStorageMinioConfig(ctx, k8sclient, cluster, stg)
+		return conf, errors.Wrap(err, "get minio config")
 	case api.BackupStorageGCS:
 		conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get gcs config")
@@ -993,7 +1050,7 @@ func deleteBackupImpl(
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
 		conf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
@@ -1035,7 +1092,7 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
 		conf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
@@ -1176,7 +1233,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) 
 	}
 
 	stgConf := cfg.Storage
-	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, s3.GCSEndpointURL) {
+	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, naming.GCSEndpointURL) {
 		stgConf = config.StorageConf{
 			Type: storage.GCS,
 			GCS:  getGCSFromS3CompatibleConfig(stgConf.S3),
