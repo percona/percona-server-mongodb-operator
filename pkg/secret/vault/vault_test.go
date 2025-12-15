@@ -65,7 +65,7 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, v, "expected Vault to be nil on error")
 		require.Error(t, err)
 
-		assert.Equal(t, "tls secret does not have ca.crt key", err.Error())
+		assert.Equal(t, "critical\ntls secret does not have ca.crt key", err.Error())
 	})
 }
 
