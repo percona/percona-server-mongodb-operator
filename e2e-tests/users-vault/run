@@ -145,7 +145,7 @@ spec:
   signerName: kubernetes.io/kubelet-serving
   groups:
   - system:authenticated
-  request: $(base64 "${tmp_dir}"/server.csr | tr -d '\n')
+  request: $(cat "${tmp_dir}"/server.csr | base64 | tr -d '\n')
   usages:
   - digital signature
   - key encipherment
