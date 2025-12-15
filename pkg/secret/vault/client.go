@@ -124,6 +124,12 @@ func (v *vaultClient) FillSecretData(ctx context.Context, data map[string][]byte
 		return false, errors.Wrap(err, "get users secret")
 	}
 
+	if len(vaultData) == 0 {
+		log := logf.FromContext(ctx)
+		log.Info("no data found in Vault", "keyPath", v.keyPath, "mountPath", v.mountPath)
+		return false, nil
+	}
+
 	shouldUpdate := false
 	for k, v := range vaultData {
 		value, ok := v.(string)

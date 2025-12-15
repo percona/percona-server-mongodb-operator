@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -38,6 +39,7 @@ type ProviderHandler struct {
 	clients   map[string][]Client
 
 	lastCleanup time.Time
+	mu          sync.Mutex
 }
 
 func NewProviderHandler(providers ...Provider) *ProviderHandler {
@@ -51,23 +53,25 @@ func NewProviderHandler(providers ...Provider) *ProviderHandler {
 	}
 }
 
-// criticalError is an error that should be joined with errors to cause the controller to stop the reconcile loop.
+// errCritical is an error that should be joined with errors to cause the controller to stop the reconcile loop.
 // Secret providers should not block reconciliation for errors unrelated to user actions (for example, connection issues).
 // However, reconciliation should be blocked when the user provides incorrect configuration or fails to create a required resource.
-var criticalError error = errors.New("critical")
+var errCritical error = errors.New("critical")
 
 func NewCriticalErr(err error) error {
-	return stderrors.Join(criticalError, err)
+	return stderrors.Join(errCritical, err)
 }
 
 func IsCriticalErr(err error) bool {
-	return errors.Is(err, criticalError)
+	return errors.Is(err, errCritical)
 }
 
 func (h *ProviderHandler) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
 	if h == nil {
 		return nil
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.ensureClients(cr)
 	clients, ok := h.clients[cr.NamespacedName().String()]
 	if !ok {
@@ -92,6 +96,8 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 	if h == nil {
 		return false, nil
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	clients, ok := h.clients[cr.NamespacedName().String()]
 	if !ok {
 		return false, nil
@@ -151,8 +157,8 @@ func (h *ProviderHandler) cleanupOutdatedClients(ctx context.Context, cl client.
 			Namespace: nnSplit[0],
 		}, new(api.PerconaServerMongoDB)); err != nil {
 			if k8serrors.IsNotFound(err) {
-				for _, cl := range clients {
-					if err := cl.Close(); err != nil {
+				for _, c := range clients {
+					if err := c.Close(); err != nil {
 						errs = append(errs, err)
 					}
 				}
