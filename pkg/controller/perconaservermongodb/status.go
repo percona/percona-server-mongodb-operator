@@ -233,9 +233,59 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	clusterCondition.Type = cr.Status.State
 	cr.Status.AddCondition(clusterCondition)
 
+	cr.Status.RemoveCondition(api.ConditionTypePendingSmartUpdate)
+	if awaiting, err := r.isAwaitingSmartUpdate(ctx, cr); err != nil {
+		return fmt.Errorf("cannot check if awaiting smart update: %v", err)
+	} else if cr.Status.Ready == cr.Status.Size && awaiting {
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypePendingSmartUpdate,
+			Status:  api.ConditionTrue,
+			Message: "Smart update is pending but has not yet started",
+		})
+	}
+
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	return r.writeStatus(ctx, cr)
+}
+
+// isAwaitingSmartUpdate returns true if the cluster smart update is pending but has not yet started.
+func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+		return false, nil
+	}
+
+	statefulSets := make([]string, 0, len(cr.Spec.Replsets)+2)
+	for _, rs := range cr.Spec.Replsets {
+		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(rs.Name).Name)
+	}
+	if cr.Spec.Sharding.Enabled {
+		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(api.ConfigReplSetName).Name)
+		statefulSets = append(statefulSets, cr.MongosNamespacedName().Name)
+	}
+
+	// count the number of updated pods from statefulsets that have changed
+	var updated int32 = 0
+	for _, name := range statefulSets {
+		sts := &appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, sts); err != nil {
+			return false, client.IgnoreNotFound(err)
+		}
+
+		pods := corev1.PodList{}
+		if err := r.client.List(ctx, &pods, &client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
+		}); err != nil {
+			return false, errors.Wrap(err, "get pod list")
+		}
+
+		if isSfsChanged(sts, &pods) {
+			updated += sts.Status.UpdatedReplicas
+		}
+	}
+
+	return updated == 0, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
