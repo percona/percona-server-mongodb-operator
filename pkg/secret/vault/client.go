@@ -47,10 +47,10 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			Namespace: cr.Namespace,
 		}, sec); err != nil {
 			werr := errors.Wrap(err, "get vault tls secret")
-			if k8serrors.IsNotFound(werr) {
-				return nil, secret.NewCriticalErr(err)
+			if k8serrors.IsNotFound(err) {
+				return nil, secret.NewCriticalErr(werr)
 			}
-			return nil, errors.Wrap(err, "get vault tls secret")
+			return nil, werr
 		}
 
 		ca, ok := sec.Data["ca.crt"]
@@ -74,10 +74,10 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 		tokenSecret := new(corev1.Secret)
 		if err := cl.Get(ctx, types.NamespacedName{Name: spec.SyncUsersSpec.TokenSecret, Namespace: cr.Namespace}, tokenSecret); err != nil {
 			werr := errors.Wrap(err, "failed to get tokenSecret")
-			if k8serrors.IsNotFound(werr) {
-				return nil, secret.NewCriticalErr(err)
+			if k8serrors.IsNotFound(err) {
+				return nil, secret.NewCriticalErr(werr)
 			}
-			return nil, err
+			return nil, werr
 		}
 		if _, ok := tokenSecret.Data["token"]; !ok {
 			return nil, secret.NewCriticalErr(errors.New("expected `token` key is not present in the .syncUsers.tokenSecret data"))
