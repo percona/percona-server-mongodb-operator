@@ -3,7 +3,6 @@ package vault
 import (
 	"bytes"
 	"context"
-	"net/url"
 	"path"
 	"strings"
 
@@ -29,12 +28,8 @@ type vaultClient struct {
 
 func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (*vaultClient, error) {
 	spec := cr.Spec.VaultSpec
-	if spec.EndpointURL == "" {
+	if spec == nil || spec.EndpointURL == "" {
 		return nil, nil
-	}
-	_, err := url.Parse(spec.EndpointURL)
-	if err != nil {
-		return nil, secret.NewCriticalErr(errors.Wrap(err, "failed to parse endpointURL"))
 	}
 
 	config := vault.DefaultConfig()

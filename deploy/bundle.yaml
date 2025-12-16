@@ -25713,6 +25713,9 @@ spec:
                 properties:
                   endpointURL:
                     type: string
+                    x-kubernetes-validations:
+                    - message: endpointURL must be a valid URL
+                      rule: isURL(self)
                   syncUsers:
                     properties:
                       keyPath:
@@ -25726,6 +25729,8 @@ spec:
                     type: object
                   tlsSecret:
                     type: string
+                required:
+                - endpointURL
                 type: object
             required:
             - image

@@ -250,6 +250,7 @@ func newCluster(name, namespace string) *api.PerconaServerMongoDB {
 	cr.Name = name
 	cr.Namespace = namespace
 	cr.Spec.Secrets = new(api.SecretsSpec)
+	cr.Spec.VaultSpec = new(api.VaultSpec)
 	cr.Spec.VaultSpec.SyncUsersSpec.Role = "my-role"
 
 	return cr

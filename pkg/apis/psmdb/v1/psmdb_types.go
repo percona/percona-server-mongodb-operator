@@ -99,7 +99,7 @@ type PerconaServerMongoDBSpec struct {
 	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
 	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
-	VaultSpec                       VaultSpec                            `json:"vault,omitempty"`
+	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -841,6 +841,8 @@ type SecretsSpec struct {
 }
 
 type VaultSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="isURL(self)",message="endpointURL must be a valid URL"
 	EndpointURL string `json:"endpointURL,omitempty"`
 	TLSSecret   string `json:"tlsSecret,omitempty"`
 	//+optional

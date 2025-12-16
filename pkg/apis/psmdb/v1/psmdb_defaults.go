@@ -92,7 +92,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
 
-	if cr.Spec.VaultSpec.EndpointURL != "" {
+	if cr.Spec.VaultSpec != nil && cr.Spec.VaultSpec.EndpointURL != "" {
 		if cr.Spec.VaultSpec.SyncUsersSpec.Role == "" {
 			cr.Spec.VaultSpec.SyncUsersSpec.Role = "operator"
 		}

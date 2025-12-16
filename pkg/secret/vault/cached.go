@@ -31,7 +31,7 @@ func (cv *cachedClient) Close() error {
 }
 
 func (cv *cachedClient) Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
-	if cv == nil || cr.Spec.VaultSpec.EndpointURL == "" {
+	if cv == nil || cr.Spec.VaultSpec == nil || cr.Spec.VaultSpec.EndpointURL == "" {
 		return nil
 	}
 
