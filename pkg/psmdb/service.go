@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
@@ -42,7 +41,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 					Name:        config.MongodPortName,
 					Port:        replset.GetPort(),
 					TargetPort:  intstr.FromInt(int(replset.GetPort())),
-					AppProtocol: appProtocol(cr, "mongo"),
+					AppProtocol: naming.AppProtocol(cr),
 				},
 			},
 			ClusterIP: "None",
@@ -90,7 +89,7 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 				Name:        config.MongodPortName,
 				Port:        replset.GetPort(),
 				TargetPort:  intstr.FromInt(int(replset.GetPort())),
-				AppProtocol: appProtocol(cr, "mongo"),
+				AppProtocol: naming.AppProtocol(cr),
 			},
 		},
 		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -130,13 +129,6 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
 	return svc
-}
-
-func appProtocol(cr *api.PerconaServerMongoDB, protocol string) *string {
-	if cr.CompareVersion("1.22.0") >= 0 {
-		return ptr.To(protocol)
-	}
-	return nil
 }
 
 type ServiceAddr struct {
