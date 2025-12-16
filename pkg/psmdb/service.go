@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
@@ -38,9 +39,10 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       config.MongodPortName,
-					Port:       replset.GetPort(),
-					TargetPort: intstr.FromInt(int(replset.GetPort())),
+					Name:        config.MongodPortName,
+					Port:        replset.GetPort(),
+					TargetPort:  intstr.FromInt(int(replset.GetPort())),
+					AppProtocol: appProtocol(cr, "mongo"),
 				},
 			},
 			ClusterIP: "None",
@@ -55,12 +57,6 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 	for k, v := range replset.Expose.ServiceLabels {
 		if _, ok := svc.Labels[k]; !ok {
 			svc.Labels[k] = v
-		}
-	}
-	if cr.CompareVersion("1.22.0") >= 0 {
-		appProtocol := "mongo"
-		for _, v := range svc.Spec.Ports {
-			v.AppProtocol = &appProtocol
 		}
 	}
 	return svc
@@ -91,9 +87,10 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       config.MongodPortName,
-				Port:       replset.GetPort(),
-				TargetPort: intstr.FromInt(int(replset.GetPort())),
+				Name:        config.MongodPortName,
+				Port:        replset.GetPort(),
+				TargetPort:  intstr.FromInt(int(replset.GetPort())),
+				AppProtocol: appProtocol(cr, "mongo"),
 			},
 		},
 		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -132,13 +129,14 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-	if cr.CompareVersion("1.22.0") >= 0 {
-		appProtocol := "mongo"
-		for _, v := range svc.Spec.Ports {
-			v.AppProtocol = &appProtocol
-		}
-	}
 	return svc
+}
+
+func appProtocol(cr *api.PerconaServerMongoDB, protocol string) *string {
+	if cr.CompareVersion("1.22.0") >= 0 {
+		return ptr.To(protocol)
+	}
+	return nil
 }
 
 type ServiceAddr struct {
