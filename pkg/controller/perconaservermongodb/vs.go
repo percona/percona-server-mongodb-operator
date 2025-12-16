@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient"
 	"github.com/percona/percona-server-mongodb-operator/versionserviceclient/models"
@@ -15,7 +17,7 @@ import (
 
 const productName = "psmdb-operator"
 
-func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta) (DepVersion, error) {
+func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta, opts versionOptions) (DepVersion, error) {
 	if strings.Contains(endpoint, "https://check.percona.com/versions") {
 		endpoint = api.GetDefaultVersionServiceEndpoint()
 	}
@@ -53,13 +55,17 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 		ClusterSize:             &vm.ClusterSize,
 		PitrEnabled:             &vm.PITREnabled,
 		PhysicalBackupScheduled: &vm.PhysicalBackupScheduled,
+		McsEnabled:              &vm.MCSEnabled,
+		RoleManagementEnabled:   &vm.RoleManagementEnabled,
+		UserManagementEnabled:   &vm.UserManagementEnabled,
+		VolumeExpansionEnabled:  &vm.VolumeExpansionEnabled,
 	}
 	applyParams = applyParams.WithTimeout(10 * time.Second)
 
 	resp, err := vsClient.VersionService.VersionServiceApply(applyParams)
 
 	if err != nil {
-		return DepVersion{}, err
+		return DepVersion{}, errors.Wrapf(err, "failed to version service apply")
 	}
 
 	if !versionUpgradeEnabled(cr) {
@@ -72,17 +78,17 @@ func (vs VersionServiceClient) GetExactVersion(cr *api.PerconaServerMongoDB, end
 
 	mongoVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Mongod)
 	if err != nil {
-		return DepVersion{}, err
+		return DepVersion{}, errors.Wrapf(err, "get mongo version")
 	}
 
 	backupVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Backup)
 	if err != nil {
-		return DepVersion{}, err
+		return DepVersion{}, errors.Wrapf(err, "get backup version")
 	}
 
-	pmmVersion, err := getVersion(resp.Payload.Versions[0].Matrix.Pmm)
+	pmmVersion, err := getPMMVersion(resp.Payload.Versions[0].Matrix.Pmm, opts.PMM3Enabled)
 	if err != nil {
-		return DepVersion{}, err
+		return DepVersion{}, errors.Wrapf(err, "get pmm version")
 	}
 
 	return DepVersion{
@@ -106,6 +112,38 @@ func getVersion(versions map[string]models.VersionVersion) (string, error) {
 	return "", nil
 }
 
+func getPMMVersion(versions map[string]models.VersionVersion, isPMM3 bool) (string, error) {
+	if len(versions) == 0 {
+		return "", fmt.Errorf("response has zero versions")
+	}
+	// One version for PMM3 and one version for PMM2 should only exist.
+	if len(versions) > 2 {
+		return "", fmt.Errorf("response has more than 2 versions")
+	}
+
+	var pmm2Version, pmm3Version string
+	for version := range versions {
+		if strings.HasPrefix(version, "3.") {
+			pmm3Version = version
+		}
+		if strings.HasPrefix(version, "2.") {
+			pmm2Version = version
+		}
+	}
+
+	if isPMM3 && pmm3Version == "" {
+		return "", fmt.Errorf("pmm3 is configured, but no pmm3 version exists")
+	}
+	if isPMM3 && pmm3Version != "" {
+		return pmm3Version, nil
+	}
+	if pmm2Version != "" {
+		return pmm2Version, nil
+	}
+
+	return "", fmt.Errorf("no recognizable PMM version found")
+}
+
 type DepVersion struct {
 	MongoImage    string `json:"mongoImage,omitempty"`
 	MongoVersion  string `json:"mongoVersion,omitempty"`
@@ -115,8 +153,12 @@ type DepVersion struct {
 	PMMVersion    string `json:"pmmVersion,omitempty"`
 }
 
+type versionOptions struct {
+	PMM3Enabled bool
+}
+
 type VersionService interface {
-	GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta) (DepVersion, error)
+	GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm VersionMeta, opts versionOptions) (DepVersion, error)
 }
 
 type VersionServiceClient struct{}
@@ -165,4 +207,8 @@ type VersionMeta struct {
 	ClusterSize             int32
 	PITREnabled             bool
 	PhysicalBackupScheduled bool
+	MCSEnabled              bool
+	VolumeExpansionEnabled  bool
+	UserManagementEnabled   bool
+	RoleManagementEnabled   bool
 }

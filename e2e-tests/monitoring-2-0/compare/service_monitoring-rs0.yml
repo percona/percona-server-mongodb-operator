@@ -16,9 +16,9 @@ metadata:
 spec:
   ports:
     - name: mongodb
-      port: 27017
+      port: 27019
       protocol: TCP
-      targetPort: 27017
+      targetPort: 27019
   selector:
     app.kubernetes.io/instance: monitoring
     app.kubernetes.io/managed-by: percona-server-mongodb-operator

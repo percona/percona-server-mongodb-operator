@@ -10,6 +10,10 @@
       {
         "role": "clusterAdmin",
         "db": "admin"
+      },
+      {
+        "role": "directShardOperations",
+        "db": "admin"
       }
     ],
     "authenticatedUserPrivileges": [
@@ -239,7 +243,6 @@
           "appendOplogNote",
           "applicationMessage",
           "auditConfigure",
-          "checkFreeMonitoringStatus",
           "cleanupOrphaned",
           "connPoolStats",
           "connPoolSync",
@@ -265,6 +268,8 @@
           "netstat",
           "oidReset",
           "operationMetrics",
+          "queryStatsRead",
+          "queryStatsReadTransformed",
           "removeShard",
           "replSetConfigure",
           "replSetGetConfig",
@@ -278,7 +283,6 @@
           "setClusterParameter",
           "setDefaultRWConcern",
           "setFeatureCompatibilityVersion",
-          "setFreeMonitoring",
           "setParameter",
           "shardedDataDistribution",
           "shardingState",

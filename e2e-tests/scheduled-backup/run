@@ -18,6 +18,19 @@ unlabel_node() {
 	kubectl_bin label nodes "${LABELED_NODE}" backupWorker- --overwrite
 }
 
+check_backup_count() {
+	local ancestor=$1
+	local expected=$2
+
+	local count=$(kubectl_bin get psmdb-backup -l percona.com/backup-ancestor=${ancestor} | grep ready | wc -l)
+	count="${count//[[:space:]]/}"
+
+	if [[ ${count} != ${expected} ]]; then
+		echo "${ancestor}: Expected ${expected} backups but found ${count}."
+		exit 1
+	fi
+}
+
 create_infra "$namespace"
 deploy_minio
 
@@ -69,11 +82,13 @@ wait_backup_agent $cluster-0
 wait_backup_agent $cluster-1
 wait_backup_agent $cluster-2
 
-desc 'add backups schedule, wait for the first backup'
+desc 'add backups schedule, wait for backups'
 apply_cluster "$test_dir/conf/$cluster-2.yml"
 sleep 55
 
+desc 'disable backups schedule'
 apply_cluster "$test_dir/conf/$cluster.yml"
+
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws=$(kubectl_bin get psmdb-backup | grep aws-s3 | awk '{print$1}' | head -1)
 	backup_name_gcp=$(kubectl_bin get psmdb-backup | grep gcp-cs | awk '{print$1}' | head -1)
@@ -88,12 +103,24 @@ wait_backup "$backup_name_minio"
 
 sleep 5
 
+echo -n "checking backup count for every-min-minio..."
+check_backup_count every-min-minio 1
+echo "OK"
+
+echo -n "checking backup count for every-min-aws-s3..."
+check_backup_count every-min-aws-s3 1
+echo "OK"
+
+echo -n "checking backup count for every-min-gcp-cs..."
+check_backup_count every-min-gcp-cs 1
+echo "OK"
+
+echo -n "checking backup count for every-min-azure-blob..."
+check_backup_count every-min-azure-blob 1
+echo "OK"
+
 desc 'check backup and restore -- minio'
-backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep "myApp.test.gz"
+check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -107,7 +134,8 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
+	setup_aws_credentials
+	check_backup_existence_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -120,7 +148,8 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	setup_gcs_credentials
+	check_backup_existence_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -133,7 +162,8 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
+	setup_azure_credentials
+	check_backup_existence_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
@@ -147,7 +177,6 @@ fi
 
 desc 'add physical backup schedule, wait for the first backup'
 apply_cluster "$test_dir/conf/$cluster-3.yml"
-
 sleep 55
 
 apply_cluster "$test_dir/conf/$cluster.yml"

@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: version-service-recommended
   finalizers:
-    - delete-psmdb-pvc
+    - percona.com/delete-psmdb-pvc
 spec:
   crVersion: 9.9.9
   image:

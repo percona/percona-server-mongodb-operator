@@ -3,9 +3,10 @@ package perconaservermongodb
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -14,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 var (
@@ -25,23 +27,45 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	log := logf.FromContext(ctx)
 
 	shouldReconcile = false
-	orderedFinalizers := cr.GetOrderedFinalizers()
+	orderedFinalizers := GetOrderedFinalizers(cr)
 	var finalizers []string
 
 	for i, f := range orderedFinalizers {
 		switch f {
-		case api.FinalizerDeletePVC:
+		case "delete-psmdb-pvc":
+			log.Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
+			fallthrough
+		case naming.FinalizerDeletePVC:
 			err = r.deletePvcFinalizer(ctx, cr)
-		case api.FinalizerDeletePSMDBPodsInOrder:
+		case "delete-psmdb-pods-in-order":
+			log.Info("The value delete-psmdb-pods-in-order is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pods-in-order instead")
+			fallthrough
+		case naming.FinalizerDeletePSMDBPodsInOrder:
 			err = r.deletePSMDBPods(ctx, cr)
 			if err == nil {
 				shouldReconcile = true
 			}
+		case naming.FinalizerDeletePITR:
+			err = r.deleteAllPITRChunks(ctx, cr)
 		default:
 			finalizers = append(finalizers, f)
 			continue
 		}
 		if err != nil {
+			if cr.Status.State == api.AppStateError {
+				/*
+					If a finalizer returns an error, the operator will continue the reconciliation process.
+					However, if the cluster is already in an error state, it is likely that this state will
+					persist in each subsequent reconcile, causing the cluster deletion process to get stuck.
+
+					The operator should attempt to execute finalizers, but when the cluster is in an error state,
+					any errors from finalizer functions should be ignored to allow the deletion process to continue.
+
+					Do not move this check elsewhere. Finalizers should not put the cluster into an error state.
+					If a finalizer function does cause the cluster to enter an error state, its logic should be changed.
+				*/
+				continue
+			}
 			switch err {
 			case errWaitingTermination:
 			default:
@@ -53,28 +77,34 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 	}
 
 	cr.SetFinalizers(finalizers)
-	err = r.client.Update(ctx, cr)
+	if err := r.client.Update(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "update")
+	}
 
-	return shouldReconcile, err
+	return shouldReconcile, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) (err error) {
+func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	pbmc, err := r.newPBM(ctx, r.client, cr)
+	if err != nil {
+		return errors.Wrap(err, "new pbm")
+	}
+	defer pbmc.Close(ctx)
+
+	if err := pbmc.DeletePITRChunks(ctx, primitive.Timestamp{
+		T: uint32(time.Now().Unix()),
+	}); err != nil {
+		return errors.Wrap(err, "delete pitr chunks")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
 	if cr.Spec.Sharding.Enabled {
 		cr.Spec.Sharding.Mongos.Size = 0
 
-		sts := new(appsv1.StatefulSet)
-		err := r.client.Get(ctx, cr.MongosNamespacedName(), sts)
-		if client.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "failed to get mongos statefulset")
-		}
-		if sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0 {
-			err = r.disableBalancer(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "failed to disable balancer")
-			}
-		}
 		list, err := r.getMongosPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "get mongos pods")
@@ -84,32 +114,49 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 
-	replsetsDeleted := true
+	rsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
-		if err := r.deleteRSPods(ctx, cr, rs); err != nil {
+		if err := r.deleteReplset(ctx, cr, rs); err != nil {
+			rsDeleted = false
 			switch err {
 			case errWaitingTermination, errWaitingFirstPrimary:
-				log.Info(err.Error(), "rs", rs.Name)
+				log.Info("deleting rs pods", "rs", rs.Name, "status", err.Error())
+				continue
 			default:
 				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
+				return err
 			}
-			replsetsDeleted = false
-			continue
 		}
 	}
-	if !replsetsDeleted {
+	if !rsDeleted {
 		return errWaitingTermination
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		if err := r.deleteRSPods(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
+		if err := r.deleteReplset(ctx, cr, cr.Spec.Sharding.ConfigsvrReplSet); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+func (r *ReconcilePerconaServerMongoDB) deleteReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+	// It's okay to delete arbiter + non-voting + hidden at the same time.
+	// None of them can be the primary.
+	if rs.Arbiter.Enabled {
+		rs.Arbiter.Size = 0
+	}
+	if rs.NonVoting.Enabled {
+		rs.NonVoting.Size = 0
+	}
+	if rs.Hidden.Enabled {
+		rs.Hidden.Size = 0
+	}
+
+	return r.deleteReplsetPods(ctx, cr, rs)
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteReplsetPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
 	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -130,7 +177,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "get rs statefulset")
+		return errors.Wrap(err, "get rs pods")
 	}
 
 	// `k8sclient.List` returns unsorted list of pods
@@ -148,7 +195,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteRSPods(ctx context.Context, cr *ap
 		return errWaitingTermination
 	case 1:
 		rs.Size = 1
-		// If there is one pod left, we should be sure that it's the primary
+		// If there is one pod left, we need to be sure that it's the primary.
 		if len(pods.Items) != 1 {
 			return errWaitingTermination
 		}
@@ -272,4 +319,30 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 	}
 
 	return nil
+}
+
+func GetOrderedFinalizers(cr *api.PerconaServerMongoDB) []string {
+	order := []string{naming.FinalizerDeletePITR, naming.FinalizerDeletePSMDBPodsInOrder, naming.FinalizerDeletePVC}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		order = []string{"delete-psmdb-pods-in-order", "delete-psmdb-pvc"}
+	}
+
+	finalizers := make([]string, len(cr.GetFinalizers()))
+	copy(finalizers, cr.GetFinalizers())
+	orderedFinalizers := make([]string, 0, len(finalizers))
+
+	for _, v := range order {
+		for i := 0; i < len(finalizers); {
+			if v == finalizers[i] {
+				orderedFinalizers = append(orderedFinalizers, v)
+				finalizers = append(finalizers[:i], finalizers[i+1:]...)
+				continue
+			}
+			i++
+		}
+	}
+
+	orderedFinalizers = append(orderedFinalizers, finalizers...)
+	return orderedFinalizers
 }

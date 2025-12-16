@@ -31,19 +31,6 @@ func NewBackupJob(name string) Job {
 	}
 }
 
-func NewRestoreJob(cr *api.PerconaServerMongoDBRestore) Job {
-	j := Job{
-		Name: cr.Name,
-		Type: TypeRestore,
-	}
-
-	if cr.Spec.PITR != nil {
-		j.Type = TypePITRestore
-	}
-
-	return j
-}
-
 func IsPBMNotConfiguredError(err error) bool {
 	return strings.Contains(err.Error(), "mongo: no documents in result")
 }
@@ -54,31 +41,8 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 	l := log.FromContext(ctx)
 	l.V(1).Info("Checking for active jobs", "currentJob", current)
 
-	bcps := &api.PerconaServerMongoDBBackupList{}
-	err := cl.List(ctx,
-		bcps,
-		&client.ListOptions{
-			Namespace: cluster.Namespace,
-		},
-	)
-	if err != nil {
-		return false, errors.Wrap(err, "get backup list")
-	}
-	for _, b := range bcps.Items {
-		if b.Name == current.Name && current.Type == TypeBackup {
-			continue
-		}
-		if b.Spec.GetClusterName() == cluster.Name &&
-			b.Status.State != api.BackupStateReady &&
-			b.Status.State != api.BackupStateError &&
-			b.Status.State != api.BackupStateWaiting {
-			l.Info("Waiting for backup to complete", "backup", b.Name, "status", b.Status.State)
-			return true, nil
-		}
-	}
-
 	rstrs := &api.PerconaServerMongoDBRestoreList{}
-	err = cl.List(ctx,
+	err := cl.List(ctx,
 		rstrs,
 		&client.ListOptions{
 			Namespace: cluster.Namespace,

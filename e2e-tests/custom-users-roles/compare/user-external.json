@@ -1,0 +1,20 @@
+switched to db $external
+{
+	"_id" : "$external.user-external",
+	"user" : "user-external",
+	"db" : "$external",
+	"roles" : [
+		{
+			"role" : "clusterAdmin",
+			"db" : "admin"
+		},
+		{
+			"role" : "userAdminAnyDatabase",
+			"db" : "admin"
+		}
+	],
+	"mechanisms" : [
+		"external"
+	]
+}
+bye

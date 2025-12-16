@@ -92,6 +92,9 @@ anaconda-mode/
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# vendor
+/vendor/
+
 ### Vim ###
 # swap
 .sw[a-p]
@@ -182,3 +185,7 @@ bin/
 ### VisualStudioCode ###
 .vscode/*
 .history
+
+projects/
+installers/olm/operator_*.yaml
+installers/olm/bundles

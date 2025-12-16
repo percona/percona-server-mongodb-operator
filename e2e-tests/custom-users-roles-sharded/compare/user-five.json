@@ -1,0 +1,21 @@
+switched to db testAdmin
+{
+	"_id" : "testAdmin.user-five",
+	"user" : "user-five",
+	"db" : "testAdmin",
+	"roles" : [
+		{
+			"role" : "role-five",
+			"db" : "testAdmin2"
+		},
+		{
+			"role" : "role-four",
+			"db" : "testAdmin1"
+		}
+	],
+	"mechanisms" : [
+		"SCRAM-SHA-1",
+		"SCRAM-SHA-256"
+	]
+}
+bye

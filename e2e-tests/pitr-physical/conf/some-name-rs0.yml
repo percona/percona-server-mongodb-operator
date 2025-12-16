@@ -40,7 +40,7 @@ spec:
     mongos:
       size: 3
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
       sidecars:
       - image: busybox
         command: ["/bin/sh"]

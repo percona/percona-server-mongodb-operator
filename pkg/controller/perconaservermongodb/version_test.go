@@ -11,6 +11,8 @@ import (
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	appsv1 "k8s.io/api/apps/v1"
@@ -19,13 +21,13 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func Test_majorUpgradeRequested(t *testing.T) {
@@ -39,7 +41,6 @@ func Test_majorUpgradeRequested(t *testing.T) {
 		want    UpgradeRequest
 		wantErr bool
 	}{
-
 		{
 			name: "TestWithEmptyMongoVersionInStatus",
 			args: args{
@@ -330,12 +331,15 @@ func Test_majorUpgradeRequested(t *testing.T) {
 }
 
 func TestVersionMeta(t *testing.T) {
+	ctx := t.Context()
 	tests := []struct {
-		name        string
-		cr          api.PerconaServerMongoDB
-		want        VersionMeta
-		clusterWide bool
-		helmDeploy  bool
+		name            string
+		cr              api.PerconaServerMongoDB
+		want            VersionMeta
+		clusterWide     bool
+		helmDeploy      bool
+		namespace       string
+		watchNamespaces string
 	}{
 		{
 			name: "Minimal CR",
@@ -359,9 +363,10 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:       "disabled",
-				Version:     version.Version,
+				Version:     version.Version(),
 				ClusterSize: 3,
 			},
+			namespace: "test-namespace",
 		},
 		{
 			name: "Full CR with old Version deployed with Helm",
@@ -399,6 +404,7 @@ func TestVersionMeta(t *testing.T) {
 						},
 						Tasks: []api.BackupTaskSpec{
 							{
+								Name:    "test",
 								Type:    defs.PhysicalBackup,
 								Enabled: true,
 							},
@@ -434,9 +440,11 @@ func TestVersionMeta(t *testing.T) {
 				PITREnabled:             true,
 				HelmDeployCR:            true,
 				PhysicalBackupScheduled: true,
+				ClusterWideEnabled:      false,
 			},
 			clusterWide: false,
 			helmDeploy:  false,
+			namespace:   "test-namespace",
 		},
 		{
 			name: "Disabled Backup with storage",
@@ -466,10 +474,43 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:          "disabled",
-				Version:        version.Version,
+				Version:        version.Version(),
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
+			namespace: "test-namespace",
+		},
+		{
+			name: "Cluster-wide with specified namespaces and operator helm deploy",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 4,
+				},
+			},
+			want: VersionMeta{
+				Apply:              "disabled",
+				Version:            version.Version(),
+				HelmDeployOperator: true,
+				ClusterWideEnabled: true,
+				ClusterSize:        4,
+			},
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "test-namespace,another-namespace",
 		},
 		{
 			name: "Cluster-wide and operator helm deploy",
@@ -493,22 +534,23 @@ func TestVersionMeta(t *testing.T) {
 			},
 			want: VersionMeta{
 				Apply:              "disabled",
-				Version:            version.Version,
+				Version:            version.Version(),
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
 			},
-			clusterWide: true,
-			helmDeploy:  true,
+			clusterWide:     true,
+			helmDeploy:      true,
+			namespace:       "test-namespace",
+			watchNamespaces: "",
 		},
 	}
-	currentNs := "test-namespace"
 	size := int32(1)
 	operatorName := "percona-server-mongodb-operator"
 	operatorDepl := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      operatorName,
-			Namespace: currentNs,
+			Namespace: "",
 			Labels:    make(map[string]string),
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -538,9 +580,9 @@ func TestVersionMeta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(k8s.WatchNamespaceEnvVar, currentNs)
+			t.Setenv(k8s.WatchNamespaceEnvVar, tt.namespace)
 			if tt.clusterWide {
-				t.Setenv(k8s.WatchNamespaceEnvVar, "")
+				t.Setenv(k8s.WatchNamespaceEnvVar, tt.watchNamespaces)
 			}
 			if tt.helmDeploy {
 				operatorDepl.Labels["helm.sh/chart"] = operatorName
@@ -563,16 +605,15 @@ func TestVersionMeta(t *testing.T) {
 				scheme:        scheme,
 				serverVersion: sv,
 			}
-			log := logf.Log.WithName(tt.name)
 
-			if err := r.setCRVersion(context.TODO(), &tt.cr); err != nil {
+			if err := r.setCRVersion(ctx, &tt.cr); err != nil {
 				t.Fatal(err, "set CR version")
 			}
-			err := tt.cr.CheckNSetDefaults(version.PlatformKubernetes, log)
+			err := tt.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes)
 			if err != nil {
 				t.Fatal(err)
 			}
-			vm, err := r.getVersionMeta(context.TODO(), &tt.cr, &operatorDepl)
+			vm, err := r.getVersionMeta(ctx, &tt.cr, &operatorDepl)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -597,11 +638,9 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 		}
 	}()
 
-	conn, err := grpc.DialContext(
-		context.Background(),
+	conn, err := grpc.NewClient(
 		fmt.Sprintf("dns:///%s", fmt.Sprintf("%s:%d", addr, port)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial server")
@@ -629,8 +668,7 @@ func startFakeVersionService(t *testing.T, addr string, port int, gwport int) er
 	return nil
 }
 
-type fakeVS struct {
-}
+type fakeVS struct{}
 
 func (b *fakeVS) Product(ctx context.Context, req *pbVersion.ProductRequest) (*pbVersion.ProductResponse, error) {
 	return &pbVersion.ProductResponse{}, nil
@@ -673,9 +711,9 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 		DatabaseVersion:         "database-version",
 		HashicorpVaultEnabled:   true,
 		KubeVersion:             "kube-version",
-		OperatorVersion:         version.Version,
+		OperatorVersion:         version.Version(),
 		Platform:                productName,
-		PmmVersion:              "pmm-version",
+		PmmVersion:              "3.1",
 		ShardingEnabled:         true,
 		PmmEnabled:              true,
 		HelmDeployOperator:      true,
@@ -706,8 +744,11 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 						},
 					},
 					Pmm: map[string]*pbVersion.Version{
-						"pmm-version": {
-							ImagePath: "pmm-image",
+						"3.1": {
+							ImagePath: "pmm3-image",
+						},
+						"2.1": {
+							ImagePath: "pmm2-image",
 						},
 					},
 				},
@@ -719,11 +760,12 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 func TestVersionService(t *testing.T) {
 	vs := VersionServiceClient{}
 	tests := []struct {
-		cr        api.PerconaServerMongoDB
-		name      string
-		vm        VersionMeta
-		want      DepVersion
-		shouldErr bool
+		cr            api.PerconaServerMongoDB
+		name          string
+		vm            VersionMeta
+		want          DepVersion
+		expectedError error
+		isPMM3        bool
 	}{
 		{
 			name: "UpgradeOptions.Apply: disabled",
@@ -736,7 +778,7 @@ func TestVersionService(t *testing.T) {
 			},
 			vm: VersionMeta{
 				Apply:   string(api.UpgradeStrategyDisabled),
-				Version: version.Version,
+				Version: version.Version(),
 			},
 			want: DepVersion{},
 		},
@@ -751,29 +793,30 @@ func TestVersionService(t *testing.T) {
 			},
 			vm: VersionMeta{
 				Apply:   string(api.UpgradeStrategyNever),
-				Version: version.Version,
+				Version: version.Version(),
 			},
 			want: DepVersion{},
 		},
 		{
-			name:      "Error on empty version service response",
-			cr:        api.PerconaServerMongoDB{},
-			vm:        VersionMeta{},
-			want:      DepVersion{},
-			shouldErr: true,
+			name:          "Error on empty version service response",
+			cr:            api.PerconaServerMongoDB{},
+			vm:            VersionMeta{},
+			want:          DepVersion{},
+			expectedError: errors.New("failed to version service apply"),
 		},
 		{
-			name: "Request to version service",
-			cr:   api.PerconaServerMongoDB{},
+			name:   "Request to version service with PMM3",
+			cr:     api.PerconaServerMongoDB{},
+			isPMM3: true,
 			vm: VersionMeta{
 				Apply:                   "",
 				MongoVersion:            "database-version",
 				KubeVersion:             "kube-version",
 				Platform:                productName,
-				PMMVersion:              "pmm-version",
+				PMMVersion:              "3.1",
 				BackupVersion:           "backup-version",
 				CRUID:                   "custom-resource-uid",
-				Version:                 version.Version,
+				Version:                 version.Version(),
 				ClusterWideEnabled:      true,
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
@@ -791,29 +834,62 @@ func TestVersionService(t *testing.T) {
 				MongoVersion:  "mongo-version",
 				BackupImage:   "backup-image",
 				BackupVersion: "backup-version",
-				PMMImage:      "pmm-image",
-				PMMVersion:    "pmm-version",
+				PMMImage:      "pmm3-image",
+				PMMVersion:    "3.1",
+			},
+		},
+		{
+			name: "Request to version service with PMM2",
+			cr:   api.PerconaServerMongoDB{},
+			vm: VersionMeta{
+				Apply:                   "",
+				MongoVersion:            "database-version",
+				KubeVersion:             "kube-version",
+				Platform:                productName,
+				PMMVersion:              "3.1",
+				BackupVersion:           "backup-version",
+				CRUID:                   "custom-resource-uid",
+				Version:                 version.Version(),
+				ClusterWideEnabled:      true,
+				HashicorpVaultEnabled:   true,
+				ShardingEnabled:         true,
+				PMMEnabled:              true,
+				HelmDeployOperator:      true,
+				HelmDeployCR:            true,
+				SidecarsUsed:            true,
+				BackupsEnabled:          true,
+				ClusterSize:             3,
+				PITREnabled:             true,
+				PhysicalBackupScheduled: true,
+			},
+			want: DepVersion{
+				MongoImage:    "mongo-image",
+				MongoVersion:  "mongo-version",
+				BackupImage:   "backup-image",
+				BackupVersion: "backup-version",
+				PMMImage:      "pmm2-image",
+				PMMVersion:    "2.1",
 			},
 		},
 	}
 	addr := "127.0.0.1"
 	port := 10000
 	gwPort := 11000
-	if err := startFakeVersionService(t, addr, port, gwPort); err != nil {
-		t.Fatal(err, "failed to start fake version service server")
-	}
+	err := startFakeVersionService(t, addr, port, gwPort)
+	require.NoError(t, err)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm)
-			if err != nil {
-				if tt.shouldErr {
-					return
-				}
-				t.Fatal(err)
+			opts := versionOptions{
+				PMM3Enabled: tt.isPMM3,
 			}
-			if dv != tt.want {
-				t.Fatal(errors.Errorf("Have: %v; Want: %v", dv, tt.want))
+			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm, opts)
+			if tt.expectedError != nil {
+				assert.ErrorContains(t, err, tt.expectedError.Error())
+				return
 			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, dv)
 		})
 	}
 }

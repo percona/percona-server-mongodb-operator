@@ -67,14 +67,14 @@ function expose_cluster() {
               "path": "/spec/replsets/0/expose",
         "value": {
           "enabled": '$expose_status',
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           },
         {
               "op": "replace",
               "path": "/spec/sharding/mongos/expose",
         "value": {
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           },
           {
@@ -82,7 +82,7 @@ function expose_cluster() {
               "path": "/spec/sharding/configsvrReplSet/expose",
         "value": {
           "enabled": '${expose_status}',
-          "exposeType" : "'"${expose_type}"'"
+          "type" : "'"${expose_type}"'"
         }
           }]'
 
@@ -116,6 +116,25 @@ function main() {
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl statefulset/$cluster-rs0
+	compare_kubectl statefulset/$cluster-cfg
+	compare_kubectl statefulset/$cluster-mongos ""
+
+	desc 'disabling sharding'
+	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": false}]'
+	sleep 10
+	wait_cluster_consistency "$cluster" 60
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-disabled"
+
+	if [[ "$(kubectl_bin get sts -o yaml | yq '.items | length')" != 1 ]]; then
+		echo "Expected to have only 1 statefulset $cluster-rs0"
+		exit 1
+	fi
+
+	desc 'enabling sharding'
+	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": true}]'
+	sleep 10
+	wait_cluster_consistency "$cluster" 60
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-enabled"
 	compare_kubectl statefulset/$cluster-cfg
 	compare_kubectl statefulset/$cluster-mongos ""
 

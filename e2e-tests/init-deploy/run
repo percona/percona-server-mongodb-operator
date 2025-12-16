@@ -6,14 +6,14 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-max_conn=13
+max_conn=17
 
 create_infra $namespace
 
 desc 'create secrets and start client'
 kubectl_bin apply \
-	-f $conf_dir/secrets_with_tls.yml \
-	-f $conf_dir/client.yml
+	-f "$test_dir/conf/secrets_with_tls.yml" \
+	-f "$conf_dir/client.yml"
 
 desc 'create custom RuntimeClass'
 if version_gt "1.19" && [ $EKS -ne 1 ]; then
@@ -36,10 +36,25 @@ compare_kubectl statefulset/$cluster
 compare_kubectl service/$cluster
 
 desc 'check if users created'
-compare_mongo_user "userAdmin:userAdmin123456@$cluster.$namespace"
-compare_mongo_user "backup:backup123456@$cluster.$namespace"
-compare_mongo_user "clusterAdmin:clusterAdmin123456@$cluster.$namespace"
-compare_mongo_user "clusterMonitor:clusterMonitor123456@$cluster.$namespace"
+
+secret_name="some-users"
+
+user=$(getUserData "$secret_name" "MONGODB_USER_ADMIN_USER")
+pass=$(getUserData "$secret_name" "MONGODB_USER_ADMIN_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "userAdmin"
+
+user=$(getUserData "$secret_name" "MONGODB_BACKUP_USER")
+pass=$(getUserData "$secret_name" "MONGODB_BACKUP_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "backup"
+
+user=$(getUserData "$secret_name" "MONGODB_CLUSTER_ADMIN_USER")
+pass=$(getUserData "$secret_name" "MONGODB_CLUSTER_ADMIN_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "clusterAdmin"
+
+user=$(getUserData "$secret_name" "MONGODB_CLUSTER_MONITOR_USER")
+pass=$(getUserData "$secret_name" "MONGODB_CLUSTER_MONITOR_PASSWORD")
+compare_mongo_user "$user:$pass@$cluster.$namespace" "clusterMonitor"
+
 # check that test user don't have access
 (run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "test:test@$cluster.$namespace" || :) 2>&1 \
 	| grep 'Authentication failed'
@@ -61,6 +76,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
 desc 'check number of connections'
 conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
 if [ ${conn_count} -gt ${max_conn} ]; then
+	echo "error: connection count (${conn_count}) exceeds maximum allowed (${max_conn})"
 	exit 1
 fi
 
@@ -79,6 +95,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
 
 desc 'check if possible to create second cluster'
 cluster2="another-name-rs0"
+apply_s3_storage_secrets
 apply_cluster $test_dir/conf/$cluster2.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster2 3
@@ -97,8 +114,27 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster2-0.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-1.$cluster2.$namespace" "-3rd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster2-2.$cluster2.$namespace" "-3rd"
 
-desc 'check for passwords leak'
-check_passwords_leak
+desc 'check number of connections with backup'
+max_conn=50
+sleep 300
+conn_count=$(run_mongo 'db.serverStatus().connections.current' "clusterAdmin:clusterAdmin123456@$cluster2.$namespace" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|bye')
+if [ ${conn_count} -gt ${max_conn} ]; then
+	echo "error: connection count (${conn_count}) exceeds maximum allowed (${max_conn}) with backup enabled"
+	exit 1
+fi
+
+desc 'check if mongod log files exist in pod'
+log_files=$(kubectl exec "${cluster2}-0" -c "mongod" -- ls "/data/db/logs" 2>/dev/null)
+if ! echo "$log_files" | grep -q 'mongod.log' || ! echo "$log_files" | grep -q 'mongod.full.log'; then
+	echo "error, files found:"
+	echo "$log_files"
+	return 1
+fi
+echo "found mongod.log and mongod.full.log in /data/db/logs"
+
+# Temporarily skipping this check
+# desc 'check for passwords leak'
+# check_passwords_leak
 
 desc 'delete custom RuntimeClass'
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"

@@ -1,6 +1,5 @@
 #!/bin/bash
 set -Eeuo pipefail
-set -o xtrace
 
 if [ "${1:0:1}" = '-' ]; then
 	set -- mongod "$@"
@@ -306,13 +305,18 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		done
 	fi
 
+	MONGO_PORT="$(_mongod_hack_get_arg_val --port "$@")"
+	MONGO_PORT="${MONGO_PORT:-${MONGODB_PORT:-27017}}"
+	export MONGO_PORT
+
 	if [ -n "$shouldPerformInitdb" ]; then
 		mongodHackedArgs=("$@")
 		if _parse_config "$@"; then
 			_mongod_hack_ensure_arg_val --config "$tempConfigFile" "${mongodHackedArgs[@]}"
 		fi
+
 		_mongod_hack_ensure_arg_val --bind_ip 127.0.0.1 "${mongodHackedArgs[@]}"
-		_mongod_hack_ensure_arg_val --port 27017 "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg_val --port "$MONGO_PORT" "${mongodHackedArgs[@]}"
 		_mongod_hack_ensure_no_arg --bind_ip_all "${mongodHackedArgs[@]}"
 
 		# remove "--auth" and "--replSet" for our initial startup (see https://docs.mongodb.com/manual/tutorial/enable-authentication/#start-mongodb-without-access-control)
@@ -339,7 +343,7 @@ if [ "$originalArgOne" = 'mongod' ]; then
 
 		"${mongodHackedArgs[@]}" --fork
 
-		mongo=("$mongo_shell" --host 127.0.0.1 --port 27017 --quiet)
+		mongo=("$mongo_shell" --host 127.0.0.1 --port "$MONGO_PORT" --quiet)
 
 		# check to see that our "mongod" actually did start up (catches "--help", "--version", MongoDB 3.2 being silly, slow prealloc, etc)
 		# https://jira.mongodb.org/browse/SERVER-16292
@@ -421,13 +425,10 @@ if [[ $originalArgOne == mongo* ]]; then
 		tlsMode="preferTLS"
 	fi
 
-	# don't add --tlsMode if TLS is disabled
-	if clusterAuthMode="$(_mongod_hack_get_arg_val --clusterAuthMode "${mongodHackedArgs[@]}")"; then
-		if [[ ${clusterAuthMode} != "keyFile" ]]; then
-			_mongod_hack_ensure_arg_val --tlsMode "${tlsMode}" "${mongodHackedArgs[@]}"
-		else
-			_mongod_hack_ensure_no_arg --sslAllowInvalidCertificates "${mongodHackedArgs[@]}"
-		fi
+	_mongod_hack_ensure_arg_val --tlsMode "${tlsMode}" "${mongodHackedArgs[@]}"
+
+	if [[ ${tlsMode} == "disabled" ]]; then
+		_mongod_hack_ensure_no_arg --sslAllowInvalidCertificates "${mongodHackedArgs[@]}"
 	fi
 
 	if [[ ${tlsMode} != "disabled" ]]; then
@@ -477,6 +478,16 @@ if [[ $originalArgOne == mongo* ]]; then
 		_mongod_hack_rename_arg_save_val --sslClusterCAFile --tlsClusterCAFile "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg_save_val --sslCRLFile --tlsCRLFile "${mongodHackedArgs[@]}"
 		_mongod_hack_rename_arg_save_val --sslDisabledProtocols --tlsDisabledProtocols "${mongodHackedArgs[@]}"
+	fi
+
+	if [[ $originalArgOne == "mongod" && ${LOGCOLLECTOR_ENABLED:-} == "true" ]]; then
+		mkdir -p /data/db/logs/
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
+		# https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
+		# the operator is using logrotate as part of the logcollector feature.
+		# using the rename option because logrotate performs db.adminCommand({ logRotate: 1 })
+		_mongod_hack_ensure_arg_val --logRotate rename "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg --logappend "${mongodHackedArgs[@]}"
 	fi
 
 	set -- "${mongodHackedArgs[@]}"

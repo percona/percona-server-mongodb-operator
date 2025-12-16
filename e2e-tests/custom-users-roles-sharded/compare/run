@@ -1,0 +1,441 @@
+#!/bin/bash
+
+set -o errexit
+
+compare() {
+	local database="$1"
+	local command="$2"
+	local uri="$3"
+	local target="$4"
+
+	run_mongos "use ${database}\n ${command}" "$uri" "mongodb" \
+		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
+		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxxesvc/' \
+		| sed '/"userId"/d' \
+			>$tmp_dir/${target}
+
+	diff ${test_dir}/compare/${target}.json $tmp_dir/${target}
+}
+
+check_auth() {
+	local uri="$1"
+
+	ping=$(run_mongos "db.runCommand({ ping: 1 }).ok" "$uri" "" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
+	desc "ping return"
+	if [ "${ping}" != "1" ]; then
+		return 1
+	fi
+}
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="some-name"
+
+create_infra "$namespace"
+
+mongosUri="userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+
+desc 'create secrets and start client'
+kubectl_bin apply -f "${conf_dir}/client.yml" \
+	-f "${conf_dir}/secrets.yml" \
+	-f "${test_dir}/conf/app-user-secrets.yml"
+
+
+apply_s3_storage_secrets
+if version_gt "1.19" && [ $EKS -ne 1 ]; then
+	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+elif version_gt "1.24" && [ $EKS -eq 1 ]; then
+	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
+else
+	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
+fi
+
+desc 'create first PSMDB cluster'
+
+apply_cluster "$test_dir/conf/$cluster-rs0.yml"
+
+desc 'check if all 3 Pods started'
+wait_for_running $cluster-rs0 3
+wait_for_running $cluster-cfg 3 "false"
+wait_for_running $cluster-mongos 3
+wait_cluster_consistency "${cluster}"
+
+desc 'check if service and statefulset created with expected config'
+compare_kubectl statefulset/$cluster-rs0
+compare_kubectl statefulset/$cluster-cfg
+compare_kubectl statefulset/$cluster-mongos ""
+
+desc 'check user created on cluster creation'
+
+userOne="user-one"
+userOnePass=$(getSecretData "user-one" "userOnePassKey")
+compare 'admin' 'db.getUser("user-one")' "$mongosUri" "user-one"
+check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
+
+desc 'delete initial user from CR and create a new one'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-two",
+				"db":"admin",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"userAdminAnyDatabase"}, 
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two"
+
+userTwo="user-two"
+userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
+
+# Both users should be in the DB, the operator should not delete the user removed from the CR
+check_auth "$userTwo:$userTwoPass@$cluster-mongos.$namespace"
+check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
+
+desc 'check password change'
+userTwoNewPass="new-user-two-password"
+patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
+sleep 20
+
+check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
+
+desc 'check user roles update from CR'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-two",
+				"db":"admin",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+
+desc 'check user roles update from DB'
+
+run_mongos \
+	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
+	"$mongosUri"
+sleep 15
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+
+desc 'check user recreated after deleted from DB'
+run_mongos \
+	'use admin\n db.dropUser("user-two")' \
+	"$mongosUri"
+sleep 15
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+
+desc 'check new user created after updated user name via CR'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-three",
+				"db":"admin",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
+compare 'admin' 'db.getUser("user-two")' "$mongosUri" "user-two-update-roles"
+
+# user-three and user-two should be in the DB
+check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
+check_auth "user-three:$userTwoNewPass@$cluster-mongos.$namespace"
+
+desc 'check new user created after updated user db via CR'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-three",
+				"db":"newDb",
+				"passwordSecretRef": {
+					"name": "user-two",
+					"key": "userTwoPassKey"
+				},
+				"roles": [
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster-rs0 3
+
+compare 'newDb' 'db.getUser("user-three")' "$mongosUri" "user-three-newDb-db"
+compare 'admin' 'db.getUser("user-three")' "$mongosUri" "user-three-admin-db"
+
+desc 'check new user created with default db and secret password key'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"users":[
+			{
+				"name":"user-four",
+				"passwordSecretRef": {
+					"name": "user-two"
+				},
+				"roles": [
+					{"db":"admin","name":"clusterAdmin"}
+				]
+			}
+		]}
+	}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getUser("user-four")' "$mongosUri" "user-four"
+
+# ======================== Roles ========================
+
+desc 'check user role on cluster initialization'
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-one"
+
+desc 'check role recreated after deleted from DB'
+run_mongos \
+	'use admin\n db.dropRole("role-one")' \
+	"$mongosUri"
+sleep 15
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-one"
+
+desc 'delete initial role from CR and create a new one'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+				"role": "role-two",
+				"db": "admin",
+				"privileges": [
+					{
+						"resource": {
+							"db": "config",
+							"collection": ""
+						},
+						"actions": [
+							"find"
+						]
+					}
+				],
+				"roles": [
+					{
+						"role": "read",
+						"db": "admin"
+					}
+				]
+			}
+		]
+	}}'
+
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getRole("role-one", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-one"
+compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-two"
+
+desc 'check role update from CR'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+				"role": "role-two",
+				"db": "admin",
+				"privileges": [
+					{
+						"resource": {
+							"db": "config",
+							"collection": ""
+						},
+						"actions": [
+							"find"
+						]
+					}
+				]
+			}
+		]
+	}}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-two-updated"
+
+desc 'check role update from DB'
+run_mongos \
+	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
+	"$mongosUri"
+sleep 15
+compare 'admin' 'db.getRole("role-two", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-two-updated"
+
+desc 'check new role created after updated role name via CR'
+kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
+		"spec": {"roles":[
+			{
+				"role": "role-three",
+				"db": "admin",
+				"privileges": [
+					{
+						"resource": {
+							"db": "config",
+							"collection": ""
+						},
+						"actions": [
+							"find"
+						]
+					}
+				]
+			}
+		]
+	}}'
+wait_for_running $cluster-rs0 3
+
+compare 'admin' 'db.getRole("role-three", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-three"
+
+desc 'check creating multiple roles and the users in a single CR apply'
+kubectl_bin patch psmdb ${psmdb} --type=merge --patch '{
+		"spec": {
+			"roles": [
+				{
+				"role": "role-four",
+				"db": "testAdmin1",
+				"privileges": [
+					{
+					"resource": {
+						"db": "testAdmin1",
+						"collection": ""
+					},
+					"actions": [
+						"find",
+						"listIndexes",
+						"listCollections"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin1",
+						"collection": "system.profile"
+					},
+					"actions": [
+						"dbStats",
+						"collStats",
+						"indexStats"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin1",
+						"collection": "system.version"
+					},
+					"actions": [
+						"find"
+					]
+					}
+				]
+				},
+				{
+				"role": "role-five",
+				"db": "testAdmin2",
+				"privileges": [
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": ""
+					},
+					"actions": [
+						"find",
+						"listIndexes",
+						"listCollections"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": "system.profile"
+					},
+					"actions": [
+						"dbStats",
+						"collStats",
+						"indexStats"
+					]
+					},
+					{
+					"resource": {
+						"db": "testAdmin2",
+						"collection": "system.version"
+					},
+					"actions": [
+						"find"
+					]
+					}
+				]
+				}
+			],
+			"users": [
+				{
+				"name": "user-five",
+				"db": "testAdmin",
+				"passwordSecretRef": {
+					"name": "user-one",
+					"key": "userOnePassKey"
+				},
+				"roles": [
+					{
+						"name": "role-four",
+						"db": "testAdmin1"
+					},
+					{
+						"name": "role-five",
+						"db": "testAdmin2"
+					}
+				]
+				},
+				{
+				"name": "user-six",
+				"db": "testAdmin",
+				"passwordSecretRef": {
+					"name": "user-one",
+					"key": "userOnePassKey"
+				},
+				"roles": [
+					{
+					"name": "role-five",
+					"db": "testAdmin2"
+					}
+				]
+				}
+			]
+	}}'
+wait_for_running $cluster-rs0 3
+compare 'testAdmin1' 'db.getRole("role-four", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-four"
+compare 'testAdmin2' 'db.getRole("role-five", {showPrivileges: true, showAuthenticationRestrictions: true})' \
+	"$mongosUri" "role-five"
+compare 'testAdmin' 'db.getUser("user-five")' "$mongosUri" "user-five"
+compare 'testAdmin' 'db.getUser("user-six")' "$mongosUri" "user-six"
+
+destroy $namespace
+
+desc 'test passed'

@@ -158,7 +158,7 @@ function test_exposed_sharded_cluster() {
 			"path": "/spec/replsets/0/expose",
 			"value": {
 				"enabled": true,
-				"exposeType" : "ClusterIP"
+				"type" : "ClusterIP"
 			}
 		},
 		{
@@ -166,7 +166,7 @@ function test_exposed_sharded_cluster() {
 			"path": "/spec/replsets/1/expose",
 			"value": {
 				"enabled": true,
-				"exposeType" : "ClusterIP"
+				"type" : "ClusterIP"
 			}
 		},
 	]'
@@ -199,4 +199,5 @@ test_exposed_single_replset
 desc 'testing exposed two replsets sharded cluster'
 test_exposed_sharded_cluster
 
+desc 'test passed'
 destroy ${namespace}

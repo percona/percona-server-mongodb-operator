@@ -1,0 +1,78 @@
+switched to db testAdmin1
+{
+	"_id" : "testAdmin1.role-four",
+	"role" : "role-four",
+	"db" : "testAdmin1",
+	"privileges" : [
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"listCollections",
+				"listIndexes"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : "system.profile"
+			},
+			"actions" : [
+				"collStats",
+				"dbStats",
+				"indexStats"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : "system.version"
+			},
+			"actions" : [
+				"find"
+			]
+		}
+	],
+	"roles" : [ ],
+	"authenticationRestrictions" : [ ],
+	"inheritedRoles" : [ ],
+	"inheritedPrivileges" : [
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : ""
+			},
+			"actions" : [
+				"find",
+				"listCollections",
+				"listIndexes"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : "system.profile"
+			},
+			"actions" : [
+				"collStats",
+				"dbStats",
+				"indexStats"
+			]
+		},
+		{
+			"resource" : {
+				"db" : "testAdmin1",
+				"collection" : "system.version"
+			},
+			"actions" : [
+				"find"
+			]
+		}
+	],
+	"inheritedAuthenticationRestrictions" : [ ],
+	"isBuiltin" : false
+}
+bye

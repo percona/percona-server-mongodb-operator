@@ -134,6 +134,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: arbiter-clusterip-mongodb-encryption-key
               readOnly: true
@@ -169,6 +171,8 @@ spec:
             secretName: arbiter-clusterip-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: arbiter-clusterip-rs0-mongod
@@ -196,6 +200,4 @@ spec:
         - emptyDir: {}
           name: mongod-data
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete

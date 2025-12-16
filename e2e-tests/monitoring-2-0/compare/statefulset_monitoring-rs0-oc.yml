@@ -44,7 +44,7 @@ spec:
             - --bind_ip_all
             - --auth
             - --dbpath=/data/db
-            - --port=27017
+            - --port=27019
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
@@ -63,7 +63,7 @@ spec:
             - name: SERVICE_NAME
               value: monitoring
             - name: MONGODB_PORT
-              value: "27017"
+              value: "27019"
             - name: MONGODB_REPLSET
               value: rs0
           envFrom:
@@ -92,7 +92,7 @@ spec:
             timeoutSeconds: 10
           name: mongod
           ports:
-            - containerPort: 27017
+            - containerPort: 27019
               name: mongodb
               protocol: TCP
           readinessProbe:
@@ -129,6 +129,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: monitoring-mongodb-encryption-key
               readOnly: true
@@ -155,7 +157,7 @@ spec:
             - name: DB_CLUSTER
               value: monitoring
             - name: DB_PORT
-              value: "27017"
+              value: "27019"
             - name: DB_PORT_MIN
               value: "30100"
             - name: DB_PORT_MAX
@@ -265,6 +267,9 @@ spec:
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -293,6 +298,8 @@ spec:
             secretName: monitoring-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: monitoring-rs0-mongod
@@ -318,9 +325,7 @@ spec:
             defaultMode: 420
             secretName: internal-monitoring-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

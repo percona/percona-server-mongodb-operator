@@ -5,14 +5,15 @@ metadata:
 spec:
   clusterServiceDNSMode: External
   unmanaged: true
+  updateStrategy: RollingUpdate
   image:
   imagePullPolicy: Always
+  updateStrategy: RollingUpdate
   secrets:
     users: cross-site-sharded-replica-secrets
     ssl: cross-site-sharded-replica-ssl
     sslInternal: cross-site-sharded-replica-ssl-internal
   replsets:
-
   - name: rs0
     size: 3
     affinity:
@@ -21,7 +22,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: ClusterIp
+      type: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -66,7 +67,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: ClusterIp
+      type: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -114,7 +115,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: true
-        exposeType: ClusterIp
+        type: ClusterIp
       resources:
         limits:
           cpu: "300m"
@@ -142,4 +143,4 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIp
+        type: ClusterIp

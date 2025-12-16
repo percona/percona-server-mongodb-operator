@@ -1,9 +1,13 @@
 arbiter
 default-cr
 demand-backup
-demand-backup-physical
-ldap
-ldap-tls
+demand-backup-incremental
+demand-backup-physical-parallel
+demand-backup-physical-aws
+demand-backup-physical-azure
+demand-backup-physical-gcp-s3
+demand-backup-physical-gcp-native
+demand-backup-physical-minio
 limits
 liveness
 mongod-major-upgrade
@@ -16,6 +20,5 @@ security-context
 self-healing-chaos
 smart-update
 upgrade-consistency
-upgrade-consistency-sharded-tls
 users
 version-service

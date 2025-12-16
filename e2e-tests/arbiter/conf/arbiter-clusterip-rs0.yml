@@ -17,7 +17,7 @@ spec:
       size: 1
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     volumeSpec:
       persistentVolumeClaim:
         resources:

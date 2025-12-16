@@ -14,7 +14,7 @@ spec:
     size: 3
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     affinity:
       antiAffinityTopologyKey: none
     resources:

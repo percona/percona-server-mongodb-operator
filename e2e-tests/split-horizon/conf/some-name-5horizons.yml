@@ -14,7 +14,7 @@ spec:
     size: 3
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     splitHorizons:
       some-name-rs0-0:
         external: some-name-rs0-0.clouddemo.xyz

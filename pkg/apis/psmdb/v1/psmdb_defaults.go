@@ -1,20 +1,24 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util/numstr"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // DefaultDNSSuffix is a default dns suffix for the cluster service
@@ -25,6 +29,7 @@ const MultiClusterDefaultDNSSuffix = "svc.clusterset.local"
 
 const (
 	MongodRESTencryptDir = "/etc/mongodb-encryption"
+	InternalKeyName      = "mongodb-key"
 	EncryptionKeyName    = "encryption-key"
 )
 
@@ -39,11 +44,11 @@ var (
 	defaultMongodSize               int32 = 3
 	defaultReplsetName                    = "rs"
 	defaultStorageEngine                  = StorageEngineWiredTiger
-	DefaultMongodPort               int32 = 27017
 	defaultWiredTigerCacheSizeRatio       = numstr.MustParse("0.5")
 	defaultInMemorySizeRatio              = numstr.MustParse("0.9")
-	defaultOperationProfilingMode         = OperationProfilingModeSlowOp
 	defaultImagePullPolicy                = corev1.PullAlways
+
+	DefaultMongoPort int32 = 27017
 )
 
 const (
@@ -54,7 +59,9 @@ const (
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
-func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log logr.Logger) error {
+func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform version.Platform) error {
+	log := logf.FromContext(ctx)
+
 	if cr.Spec.Replsets == nil {
 		return errors.New("at least one replica set should be specified")
 	}
@@ -197,10 +204,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		}
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
-		if cr.Spec.Sharding.Mongos.Port == 0 {
-			cr.Spec.Sharding.Mongos.Port = 27017
-		}
-
 		for i := range cr.Spec.Replsets {
 			cr.Spec.Replsets[i].ClusterRole = ClusterRoleShardSvr
 		}
@@ -312,10 +315,32 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
+
+			if deprecatedType := cr.Spec.Sharding.Mongos.Expose.DeprecatedExposeType; deprecatedType != "" {
+				cr.Spec.Sharding.Mongos.Expose.ExposeType = deprecatedType
+			}
+		}
+		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels) > 0 {
+			cr.Spec.Sharding.Mongos.Expose.ServiceLabels = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceLabels, cr.Spec.Sharding.Mongos.Expose.ServiceLabels)
+		}
+		if len(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations) > 0 {
+			cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations = util.MapMerge(cr.Spec.Sharding.Mongos.Expose.DeprecatedServiceAnnotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)
 		}
 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
+	}
+
+	if mongos := cr.Spec.Sharding.Mongos; mongos != nil && cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if mongos.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.spec.sharding.mongos.expose.exposeType` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+		if len(mongos.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.spec.sharding.mongos.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.spec.sharding.mongos.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace)
 		}
 	}
 
@@ -445,7 +470,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			if cr.CompareVersion("1.15.0") < 0 {
 				replset.ReadinessProbe.Exec = nil
 				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(DefaultMongodPort)),
+					Port: intstr.FromInt(int(replset.GetPort())),
 				}
 			}
 		}
@@ -486,12 +511,26 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
 		}
+
+		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
+			return errors.Wrap(err, "set nonvoting defaults")
+		}
 	}
 
 	if cr.Spec.Backup.Enabled {
-		for _, bkpTask := range cr.Spec.Backup.Tasks {
+		for i := range cr.Spec.Backup.Tasks {
+			bkpTask := &cr.Spec.Backup.Tasks[i]
+
+			if bkpTask.Name == "" {
+				return errors.Errorf("backup task %d should have a name", i)
+			}
 			if string(bkpTask.CompressionType) == "" {
 				bkpTask.CompressionType = compress.CompressionTypeGZIP
+			}
+
+			if cr.CompareVersion("1.21.0") >= 0 && bkpTask.Keep > 0 && bkpTask.Retention != nil && bkpTask.Retention.Count == 0 {
+				log.Info(".spec.backup.tasks[].keep will be deprecated in the future. Consider using .spec.backup.tasks[].retention.count instead", "task", bkpTask.Name)
+				continue
 			}
 		}
 		if len(cr.Spec.Backup.ServiceAccountName) == 0 && cr.CompareVersion("1.15.0") < 0 {
@@ -517,6 +556,38 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 			}
 		}
 
+		if cr.Spec.PMM.ContainerSecurityContext == nil {
+			tvar := true
+			cr.Spec.PMM.ContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: &tvar,
+				RunAsUser:    fsgroup,
+			}
+		}
+
+		if cr.CompareVersion("1.20.0") < 0 && cr.Spec.Backup.PITR.Enabled {
+			if len(cr.Spec.Backup.Storages) != 1 {
+				cr.Spec.Backup.PITR.Enabled = false
+				log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
+			}
+		}
+
+		if cr.CompareVersion("1.20.0") >= 0 && len(cr.Spec.Backup.Storages) > 1 {
+			main := 0
+			for _, stg := range cr.Spec.Backup.Storages {
+				if stg.Main {
+					main += 1
+				}
+			}
+
+			if main == 0 {
+				return errors.New("main backup storage is not specified")
+			}
+
+			if main > 1 {
+				return errors.New("multiple main backup storages are specified")
+			}
+		}
+
 		for _, stg := range cr.Spec.Backup.Storages {
 			if stg.Type != BackupStorageS3 {
 				continue
@@ -533,15 +604,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.Backup.PITR.Enabled = false
 	}
 
-	if cr.Spec.Backup.PITR.Enabled {
-		if len(cr.Spec.Backup.Storages) != 1 {
-			cr.Spec.Backup.PITR.Enabled = false
-			log.Info("Point-in-time recovery can be enabled only if one bucket is used in spec.backup.storages")
-		}
-
-		if cr.Spec.Backup.PITR.OplogSpanMin.Float64() == 0 {
-			cr.Spec.Backup.PITR.OplogSpanMin = numstr.MustParse("10")
-		}
+	if cr.Spec.Backup.PITR.Enabled && cr.Spec.Backup.PITR.OplogSpanMin.Float64() == 0 {
+		cr.Spec.Backup.PITR.OplogSpanMin = numstr.MustParse("10")
 	}
 
 	if cr.Status.Replsets == nil {
@@ -556,8 +620,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 		cr.Spec.ClusterServiceDNSMode = DNSModeInternal
 	}
 
-	if cr.Spec.Unmanaged && cr.Spec.Backup.Enabled {
-		return errors.New("backup.enabled must be false on unmanaged clusters")
+	if len(cr.Spec.UpdateStrategy) == 0 {
+		cr.Spec.UpdateStrategy = SmartUpdateStatefulSetStrategyType
 	}
 
 	if cr.Spec.Unmanaged && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
@@ -583,6 +647,21 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(platform version.Platform, log
 	return nil
 }
 
+func (rs *ReplsetSpec) IsEncryptionEnabled() (bool, error) {
+	enabled, err := rs.Configuration.isEncryptionEnabled()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse replset configuration")
+	}
+
+	if enabled == nil {
+		if rs.Storage.Engine == StorageEngineInMemory {
+			return false, nil // disabled for inMemory engine by default
+		}
+		return true, nil // true by default
+	}
+	return *enabled, nil
+}
+
 // SetDefaults set default options for the replset
 func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
 	if rs.VolumeSpec == nil {
@@ -594,8 +673,32 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
 	}
 
-	if rs.Expose.Enabled && rs.Expose.ExposeType == "" {
-		rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+	if rs.Expose.Enabled {
+		if rs.Expose.ExposeType == "" {
+			rs.Expose.ExposeType = corev1.ServiceTypeClusterIP
+
+			if rs.Expose.DeprecatedExposeType != "" {
+				rs.Expose.ExposeType = rs.Expose.DeprecatedExposeType
+			}
+		}
+		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
+			rs.Expose.ServiceLabels = util.MapMerge(rs.Expose.DeprecatedServiceLabels, rs.Expose.ServiceLabels)
+		}
+		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
+			rs.Expose.ServiceAnnotations = util.MapMerge(rs.Expose.DeprecatedServiceAnnotations, rs.Expose.ServiceAnnotations)
+		}
+	}
+
+	if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
+		if rs.Expose.DeprecatedExposeType != "" {
+			log.Info("Field `.expose.exposeType` was deprecated in 1.18.0. Consider using `.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceLabels) > 0 {
+			log.Info("Field `.expose.serviceLabels` was deprecated in 1.18.0. Consider using `.expose.labels` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
+		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
+			log.Info("Field `.expose.serviceAnnotations` was deprecated in 1.18.0. Consider using `.expose.annotations` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
+		}
 	}
 
 	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
@@ -657,6 +760,16 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 		if extNode.Votes == 0 && extNode.Priority != 0 {
 			return errors.Errorf("invalid priority for %s: non-voting members must have priority 0", extNode.Host)
+		}
+	}
+
+	if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+		encryptionEnabled, err := rs.IsEncryptionEnabled()
+		if err != nil {
+			return errors.Wrap(err, "failed to parse replset configuration")
+		}
+		if encryptionEnabled {
+			return errors.New("inMemory storage engine doesn't support encryption")
 		}
 	}
 
@@ -734,7 +847,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.CompareVersion("1.15.0") < 0 {
 			nv.ReadinessProbe.Exec = nil
 			nv.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-				Port: intstr.FromInt(int(DefaultMongodPort)),
+				Port: intstr.FromInt(int(rs.GetPort())),
 			}
 		}
 	}
@@ -755,7 +868,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ServiceAccountName = WorkloadSA
 	}
 
-	nv.MultiAZ.reconcileOpts(cr)
+	//nolint:staticcheck
+	if err := nv.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s nonVoting", rs.Name)
+	}
 
 	if nv.ContainerSecurityContext == nil {
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
@@ -766,6 +882,113 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	}
 
 	if err := nv.Configuration.SetDefaults(); err != nil {
+		return errors.Wrap(err, "failed to set configuration defaults")
+	}
+
+	return nil
+}
+
+func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
+	if h.LivenessProbe == nil {
+		h.LivenessProbe = new(LivenessProbeExtended)
+	}
+	if h.LivenessProbe.InitialDelaySeconds < 1 {
+		h.LivenessProbe.InitialDelaySeconds = rs.LivenessProbe.InitialDelaySeconds
+	}
+	if h.LivenessProbe.TimeoutSeconds < 1 {
+		h.LivenessProbe.TimeoutSeconds = rs.LivenessProbe.TimeoutSeconds
+	}
+	if h.LivenessProbe.PeriodSeconds < 1 {
+		h.LivenessProbe.PeriodSeconds = rs.LivenessProbe.PeriodSeconds
+	}
+	if h.LivenessProbe.FailureThreshold < 1 {
+		h.LivenessProbe.FailureThreshold = rs.LivenessProbe.FailureThreshold
+	}
+	if h.LivenessProbe.StartupDelaySeconds < 1 {
+		h.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
+	}
+	if h.LivenessProbe.Exec == nil {
+		h.LivenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		if cr.TLSEnabled() {
+			h.LivenessProbe.Exec.Command = append(
+				h.LivenessProbe.Exec.Command,
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+			)
+		}
+	}
+	startupDelaySecondsFlag := "--startupDelaySeconds"
+	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+		h.LivenessProbe.Exec.Command = append(
+			h.LivenessProbe.Exec.Command,
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+	}
+}
+
+func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
+	if h.ReadinessProbe == nil {
+		h.ReadinessProbe = &corev1.Probe{}
+	}
+
+	if h.ReadinessProbe.TCPSocket == nil && h.ReadinessProbe.Exec == nil {
+		h.ReadinessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
+			},
+		}
+	}
+	if h.ReadinessProbe.InitialDelaySeconds < 1 {
+		h.ReadinessProbe.InitialDelaySeconds = rs.ReadinessProbe.InitialDelaySeconds
+	}
+	if h.ReadinessProbe.TimeoutSeconds < 1 {
+		h.ReadinessProbe.TimeoutSeconds = rs.ReadinessProbe.TimeoutSeconds
+	}
+	if h.ReadinessProbe.PeriodSeconds < 1 {
+		h.ReadinessProbe.PeriodSeconds = rs.ReadinessProbe.PeriodSeconds
+	}
+	if h.ReadinessProbe.FailureThreshold < 1 {
+		h.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
+	}
+}
+
+func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	if !h.Enabled {
+		return nil
+	}
+
+	if h.VolumeSpec != nil {
+		if err := h.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "reconcile volumes for replset %s nonVoting", rs.Name)
+		}
+	} else {
+		h.VolumeSpec = rs.VolumeSpec
+	}
+
+	h.setLivenessProbe(cr, rs)
+	h.setReadinessProbe(rs)
+
+	if len(h.ServiceAccountName) == 0 {
+		h.ServiceAccountName = WorkloadSA
+	}
+
+	//nolint:staticcheck
+	if err := h.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "reconcile multiAZ options for replset %s-hidden", rs.Name)
+	}
+
+	if h.ContainerSecurityContext == nil {
+		h.ContainerSecurityContext = rs.ContainerSecurityContext
+	}
+
+	if h.PodSecurityContext == nil {
+		h.PodSecurityContext = rs.PodSecurityContext
+	}
+
+	if err := h.Configuration.SetDefaults(); err != nil {
 		return errors.Wrap(err, "failed to set configuration defaults")
 	}
 
@@ -881,7 +1104,6 @@ const AffinityOff = "none"
 // - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
 func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
-
 	if cr.CompareVersion("1.16.0") < 0 {
 		affinityValidTopologyKeys = map[string]struct{}{
 			AffinityOff:                                {},

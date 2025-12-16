@@ -7,7 +7,17 @@ spec:
   image:
   imagePullPolicy: Always
   backup:
-    enabled: false
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
   sharding:
     enabled: true
     configsvrReplSet:
@@ -19,7 +29,6 @@ spec:
               storage: 3Gi
       expose:
         enabled: false
-      runtimeClassName: container-rc
 
     mongos:
       size: 3
@@ -27,8 +36,7 @@ spec:
         replication:
           localPingThresholdMs: 15
       expose:
-        exposeType: ClusterIP
-      runtimeClassName: container-rc
+        type: ClusterIP
 
   replsets:
   - name: rs0
@@ -47,8 +55,43 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 1Gi
-    runtimeClassName: container-rc
+            storage: 3Gi
+    size: 3
+  - name: rs1
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+    size: 3
+  - name: rs2
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
     size: 3
   secrets:
     users: some-users

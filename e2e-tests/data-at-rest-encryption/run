@@ -19,7 +19,7 @@ cluster='some-name'
 desc "create PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all Pods started'
-wait_for_running $cluster-rs0 3
+wait_for_running $cluster-rs0 3 "false"
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 
@@ -56,11 +56,7 @@ fi
 sleep 5
 
 desc "check backup and restore -- minio"
-backup_dest_minio=$(get_backup_dest "$backup_name_minio")
-kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://${backup_dest_minio}/rs0/ \
-	| grep myApp.test.gz
+check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
 run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 run_restore "$backup_name_minio"
@@ -70,7 +66,8 @@ compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
+	setup_gcs_credentials
+	check_backup_existence_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
 	run_mongos 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-mongos.$namespace"
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-2nd"
 	run_restore "$backup_name_gcp"
@@ -79,30 +76,54 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 desc 'check logs that cluster encrypted'
-encrypted_cluster_log=$(kubectl_bin logs some-name-rs0-0 -c mongod -n $namespace | grep -i "Encryption keys DB is initialized successfully")
 
-echo "$encrypted_cluster_log"
-if [ -z "$encrypted_cluster_log" ]; then
+if ! kubectl_bin logs ${cluster}-rs0-0 -c mongod | grep -i "Encryption keys DB is initialized successfully"; then
 	echo "Cluster is not encrypted"
 	exit 1
 fi
 
+log "psmdb/${cluster} is properly encrypted: OK"
+
 desc "check logs for unencrypted cluster"
+
+log "disabling encryption (this will cause pods to crash because data is already encrypted)"
 apply_cluster "$test_dir/conf/$cluster-unencrypted.yml"
+
+log "waiting for 30 seconds"
 sleep 30
 
+log "checking if encryption is disabled"
 retry=0
-unencrypted_cluster_log=""
-until [ "$retry" -ge 10 ]; do
-	unencrypted_cluster_log=$(kubectl_bin logs some-name-rs0-2 -c mongod -n $namespace | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk")
-	if [ -n "$unencrypted_cluster_log" ]; then
-		echo "Cluster is not encrypted already"
+
+encryption_disabled=0
+while true; do
+	for pod in $(kubectl_bin get pod -l app.kubernetes.io/component=cfg --no-headers | awk '{print $1}'); do
+		log "checking pod/${pod} logs"
+
+		if kubectl_bin logs ${pod} -c mongod | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk"; then
+			encryption_disabled=1
+		fi
+	done
+
+	for pod in $(kubectl_bin get pod -l app.kubernetes.io/component=mongod --no-headers | awk '{print $1}'); do
+		log "checking pod/${pod} logs"
+
+		if kubectl_bin logs ${pod} -c mongod | grep -i "This may be due to the database files being encrypted, being from an older version or due to corruption on disk"; then
+			encryption_disabled=1
+		fi
+	done
+
+	if [[ ${encryption_disabled} == 1 ]]; then
+		log "psmdb/${cluster} encryption is disabled: OK"
 		break
-	elif [ $retry == 15 ]; then
-		echo "Max retry count $retry reached. Cluster is still encrypted"
+	fi
+
+	if [[ $retry == 15 ]]; then
+		log "max retry count $retry reached. Cluster is still encrypted"
 		exit 1
 	else
 		retry=$((retry + 1))
+		log "(retry ${retry}) waiting for encryption to disabled"
 		sleep 15
 		continue
 	fi

@@ -15,12 +15,13 @@ metadata:
       kind: PerconaServerMongoDB
       name: local-balancer
 spec:
-  externalTrafficPolicy: Cluster
+  externalTrafficPolicy: Local
   ports:
     - name: mongodb
       port: 27017
       protocol: TCP
       targetPort: 27017
+  publishNotReadyAddresses: true
   selector:
     statefulset.kubernetes.io/pod-name: local-balancer-rs0-0
   sessionAffinity: None

@@ -21,7 +21,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: ClusterIp
+      type: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -66,7 +66,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: true
-      exposeType: ClusterIp
+      type: ClusterIp
     nonvoting:
       enabled: false
       size: 3
@@ -113,7 +113,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: true
-        exposeType: ClusterIp
+        type: ClusterIp
       resources:
         limits:
           cpu: "300m"
@@ -141,4 +141,4 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIp
+        type: ClusterIp

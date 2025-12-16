@@ -2,6 +2,7 @@ package tls
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -19,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
@@ -131,6 +133,7 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      issuerName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
@@ -149,6 +152,10 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		}
 	}
 
+	if cr.CompareVersion("1.17.0") < 0 {
+		issuer.Labels = nil
+	}
+
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
@@ -157,12 +164,17 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      caIssuerName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{
 				SelfSigned: &cm.SelfSignedIssuer{},
 			},
 		},
+	}
+
+	if cr.CompareVersion("1.17.0") < 0 {
+		issuer.Labels = nil
 	}
 
 	return c.createOrUpdate(ctx, cr, issuer)
@@ -185,6 +197,7 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      certificateName(cr, internal),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
@@ -203,6 +216,10 @@ func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 		},
 	}
 
+	if cr.CompareVersion("1.17.0") < 0 {
+		certificate.Labels = nil
+	}
+
 	return c.createOrUpdate(ctx, cr, certificate)
 }
 
@@ -213,17 +230,17 @@ var (
 
 func (c *certManagerController) Check(ctx context.Context, config *rest.Config, ns string) error {
 	log := logf.FromContext(ctx)
-	checker, err := cmapichecker.New(config, c.scheme, ns)
+	checker, err := cmapichecker.New(config, ns)
 	if err != nil {
 		return err
 	}
 	err = checker.Check(ctx)
 	if err != nil {
-		switch cmapichecker.TranslateToSimpleError(err) {
-		case cmapichecker.ErrCertManagerCRDsNotFound:
+		switch err := translateCheckError(err); {
+		case errors.Is(err, cmapichecker.ErrCertManagerCRDsNotFound):
 			return ErrCertManagerNotFound
-		case cmapichecker.ErrWebhookCertificateFailure, cmapichecker.ErrWebhookServiceFailure, cmapichecker.ErrWebhookDeploymentFailure:
-			log.Info("cert-manager is not ready", "error", cmapichecker.TranslateToSimpleError(err))
+		case errors.Is(err, cmapichecker.ErrWebhookCertificateFailure), errors.Is(err, cmapichecker.ErrWebhookServiceFailure), errors.Is(err, cmapichecker.ErrWebhookDeploymentFailure):
+			log.Error(cmapichecker.TranslateToSimpleError(err), "cert-manager is not ready")
 			return ErrCertManagerNotReady
 		}
 		return err
@@ -231,11 +248,24 @@ func (c *certManagerController) Check(ctx context.Context, config *rest.Config, 
 	return nil
 }
 
+func translateCheckError(err error) error {
+	const crdsMapping3Error = `error finding the scope of the object: failed to get restmapping: unable to retrieve the complete list of server APIs: cert-manager.io/v1: no matches for cert-manager.io/v1, Resource=`
+	// TODO: remove as soon as TranslateToSimpleError uses this regexp
+	regexErrCertManagerCRDsNotFound := regexp.MustCompile(`^(` + regexp.QuoteMeta(crdsMapping3Error) + `)$`)
+
+	if regexErrCertManagerCRDsNotFound.MatchString(err.Error()) {
+		return cmapichecker.ErrCertManagerCRDsNotFound
+	}
+
+	return cmapichecker.TranslateToSimpleError(err)
+}
+
 func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	cert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CACertificateSecretName(cr),
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: CACertificateSecretName(cr),
@@ -248,6 +278,9 @@ func (c *certManagerController) ApplyCACertificate(ctx context.Context, cr *api.
 			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 		},
+	}
+	if cr.CompareVersion("1.17.0") < 0 {
+		cert.Labels = nil
 	}
 
 	return c.createOrUpdate(ctx, cr, cert)
@@ -277,13 +310,14 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					return err
 				} else if err == nil {
 					successCount++
-					if len(secret.OwnerReferences) == 0 {
-						if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
-							return errors.Wrap(err, "set controller reference")
-						}
-						if err = c.cl.Update(ctx, secret); err != nil {
-							return errors.Wrap(err, "failed to update secret")
-						}
+					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != secret.Name {
+						continue
+					}
+					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
+						return errors.Wrap(err, "set controller reference")
+					}
+					if err = c.cl.Update(ctx, secret); err != nil {
+						return errors.Wrap(err, "failed to update secret")
 					}
 				}
 			}

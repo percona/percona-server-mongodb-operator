@@ -3,16 +3,19 @@ kind: PerconaServerMongoDB
 metadata:
   name: my-cluster-name
   finalizers:
-    - delete-psmdb-pods-in-order
-#    - delete-psmdb-pvc
+    - percona.com/delete-psmdb-pods-in-order
+#    - percona.com/delete-psmdb-pvc
+#    - percona.com/delete-pitr-chunks
 spec:
 #  platform: openshift
 #  clusterServiceDNSSuffix: svc.cluster.local
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-  crVersion: 1.16.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod7.0
+#  enableVolumeExpansion: false
+#  enableExternalVolumeAutoscaling: false
+  crVersion: 1.22.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -49,15 +52,28 @@ spec:
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
+#    ssl: my-cluster-name-ssl
+#    sslInternal: my-cluster-name-ssl-internal
+#    keyFile: my-cluster-name-mongodb-keyfile
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    containerSecurityContext: {}
+#    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
+#    resources:
+#      requests:
+#        memory: 150M
+#        cpu: 300m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
+
   replsets:
   - name: rs0
     size: 3
@@ -70,6 +86,20 @@ spec:
 #        maxSkew: 1
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
+#    replsetOverrides:
+#      my-cluster-name-rs0-0:
+#        host: my-cluster-name-rs0-0.example.net:27017
+#        priority: 3
+#        tags:
+#          key: value-0
+#      my-cluster-name-rs0-1:
+#        host: my-cluster-name-rs0-1.example.net:27017
+#        tags:
+#          key: value-1
+#      my-cluster-name-rs0-2:
+#        host: my-cluster-name-rs0-2.example.net:27017
+#        tags:
+#          key: value-2
 #    externalNodes:
 #    - host: 34.124.76.90
 #    - host: 34.124.76.91
@@ -110,6 +140,9 @@ spec:
 #      operator: "Exists"
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
+#    primaryPreferTagSelector:
+#      region: us-west-2
+#      zone: us-west-2c
 #    priorityClassName: high-priority
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
@@ -169,6 +202,10 @@ spec:
 #    - name: sidecar-config
 #      configMap:
 #        name: myconfigmap
+#    - name: backup-nfs
+#      nfs:
+#        server: "nfs-service.storage.svc.cluster.local"
+#        path: "/psmdb-some-name-rs0"
 #    sidecarPVCs:
 #    - apiVersion: v1
 #      kind: PersistentVolumeClaim
@@ -196,20 +233,23 @@ spec:
 #        external-2: rs0-2.mycluster2.xyz
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
+#      loadBalancerClass: "eks.amazonaws.com/nlb"
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
-#      serviceAnnotations:
+#      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#      serviceLabels:
+#      labels:
 #        rack: rack-22
+#      internalTrafficPolicy: Local
+#      externalTrafficPolicy: Local
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "600m"
+        memory: "1Gi"
       requests:
         cpu: "300m"
-        memory: "0.5G"
+        memory: "1Gi"
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:
@@ -225,6 +265,67 @@ spec:
         resources:
           requests:
             storage: 3Gi
+
+    hidden:
+      enabled: false
+#      podSecurityContext: {}
+#      containerSecurityContext: {}
+      size: 2
+#      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
+#      configuration: |
+#        operationProfiling:
+#          mode: slowOp
+#        systemLog:
+#          verbosity: 1
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      priorityClassName: high-priority
+#      annotations:
+#        iam.amazonaws.com/role: role-arn
+#      labels:
+#        rack: rack-22
+#      nodeSelector:
+#        disktype: ssd
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
+      resources:
+        limits:
+          cpu: "600m"
+          memory: "1Gi"
+        requests:
+          cpu: "300m"
+          memory: "1Gi"
+      volumeSpec:
+#        emptyDir: {}
+#        hostPath:
+#          path: /data
+#          type: Directory
+        persistentVolumeClaim:
+#          annotations:
+#            volume.beta.kubernetes.io/storage-class: example-hostpath
+#          labels:
+#            rack: rack-22
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 3Gi
 
     nonvoting:
       enabled: false
@@ -266,11 +367,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -316,11 +417,11 @@ spec:
 #    schedulerName: "default"
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
@@ -407,20 +508,23 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
+#        loadBalancerClass: "eks.amazonaws.com/nlb"
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -509,43 +613,101 @@ spec:
         maxUnavailable: 1
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
 #        servicePerPod: true
+#        loadBalancerClass: "eks.amazonaws.com/nlb"
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
-#        serviceAnnotations:
+#        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-#        serviceLabels:
+#        labels:
 #          rack: rack-22
 #        nodePort: 32017
+#        internalTrafficPolicy: Local
+#        externalTrafficPolicy: Local
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
 #        - "host1"
 #        - "host2"
 
+#  roles:
+#    - role: myClusterwideAdmin
+#      db: admin
+#      privileges:
+#        - resource:
+#            cluster: true
+#          actions:
+#            - addShard
+#        - resource:
+#            db: config
+#            collection: ''
+#          actions:
+#            - find
+#            - update
+#            - insert
+#            - remove
+#      roles:
+#        - role: read
+#          db: admin
+#    - role: my-role
+#      db: myDb
+#      privileges:
+#        - resource:
+#            db: ''
+#            collection: ''
+#          actions:
+#            - find
+#      authenticationRestrictions:
+#        - clientSource:
+#            - 127.0.0.1
+#          serverAddress:
+#            - 127.0.0.1
+
+#  users:
+#  - name: my-user
+#    db: admin
+#    passwordSecretRef:
+#      name: my-user-password
+#      key: my-user-password-key
+#    roles:
+#      - name: clusterAdmin
+#        db: admin
+#      - name: userAdminAnyDatabase
+#        db: admin
+#  - name: my-usr
+#    db: admin
+#    passwordSecretRef:
+#      name: my-user-pwd
+#      key: my-user-pwd-key
+#    roles:
+#      - name: dbOwner
+#        db: sometest
+
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
+#    startingDeadlineSeconds: 300
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1.2Gi"
 #      requests:
 #        cpu: "300m"
-#        memory: "0.5G"
+#        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
 #      s3-us-west:
+#        main: true
 #        type: s3
 #        s3:
 #          bucket: S3-BACKUP-BUCKET-NAME-HERE
@@ -565,7 +727,18 @@ spec:
 #          maxUploadParts: 10000
 #          storageClass: STANDARD
 #          insecureSkipTLSVerify: false
-#      minio:
+#      gcs:
+#        type: gcs
+#        gcs:
+#          bucket: GCS-BACKUP-BUCKET-NAME-HERE
+#          prefix: ""
+#          credentialsSecret: my-cluster-name-backup-gcs
+#          chunkSize: 10485760
+#          retryer:
+#            backoffInitial: 1
+#            backoffMax: 30
+#            backoffMultiplier: 2
+#      minio-s3:
 #        type: s3
 #        s3:
 #          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
@@ -574,6 +747,16 @@ spec:
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
 #          prefix: ""
+#      minio:
+#        type: minio
+#        minio:
+#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+#          region: us-east-1
+#          credentialsSecret: my-cluster-name-backup-minio
+#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
+#          insecureSkipTLSVerify: false
+#          prefix: ""
+#          secure: false
 #      azure-blob:
 #        type: azure
 #        azure:
@@ -581,6 +764,13 @@ spec:
 #          prefix: PREFIX-NAME
 #          endpointUrl: https://accountName.blob.core.windows.net
 #          credentialsSecret: SECRET-NAME
+#      backup-nfs:
+#        type: filesystem
+#        filesystem:
+#          path: /mnt/nfs/
+#    volumeMounts:
+#    - mountPath: /mnt/nfs/
+#      name: backup-nfs
     pitr:
       enabled: false
       oplogOnly: false
@@ -595,10 +785,12 @@ spec:
 #        timeouts:
 #          startingStatus: 33
 #        oplogSpanMin: 10
+#        numParallelCollections: 2
 #      restoreOptions:
 #        batchSize: 500
 #        numInsertionWorkers: 10
 #        numDownloadWorkers: 4
+#        numParallelCollections: 2
 #        maxDownloadBufferMb: 0
 #        downloadChunkMb: 32
 #        mongodLocation: /usr/bin/mongo
@@ -609,22 +801,61 @@ spec:
 #      - name: daily-s3-us-west
 #        enabled: true
 #        schedule: "0 0 * * *"
-#        keep: 3
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
 #      - name: weekly-s3-us-west
 #        enabled: false
 #        schedule: "0 0 * * 0"
-#        keep: 5
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
 #      - name: weekly-s3-us-west-physical
 #        enabled: false
 #        schedule: "0 5 * * 0"
-#        keep: 5
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
 #        type: physical
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+#      - name: weekly-s3-us-west-incremental
+#        enabled: false
+#        schedule: "0 1 * * *"
+#        type: incremental
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+#      - name: weekly-s3-us-west-incremental-base
+#        enabled: false
+#        schedule: "0 5 * * 0"
+#        retention:
+#          count: 3
+#          type: count
+#          deleteFromStorage: true
+#        type: incremental-base
+#        storageName: s3-us-west
+#        compressionType: gzip
+#        compressionLevel: 6
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
+#    configuration: |
+#      [SERVICE]
+#          Flush        1
+#          Log_Level    error
+#          Daemon       off
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m

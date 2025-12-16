@@ -12,6 +12,10 @@
         "db": "admin"
       },
       {
+        "role": "directShardOperations",
+        "db": "admin"
+      },
+      {
         "role": "explainRole",
         "db": "admin"
       },
@@ -183,7 +187,6 @@
         },
         "actions": [
           "allCollectionStats",
-          "checkFreeMonitoringStatus",
           "connPoolStats",
           "getDefaultRWConcern",
           "getCmdLineOpts",
@@ -197,6 +200,8 @@
           "listShards",
           "netstat",
           "operationMetrics",
+          "queryStatsRead",
+          "queryStatsReadTransformed",
           "replSetGetConfig",
           "replSetGetStatus",
           "serverStatus",

@@ -5,18 +5,24 @@ GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]
 API="psmdb.percona.com/v1"
 OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod7.0"}
+IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
 IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod5.0
-
 perconalab/percona-server-mongodb-operator:main-mongod6.0
-perconalab/percona-server-mongodb-operator:main-mongod7.0'}
+perconalab/percona-server-mongodb-operator:main-mongod7.0
+perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
-IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
+IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-CERT_MANAGER_VER="1.12.4"
+IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
+IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
+CERT_MANAGER_VER="1.19.1"
+MINIO_VER="5.4.0"
+CHAOS_MESH_VER="2.7.1"
+UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
+DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
+SKIP_DELETE=${SKIP_DELETE:-0}
 tmp_dir=$(mktemp -d)
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
@@ -26,7 +32,7 @@ namespace="${test_name}-${RANDOM}"
 replica_namespace="${test_name}-replica-${RANDOM}"
 conf_dir=$(realpath $test_dir/../conf || :)
 src_dir=$(realpath $test_dir/../..)
-logs_dir=$(realpath $test_dir/../logs)
+logs_dir=$(realpath $test_dir/../logs || :)
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
 	if [ ! -d "${logs_dir}" ]; then
@@ -68,6 +74,20 @@ else
 fi
 KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
+log() {
+	set +o xtrace
+	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+	set_debug
+}
+
+sleep_with_log() {
+	local d=$1
+	local msg=$2
+
+	log "${msg}. sleeping for ${d} seconds"
+	sleep ${d}
+}
+
 set_debug() {
 	if [[ ${DEBUG_TESTS} == 1 ]]; then
 		set -o xtrace
@@ -75,6 +95,7 @@ set_debug() {
 		set +o xtrace
 	fi
 }
+
 version_gt() {
 	# return true if kubernetes version equal or greater than desired
 	if [ $(echo "${KUBE_VERSION} >= $1" | bc -l) -eq 1 ]; then
@@ -96,6 +117,12 @@ apply_s3_storage_secrets() {
 	fi
 }
 
+set_kube_ctx() {
+	local namespace=$1
+
+	kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+}
+
 create_namespace() {
 	local namespace="$1"
 	local skip_clean_namespace="$2"
@@ -104,7 +131,7 @@ create_namespace() {
 		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
-			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|gke-mcs|^NAME" \
+			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -129,7 +156,7 @@ create_namespace() {
 
 		desc "create namespace $namespace"
 		kubectl_bin create namespace "$namespace"
-		kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
+		set_kube_ctx ${namespace}
 	fi
 }
 
@@ -137,6 +164,27 @@ get_operator_pod() {
 	kubectl_bin get pods \
 		--selector=name=percona-server-mongodb-operator \
 		-o 'jsonpath={.items[].metadata.name}' ${OPERATOR_NS:+-n $OPERATOR_NS}
+}
+
+wait_operator_pod() {
+	local pod=$1
+
+	set +o xtrace
+	retry=0
+	echo -n "waiting for pod/$pod to be ready"
+	until kubectl_bin get pod/$pod ${OPERATOR_NS:+-n $OPERATOR_NS} -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep --quiet 'true'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [[ $retry -ge 360 ]]; then
+			kubectl_bin describe pod/$pod
+			kubectl_bin logs $pod ${OPERATOR_NS:+-n $OPERATOR_NS}
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo ".OK"
+	set_debug
 }
 
 wait_pod() {
@@ -194,15 +242,14 @@ wait_backup_agent() {
 	local agent_pod=$1
 
 	set +o xtrace
-	retry=0
-	echo -n $agent_pod
-	until [ "$(kubectl_bin logs $agent_pod -c backup-agent | egrep -v "\[ERROR\] pitr: check if on:|node:|starting PITR routine|\[agentCheckup\]" | cut -d' ' -f3- | tail -n 1)" == "listening for the commands" ]; do
+	local retry=0
+	echo -n "waiting for pbm-agent to be ready in ${agent_pod}..."
+	until kubectl_bin logs $agent_pod -c backup-agent | grep "listening for the commands"; do
 		sleep 5
 		echo -n .
 		let retry+=1
 		if [ $retry -ge 360 ]; then
-			kubectl_bin logs $agent_pod -c backup-agent \
-				| tail -100
+			kubectl_bin logs $agent_pod -c backup-agent | tail -100
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
@@ -211,31 +258,50 @@ wait_backup_agent() {
 	set_debug
 }
 
+print_operator_logs() {
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+}
+
 wait_backup() {
 	local backup_name=$1
+	local target_state=${2:-"ready"}
 
 	set +o xtrace
 	retry=0
-	echo -n $backup_name
+	echo -n "waiting for ${backup_name} to reach ${target_state} state"
 	local current_status=
-	until [[ ${current_status} == "ready" ]]; do
+	until [[ ${current_status} == ${target_state} ]]; do
 		sleep 1
 		echo -n .
 		let retry+=1
 		current_status=$(kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge 360 || ${current_status} == 'error' ]]; then
-			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
-				| tail -100
-			echo "Backup object psmdb-backup/${backup_name} is in ${current_state} state."
-			echo something went wrong with operator or kubernetes cluster
+		if [[ $retry -ge 600 || ${current_status} == 'error' ]]; then
+			print_operator_logs | tail -n 200
+			kubectl_bin get psmdb-backup
+			kubectl_bin describe psmdb-backup/${backup_name}
+			echo "Backup object psmdb-backup/${backup_name} is in ${current_status} state."
 			exit 1
 		fi
 	done
-	echo
+	echo '.OK'
+	set_debug
+}
+
+wait_for_pbm_operations() {
+	local cluster=$1
+
+	set +o xtrace
+	echo -n "waiting for PBM operation to finish"
+	retry=0
+	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
+		if [ $retry -ge 540 ]; then
+			echo max retry count $retry reached. something went wrong with PBM operations
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo '.OK'
 	set_debug
 }
 
@@ -312,39 +378,91 @@ simple_data_check() {
 	fi
 }
 
+get_mongod_pods() {
+	local cluster=$1
+
+	kubectl_bin get pod \
+		--no-headers \
+		-l app.kubernetes.io/instance=${cluster} \
+		-l app.kubernetes.io/component=mongod | awk '{print $1}'
+
+}
+
+collect_physical_restore_logs() {
+	local cluster=$1
+	local restore=$2
+
+	for pod in $(get_mongod_pods ${cluster}); do
+		desc "pbm-agent logs from ${pod}"
+		kubectl_bin exec ${pod} -- cat /tmp/pbm-agent.log || echo "failed to get /tmp/pbm-agent.log from ${pod}"
+	done
+}
+
+is_physical_backup() {
+	local backup=$1
+
+	if [[ $(kubectl_bin get psmdb-backup ${backup} -o jsonpath={.status.type}) == "physical" ]]; then
+		return 0
+	fi
+
+	return 1
+}
+
 wait_restore() {
 	local backup_name=$1
 	local cluster_name=$2
 	local target_state=${3:-"ready"}
 	local wait_cluster_consistency=${4:-1}
-	local wait_time=${5:-780}
+	local wait_time=${5:-1780}
+	local ok_if_ready=${6:-0}
 
 	set +o xtrace
-	retry=0
-	echo -n "waiting psmdb-restore/${backup_name} to reach ${target_state} state"
-	local current_state=
-	until [[ ${current_state} == ${target_state} ]]; do
+	# We need to run wait till object is created, otherwise wait fails at once
+	echo -n "Waiting for the psmdb-restore/restore-$backup_name object to be created"
+	retry_object=0
+	until kubectl_bin get psmdb-restore restore-$backup_name >/dev/null 2>&1; do
+		echo -n .
+		let retry_object+=1
+		if [[ ${retry_object} -ge 60 ]]; then
+			echo "psmdb-restore/restore-$backup_name object was not created."
+			exit 1
+		fi
 		sleep 1
+	done
+	echo ".OK"
+
+	echo -n "Waiting psmdb-restore/restore-${backup_name} to reach state \"${target_state}\" "
+	retry=0
+	retry_count=$((wait_time / 60))
+	until kubectl wait psmdb-restore restore-${backup_name} --for=jsonpath='{.status.state}'=${target_state} --timeout=60s >/dev/null 2>&1; do
 		echo -n .
 		let retry+=1
 		current_state=$(kubectl_bin get psmdb-restore restore-$backup_name -o jsonpath='{.status.state}')
-		if [[ $retry -ge $wait_time || ${current_state} == 'error' ]]; then
+		if [[ ${ok_if_ready} == 1 && ${current_state} == 'ready' ]]; then
+			echo ".OK after ${retry} minutes"
+			break
+		fi
+		if [[ ${retry} -ge ${retry_count} || ${current_state} == 'error' ]]; then
+			if is_physical_backup ${backup_name}; then
+				collect_physical_restore_logs
+			fi
+
 			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-				| grep -v 'level=info' \
-				| grep -v 'level=debug' \
-				| grep -v 'Getting tasks for pod' \
-				| grep -v 'Getting pods from source' \
+				| grep "restore-${backup_name}" \
 				| tail -100
+
 			kubectl_bin get psmdb-restore restore-${backup_name} -o yaml
-			echo "Restore object restore-${backup_name} is in ${current_state} state."
+			kubectl_bin describe psmdb-restore restore-${backup_name}
+
+			echo "Restore object restore-${backup_name} is in ${current_state} state after ${retry} minutes."
 			echo something went wrong with operator or kubernetes cluster
 			exit 1
 		fi
 	done
-	echo
-	set -o xtrace
+	echo ".OK after ${retry} minutes"
+	set_debug
 
-	if [ $wait_cluster_consistency -eq 1 ]; then
+	if [[ $wait_cluster_consistency -eq 1 ]]; then
 		wait_cluster_consistency "${cluster_name}"
 	fi
 }
@@ -359,7 +477,7 @@ apply_rbac() {
 }
 
 deploy_operator() {
-	desc 'start PSMDB operator'
+	desc "start PSMDB operator: ${IMAGE}"
 
 	local cr_file
 	if [ -f "${test_dir}/conf/crd.yaml" ]; then
@@ -375,7 +493,7 @@ deploy_operator() {
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
-			| kubectl_bin apply -f -
+			| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 	else
 		apply_rbac rbac
 		yq eval '
@@ -384,8 +502,10 @@ deploy_operator() {
 			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/operator.yaml \
 			| kubectl_bin apply -f -
 	fi
-	sleep 2
-	wait_pod $(get_operator_pod)
+	sleep 20
+	wait_operator_pod $(get_operator_pod)
+	echo "Print operator info from log"
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_operator_gh() {
@@ -402,11 +522,41 @@ deploy_operator_gh() {
 	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
 	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
 
-	$sed -i -e "s^image: .*^image: ${IMAGE}^" "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
-	kubectl_bin apply -f "${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+	yq eval '
+		(.spec.template.spec.containers[].image = "'${IMAGE}'") |
+		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 	sleep 2
-	wait_pod "$(get_operator_pod)"
+	wait_operator_pod "$(get_operator_pod)"
+	echo "Print operator info from log"
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
+}
+
+deploy_operator_gh_release() {
+	local git_tag="$1"
+
+	desc "start operator ${git_tag}"
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml" --server-side
+	local rbac_yaml="rbac"
+	local operator_yaml="operator"
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac_yaml="cw-rbac"
+		operator_yaml="cw-operator"
+	fi
+	kubectl_bin apply -f "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${rbac_yaml}.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/${operator_yaml}.yaml" >"${tmp_dir}/${operator_yaml}_${git_tag}.yaml"
+
+	yq eval '
+		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
+		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
+ 
+	sleep 20
+	wait_operator_pod "$(get_operator_pod)"
+	echo "Print operator info from log"
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
 deploy_minio() {
@@ -416,7 +566,7 @@ deploy_minio() {
 	helm repo add minio https://charts.min.io/
 	# kubectl_bin delete pvc minio-service --force
 	retry 10 60 helm install minio-service \
-		--version 5.0.14 \
+		--version $MINIO_VER \
 		--set replicas=1 \
 		--set mode=standalone \
 		--set resources.requests.memory=256Mi \
@@ -437,10 +587,17 @@ deploy_minio() {
 		kubectl_bin create svc -n ${OPERATOR_NS} externalname minio-service --external-name="minio-service.${namespace}.svc.cluster.local" --tcp="9000"
 	fi
 
-	# create bucket
+	create_minio_bucket operator-testing
+}
+
+create_minio_bucket() {
+	local bucket=$1
+
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
+		AWS_SECRET_ACCESS_KEY=some-secret-key \
+		AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://${bucket}"
 }
 
 deploy_vault() {
@@ -505,7 +662,7 @@ deploy_chaos_mesh() {
 
 	desc 'install chaos-mesh'
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${chaos_mesh_ns} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version $CHAOS_MESH_VER
 	sleep 10
 }
 
@@ -565,10 +722,16 @@ wait_for_running() {
 			wait_pod ${name}-${i}
 		fi
 	done
-	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.enabled}') == "true" ]]; then
-		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].non_voting.size}') - 1))
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].nonvoting.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].nonvoting.size}') - 1))
 		for i in $(seq 0 $last_pod); do
 			wait_pod ${name}-nv-${i}
+		done
+	fi
+	if [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.enabled}') == "true" ]]; then
+		last_pod=$(($(kubectl_bin get psmdb ${cluster_name} -o jsonpath='{.spec.replsets[?(@.name=="'${rs_name}'")].hidden.size}') - 1))
+		for i in $(seq 0 $last_pod); do
+			wait_pod ${name}-hidden-${i}
 		done
 	fi
 	sleep 10
@@ -581,6 +744,12 @@ wait_for_running() {
 			timeout=$((timeout + 1))
 			echo -n '.'
 			if [[ ${timeout} -gt 1500 ]]; then
+				kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+					| grep -v 'level=info' \
+					| grep -v 'level=debug' \
+					| grep -v 'Getting tasks for pod' \
+					| grep -v 'Getting pods from source' \
+					| tail -200
 				echo
 				echo "Waiting timeout has been reached. Exiting..."
 				exit 1
@@ -596,7 +765,7 @@ wait_for_delete() {
 	local wait_time=${2:-60}
 
 	set +o xtrace
-	echo -n "$res - "
+	echo -n "waiting for $res to be deleted"
 	retry=0
 	until (kubectl_bin get $res || :) 2>&1 | grep NotFound; do
 		sleep 1
@@ -632,6 +801,7 @@ compare_generation() {
 compare_kubectl() {
 	local resource="$1"
 	local postfix="$2"
+	local skip_generation_check="$3"
 	local expected_result=${test_dir}/compare/${resource//\//_}${postfix}.yml
 	local new_result="${tmp_dir}/${resource//\//_}.yml"
 
@@ -654,6 +824,7 @@ compare_kubectl() {
 			del(.spec.template.spec.containers[].env[] | select(.name == "NAMESPACE")) |
 			del(.metadata.selfLink) |
 			del(.metadata.annotations."cloud.google.com/neg") |
+			del(.metadata.annotations."kubectl.kubernetes.io/last-applied-configuration") |
 			del(.. | select(has("image")).image) |
 			del(.. | select(has("clusterIP")).clusterIP) |
 			del(.. | select(has("clusterIPs")).clusterIPs) |
@@ -692,7 +863,75 @@ compare_kubectl() {
 			yq -i eval 'del(.metadata.generation)' ${new_result}
 		fi
 	fi
-	diff -u "$expected_result" "$new_result"
+	if [ -n "$skip_generation_check" ]; then
+		yq -i eval 'del(.metadata.generation)' ${new_result}
+	fi
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		if ! diff -u "$expected_result" "$new_result"; then
+			log "compare_kubectl ($(caller)) failed with diff"
+			exit 1
+		fi
+	else
+		cp ${new_result} ${expected_result}
+	fi
+
+	log "compare_kubectl: ${resource} OK"
+}
+
+run_recovery_check() {
+	local backup_name=$1
+	local compare_suffix=${2:-"_restore"}
+	local is_sharded=${3:-""}
+	local tls=${4:-""}
+
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
+	echo
+
+	compare_kubectl "statefulset/${cluster}-rs0" ${compare_suffix}
+
+	# we don't wait for cluster readiness here because the annotation gets removed then
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
+
+	log "Physical restore finished: OK"
+
+	if [ $(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"') == null ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		exit 1
+	fi
+	echo
+
+	wait_cluster_consistency ${cluster}
+	wait_for_pbm_operations ${cluster}
+
+	log "Operator triggered PBM resync: OK"
+
+	if [ -n "$is_sharded" ]; then
+		compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-sharded" "" "" "" "" "$tls"
+	else
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
+		compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "$tls"
+	fi
+
+	log "Data restored: OK"
+
+	echo "${cluster}-rs0-0:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-0 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-1:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-1 -- ls -l /data/db/pbm-restore-logs
+	echo "${cluster}-rs0-2:/data/db/pbm-restore-logs"
+	kubectl_bin exec ${cluster}-rs0-2 -- ls -l /data/db/pbm-restore-logs
+	if [ -n "$is_sharded" ]; then
+		echo "${cluster}-cfg-0:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-0 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-1:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-1 -- ls -l /data/db/pbm-restore-logs
+		echo "${cluster}-cfg-2:/data/db/pbm-restore-logs"
+		kubectl_bin exec ${cluster}-cfg-2 -- ls -l /data/db/pbm-restore-logs
+	fi
+
+	log "Restore logs are preserved: OK"
 }
 
 run_mongo() {
@@ -705,7 +944,19 @@ run_mongo() {
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+}
 
+run_mongosh() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-"mongodb+srv"}
+	local suffix=${4:-".svc.cluster.local"}
+	local mongo_flag="$5"
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
 
 run_mongo_tls() {
@@ -715,6 +966,13 @@ run_mongo_tls() {
 	local suffix=${4:-.svc.cluster.local}
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
@@ -726,11 +984,39 @@ run_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local port=${6:-"27017"}
+	local mongo_bin=${7:-mongo}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
+}
+
+run_mongos_tls() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local mongo_flag="$5"
+	local port=${6:-"27017"}
+	local mongo_bin=${7:-mongo}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 }
 
 run_script_mongos() {
@@ -738,18 +1024,34 @@ run_script_mongos() {
 	local uri="$2"
 	local driver=${3:-mongodb}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
+	local mongo_bin=${6:-mongo}
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongo $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "${mongo_bin} $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+}
+
+get_pmm_service_ip() {
+	local service=$1
+
+	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
+		sleep 1
+	done
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+		sleep 1
+	done
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
 get_service_ip() {
 	local service=$1
 	local server_type=${2:-rs0}
+
 	if [ "$(kubectl_bin get psmdb/${service/-$server_type*/} -o 'jsonpath={.spec.replsets[].expose.enabled}')" != "true" ]; then
 		echo -n $service.${service/-rs0*/}-rs0
 		return
@@ -776,12 +1078,32 @@ compare_mongo_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local sort="$7"
+	local tls="${8:-false}"
 
-	run_mongo "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
+	local full_command="db.${collection}.${command}()"
+	if [[ -n ${sort} ]]; then
+		full_command="${full_command}.${sort}"
+	fi
+
+	log "running ${full_command} in ${database}"
+
+	if [[ $tls == "true" ]]; then
+		mongo_command=run_mongo_tls
+	else
+		mongo_command=run_mongo
+	fi
+
+	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" \
+		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 compare_mongos_cmd() {
@@ -791,18 +1113,31 @@ compare_mongos_cmd() {
 	local suffix="$4"
 	local database="${5:-myApp}"
 	local collection="${6:-test}"
+	local port="${7:-27017}"
+	local tls="${8:-false}"
 
-	run_mongos "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
+	if [[ $tls == "true" ]]; then
+		mongos_command=run_mongos_tls
+	else
+		mongos_command=run_mongos
+	fi
+
+	$mongos_command "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
+		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
-	diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
 }
 
 get_mongo_primary_endpoint() {
 	local uri="$1"
 
-	run_mongo 'db.isMaster().me' "$uri" "mongodb" ":27017" \
+	run_mongo 'db.hello().me' "$uri" "mongodb" ":27017" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| grep ":27017$"
@@ -824,9 +1159,18 @@ get_mongo_primary() {
 	fi
 }
 
+check_exported_mongos_service_endpoint() {
+	local host=$1
+
+	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+		echo "Exported host is not correct after the restore"
+		exit 1
+	fi
+}
+
 compare_mongo_user() {
 	local uri="$1"
-	local user=$(echo $uri | cut -d : -f 1)
+	local user="$2"
 	local expected_result=${test_dir}/compare/$user.json
 
 	if [[ $IMAGE_MONGOD =~ 4\.0 ]] && [ -f ${test_dir}/compare/$user-40.json ]; then
@@ -847,6 +1191,9 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 7\.0 ]] && [ -f ${test_dir}/compare/$user-70.json ]; then
 		expected_result=${test_dir}/compare/$user-70.json
 	fi
+	if [[ $IMAGE_MONGOD =~ 8\.0 ]] && [ -f ${test_dir}/compare/$user-80.json ]; then
+		expected_result=${test_dir}/compare/$user-80.json
+	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
 		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
@@ -855,7 +1202,12 @@ compare_mongo_user() {
 		| sed -e '$s/,$/}/' \
 		| jq '.authInfo.authenticatedUserPrivileges|=sort_by(.resource.anyResource, .resource.cluster, .resource.db, .resource.collection)|.authInfo.authenticatedUserRoles|=sort_by(.role)' \
 			>$tmp_dir/$user.json
-	diff -u $expected_result $tmp_dir/$user.json
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u $expected_result $tmp_dir/$user.json
+	else
+		cp $tmp_dir/$user.json $expected_result
+	fi
 }
 
 start_gke() {
@@ -903,9 +1255,22 @@ delete_crd() {
 	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
 }
 
+delete_backups() {
+	desc 'Delete psmdb-backup'
+	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
+		kubectl_bin get psmdb-backup
+		kubectl_bin delete psmdb-backup --all
+	fi
+}
+
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
+
+	if [[ ${SKIP_DELETE} == 1 ]]; then
+		echo "SKIP_DELETE=1, not destroying ${namespace}"
+		return
+	fi
 
 	desc 'destroy cluster/operator and all other resources'
 	if [ ${ignore_logs} == "false" ] && [ "${DEBUG_TESTS}" == 1 ]; then
@@ -923,9 +1288,11 @@ destroy() {
 	#TODO: maybe will be enabled later
 	#diff $test_dir/compare/operator.log $tmp_dir/operator.log
 
+	delete_backups
+
 	delete_crd
 
-	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
+	destroy_cert_manager || true
 	if [ -n "$OPENSHIFT" ]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
 		if [ -n "$OPERATOR_NS" ]; then
@@ -938,6 +1305,10 @@ destroy() {
 		fi
 	fi
 	rm -rf ${tmp_dir}
+}
+
+destroy_cert_manager() {
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
 }
 
 desc() {
@@ -953,7 +1324,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||"
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||"
 }
 
 get_service_endpoint() {
@@ -1040,13 +1411,20 @@ get_qan_values() {
 EOF
 
 	local response
-	response=$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-		| jq '.rows[].fingerprint')
+
+	retry=0
+
+	until [[ "$(curl -s -k -XPOST -d @payload.json "https://${user_pass}@$endpoint/v0/qan/GetReport" \
+		| jq '.rows[].sparkline')" != "null" ]]; do
+		let retry+=1
+		if [ $retry -ge 10 ]; then
+			echo max retry count $retry reached. "No data for $service_type service type in QAN"
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
 	rm -f payload.json
-	if [[ $response == "null" ]]; then
-		echo "No data for $service_type service type in QAN"
-		exit 1
-	fi
 }
 
 cat_config() {
@@ -1056,6 +1434,11 @@ cat_config() {
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
+}
+
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
 }
 
 apply_cluster() {
@@ -1070,6 +1453,14 @@ apply_cluster() {
 				del(.spec.backup.tasks.[1])' - \
 			| kubectl_bin apply -f -
 	fi
+}
+
+# get_cluster_gh echoes the default cr.yaml on github
+# so caller can do intended modifications and apply it
+get_cluster_gh() {
+	local git_tag=$1
+
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/cr.yaml"
 }
 
 spinup_psmdb() {
@@ -1161,24 +1552,94 @@ wait_cluster_consistency() {
 		echo -n .
 		sleep 10
 	done
+	echo '.OK'
 }
 
 run_backup() {
 	local storage=$1
 	local backup_name=${2:-"backup-${storage}"}
+	local type=${3:-"logical"}
 
 	desc "run backup $backup_name"
 
 	yq eval '.metadata.name = "'${backup_name}'"
-			| .spec.storageName = "'${storage}'"' \
+			| .spec.storageName = "'${storage}'"
+			| .spec.type = "'${type}'"' \
 		$test_dir/conf/backup-$storage.yml \
 		| kubectl_bin apply -f -
 }
 
-check_backup_deletion() {
-	path=$1
-	storage_name=$2
+function check_backup_deletion_aws() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	storage_name="aws-s3"
 	retry=0
+
+	while aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+	
+	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+}
+
+function check_backup_deletion_gcs() {
+    backup_dest_gcp=$1
+	obj=$2
+	storage_name="gcp-cs"
+	retry=0
+	gcs_path="gs://${backup_dest_gcp}${obj}"
+
+    while gsutil ls "$gcs_path" >/dev/null 2>&1; do
+        if [ $retry -ge 15 ]; then
+            echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+            echo "Backup $gcs_path still exists in $storage_name (expected it to be deleted)"
+            exit 1
+        fi
+        echo "waiting for backup to be deleted from $storage_name"
+        sleep 10
+        ((retry += 1))
+    done
+
+    echo "Backup $gcs_path not found in $storage_name"
+}
+
+function check_backup_deletion_azure() {
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
+	blob=$2
+	storage_name="azure-blob"
+	retry=0
+	blob_path="${blob_prefix}${blob}"
+
+	while az storage blob show --container-name "$container" --name "$blob_path" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+	
+	echo "Backup ${blob_path} in container $container not found in $storage_name"
+}
+
+check_backup_deletion() {
+	local path=$1
+	local storage_name=$2
+	local retry=0
+
 	until [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 403 ]] || [[ $(curl -sw '%{http_code}' -o /dev/null $path) -eq 404 ]]; do
 		if [ $retry -ge 10 ]; then
 			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
@@ -1191,11 +1652,126 @@ check_backup_deletion() {
 	done
 }
 
+function setup_aws_credentials() {
+    local secret_name="aws-s3-secret"
+    
+    if [[ -n "$AWS_ACCESS_KEY_ID" ]] && [[ -n "$AWS_SECRET_ACCESS_KEY" ]]; then
+        echo "AWS credentials already set in environment"
+        return 0
+    fi
+    
+    echo "Setting up AWS credentials from secret: $secret_name"
+    
+    # Disable tracing for the entire credential section
+    local trace_was_on=0
+    if [[ $- == *x* ]]; then
+        trace_was_on=1
+        set +x
+    fi
+
+    AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+    AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+    
+    if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
+        # Re-enable tracing before error message if it was on
+        [[ $trace_was_on -eq 1 ]] && set -x
+        echo "Failed to extract AWS credentials from secret"
+        return 1
+    fi
+    
+    export AWS_ACCESS_KEY_ID
+    export AWS_SECRET_ACCESS_KEY
+    
+    # Re-enable tracing if it was on
+    [[ $trace_was_on -eq 1 ]] && set -x
+    
+    echo "AWS credentials configured successfully"
+}
+
+function setup_gcs_credentials() {
+    local secret_name="gcp-cs-secret"
+
+    if gsutil ls >/dev/null 2>&1; then
+        echo "GCS credentials already set in environment"
+        return 0
+    fi
+
+    echo "Setting up GCS credentials from K8s secret: $secret_name"
+    
+    # Disable tracing for the entire credential section
+    local trace_was_on=0
+    if [[ $- == *x* ]]; then
+        trace_was_on=1
+        set +x
+    fi
+    
+    ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+    SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+    
+    if [[ -z "$ACCESS_KEY_ID" ]] || [[ -z "$SECRET_ACCESS_KEY" ]]; then
+        # Re-enable tracing before error message if it was on
+        [[ $trace_was_on -eq 1 ]] && set -x
+        echo "Failed to extract GCS credentials from secret" >&2
+        return 1
+    fi
+    
+    boto_tmp=$(mktemp /tmp/boto.XXXXXX)
+    chmod 600 "$boto_tmp"
+
+    cat <<EOF >"$boto_tmp"
+[Credentials]
+gs_access_key_id = ${ACCESS_KEY_ID}
+gs_secret_access_key = ${SECRET_ACCESS_KEY}
+EOF
+
+    export BOTO_CONFIG="$boto_tmp"
+
+    unset ACCESS_KEY_ID
+    unset SECRET_ACCESS_KEY
+    
+    [[ $trace_was_on -eq 1 ]] && set -x
+    
+    echo "GCS credentials configured successfully"
+}
+
+function setup_azure_credentials() {
+    local secret_name="azure-secret"
+
+    echo "Setting up Azure credentials from K8s secret: $secret_name"
+    
+    # Disable tracing for the entire credential section
+    local trace_was_on=0
+    if [[ $- == *x* ]]; then
+        trace_was_on=1
+        set +x
+    fi
+    
+    AZURE_STORAGE_ACCOUNT=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_NAME}' 2>/dev/null | base64 -d 2>/dev/null)
+    AZURE_STORAGE_KEY=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+
+    if [[ -z "$AZURE_STORAGE_ACCOUNT" ]] || [[ -z "$AZURE_STORAGE_KEY" ]]; then
+        # Re-enable tracing before error message if it was on
+        [[ $trace_was_on -eq 1 ]] && set -x
+        echo "Failed to extract Azure credentials from secret" >&2
+        return 1
+    fi
+
+    export AZURE_STORAGE_ACCOUNT
+    export AZURE_STORAGE_KEY
+
+    # Re-enable tracing if it was on
+    [[ $trace_was_on -eq 1 ]] && set -x
+
+    echo "Azure credentials configured successfully"
+}
+
 create_infra() {
 	local ns="$1"
 
-	delete_crd
-	check_crd_for_deletion "${GIT_BRANCH}"
+	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
+		delete_crd
+		check_crd_for_deletion "${GIT_BRANCH}"
+	fi
 	if [ -n "$OPERATOR_NS" ]; then
 		create_namespace $OPERATOR_NS
 		deploy_operator
@@ -1203,6 +1779,21 @@ create_infra() {
 	else
 		create_namespace $ns
 		deploy_operator
+	fi
+}
+
+create_infra_gh_release() {
+	local ns="$1"
+	local git_tag="$2"
+
+	check_crd_for_deletion "${git_tag}"
+	if [ -n "${OPERATOR_NS}" ]; then
+		create_namespace "${OPERATOR_NS}"
+		deploy_operator_gh_release "${git_tag}"
+		create_namespace "${ns}"
+	else
+		create_namespace "${ns}"
+		deploy_operator_gh_release "${git_tag}"
 	fi
 }
 
@@ -1267,7 +1858,7 @@ function run_simple_cli_inside_image() {
 	local pod_name=${RANDOM}
 	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
-	local output=$(kubectl_bin -n default exec ${pod_name} -- ${cli})
+	local output=$(kubectl_bin -n default exec ${pod_name} -- bash -c "${cli} 2>&1")
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
 	echo ${output}
 }
@@ -1348,11 +1939,12 @@ insert_data_mongos() {
 	local data=$1
 	local db_name=$2
 	local flags=$3
+	local port=${4:-"27017"}
 
 	run_mongos \
 		"use ${db_name}\n db.test.insert({ x: ${data} })" \
 		"myApp:myPass@$cluster-mongos.$namespace" "" "" \
-		"$flags"
+		"$flags" "$port"
 }
 
 deploy_pmm_server() {
@@ -1451,6 +2043,12 @@ start_cluster() {
 	wait_cluster_consistency "${cluster_name}"
 }
 
+format_pitr_target() {
+	local target=$1
+
+	echo ${target} | sed 's/T/ /' | sed 's/Z//'
+}
+
 get_latest_restorable_time() {
 	local cluster=$1
 	local first_timestamp
@@ -1536,9 +2134,9 @@ wait_for_cluster_state() {
 	local cluster_name=$1
 	local target_state=$2
 
-	echo -n "Waiting for cluster to reach ${target_state} state"
+	echo -n "Waiting for psmdb/${cluster_name} to reach ${target_state} state"
 	local timeout=0
-	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == ${target_state} ]]; do
+	until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) =~ ${target_state} ]]; do
 		sleep 1
 		timeout=$((timeout + 1))
 		echo -n '.'
@@ -1549,4 +2147,298 @@ wait_for_cluster_state() {
 		fi
 	done
 	echo
+	log "psmdb/${cluster_name} is ${target_state}: OK"
+}
+
+urlencode() {
+	uri="$1"
+	echo -n "$uri" | jq -s -R -r @uri
+}
+
+getUserData() {
+	local secretName=$1
+	local dataKey=$2
+	urlencode "$(getSecretData "$secretName" "$dataKey")"
+}
+
+write_document() {
+	local cmp_postfix="$1"
+	local sleep_value=${2:-0}
+
+	log 'write initial data, read from all'
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep $sleep_value
+
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" ${cmp_postfix}
+}
+
+write_initial_data() {
+	desc 'create user myApp'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+		"userAdmin:userAdmin123456@$cluster-mongos.$namespace"
+	sleep 2
+}
+
+reset_collection() {
+	desc 'reset data'
+
+	run_mongos \
+		'use myApp\n db.test.remove({})' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+	sleep 2
+	write_document '' '120'
+}
+
+get_latest_oplog_chunk_ts() {
+	local cluster=$1
+	echo $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq '.backups.pitrChunks.pitrChunks | last | .range.end')
+}
+
+format_date() {
+	local timestamp=$1
+	echo $(TZ=UTC $date -d@${timestamp} '+%Y-%m-%d %H:%M:%S')
+}
+
+get_bucket_name() {
+	local backup_name=$1
+
+	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.s3.bucket}'
+}
+
+check_recovery() {
+	local backup_name=$1
+	local restore_type=$2
+	local restore_date=$3
+	local cmp_postfix=$4
+	local cluster_name=$5
+	local backupSource=$6
+
+	local latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+
+	desc "write more data before restore by $restore_type"
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"myApp:myPass@$cluster-mongos.$namespace"
+
+	if [[ -n ${restore_date} ]]; then
+		desc "Restoring to time $(format_date ${restore_date})"
+		retries=0
+		until [[ ${latest_ts} -gt ${restore_date} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Last oplog chunk ($(format_date ${latest_ts})) is not greater than restore target ($(format_date ${restore_date}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be greater than restore target ($(format_date ${restore_date}))"
+			sleep 10
+		done
+	else
+		desc "Restoring to latest"
+		local current_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+		retries=0
+		until [[ ${latest_ts} -gt ${current_ts} ]]; do
+			if [[ $retries -gt 30 ]]; then
+				echo "Timeout while waiting for last oplog chunk ($(format_date ${latest_ts}))"
+				exit 1
+			fi
+			latest_ts=$(get_latest_oplog_chunk_ts $cluster_name)
+			retries=$((retries + 1))
+			echo "Waiting for last oplog chunk ($(format_date ${latest_ts})) to be 120 seconds older than starting chunk ($(format_date ${current_ts}))"
+			sleep 10
+		done
+	fi
+
+	if [ -z "$backupSource" ]; then
+		desc "check restore by $restore_type"
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "s/backupName:/backupName: $backup_name/" \
+			| $sed -e "/backupSource/,+8d" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
+			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $(format_date ${restore_date})/"; fi \
+			| kubectl_bin apply -f -
+	else
+		desc "check restore by $restore_type $backupSource"
+		backup_dest=$(get_backup_dest "$backup_name")
+		cat $test_dir/conf/restore.yml \
+			| $sed -e "s/name:/name: restore-$backup_name/" \
+			| $sed -e "/backupName/d" \
+			| $sed -e "s/pitrType:/type: $restore_type/" \
+			| if [ -z "$restore_date" ]; then $sed -e "/date:/d"; else $sed -e "s/date:/date: $(format_date ${restore_date})"/; fi \
+			| $sed -e "s|DESTINATION|$backup_dest|" \
+			| $sed -e "s|BUCKET-NAME|$(get_bucket_name "$backup_name")|" \
+			| if [ -n "$selective_collection" ]; then yq eval '.spec.selective = {"namespaces": ["myApp.test"], "withUsersAndRoles": true}'; else yq; fi \
+			| kubectl_bin apply -f -
+	fi
+
+	# fail faster if we don't reach requested status until some time
+	wait_restore "$backup_name" "$cluster_name" "requested" "0" "1200"
+	echo
+	wait_restore "$backup_name" "$cluster_name" "ready" "0" "1600"
+	echo
+	set -o xtrace
+
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3
+	wait_for_running $cluster-mongos 3
+	sleep 10
+
+	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "$cmp_postfix"
+}
+
+run_pitr_check() {
+	local backup=$1
+	local cluster=$2
+	local find_prefix=$3
+
+	wait_for_oplogs "${cluster}"
+	local target_time=$(format_date $(get_latest_oplog_chunk_ts ${cluster}))
+
+	log "dropping test collection"
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	log "checking pitr... backup: ${backup} target: ${target_time}"
+	cat $test_dir/conf/pitr.yml \
+		| yq eval ".metadata.name = \"restore-${backup}\"" \
+		| yq eval ".spec.backupName = \"${backup}\"" \
+		| yq eval ".spec.pitr.date = \"${target_time}\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "${backup}" "${cluster}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "${find_prefix}" ".svc.cluster.local" "myApp" "test"
+}
+
+wait_for_oplogs() {
+	local cluster1=$1
+
+	local backup_last_write=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json | jq .backups.snapshot[0].restoreTo)
+
+	local retries=0
+	local last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+	until [[ ${last_chunk} -gt ${backup_last_write} ]]; do
+		if [[ $retries -gt 30 ]]; then
+			log "Last oplog chunk ($(format_date ${last_chunk})) is not greater than last write ($(format_date ${backup_last_write}))"
+			exit 1
+		fi
+		last_chunk=$(get_latest_oplog_chunk_ts ${cluster})
+		retries=$((retries + 1))
+		log "Waiting for last oplog chunk ($(format_date ${last_chunk})) to be greater than last write ($(format_date ${backup_last_write}))"
+		sleep 10
+	done
+}
+
+function check_backup_existence_aws() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	storage_name="aws-s3"
+	retry=0
+
+	until aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 30 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup was not found in bucket -- $storage_name"
+			exit 1
+		fi
+		echo "waiting for backup $bucket/$key_prefix/$key in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+	
+	echo "Backup $bucket/$key_prefix/$key found in $storage_name"
+}
+
+function check_backup_existence_gcs() {
+	backup_dest_gcp=$1
+	obj=$2
+	storage_name="gcp-cs"
+	retry=0
+
+	gcs_path="gs://${backup_dest_gcp}${obj}"
+
+	until gsutil ls "$gcs_path" >/dev/null 2>&1; do
+		if [ $retry -ge 30 ]; then
+			echo "Max retry count $retry reached. Something went wrong with operator or Kubernetes cluster."
+			echo "Backup was not found in bucket -- $storage_name"
+			exit 1
+		fi
+		echo "Waiting for backup $gcs_path in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+	
+	echo "Backup $gcs_path found in $storage_name"
+}
+
+function check_backup_existence_azure() {
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
+	blob=$2
+	storage_name="azure-blob"
+	retry=0
+	blob_path="${blob_prefix}${blob}"
+
+	until az storage blob show --container-name "$container" --name "$blob_path" &>/dev/null; do
+		if [ $retry -ge 30 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup was not found in container -- $storage_name"
+			exit 1
+		fi
+		echo "waiting for backup $blob_path in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+	
+	echo "Backup $blob_path found in $storage_name"
+}
+
+check_backup_in_storage() {
+	local backup=$1
+	local storage_type=$2
+	local replset=$3
+	local file=${4:-"filelist.pbm"}
+
+	local endpoint
+	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
+	case ${storage_type} in
+		s3)
+			endpoint="s3.amazonaws.com"
+			setup_aws_credentials
+			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
+			;;
+		gcs)
+			endpoint="storage.googleapis.com"
+			setup_gcs_credentials
+			check_backup_existence_gcs "$backup_dest" "/${replset}/${file}"
+			;;
+		azure)
+			endpoint="engk8soperators.blob.core.windows.net"
+			setup_azure_credentials
+			check_backup_existence_azure "$backup_dest" "/${replset}/${file}"
+			;;
+		minio)
+			endpoint="minio-service"
+			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+				/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+				| grep "${file}"; do
+				sleep 1
+				let retry+=1
+				if [ $retry -ge 60 ]; then
+					log "Max retry count $retry reached. Something went wrong with writing backup"
+					exit 1
+				fi
+			done
+			;;
+		*)
+			echo "unsupported storage type: ${storage_type}"
+			exit 1
+			;;
+	esac
 }

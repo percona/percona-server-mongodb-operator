@@ -18,9 +18,9 @@ metadata:
 spec:
   ports:
     - name: mongos
-      port: 27017
+      port: 27019
       protocol: TCP
-      targetPort: 27017
+      targetPort: 27019
   selector:
     app.kubernetes.io/component: mongos
     app.kubernetes.io/instance: monitoring

@@ -1,11 +1,13 @@
-FROM --platform=${BUILDPLATFORM} golang:1.22 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.25 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
 COPY go.mod go.sum ./
+COPY cmd/mongodb-healthcheck/logger/lumberjack ./cmd/mongodb-healthcheck/logger/lumberjack
 RUN go mod download
 
 ARG GIT_COMMIT
 ARG GIT_BRANCH
+ARG BUILD_TIME
 ARG GO_LDFLAGS
 ARG GOOS=linux
 ARG TARGETARCH
@@ -15,7 +17,7 @@ COPY . .
 
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=${TARGETARCH} CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-       go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH" \
+       go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
            -o build/_output/bin/percona-server-mongodb-operator \
                cmd/manager/main.go \
     && cp -r build/_output/bin/percona-server-mongodb-operator /usr/local/bin/percona-server-mongodb-operator
@@ -51,5 +53,6 @@ COPY build/init-entrypoint.sh /init-entrypoint.sh
 COPY build/ps-entry.sh /ps-entry.sh
 COPY build/physical-restore-ps-entry.sh /physical-restore-ps-entry.sh
 COPY build/pbm-entry.sh /pbm-entry.sh
+COPY build/logcollector /logcollector
 
 USER 2

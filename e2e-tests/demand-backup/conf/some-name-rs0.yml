@@ -11,6 +11,7 @@ spec:
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret
@@ -26,7 +27,7 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
-      gcp-cs:
+      gcp-cs-s3:
         type: s3
         s3:
           credentialsSecret: gcp-cs-secret
@@ -42,7 +43,17 @@ spec:
           prefix: psmdb-demand-backup
           endpointUrl: https://engk8soperators.blob.core.windows.net
           credentialsSecret: azure-secret
-
+      gcp-cs-sa:
+        type: gcs
+        gcs:
+          credentialsSecret: gcp-cs-sa-key-secret
+          bucket: operator-testing
+          prefix: psmdb-demand-backup
+          chunkSize: 10485760
+          retryer:
+            backoffInitial: 1
+            backoffMax: 30
+            backoffMultiplier: 2
     tasks:
     - name: weekly
       enabled: true
@@ -67,7 +78,7 @@ spec:
             storage: 1Gi
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     size: 3
     configuration: |
       operationProfiling:

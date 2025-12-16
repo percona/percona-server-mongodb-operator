@@ -11,13 +11,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // creates a fake client to mock API calls with the mock objects
@@ -98,7 +97,7 @@ func TestConnectionEndpoint(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
 			Image:     "some-image",
-			CRVersion: version.Version,
+			CRVersion: version.Version(),
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
@@ -192,7 +191,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "psmdb-mock-mongos.psmdb.svc.cluster.local",
+			expected: "psmdb-mock-mongos.psmdb.svc.cluster.local:27017",
 		},
 		{
 			name: "loadbalancer expose for sharding with service per pod",
@@ -232,14 +231,14 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "psmdb-mock-mongos-0.psmdb.svc.cluster.local,psmdb-mock-mongos-1.psmdb.svc.cluster.local,psmdb-mock-mongos-2.psmdb.svc.cluster.local",
+			expected: "psmdb-mock-mongos-0.psmdb.svc.cluster.local:27017,psmdb-mock-mongos-1.psmdb.svc.cluster.local:27017,psmdb-mock-mongos-2.psmdb.svc.cluster.local:27017",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr
-			if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+			if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 				t.Fatal(err)
 			}
 			obj := []client.Object{cr}
@@ -310,6 +309,12 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 		Spec: corev1.ServiceSpec{
 			Type:      svcType,
 			ClusterIP: clusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name: "mongos",
+					Port: 27017,
+				},
+			},
 		},
 		Status: corev1.ServiceStatus{
 			LoadBalancer: corev1.LoadBalancerStatus{

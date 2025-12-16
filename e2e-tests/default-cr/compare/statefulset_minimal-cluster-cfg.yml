@@ -139,6 +139,8 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: minimal-cluster-mongodb-encryption-key
               readOnly: true
@@ -174,6 +176,8 @@ spec:
             secretName: minimal-cluster-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - name: minimal-cluster-mongodb-encryption-key
           secret:
             defaultMode: 288
@@ -194,9 +198,7 @@ spec:
             defaultMode: 420
             secretName: internal-minimal-cluster-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

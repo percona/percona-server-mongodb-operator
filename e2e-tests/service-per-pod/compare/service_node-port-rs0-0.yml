@@ -15,12 +15,13 @@ metadata:
       kind: PerconaServerMongoDB
       name: node-port
 spec:
-  externalTrafficPolicy: Local
+  externalTrafficPolicy: Cluster
   ports:
     - name: mongodb
       port: 27017
       protocol: TCP
       targetPort: 27017
+  publishNotReadyAddresses: true
   selector:
     statefulset.kubernetes.io/pod-name: node-port-rs0-0
   sessionAffinity: None

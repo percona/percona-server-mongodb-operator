@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -17,13 +18,23 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	log := logf.FromContext(ctx)
+func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) map[string][]byte {
+	m := secret.DeepCopy().Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		for k, v := range secret.Data {
+			m[k+"_ESCAPED"] = []byte(url.QueryEscape(string(v)))
+		}
+	}
+	return m
+}
 
+func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	sysUsersSecretObj := corev1.Secret{}
 	err := r.client.Get(ctx,
 		types.NamespacedName{
@@ -36,11 +47,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	} else if err != nil {
 		return errors.Wrapf(err, "get sys users secret '%s'", cr.Spec.Secrets.Users)
-	}
-
-	if !cr.Spec.PMM.HasSecret(&sysUsersSecretObj) && cr.Spec.PMM.Enabled {
-		log.Info(fmt.Sprintf(`Can't enable PMM: "%s" or "%s" with "%s" keys don't exist in the secrets, or secrets and internal secrets are out of sync`,
-			api.PMMAPIKey, api.PMMUserKey, api.PMMPasswordKey), "secrets", cr.Spec.Secrets.Users, "internalSecrets", api.InternalUserSecretName(cr))
 	}
 
 	secretName := api.InternalUserSecretName(cr)
@@ -62,6 +68,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		internalSysUsersSecret.ObjectMeta = metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		}
+		if cr.CompareVersion("1.17.0") < 0 {
+			internalSysUsersSecret.Labels = nil
+		}
+		if cr.CompareVersion("1.19.0") >= 0 {
+			internalSysUsersSecret.Data = getInternalSecretData(cr, &sysUsersSecretObj)
 		}
 		err = r.client.Create(ctx, internalSysUsersSecret)
 		if err != nil {
@@ -75,13 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return nil
 	}
 
-	newSysData, err := json.Marshal(sysUsersSecretObj.Data)
-	if err != nil {
-		return errors.Wrap(err, "marshal sys secret data")
-	}
-
-	newSecretDataHash := sha256Hash(newSysData)
-	dataChanged, err := sysUsersSecretDataChanged(newSecretDataHash, &internalSysSecretObj)
+	dataChanged, err := sysUsersSecretDataChanged(cr, &sysUsersSecretObj, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "check sys users data changes")
 	}
@@ -92,12 +99,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 	logf.FromContext(ctx).Info("Secret data changed. Updating users...")
 
-	containers, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
+	containerNames, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 	if err != nil {
 		return errors.Wrap(err, "manage sys users")
 	}
 
-	if len(containers) > 0 {
+	if len(containerNames) > 0 {
 		rsPodList, err := r.getMongodPods(ctx, cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to get mongos pods")
@@ -121,8 +128,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			pods = append(pods, cfgPodlist.Items...)
 		}
 
-		for _, name := range containers {
-			err = r.killcontainer(ctx, pods, name)
+		for _, name := range containerNames {
+			err = r.killContainer(ctx, pods, name)
 			if err != nil {
 				return errors.Wrapf(err, "failed to kill %s container", name)
 			}
@@ -130,6 +137,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	}
 
 	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+	}
 	err = r.client.Update(ctx, &internalSysSecretObj)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret")
@@ -138,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
+func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
 	for _, pod := range pods {
 		for _, c := range pod.Spec.Containers {
 			if c.Name == containerName {
@@ -164,7 +174,6 @@ func (r *ReconcilePerconaServerMongoDB) killcontainer(ctx context.Context, pods 
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -194,7 +203,7 @@ func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 		bytes.Equal(su.newData[passKey], su.currData[passKey]) {
 		return false, nil
 	}
-	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey {
+	if nameKey == api.EnvPMMServerUser || passKey == api.EnvPMMServerAPIKey || passKey == api.EnvPMMServerToken {
 		return true, nil
 	}
 	su.users = append(su.users, systemUser{
@@ -253,22 +262,31 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
-	if cr.Spec.PMM.Enabled && cr.Spec.PMM.HasSecret(newUsersSec) {
-		// insert in front
-		if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+	if cr.Spec.PMM.Enabled {
+		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{
 				{
-					nameKey: api.EnvPMMServerAPIKey,
-					passKey: api.EnvPMMServerAPIKey,
+					nameKey: api.PMMServerToken,
+					passKey: api.PMMServerToken,
 				},
 			}, users...)
-		} else {
-			users = append([]user{
-				{
-					nameKey: api.EnvPMMServerUser,
-					passKey: api.EnvPMMServerPassword,
-				},
-			}, users...)
+		}
+		if cr.Spec.PMM.HasSecret(newUsersSec) {
+			if cr.Spec.PMM.ShouldUseAPIKeyAuth(newUsersSec) {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerAPIKey,
+						passKey: api.EnvPMMServerAPIKey,
+					},
+				}, users...)
+			} else {
+				users = append([]user{
+					{
+						nameKey: api.EnvPMMServerUser,
+						passKey: api.EnvPMMServerPassword,
+					},
+				}, users...)
+			}
 		}
 	}
 
@@ -281,8 +299,8 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 		if changed {
 			switch u.nameKey {
 			case api.EnvMongoDBBackupUser:
-				containers = append(containers, "backup-agent")
-			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey:
+				containers = append(containers, naming.ContainerBackupAgent)
+			case api.EnvPMMServerUser, api.EnvPMMServerAPIKey, api.EnvPMMServerToken:
 				containers = append(containers, "pmm-client")
 			}
 		}
@@ -303,7 +321,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 	for i := range repls {
 		replset := repls[i]
 		grp.Go(func() error {
-			client, err := r.mongoClientWithRole(gCtx, cr, *replset, api.RoleUserAdmin)
+			client, err := r.mongoClientWithRole(gCtx, cr, replset, api.RoleUserAdmin)
 			if err != nil {
 				return errors.Wrap(err, "dial:")
 			}
@@ -328,7 +346,7 @@ func (r *ReconcilePerconaServerMongoDB) updateUsers(ctx context.Context, cr *api
 
 func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	if bytes.Equal(u.currName, u.name) {
-		err := c.UpdateUserPass(ctx, string(u.name), string(u.pass))
+		err := c.UpdateUserPass(ctx, "admin", string(u.name), string(u.pass))
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}
 
@@ -336,12 +354,19 @@ func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 
-func sysUsersSecretDataChanged(newHash string, usersSecret *corev1.Secret) (bool, error) {
-	secretData, err := json.Marshal(usersSecret.Data)
+func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret, internalSecret *corev1.Secret) (bool, error) {
+	newData := getInternalSecretData(cr, usersSecret)
+	newDataJSON, err := json.Marshal(newData)
 	if err != nil {
 		return false, err
 	}
-	oldHash := sha256Hash(secretData)
+	newHash := sha256Hash(newDataJSON)
+
+	oldDataJSON, err := json.Marshal(internalSecret.Data)
+	if err != nil {
+		return false, err
+	}
+	oldHash := sha256Hash(oldDataJSON)
 
 	return oldHash != newHash, nil
 }

@@ -3,6 +3,9 @@ kind: PerconaServerMongoDB
 metadata:
   name: mydb
 spec:
+  updateStrategy: RollingUpdate
+  tls:
+    mode: allowTLS
   unmanaged: true
   unsafeFlags:
     replsetSize: true
@@ -10,13 +13,14 @@ spec:
   clusterServiceDNSMode: "Internal"
   image: percona/percona-server-mongodb:6.0.4-3
   imagePullPolicy: Always
+  updateStrategy: RollingUpdate
   secrets:
-    users: mydb-users
-    ssl: mydb-ssl
-    sslInternal: mydb-ssl-internal
-    encryptionKey: mydb-encryption-key
+    users: mydb-custom-users
+    ssl: mydb-custom-ssl
+    sslInternal: mydb-custom-ssl-internal
+    encryptionKey: mydb-custom-encryption-key
+    keyFile: mydb-custom-mongodb-keyfile
   replsets:
-
   - name: rs0
     size: 2
     affinity:
@@ -25,7 +29,7 @@ spec:
       maxUnavailable: 1
     expose:
       enabled: false
-      exposeType: ClusterIp
+      type: ClusterIp
     resources:
       limits:
         cpu: "300m"
@@ -73,7 +77,7 @@ spec:
         maxUnavailable: 1
       expose:
         enabled: false
-        exposeType: ClusterIp
+        type: ClusterIp
       resources:
         limits:
           cpu: "300m"
@@ -101,4 +105,4 @@ spec:
           cpu: "300m"
           memory: "0.5G"
       expose:
-        exposeType: ClusterIp
+        type: ClusterIp

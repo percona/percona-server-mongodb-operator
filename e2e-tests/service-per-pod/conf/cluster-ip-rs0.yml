@@ -11,7 +11,7 @@ spec:
       antiAffinityTopologyKey: none
     expose:
       enabled: true
-      exposeType: ClusterIP
+      type: ClusterIP
     volumeSpec:
       persistentVolumeClaim:
         resources:

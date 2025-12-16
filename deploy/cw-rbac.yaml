@@ -112,6 +112,7 @@ rules:
   - delete
 - apiGroups:
   - events.k8s.io
+  - ""
   resources:
   - events
   verbs:
@@ -126,6 +127,7 @@ rules:
   resources:
   - issuers
   - certificates
+  - certificaterequests
   verbs:
   - get
   - list

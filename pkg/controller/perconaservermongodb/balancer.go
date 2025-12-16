@@ -17,7 +17,13 @@ import (
 func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || (s.Balancer.Enabled != nil && !*s.Balancer.Enabled) || cr.DeletionTimestamp != nil || cr.Spec.Pause {
+	if s := cr.Spec.Sharding; !s.Enabled ||
+		s.Mongos.Size == 0 ||
+		!s.Balancer.IsEnabled() ||
+		cr.Spec.Unmanaged ||
+		cr.DeletionTimestamp != nil ||
+		cr.Spec.Pause {
+
 		return nil
 	}
 
@@ -26,12 +32,17 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		return errors.Wrap(err, "failed to check if all sfs are up to date")
 	}
 
+	bcpRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to check running backups")
+	}
+
 	rstRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check running restores")
 	}
 
-	if !uptodate || rstRunning {
+	if !uptodate || bcpRunning || rstRunning {
 		return nil
 	}
 
@@ -104,7 +115,10 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) disableBalancerIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if s := cr.Spec.Sharding; !s.Enabled || s.Mongos.Size == 0 || cr.Spec.Unmanaged || s.Balancer.Enabled == nil || *s.Balancer.Enabled {
+	if s := cr.Spec.Sharding; !s.Enabled ||
+		s.Mongos.Size == 0 ||
+		s.Balancer.IsEnabled() ||
+		cr.Spec.Unmanaged {
 		return nil
 	}
 	return r.disableBalancer(ctx, cr)

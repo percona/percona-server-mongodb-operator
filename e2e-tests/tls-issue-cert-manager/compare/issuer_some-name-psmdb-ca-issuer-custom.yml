@@ -1,0 +1,9 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  annotations:
+    some-random-annotation: "true"
+  generation: 1
+  name: some-name-psmdb-ca-issuer
+spec:
+  selfSigned: {}

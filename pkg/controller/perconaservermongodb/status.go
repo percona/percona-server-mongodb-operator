@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
@@ -92,6 +93,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			currentRSstatus = api.ReplsetStatus{}
 		}
 
+		status.Members = currentRSstatus.Members
 		status.Initialized = currentRSstatus.Initialized
 		status.AddedAsShard = currentRSstatus.AddedAsShard
 
@@ -215,6 +217,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		}
 	}
 
+	if state != api.AppStateReady {
+		log.V(1).Info("Cluster is not ready",
+			"upgradeInProgress", inProgress,
+			"replsetsReady", replsetsReady,
+			"clusterState", clusterState,
+		)
+	}
+
 	if cr.Status.State != state {
 		log.Info("Cluster state changed", "previous", cr.Status.State, "current", state)
 	}
@@ -260,30 +270,41 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
+	sts := &appsv1.StatefulSet{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + rsSpec.Name, Namespace: cr.Namespace}, sts)
+	if err != nil {
+		return api.ReplsetStatus{}, client.IgnoreNotFound(err)
+	}
+
+	if sts.Annotations[api.AnnotationPVCResizeInProgress] != "" {
+		return api.ReplsetStatus{Status: api.AppStateInit}, nil
+	}
+
 	list, err := psmdb.GetRSPods(ctx, r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)
 	}
 
 	status := api.ReplsetStatus{
-		Size:   rsSpec.Size,
+		Size:   rsSpec.GetSize(),
 		Status: api.AppStateInit,
 	}
 
-	if rsSpec.Arbiter.Enabled {
-		status.Size += rsSpec.Arbiter.Size
-	}
-
-	if rsSpec.NonVoting.Enabled {
-		status.Size += rsSpec.NonVoting.Size
-	}
-
 	for _, pod := range list.Items {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+			continue
+		}
+
 		for _, cntr := range pod.Status.ContainerStatuses {
 			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
 				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
 			}
 		}
+
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
@@ -305,7 +326,7 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size == status.Ready:
+	case status.Ready > 0 && status.Size == status.Ready:
 		status.Status = api.AppStateReady
 	}
 
@@ -334,6 +355,14 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	status.Size = len(list.Items)
 
 	for _, pod := range list.Items {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+			continue
+		}
+
 		for _, cntr := range pod.Status.ContainerStatuses {
 			if cntr.State.Waiting != nil && cntr.State.Waiting.Message != "" {
 				status.Message += cntr.Name + ": " + cntr.State.Waiting.Message + "; "
@@ -343,7 +372,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		for _, cond := range pod.Status.Conditions {
 			switch cond.Type {
 			case corev1.ContainersReady:
-				if cond.Status == corev1.ConditionTrue && pod.DeletionTimestamp == nil {
+				if cond.Status == corev1.ConditionTrue {
 					status.Ready++
 				}
 			case corev1.PodScheduled:
@@ -360,7 +389,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 		status.Status = api.AppStateStopping
 	case cr.Spec.Pause:
 		status.Status = api.AppStatePaused
-	case status.Size > 0 && status.Size == status.Ready && status.Size == int(cr.Spec.Sharding.Mongos.Size):
+	case status.Ready > 0 && status.Size == status.Ready && status.Size == int(cr.Spec.Sharding.Mongos.Size):
 		status.Status = api.AppStateReady
 	}
 
@@ -369,7 +398,7 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr, false)
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
@@ -382,14 +411,8 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		err := r.client.List(ctx,
 			&list,
 			&client.ListOptions{
-				Namespace: cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(map[string]string{
-					"app.kubernetes.io/name":       "percona-server-mongodb",
-					"app.kubernetes.io/instance":   cr.Name,
-					"app.kubernetes.io/replset":    rs.Name,
-					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-					"app.kubernetes.io/part-of":    "percona-server-mongodb",
-				}),
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)),
 			},
 		)
 		if err != nil {
@@ -399,7 +422,7 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 		if rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer {
 			dnsMode = api.DNSModeExternal
 		}
-		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, dnsMode, rs.Name, rs.Expose.Enabled, list.Items)
+		addrs, err := psmdb.GetReplsetAddrs(ctx, r.client, cr, dnsMode, rs, rs.Expose.Enabled, list.Items)
 		if err != nil {
 			switch errors.Cause(err) {
 			case psmdb.ErrNoIngressPoints, psmdb.ErrServiceNotExists:

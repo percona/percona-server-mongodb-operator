@@ -1,0 +1,107 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+run_backup() {
+	local name=$1
+	local idx=$2
+	local type=$3
+
+	desc "run backup $name-$idx"
+	cat $test_dir/conf/$name.yml \
+		| $sed -e "s/name:/name: $name-$idx/" \
+		| $sed -e "s/type:/type: $type/" \
+		| kubectl_bin apply -f -
+
+	wait_backup "$name-$idx"
+}
+
+main() {
+	create_infra $namespace
+	deploy_minio
+
+	desc 'create secrets and start client'
+	kubectl_bin apply \
+		-f "$conf_dir/secrets.yml" \
+		-f "$conf_dir/client.yml" \
+		-f $conf_dir/minio-secret.yml
+
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster $test_dir/conf/$cluster-rs0.yml
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	sleep 10
+
+	write_initial_data
+	write_document
+
+	wait_backup_agent $cluster-rs0-0
+	wait_backup_agent $cluster-rs0-1
+	wait_backup_agent $cluster-rs0-2
+	wait_backup_agent $cluster-rs1-0
+	wait_backup_agent $cluster-rs1-1
+	wait_backup_agent $cluster-rs1-2
+	wait_backup_agent $cluster-rs2-0
+	wait_backup_agent $cluster-rs2-1
+	wait_backup_agent $cluster-rs2-2
+
+	# The sleep is needed to workaround a bug in PBM, check PBM-1265 for more info
+	echo "Sleeping for 360 seconds"
+	sleep 360
+
+	backup_name_minio="backup-minio"
+
+	desc 'restore pitr type date using backupSource'
+	run_backup $backup_name_minio 1 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-1"
+	reset_collection
+
+	time_now=$(run_mongos 'new Date().getTime() / 1000' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -d'.' -f1)
+
+	check_recovery "${backup_name_minio}-1" date "$time_now" "" "$cluster" backupSource
+
+	desc "delete PSMDB cluster $cluster"
+	kubectl_bin delete psmdb $cluster
+	kubectl_bin delete pvc -l app.kubernetes.io/managed-by=percona-server-mongodb-operator
+	sleep 10
+
+	desc "recreate PSMDB cluster $cluster"
+	desc "create second PSMDB cluster $cluster"
+	apply_cluster $test_dir/conf/$cluster-rs0.yml
+
+	desc 'check if all 3 Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-rs1 3
+	wait_for_running $cluster-rs2 3
+	sleep 10
+
+	write_initial_data
+	write_document
+
+	desc 'restore pitr type latest using backupSource'
+	write_document "-2nd"
+	run_backup $backup_name_minio 2 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-2"
+	check_recovery "${backup_name_minio}-2" latest "" "-3rd" "$cluster" backupSource
+
+	desc 'disable pitr'
+	kubectl patch psmdb "$cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+	sleep 20
+
+	desc 'delete all backups'
+	kubectl_bin delete psmdb-backup --all
+
+	desc 'destroy cluster'
+	destroy $namespace
+	desc 'test passed'
+}
+
+main

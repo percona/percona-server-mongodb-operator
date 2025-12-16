@@ -1,0 +1,21 @@
+switched to db admin
+{
+	"_id" : "admin.user-one",
+	"user" : "user-one",
+	"db" : "admin",
+	"roles" : [
+		{
+			"role" : "clusterAdmin",
+			"db" : "admin"
+		},
+		{
+			"role" : "userAdminAnyDatabase",
+			"db" : "admin"
+		}
+	],
+	"mechanisms" : [
+		"SCRAM-SHA-1",
+		"SCRAM-SHA-256"
+	]
+}
+bye

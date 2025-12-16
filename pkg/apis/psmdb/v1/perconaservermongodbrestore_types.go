@@ -8,6 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 )
 
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
@@ -18,6 +20,26 @@ type PerconaServerMongoDBRestoreSpec struct {
 	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
 	StorageName  string                            `json:"storageName,omitempty"`
 	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
+	Selective    *SelectiveRestoreOpts             `json:"selective,omitempty"`
+}
+
+type SelectiveRestoreOpts struct {
+	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
+	Namespaces        []string `json:"namespaces,omitempty"`
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaces() []string {
+	if s == nil {
+		return nil
+	}
+	return s.Namespaces
+}
+
+func (s *SelectiveRestoreOpts) GetWithUsersAndRoles() bool {
+	if s == nil {
+		return false
+	}
+	return s.WithUsersAndRoles
 }
 
 // RestoreState is for restore status states
@@ -70,6 +92,15 @@ type PerconaServerMongoDBRestoreList struct {
 	Items           []PerconaServerMongoDBRestore `json:"items"`
 }
 
+func (r *PerconaServerMongoDBRestore) SetDefaults() error {
+	if bs := r.Spec.BackupSource; bs != nil {
+		if bs.Type == "" {
+			bs.Type = defs.LogicalBackup
+		}
+	}
+	return nil
+}
+
 func (r *PerconaServerMongoDBRestore) CheckFields() error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
@@ -88,8 +119,12 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
-		if len(r.Spec.StorageName) == 0 && r.Spec.BackupSource.S3 == nil && r.Spec.BackupSource.Azure == nil {
-			return errors.New("one of storageName, backupSource.s3 or backupSource.azure is required")
+		if len(r.Spec.StorageName) == 0 &&
+			r.Spec.BackupSource.S3 == nil &&
+			r.Spec.BackupSource.GCS == nil &&
+			r.Spec.BackupSource.Azure == nil &&
+			r.Spec.BackupSource.Filesystem == nil {
+			return errors.New("one of storageName, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
 		}
 	}
 
@@ -117,6 +152,7 @@ type PITRestoreDate struct {
 }
 
 func (PITRestoreDate) OpenAPISchemaType() []string { return []string{"string"} }
+
 func (PITRestoreDate) OpenAPISchemaFormat() string { return "" }
 
 func (t *PITRestoreDate) UnmarshalJSON(b []byte) (err error) {
@@ -145,6 +181,8 @@ func (t *PITRestoreDate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.Time.Format("2006-01-02 15:04:05"))
 }
 
+// +kubebuilder:validation:XValidation:rule="self.type != 'date' || (has(self.date) && self.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'))",message="Time should be in format YYYY-MM-DD HH:MM:SS with valid ranges (MM: 01-12, DD: 01-31, HH: 00-23, MM/SS: 00-59)"
+// +kubebuilder:validation:XValidation:rule="self.type != 'latest' || !has(self.date)",message="Date should not be used when 'latest' type is used"
 type PITRestoreSpec struct {
 	Type PITRestoreType  `json:"type,omitempty"`
 	Date *PITRestoreDate `json:"date,omitempty"`

@@ -12,6 +12,7 @@ spec:
     image: perconalab/percona-server-mongodb-operator:main-backup
     storages:
       aws-s3:
+        main: true
         type: s3
         s3:
           credentialsSecret: aws-s3-secret
@@ -64,7 +65,7 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
 
   replsets:
   - name: rs0

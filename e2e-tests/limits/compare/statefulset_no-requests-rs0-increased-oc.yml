@@ -144,6 +144,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: no-requests-mongodb-encryption-key
               readOnly: true
@@ -181,6 +183,8 @@ spec:
             secretName: no-requests-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: no-requests-rs0-mongod
@@ -206,9 +210,7 @@ spec:
             defaultMode: 420
             secretName: internal-no-requests-users
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
     - metadata:
         name: mongod-data

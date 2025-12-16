@@ -19,10 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
-	"github.com/percona/percona-server-mongodb-operator/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // TestConnectionLeaks aims to cover every initialization of a connection to the MongoDB database.
@@ -43,7 +44,7 @@ func TestConnectionLeaks(t *testing.T) {
 			Backup: api.BackupSpec{
 				Enabled: false,
 			},
-			CRVersion: version.Version,
+			CRVersion: version.Version(),
 			Image:     "percona/percona-server-mongodb:latest",
 			Replsets: []*api.ReplsetSpec{
 				{
@@ -111,14 +112,14 @@ func TestConnectionLeaks(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		cr := tt.cr
 		t.Run(tt.name, func(t *testing.T) {
+			cr := tt.cr
 			updatedRevision := "some-revision"
 
 			obj := []client.Object{}
 			obj = append(obj, cr,
-				fakeStatefulset(cr, cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].Size, updatedRevision),
-				fakeStatefulset(cr, "deleted-sts", 0, ""),
+				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, updatedRevision, ""),
+				fakeStatefulset(cr, &api.ReplsetSpec{Name: "deleted-sts"}, 0, "", ""),
 			)
 
 			rsPods := fakePodsForRS(cr, cr.Spec.Replsets[0])
@@ -132,10 +133,10 @@ func TestConnectionLeaks(t *testing.T) {
 				allPods = append(allPods, fakePodsForMongos(cr)...)
 
 				cr := cr.DeepCopy()
-				if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
-				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet.Name, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision))
+				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision, ""))
 				allPods = append(allPods, fakePodsForRS(cr, cr.Spec.Sharding.ConfigsvrReplSet)...)
 			}
 
@@ -143,7 +144,7 @@ func TestConnectionLeaks(t *testing.T) {
 
 			if cr.Spec.Unmanaged {
 				cr := cr.DeepCopy()
-				if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
 				obj = append(obj, &corev1.Secret{
@@ -159,6 +160,7 @@ func TestConnectionLeaks(t *testing.T) {
 			r := buildFakeClient(obj...)
 			r.mongoClientProvider = &fakeMongoClientProvider{pods: rsPods, cr: cr, connectionCount: connectionCount}
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			r.crons = NewCronRegistry()
 
 			g, gCtx := errgroup.WithContext(ctx)
 			gCtx, cancel := context.WithCancel(gCtx)
@@ -216,7 +218,6 @@ func TestConnectionLeaks(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func updateResource[T any](resource T, update func(T)) T {
@@ -226,7 +227,7 @@ func updateResource[T any](resource T, update func(T)) T {
 
 func updateUsersSecret(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error {
 	cr = cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return err
 	}
 	secret := corev1.Secret{}
@@ -287,11 +288,11 @@ func updatePodsForSmartUpdate(ctx context.Context, cl client.Client, cr *api.Per
 
 func fakePodsForRS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []client.Object {
 	pods := []client.Object{}
-	ls := psmdb.RSLabels(cr, rs.Name)
+	ls := naming.RSLabels(cr, rs)
 
-	ls["app.kubernetes.io/component"] = "mongod"
+	ls[naming.LabelKubernetesComponent] = "mongod"
 	if rs.Name == api.ConfigReplSetName {
-		ls["app.kubernetes.io/component"] = api.ConfigReplSetName
+		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
 	for i := 0; i < int(rs.Size); i++ {
 		pods = append(pods, fakePod(fmt.Sprintf("%s-%s-%d", cr.Name, rs.Name, i), cr.Namespace, ls, "mongod"))
@@ -301,7 +302,7 @@ func fakePodsForRS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []client.O
 
 func fakePodsForMongos(cr *api.PerconaServerMongoDB) []client.Object {
 	pods := []client.Object{}
-	ls := psmdb.MongosLabels(cr)
+	ls := naming.MongosLabels(cr)
 	ms := cr.Spec.Sharding.Mongos
 	for i := 0; i < int(ms.Size); i++ {
 		pods = append(pods, fakePod(fmt.Sprintf("%s-%s-%d", cr.Name, "mongos", i), cr.Namespace, ls, "mongos"))
@@ -343,15 +344,30 @@ func fakePod(name, namespace string, ls map[string]string, containerName string)
 	}
 }
 
-func fakeStatefulset(cr *api.PerconaServerMongoDB, rsName string, size int32, updateRevision string) client.Object {
+func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int32, updateRevision string, component string) client.Object {
+	ls := naming.RSLabels(cr, rs)
+	ls[naming.LabelKubernetesComponent] = component
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", cr.Name, rsName),
+			Name:      fmt.Sprintf("%s-%s", cr.Name, rs.Name),
 			Namespace: cr.Namespace,
-			Labels:    psmdb.RSLabels(cr, rsName),
+			Labels:    ls,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 27017,
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		Status: appsv1.StatefulSetStatus{
 			UpdateRevision: updateRevision,
@@ -365,19 +381,21 @@ type fakeMongoClientProvider struct {
 	connectionCount *int
 }
 
-func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs api.ReplsetSpec, role api.UserRole) (mongo.Client, error) {
+func (g *fakeMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
-func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole) (mongo.Client, error) {
+
+func (g *fakeMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
 	return &fakeMongoClient{pods: g.pods, cr: g.cr, connectionCount: g.connectionCount, Client: fakeClient}, nil
 }
-func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.UserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+
+func (g *fakeMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
 	*g.connectionCount++
 
 	fakeClient := mongoFake.NewClient()
@@ -401,15 +419,15 @@ func (c *fakeMongoClient) GetFCV(ctx context.Context) (string, error) {
 	return "4.0", nil
 }
 
-func (c *fakeMongoClient) GetRole(ctx context.Context, role string) (*mongo.Role, error) {
+func (c *fakeMongoClient) GetRole(ctx context.Context, db, role string) (*mongo.Role, error) {
 	return &mongo.Role{
 		Role: string(api.RoleClusterAdmin),
 	}, nil
 }
 
-func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username string) (*mongo.User, error) {
+func (c *fakeMongoClient) GetUserInfo(ctx context.Context, username, db string) (*mongo.User, error) {
 	return &mongo.User{
-		Roles: []map[string]interface{}{},
+		Roles: []mongo.Role{},
 	}, nil
 }
 
@@ -423,14 +441,13 @@ func (c *fakeMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, err
 }
 
 func (c *fakeMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
-	log := logf.FromContext(ctx)
 	cr := c.cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, log); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return mongo.Status{}, err
 	}
 	members := []*mongo.Member{}
 	for key, pod := range c.pods {
-		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name)
+		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].GetPort())
 		state := mongo.MemberStateSecondary
 		if key == 0 {
 			state = mongo.MemberStatePrimary
@@ -451,14 +468,13 @@ func (c *fakeMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
 }
 
 func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error) {
-	log := logf.FromContext(ctx)
 	cr := c.cr.DeepCopy()
-	if err := cr.CheckNSetDefaults(version.PlatformKubernetes, log); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return mongo.RSConfig{}, err
 	}
 	members := []mongo.ConfigMember{}
 	for key, pod := range c.pods {
-		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name)
+		host := psmdb.GetAddr(cr, pod.GetName(), cr.Spec.Replsets[0].Name, cr.Spec.Replsets[0].GetPort())
 
 		member := mongo.ConfigMember{
 			ID:           key,
@@ -487,7 +503,6 @@ func (c *fakeMongoClient) RemoveShard(ctx context.Context, shard string) (mongo.
 			OK: 1,
 		},
 	}, nil
-
 }
 
 func (c *fakeMongoClient) IsBalancerRunning(ctx context.Context) (bool, error) {
@@ -504,10 +519,10 @@ func (c *fakeMongoClient) ListShard(ctx context.Context) (mongo.ShardList, error
 
 func (c *fakeMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
 	isMaster := false
-	if err := c.cr.CheckNSetDefaults(version.PlatformKubernetes, logf.FromContext(ctx)); err != nil {
+	if err := c.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		return nil, err
 	}
-	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name) {
+	if c.host == psmdb.GetAddr(c.cr, c.pods[0].GetName(), c.cr.Spec.Replsets[0].Name, c.cr.Spec.Replsets[0].GetPort()) {
 		isMaster = true
 	}
 	return &mongo.IsMasterResp{

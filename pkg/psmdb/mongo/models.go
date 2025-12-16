@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	MinVotingMembers    = 1
 	MaxVotingMembers    = 7
 	MaxMembers          = 50
 	DefaultPriority     = 2
@@ -18,6 +17,9 @@ const (
 
 // Replica Set tags: https://docs.mongodb.com/manual/tutorial/configure-replica-set-tag-sets/#add-tag-sets-to-a-replica-set
 type ReplsetTags map[string]string
+
+// getLastErrorModes expects a replicaset tag and an integer associated with it: https://www.mongodb.com/docs/manual/reference/replica-configuration/#mongodb-rsconf-rsconf.settings.getLastErrorModes
+type WriteConcernReplsetTags map[string]int
 
 // RSMember document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type ConfigMember struct {
@@ -43,19 +45,19 @@ type RSConfig struct {
 	Configsvr                          bool          `bson:"configsvr,omitempty" json:"configsvr,omitempty"`
 	ProtocolVersion                    int           `bson:"protocolVersion,omitempty" json:"protocolVersion,omitempty"`
 	Settings                           Settings      `bson:"settings,omitempty" json:"settings,omitempty"`
-	WriteConcernMajorityJournalDefault bool          `bson:"writeConcernMajorityJournalDefault,omitempty" json:"writeConcernMajorityJournalDefault,omitempty"`
+	WriteConcernMajorityJournalDefault bool          `bson:"writeConcernMajorityJournalDefault" json:"writeConcernMajorityJournalDefault"`
 }
 
 // Settings document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
 type Settings struct {
-	ChainingAllowed         bool                   `bson:"chainingAllowed,omitempty" json:"chainingAllowed,omitempty"`
-	HeartbeatIntervalMillis int64                  `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
-	HeartbeatTimeoutSecs    int                    `bson:"heartbeatTimeoutSecs,omitempty" json:"heartbeatTimeoutSecs,omitempty"`
-	ElectionTimeoutMillis   int64                  `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis,omitempty"`
-	CatchUpTimeoutMillis    int64                  `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
-	GetLastErrorModes       map[string]ReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
-	GetLastErrorDefaults    WriteConcern           `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
-	ReplicaSetID            primitive.ObjectID     `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
+	ChainingAllowed         bool                               `bson:"chainingAllowed,omitempty" json:"chainingAllowed,omitempty"`
+	HeartbeatIntervalMillis int64                              `bson:"heartbeatIntervalMillis,omitempty" json:"heartbeatIntervalMillis,omitempty"`
+	HeartbeatTimeoutSecs    int                                `bson:"heartbeatTimeoutSecs,omitempty" json:"heartbeatTimeoutSecs,omitempty"`
+	ElectionTimeoutMillis   int64                              `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis,omitempty"`
+	CatchUpTimeoutMillis    int64                              `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
+	GetLastErrorModes       map[string]WriteConcernReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
+	GetLastErrorDefaults    WriteConcern                       `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
+	ReplicaSetID            primitive.ObjectID                 `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
 }
 
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
@@ -114,9 +116,12 @@ type FCV struct {
 const ShardRemoveCompleted string = "completed"
 
 type ShardRemoveResp struct {
-	Msg       string `json:"msg" bson:"msg"`
-	State     string `json:"state" bson:"state"`
+	Msg       string   `json:"msg" bson:"msg"`
+	State     string   `json:"state" bson:"state"`
+	Note      string   `json:"note" bson:"note"`
+	DBsToMove []string `json:"dbsToMove" bson:"dbsToMove"`
 	Remaining struct {
+		DBs         int `json:"dbs" bson:"dbs"`
 		Chunks      int `json:"chunks" bson:"chunks"`
 		JumboChunks int `json:"jumboChunks" bson:"jumboChunks"`
 	} `json:"remaining" bson:"remaining"`
@@ -235,24 +240,45 @@ func (s *Status) Primary() *Member {
 	return nil
 }
 
+type RoleAuthenticationRestriction struct {
+	ClientSource  []string `bson:"clientSource" json:"clientSource"`
+	ServerAddress []string `bson:"serverAddress" json:"serverAddress"`
+}
+
 type RolePrivilege struct {
 	Resource map[string]interface{} `bson:"resource" json:"resource"`
 	Actions  []string               `bson:"actions" json:"actions"`
 }
 
+type InheritenceRole struct {
+	Role string `bson:"role" json:"role"`
+	DB   string `bson:"db" json:"db"`
+}
+
 type Role struct {
-	Role       string                   `bson:"role" json:"role"`
-	Roles      []map[string]interface{} `bson:"roles" json:"roles"`
-	Privileges []RolePrivilege          `bson:"privileges" json:"privileges"`
+	Role                       string                          `bson:"role" json:"role"`
+	DB                         string                          `bson:"db" json:"db"`
+	Roles                      []InheritenceRole               `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                 `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions []RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
+}
+
+type GetRoleResult struct {
+	Role                       string                            `bson:"role" json:"role"`
+	DB                         string                            `bson:"db" json:"db"`
+	Roles                      []InheritenceRole                 `bson:"roles" json:"roles"`
+	Privileges                 []RolePrivilege                   `bson:"privileges" json:"privileges"`
+	AuthenticationRestrictions [][]RoleAuthenticationRestriction `bson:"authenticationRestrictions" json:"authenticationRestrictions"`
 }
 
 type RoleInfo struct {
-	Roles      []Role `bson:"roles" json:"roles"`
+	Roles      []GetRoleResult `bson:"roles" json:"roles"`
 	OKResponse `bson:",inline"`
 }
 
 type User struct {
-	Roles []map[string]interface{} `bson:"roles" json:"roles"`
+	DB    string `bson:"db" json:"db"`
+	Roles []Role `bson:"roles" json:"roles"`
 }
 
 type UsersInfo struct {

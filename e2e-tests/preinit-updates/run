@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+create_infra ${namespace}
+
+cluster="some-name"
+desc "test starts on cluster: ${cluster}"
+
+apply_cluster ${test_dir}/conf/${cluster}.yml
+wait_for_running ${cluster}-rs0 1 "false"
+echo "enabling backups"
+kubectl_bin patch psmdb ${cluster} --type=merge -p '{"spec":{"backup":{"enabled":true}}}'
+echo "sleeping for 7 seconds..."
+sleep 7
+echo "changing rs0 resources"
+kubectl_bin patch psmdb ${cluster} --type=json -p '[{"op":"replace","path":"/spec/replsets/0/resources/limits/cpu","value":"550m"}]'
+
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency "${cluster}"
+
+desc 'test passed'
+
+destroy $namespace
