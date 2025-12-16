@@ -197,14 +197,6 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--bind_ip_all",
 	}
 
-	if cr.CompareVersion("1.22.0") < 0 {
-		args = append(args, "--auth")
-	}
-
-	if replset.Configuration.IsAuthorizationEnabled() {
-		args = append(args, "--auth")
-	}
-
 	args = append(args,
 		"--dbpath="+config.MongodContainerDataDir,
 		"--port="+strconv.Itoa(int(replset.GetPort())),
@@ -212,6 +204,10 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--storageEngine="+string(replset.Storage.Engine),
 		"--relaxPermChecks",
 	)
+
+	if cr.CompareVersion("1.22.0") < 0 || replset.Configuration.IsAuthorizationEnabled() {
+		args = append(args, "--auth")
+	}
 
 	name, err := replset.CustomReplsetName()
 	if err == nil {
