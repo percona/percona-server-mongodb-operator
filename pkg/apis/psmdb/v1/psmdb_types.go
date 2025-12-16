@@ -629,8 +629,6 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 }
 
 // IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
-// If `authorization` or `security` sections are not present, returns true (enabled by default).
-// The authorization can be set to "enabled" or "disabled" as per MongoDB documentation.
 // https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
 func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
 	m, err := conf.GetOptions("security")

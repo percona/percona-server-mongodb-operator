@@ -197,6 +197,10 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		"--bind_ip_all",
 	}
 
+	if cr.CompareVersion("1.22.0") < 0 {
+		args = append(args, "--auth")
+	}
+
 	if replset.Configuration.IsAuthorizationEnabled() {
 		args = append(args, "--auth")
 	}

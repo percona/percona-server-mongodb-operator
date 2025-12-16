@@ -54,7 +54,6 @@ spec:
       containers:
         - args:
             - --bind_ip_all
-            - --auth
             - --dbpath=/data/db
             - --port=27017
             - --replSet=rs0
