@@ -2,8 +2,6 @@ items:
 - apiVersion: v1
   kind: Service
   metadata:
-    annotations:
-      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsiYXBwLmt1YmVybmV0ZXMuaW8vaW5zdGFuY2UiOiJycy1zdmMiLCJhcHAua3ViZXJuZXRlcy5pby9tYW5hZ2VkLWJ5IjoicGVyY29uYS1zZXJ2ZXItbW9uZ29kYi1vcGVyYXRvciIsImFwcC5rdWJlcm5ldGVzLmlvL25hbWUiOiJwZXJjb25hLXNlcnZlci1tb25nb2RiIiwiYXBwLmt1YmVybmV0ZXMuaW8vcGFydC1vZiI6InBlcmNvbmEtc2VydmVyLW1vbmdvZGIiLCJhcHAua3ViZXJuZXRlcy5pby9yZXBsc2V0IjoicnMwIn0sImNsdXN0ZXJJUCI6Ik5vbmUifQ==
     labels:
       app.kubernetes.io/instance: rs-svc
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
@@ -22,7 +20,8 @@ items:
   spec:
     clusterIP: None
     ports:
-    - name: mongodb
+    - appProtocol: mongodb
+      name: mongodb
       port: 27017
       targetPort: 27017
     selector:
@@ -36,8 +35,6 @@ items:
 - apiVersion: v1
   kind: Service
   metadata:
-    annotations:
-      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsic3RhdGVmdWxzZXQua3ViZXJuZXRlcy5pby9wb2QtbmFtZSI6InJzLXN2Yy1yczAtMCJ9LCJ0eXBlIjoiQ2x1c3RlcklQIiwicHVibGlzaE5vdFJlYWR5QWRkcmVzc2VzIjp0cnVlfQ==
     labels:
       app.kubernetes.io/component: external-service
       app.kubernetes.io/instance: rs-svc
@@ -56,7 +53,8 @@ items:
     resourceVersion: "1"
   spec:
     ports:
-    - name: mongodb
+    - appProtocol: mongodb
+      name: mongodb
       port: 27017
       targetPort: 27017
     publishNotReadyAddresses: true
@@ -68,8 +66,6 @@ items:
 - apiVersion: v1
   kind: Service
   metadata:
-    annotations:
-      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsic3RhdGVmdWxzZXQua3ViZXJuZXRlcy5pby9wb2QtbmFtZSI6InJzLXN2Yy1yczAtMSJ9LCJ0eXBlIjoiQ2x1c3RlcklQIiwicHVibGlzaE5vdFJlYWR5QWRkcmVzc2VzIjp0cnVlfQ==
     labels:
       app.kubernetes.io/component: external-service
       app.kubernetes.io/instance: rs-svc
@@ -88,7 +84,8 @@ items:
     resourceVersion: "1"
   spec:
     ports:
-    - name: mongodb
+    - appProtocol: mongodb
+      name: mongodb
       port: 27017
       targetPort: 27017
     publishNotReadyAddresses: true
@@ -100,8 +97,6 @@ items:
 - apiVersion: v1
   kind: Service
   metadata:
-    annotations:
-      percona.com/last-config-hash: eyJwb3J0cyI6W3sibmFtZSI6Im1vbmdvZGIiLCJwb3J0IjoyNzAxNywidGFyZ2V0UG9ydCI6MjcwMTd9XSwic2VsZWN0b3IiOnsic3RhdGVmdWxzZXQua3ViZXJuZXRlcy5pby9wb2QtbmFtZSI6InJzLXN2Yy1yczAtMiJ9LCJ0eXBlIjoiQ2x1c3RlcklQIiwicHVibGlzaE5vdFJlYWR5QWRkcmVzc2VzIjp0cnVlfQ==
     labels:
       app.kubernetes.io/component: external-service
       app.kubernetes.io/instance: rs-svc
@@ -120,7 +115,8 @@ items:
     resourceVersion: "1"
   spec:
     ports:
-    - name: mongodb
+    - appProtocol: mongodb
+      name: mongodb
       port: 27017
       targetPort: 27017
     publishNotReadyAddresses: true
