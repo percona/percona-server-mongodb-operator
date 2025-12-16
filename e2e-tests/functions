@@ -601,7 +601,7 @@ create_minio_bucket() {
 }
 
 deploy_vault() {
-	name=${1:-vault-service}
+	local name=${1:-vault-service}
 	if [[ $# -gt 0 ]]; then
 		shift
 	fi
@@ -611,7 +611,7 @@ deploy_vault() {
 	helm repo remove hashicorp || :
 	helm repo add hashicorp https://helm.releases.hashicorp.com
 
-	destroy_vault
+	destroy_vault "$name"
 
 	if [[ -n ${OPENSHIFT} ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
@@ -647,17 +647,22 @@ EOF
 }
 
 destroy_vault() {
-	local vault_ns=$(helm list --all-namespaces --filter vault-service | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
+	local name=${1:-vault-service}
+	local vault_ns
+	vault_ns="$(helm list --all-namespaces --filter "$name" | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')"
 
 	desc 'destroy vault'
-	for i in $(kubectl api-resources | grep vault | awk '{print $1}'); do timeout 30 kubectl delete ${i} --all --all-namespaces || :; done
+	for i in $(kubectl api-resources | grep vault | awk '{print $1}'); do timeout 30 kubectl delete "${i}" --all --all-namespaces || :; done
 	if [ -n "${vault_ns}" ]; then
-		helm uninstall vault-service --namespace ${vault_ns} || :
+		helm uninstall "$name" --namespace "${vault_ns}" || :
 	fi
-	timeout 30 kubectl delete crd $(kubectl get crd | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete mutatingwebhookconfiguration $(kubectl get mutatingwebhookconfiguration | grep 'vault' | awk '{print $1}') || :
+
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete mutatingwebhookconfiguration $(kubectl get mutatingwebhookconfiguration -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
 }
 
 deploy_chaos_mesh() {

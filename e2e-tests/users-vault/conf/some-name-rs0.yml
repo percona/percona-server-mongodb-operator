@@ -47,7 +47,7 @@ spec:
             storage: 1Gi
     size: 3
   vault:
-    endpointURL: https://vault-service:8200
+    endpointURL: https://users-vault-service:8200
     tlsSecret: vault-server-tls
     syncUsers:
       role: operator

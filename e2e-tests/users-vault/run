@@ -6,7 +6,7 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-vault_name="vault-service"
+vault_name="users-vault-service"
 
 setup_vault() {
 	local tls_secret_name="vault-server-tls"
@@ -41,13 +41,15 @@ storage "file" {
 
 	wait_pod $vault_name-0
 
+	sleep 20
+
 	kubectl_bin exec $vault_name-0 -- vault auth enable kubernetes
 	cat "$test_dir"/conf/role-binding.yml \
 		| yq ".metadata.namespace=\"$namespace\"" \
 		| yq ".subjects[0].namespace=\"$namespace\"" \
 		| kubectl_bin apply -f -
 
-	token=$(kubectl_bin exec -it $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
+	token=$(kubectl_bin exec $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
 	kubectl_bin create secret generic vault-sync-secret --from-literal=token="${token}"
 
 	# shellcheck disable=SC2016
@@ -281,6 +283,7 @@ main() {
 		exit 1
 	fi
 
+	destroy_vault $vault_name
 	destroy "$namespace"
 	desc 'test passed'
 }
