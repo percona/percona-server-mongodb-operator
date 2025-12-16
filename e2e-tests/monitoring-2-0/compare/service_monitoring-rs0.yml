@@ -15,7 +15,8 @@ metadata:
       name: monitoring
 spec:
   ports:
-    - name: mongodb
+    - appProtocol: mongodb
+      name: mongodb
       port: 27019
       protocol: TCP
       targetPort: 27019

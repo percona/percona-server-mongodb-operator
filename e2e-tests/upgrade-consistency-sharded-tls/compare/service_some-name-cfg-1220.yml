@@ -15,7 +15,7 @@ metadata:
       name: some-name
 spec:
   ports:
-    - appProtocol: mongo
+    - appProtocol: mongodb
       name: mongodb
       port: 27017
       protocol: TCP

@@ -17,7 +17,8 @@ metadata:
       name: monitoring-pmm3
 spec:
   ports:
-    - name: mongos
+    - appProtocol: mongodb
+      name: mongos
       port: 27019
       protocol: TCP
       targetPort: 27019
