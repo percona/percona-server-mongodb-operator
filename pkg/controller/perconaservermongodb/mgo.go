@@ -17,6 +17,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -719,8 +721,35 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
+		backoff := wait.Backoff{
+			Steps:    5,
+			Duration: 50 * time.Millisecond,
+			Factor:   5.0,
+			Jitter:   0.1,
+		}
+		err = retry.OnError(backoff, func(err error) bool { return true }, func() error {
+			var stderr, stdout bytes.Buffer
+
+			hello := []string{"sh", "-c",
+				mongoCmd + " --eval 'db.runCommand({ hello: 1 }).isWritablePrimary'"}
+			err = r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
+			if err != nil {
+				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
+			}
+
+			out := strings.Trim(stdout.String(), "\n")
+			if out != "true" {
+				return errors.New("is not the writable primary")
+			}
+
+			log.Info(pod.Name+" is the writable primary", "replset", replsetName)
+
+			return nil
+		})
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "wait for replset initialization")
+		}
 		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
-		time.Sleep(time.Second * 5)
 
 		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
