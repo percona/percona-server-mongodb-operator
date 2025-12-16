@@ -38,12 +38,6 @@ main() {
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 	wait_cluster_consistency "${cluster/-rs0/}"
 
-	desc 'verify connection works WITHOUT authentication given that auth is disabled'
-	run_mongo \
-		'db.version()' \
-		"$cluster.$namespace" \
-		"mongodb"
-
 	desc 'check if service and pvc created with expected config'
 	compare_kubectl service/$cluster
 	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"

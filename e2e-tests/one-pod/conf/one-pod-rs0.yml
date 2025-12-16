@@ -24,7 +24,6 @@ spec:
       security:
         redactClientLogData: false
         enableEncryption: false
-        authorization: disabled
       setParameter:
         ttlMonitorSleepSecs: 60
         wiredTigerConcurrentReadTransactions: 128
