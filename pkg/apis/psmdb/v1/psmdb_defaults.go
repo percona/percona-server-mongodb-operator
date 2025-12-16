@@ -952,7 +952,7 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 				"--component", "mongod",
 			},
 		}
-		if cr.TLSEnabled() {
+		if cr.CompareVersion("1.22.0") >= 0 && cr.TLSEnabled() {
 			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
 				"--ssl", "--sslInsecure",
 				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
