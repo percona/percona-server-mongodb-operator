@@ -211,7 +211,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 
 	name, err := replset.CustomReplsetName()
 	if err == nil {
-		// Update the replSet argument with the custom name
+		// given that --auth option is optional, we cannot rely on the fixed hardcoded index.
 		for i, arg := range args {
 			if len(arg) >= 9 && arg[:9] == "--replSet" {
 				args[i] = "--replSet=" + name
