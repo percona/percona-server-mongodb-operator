@@ -466,7 +466,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					"--component", "mongod",
 				},
 			}
-			if cr.TLSEnabled() && cr.CompareVersion("1.21.0") >= 0 {
+			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
@@ -849,7 +849,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--component", "mongod",
 			},
 		}
-		if cr.TLSEnabled() && cr.CompareVersion("1.21.0") >= 0 {
+		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
 				"--ssl", "--sslInsecure",
 				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
