@@ -20,7 +20,7 @@ items:
   spec:
     clusterIP: None
     ports:
-    - appProtocol: mongodb
+    - appProtocol: mongo
       name: mongodb
       port: 27017
       targetPort: 27017
@@ -53,7 +53,7 @@ items:
   spec:
     clusterIP: None
     ports:
-    - appProtocol: mongodb
+    - appProtocol: mongo
       name: mongodb
       port: 27017
       targetPort: 27017

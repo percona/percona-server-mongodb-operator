@@ -37,7 +37,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongodb"),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -68,7 +68,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongodb"),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -102,7 +102,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongodb"),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{
