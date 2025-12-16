@@ -232,7 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			rsStatus.AddedAsShard = ptr.To(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
 		} else {
-			return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
+			return api.AppStateInit, nil, nil
 		}
 	}
 
