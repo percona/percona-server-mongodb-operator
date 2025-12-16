@@ -265,7 +265,8 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 	}
 
 	// count the number of updated pods from statefulsets that have changed
-	var updated int32 = 0
+	var updated int32
+	stsChanged := false // true if any statefulset has changed
 	for _, name := range statefulSets {
 		sts := &appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, sts); err != nil {
@@ -279,13 +280,14 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 		}); err != nil {
 			return false, errors.Wrap(err, "get pod list")
 		}
-
+		fmt.Println("pods: ", len(pods.Items))
 		if isSfsChanged(sts, &pods) {
 			updated += sts.Status.UpdatedReplicas
+			stsChanged = true
 		}
 	}
-
-	return updated == 0, nil
+	fmt.Println("stsChanged: ", stsChanged, "updated: ", updated)
+	return stsChanged && updated == 0, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) (bool, error) {

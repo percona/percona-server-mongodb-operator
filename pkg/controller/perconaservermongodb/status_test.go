@@ -17,6 +17,7 @@ import (
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
+	"github.com/stretchr/testify/assert"
 )
 
 // creates a fake client to mock API calls with the mock objects
@@ -321,5 +322,125 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 				Ingress: ingress,
 			},
 		},
+	}
+}
+
+func TestIsAwaitingSmartUpgrade(t *testing.T) {
+	ctx := t.Context()
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "psmdb-mock",
+			Namespace:  "psmdb",
+			Generation: 1,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Backup: api.BackupSpec{
+				Enabled: false,
+			},
+			CRVersion: version.Version(),
+			Image:     "percona/percona-server-mongodb:latest",
+			Replsets: []*api.ReplsetSpec{
+				{
+					Name:       "rs0",
+					Size:       3,
+					VolumeSpec: fakeVolumeSpec(t),
+				},
+			},
+			UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
+			UpgradeOptions: api.UpgradeOptions{
+				SetFCV: true,
+			},
+			Sharding: api.Sharding{Enabled: false},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			MongoVersion:       "4.2",
+			ObservedGeneration: 1,
+			State:              api.AppStateReady,
+			MongoImage:         "percona/percona-server-mongodb:4.0",
+		},
+	}
+	sts := fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, "some-revision", "mongod")
+	pods := fakePodsForRS(cr, cr.Spec.Replsets[0])
+
+	testCases := []struct {
+		desc     string
+		expected bool
+		mock     func(cl client.Client)
+		cluster  *api.PerconaServerMongoDB
+	}{
+		{
+			desc:     "smart update is disabled",
+			expected: false,
+			mock: func(cl client.Client) {
+				cr.Spec.UpdateStrategy = ""
+			},
+			cluster: updateResource(cr.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.UpdateStrategy = ""
+			}),
+		},
+		{
+			desc:     "statefulset has not changed",
+			expected: false,
+			mock: func(cl client.Client) {
+				for _, pod := range pods {
+					labels := pod.GetLabels()
+					labels["controller-revision-hash"] = "some-revision"
+					pod.SetLabels(labels)
+					cl.Update(ctx, pod)
+				}
+			},
+			cluster: cr.DeepCopy(),
+		},
+		{
+			desc:     "statefulset has changed, no pods updated",
+			expected: true,
+			mock: func(cl client.Client) {
+				for _, pod := range pods {
+					labels := pod.GetLabels()
+					labels["controller-revision-hash"] = "previous-revision"
+					pod.SetLabels(labels)
+					cl.Update(ctx, pod)
+				}
+				fakeSts := sts.DeepCopyObject().(*appsv1.StatefulSet)
+				fakeSts.Status.UpdatedReplicas = 0
+				cl.Status().Update(ctx, fakeSts)
+			},
+			cluster: cr.DeepCopy(),
+		},
+		{
+			desc:     "statefulset has changed, some pods updated",
+			expected: false,
+			mock: func(cl client.Client) {
+				updatedCount := len(pods) - 1
+				for _, pod := range pods[:updatedCount] {
+					labels := pod.GetLabels()
+					labels["controller-revision-hash"] = "previous-revision"
+					pod.SetLabels(labels)
+					cl.Update(ctx, pod)
+				}
+				fakeSts := sts.DeepCopyObject().(*appsv1.StatefulSet)
+				fakeSts.Status.UpdatedReplicas = int32(updatedCount)
+				cl.Status().Update(ctx, fakeSts)
+			},
+			cluster: cr.DeepCopy(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Setup mocks
+			objs := []client.Object{}
+			objs = append(objs, tc.cluster, sts)
+			objs = append(objs, pods...)
+			r := buildFakeClient(objs...)
+			if tc.mock != nil {
+				tc.mock(r.client)
+			}
+
+			actual, err := r.isAwaitingSmartUpdate(ctx, tc.cluster)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, actual)
+		})
+
 	}
 }
