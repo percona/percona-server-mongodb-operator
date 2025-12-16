@@ -99,7 +99,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if strings.HasPrefix(cr.Spec.VaultSpec.EndpointURL, "https://") {
 			if cr.Spec.VaultSpec.TLSSecret == "" {
-				return errors.New("spec.secrets.vaultSpec.tlsSecret must be set when spec.secrets.vaultSpec.address uses https")
+				return errors.New("spec.vault.tlsSecret must be set when spec.vault.endpointURL uses https")
 			}
 		}
 	}
