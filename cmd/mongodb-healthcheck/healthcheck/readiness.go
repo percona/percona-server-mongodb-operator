@@ -44,7 +44,7 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		return err
 	}
 
-	s, err := func() (*mongo.Status, error) {
+	s, err := func() (status *mongo.Status, err error) {
 		cnf.Timeout = time.Second
 		client, err := db.Dial(ctx, cnf)
 		if err != nil {
@@ -55,7 +55,8 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 				err = errors.Wrap(derr, "failed to disconnect")
 			}
 		}()
-		rs, err := client.RSStatus(ctx)
+		var rs mongo.Status
+		rs, err = client.RSStatus(ctx)
 		if err != nil {
 			if errors.Is(err, mongo.ErrInvalidReplsetConfig) {
 				return nil, nil
