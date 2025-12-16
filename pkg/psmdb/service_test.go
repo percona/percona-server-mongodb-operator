@@ -280,7 +280,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: ptr.To("mongodb"),
 						},
 					},
 					Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
