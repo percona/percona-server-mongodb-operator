@@ -4,6 +4,11 @@ set -o xtrace
 
 export PATH="$PATH":/opt/fluent-bit/bin
 
+LOGROTATE_CONF_DIR=""
+if [ -f /opt/percona/logcollector/logrotate/conf.d ]; then
+	LOGROTATE_CONF_DIR="/opt/percona/logcollector/logrotate/conf.d"
+fi
+
 if [ "$1" = 'logrotate' ]; then
 	if [[ $EUID != 1001 ]]; then
 		# logrotate requires UID in /etc/passwd
@@ -11,7 +16,7 @@ if [ "$1" = 'logrotate' ]; then
 		cat /tmp/passwd >/etc/passwd
 		rm -rf /tmp/passwd
 	fi
-	exec go-cron "0 0 * * *" sh -c "logrotate -s /data/db/logs/logrotate.status /opt/percona/logcollector/logrotate/logrotate.conf;"
+	exec go-cron "0 0 * * *" sh -c "logrotate -s /data/db/logs/logrotate.status /opt/percona/logcollector/logrotate/logrotate.conf ${LOGROTATE_CONF_DIR};"
 else
 	if [ "$1" = 'fluent-bit' ]; then
 		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'

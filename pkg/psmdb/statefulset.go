@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,6 +16,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -41,8 +43,31 @@ type StatefulSpecSecretParams struct {
 }
 
 type StatefulConfigParams struct {
-	MongoDConf        config.CustomConfig
-	LogCollectionConf config.CustomConfig
+	MongoDConf         config.CustomConfig
+	LogCollectionConf  config.CustomConfig
+	LogRotateConf      config.CustomConfig
+	LogRotateExtraConf config.CustomConfig
+}
+
+func (p *StatefulConfigParams) HashHex(cr *api.PerconaServerMongoDB) string {
+	var b strings.Builder
+	if p.MongoDConf.Type.IsUsable() {
+		b.WriteString(p.MongoDConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 && p.LogCollectionConf.Type.IsUsable() {
+		b.WriteString(p.LogCollectionConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		if p.LogRotateConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateConf.HashHex)
+		}
+		if p.LogRotateExtraConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateExtraConf.HashHex)
+		}
+	}
+	return b.String()
 }
 
 // StatefulSpec returns spec for stateful set
@@ -62,6 +87,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
+	logRotateConfigName := logrotate.ConfigMapName(cr.Name)
 
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentArbiter:
@@ -149,6 +175,19 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
+	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateConf.Type.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         logrotate.VolumeName,
+			VolumeSource: configs.LogRotateConf.Type.VolumeSource(logRotateConfigName),
+		})
+	}
+	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateExtraConf.Type.IsUsable() {
+		volumes = append(volumes, corev1.Volume{
+			Name:         logrotate.CustomVolumeName,
+			VolumeSource: configs.LogRotateConf.Type.VolumeSource(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name),
+		})
+	}
+
 	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
@@ -206,12 +245,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if configs.MongoDConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
-	}
-
-	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = annotations["percona.com/configuration-hash"] + configs.LogCollectionConf.HashHex
+	if hash := configs.HashHex(cr); hash != "" {
+		annotations["percona.com/configuration-hash"] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
