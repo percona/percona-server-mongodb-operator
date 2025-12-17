@@ -340,7 +340,7 @@ const (
 )
 
 // ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
-// but has not yet started. For e.g, if a backup/restore is running at the same time as a smart update is triggered.
+// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
 const ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
 
 type ClusterCondition struct {
