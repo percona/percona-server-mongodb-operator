@@ -413,17 +413,16 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			desc:     "statefulset has changed, some pods updated",
 			expected: false,
 			mock: func(cl client.Client) error {
-				updatedCount := len(pods) - 1
-				for _, pod := range pods[:updatedCount] {
-					labels := pod.GetLabels()
-					labels["controller-revision-hash"] = "previous-revision"
-					pod.SetLabels(labels)
-					if err := cl.Update(ctx, pod); err != nil {
-						return err
-					}
+				outdatedPod := pods[2]
+
+				labels := outdatedPod.GetLabels()
+				labels["controller-revision-hash"] = "previous-revision"
+				outdatedPod.SetLabels(labels)
+				if err := cl.Update(ctx, outdatedPod); err != nil {
+					return err
 				}
 				fakeSts := sts.DeepCopyObject().(*appsv1.StatefulSet)
-				fakeSts.Status.UpdatedReplicas = int32(updatedCount)
+				fakeSts.Status.UpdatedReplicas = 2
 				return cl.Status().Update(ctx, fakeSts)
 			},
 			cluster: cr.DeepCopy(),
