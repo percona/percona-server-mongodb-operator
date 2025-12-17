@@ -438,7 +438,8 @@ func TestIsAwaitingSmartUpgrade(t *testing.T) {
 			objs = append(objs, pods...)
 			r := buildFakeClient(objs...)
 			if tc.mock != nil {
-				tc.mock(r.client)
+				err := tc.mock(r.client)
+				assert.NoError(t, err)
 			}
 
 			actual, err := r.isAwaitingSmartUpdate(ctx, tc.cluster)
