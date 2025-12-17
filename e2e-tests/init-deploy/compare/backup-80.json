@@ -449,6 +449,7 @@
           "cluster": true
         },
         "actions": [
+          "listClusterCatalog",
           "allCollectionStats",
           "appendOplogNote",
           "bypassWriteBlockingMode",
@@ -469,6 +470,7 @@
           "operationMetrics",
           "queryStatsRead",
           "queryStatsReadTransformed",
+          "readBackupFile",
           "replSetGetConfig",
           "replSetGetStatus",
           "serverStatus",

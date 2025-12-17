@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.22.0
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -151,6 +151,37 @@ spec:
               latestRestorableTime:
                 format: date-time
                 type: string
+              minio:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  debugTrace:
+                    type: boolean
+                  endpointUrl:
+                    type: string
+                  forcePathStyle:
+                    type: boolean
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  partSize:
+                    format: int64
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      numMaxRetries:
+                        type: integer
+                    required:
+                    - numMaxRetries
+                    type: object
+                  secure:
+                    type: boolean
+                type: object
               pbmName:
                 type: string
               pbmPod:
@@ -238,7 +269,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.22.0
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -345,6 +376,37 @@ spec:
                   latestRestorableTime:
                     format: date-time
                     type: string
+                  minio:
+                    properties:
+                      bucket:
+                        type: string
+                      credentialsSecret:
+                        type: string
+                      debugTrace:
+                        type: boolean
+                      endpointUrl:
+                        type: string
+                      forcePathStyle:
+                        type: boolean
+                      insecureSkipTLSVerify:
+                        type: boolean
+                      partSize:
+                        format: int64
+                        type: integer
+                      prefix:
+                        type: string
+                      region:
+                        type: string
+                      retryer:
+                        properties:
+                          numMaxRetries:
+                            type: integer
+                        required:
+                        - numMaxRetries
+                        type: object
+                      secure:
+                        type: boolean
+                    type: object
                   pbmName:
                     type: string
                   pbmPod:
@@ -479,7 +541,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.21.0
+    app.kubernetes.io/version: v1.22.0
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -1150,6 +1212,37 @@ spec:
                           type: object
                         main:
                           type: boolean
+                        minio:
+                          properties:
+                            bucket:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            debugTrace:
+                              type: boolean
+                            endpointUrl:
+                              type: string
+                            forcePathStyle:
+                              type: boolean
+                            insecureSkipTLSVerify:
+                              type: boolean
+                            partSize:
+                              format: int64
+                              type: integer
+                            prefix:
+                              type: string
+                            region:
+                              type: string
+                            retryer:
+                              properties:
+                                numMaxRetries:
+                                  type: integer
+                              required:
+                              - numMaxRetries
+                              type: object
+                            secure:
+                              type: boolean
+                          type: object
                         s3:
                           properties:
                             bucket:
@@ -25621,9 +25714,9 @@ spec:
             type: object
           status:
             properties:
-              backup:
-                type: string
               backupConfigHash:
+                type: string
+              backupImage:
                 type: string
               backupVersion:
                 type: string

@@ -126,11 +126,11 @@ spec:
           timeoutSeconds: 2
         resources:
           limits:
-            cpu: 300m
-            memory: 500M
+            cpu: 600m
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 500M
+            memory: 1Gi
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -148,6 +148,8 @@ spec:
           readOnly: true
         - mountPath: /opt/percona
           name: bin
+        - mountPath: /.mongodb
+          name: mongosh
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true
@@ -269,11 +271,11 @@ spec:
         name: mongo-init
         resources:
           limits:
-            cpu: 300m
-            memory: 500M
+            cpu: 600m
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 500M
+            memory: 1Gi
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
@@ -292,6 +294,8 @@ spec:
           secretName: reconcile-statefulset-cr-mongodb-keyfile
       - emptyDir: {}
         name: bin
+      - emptyDir: {}
+        name: mongosh
       - configMap:
           name: reconcile-statefulset-cr-log-collector-config
           optional: true
