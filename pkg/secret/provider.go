@@ -1,8 +1,10 @@
 package secret
 
 import (
+	"bytes"
 	"context"
 	stderrors "errors"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -108,17 +110,31 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 	changed := false
 	var errs []error
 	for _, p := range clients {
-		c, err := p.FillSecretData(ctx, data)
+		newData := make(map[string][]byte)
+		maps.Copy(newData, data)
+		c, err := p.FillSecretData(ctx, newData)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		if c {
 			changed = true
-			log.Info("Changes in the secret provider detected. Updating users secret", "cluster", cr.Name, "namespace", cr.Namespace, "secret provider", p.Name())
+			keys := changedKeys(data, newData)
+			data = newData
+			log.Info("Changes in the secret provider detected. Updating users secret", "cluster", cr.Name, "namespace", cr.Namespace, "secret provider", p.Name(), "changed keys", keys)
 		}
 	}
 	return changed, stderrors.Join(errs...)
+}
+
+func changedKeys(original, changed map[string][]byte) []string {
+	changedKeys := []string{}
+	for k, v := range changed {
+		if value, ok := original[k]; !ok || !bytes.Equal(v, value) {
+			changedKeys = append(changedKeys, k)
+		}
+	}
+	return changedKeys
 }
 
 func (h *ProviderHandler) ensureClients(cr *api.PerconaServerMongoDB) {
