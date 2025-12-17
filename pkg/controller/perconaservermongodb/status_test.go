@@ -365,15 +365,12 @@ func TestIsAwaitingSmartUpgrade(t *testing.T) {
 	testCases := []struct {
 		desc     string
 		expected bool
-		mock     func(cl client.Client)
+		mock     func(cl client.Client) error
 		cluster  *api.PerconaServerMongoDB
 	}{
 		{
 			desc:     "smart update is disabled",
 			expected: false,
-			mock: func(cl client.Client) {
-				cr.Spec.UpdateStrategy = ""
-			},
 			cluster: updateResource(cr.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.UpdateStrategy = ""
 			}),
@@ -381,46 +378,53 @@ func TestIsAwaitingSmartUpgrade(t *testing.T) {
 		{
 			desc:     "statefulset has not changed",
 			expected: false,
-			mock: func(cl client.Client) {
+			mock: func(cl client.Client) error {
 				for _, pod := range pods {
 					labels := pod.GetLabels()
 					labels["controller-revision-hash"] = "some-revision"
 					pod.SetLabels(labels)
-					cl.Update(ctx, pod)
+					if err := cl.Update(ctx, pod); err != nil {
+						return err
+					}
 				}
+				return nil
 			},
 			cluster: cr.DeepCopy(),
 		},
 		{
 			desc:     "statefulset has changed, no pods updated",
 			expected: true,
-			mock: func(cl client.Client) {
+			mock: func(cl client.Client) error {
 				for _, pod := range pods {
 					labels := pod.GetLabels()
 					labels["controller-revision-hash"] = "previous-revision"
 					pod.SetLabels(labels)
-					cl.Update(ctx, pod)
+					if err := cl.Update(ctx, pod); err != nil {
+						return err
+					}
 				}
 				fakeSts := sts.DeepCopyObject().(*appsv1.StatefulSet)
 				fakeSts.Status.UpdatedReplicas = 0
-				cl.Status().Update(ctx, fakeSts)
+				return cl.Status().Update(ctx, fakeSts)
 			},
 			cluster: cr.DeepCopy(),
 		},
 		{
 			desc:     "statefulset has changed, some pods updated",
 			expected: false,
-			mock: func(cl client.Client) {
+			mock: func(cl client.Client) error {
 				updatedCount := len(pods) - 1
 				for _, pod := range pods[:updatedCount] {
 					labels := pod.GetLabels()
 					labels["controller-revision-hash"] = "previous-revision"
 					pod.SetLabels(labels)
-					cl.Update(ctx, pod)
+					if err := cl.Update(ctx, pod); err != nil {
+						return err
+					}
 				}
 				fakeSts := sts.DeepCopyObject().(*appsv1.StatefulSet)
 				fakeSts.Status.UpdatedReplicas = int32(updatedCount)
-				cl.Status().Update(ctx, fakeSts)
+				return cl.Status().Update(ctx, fakeSts)
 			},
 			cluster: cr.DeepCopy(),
 		},
