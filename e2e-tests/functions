@@ -633,6 +633,7 @@ deploy_vault() {
 		sleep 1
 	done
 
+	sleep 5
 	kubectl_bin exec pod/"$name"-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json >"${tmp_dir}"/vault-init
 	local unsealKey
 	unsealKey=$(jq -r ".unseal_keys_b64[]" <"${tmp_dir}"/vault-init)
