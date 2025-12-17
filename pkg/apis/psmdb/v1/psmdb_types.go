@@ -1508,7 +1508,7 @@ type LogCollectorSpec struct {
 type LogRotateSpec struct {
 	// Configuration allows overriding the default logrotate configuration.
 	Configuration string `json:"configuration,omitempty"`
-	// AdditionalConfig allows specifying an additional configuration file for logrotate.
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
 	// This should be a reference to a ConfigMap in the same namespace.
 	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
 }
