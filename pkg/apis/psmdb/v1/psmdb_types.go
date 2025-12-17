@@ -1502,6 +1502,15 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logRotate,omitempty"`
+}
+
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// AdditionalConfig allows specifying an additional configuration file for logrotate.
+	// This should be a reference to a ConfigMap in the same namespace.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfigs,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
