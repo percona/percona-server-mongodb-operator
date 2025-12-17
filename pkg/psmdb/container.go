@@ -224,16 +224,13 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		args = append(args, "--sslAllowInvalidCertificates")
 	}
 
-	authorizationDisabled := cr.CompareVersion("1.22.0") >= 0 && !replset.Configuration.IsAuthorizationEnabled()
-	if !authorizationDisabled {
-		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-			args = append(args,
-				"--clusterAuthMode=keyFile",
-				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
-			)
-		} else if cr.TLSEnabled() {
-			args = append(args, "--clusterAuthMode=x509")
-		}
+	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
+		args = append(args,
+			"--clusterAuthMode=keyFile",
+			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
+		)
+	} else if cr.TLSEnabled() {
+		args = append(args, "--clusterAuthMode=x509")
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 {
