@@ -280,13 +280,11 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 		}); err != nil {
 			return false, errors.Wrap(err, "get pod list")
 		}
-		fmt.Println("pods: ", len(pods.Items))
 		if isSfsChanged(sts, &pods) {
 			updated += sts.Status.UpdatedReplicas
 			stsChanged = true
 		}
 	}
-	fmt.Println("stsChanged: ", stsChanged, "updated: ", updated)
 	return stsChanged && updated == 0, nil
 }
 
