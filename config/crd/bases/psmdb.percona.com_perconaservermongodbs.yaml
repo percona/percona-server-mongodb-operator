@@ -702,7 +702,7 @@ spec:
                     properties:
                       configuration:
                         type: string
-                      extraConfigs:
+                      extraConfig:
                         properties:
                           name:
                             default: ""

@@ -1510,7 +1510,7 @@ type LogRotateSpec struct {
 	Configuration string `json:"configuration,omitempty"`
 	// AdditionalConfig allows specifying an additional configuration file for logrotate.
 	// This should be a reference to a ConfigMap in the same namespace.
-	ExtraConfig corev1.LocalObjectReference `json:"extraConfigs,omitempty"`
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
