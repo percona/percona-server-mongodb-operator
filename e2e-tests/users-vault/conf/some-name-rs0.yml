@@ -47,7 +47,7 @@ spec:
             storage: 1Gi
     size: 3
   vault:
-    endpointURL: https://users-vault-service:8200
+    endpointURL: https://users-vault-service.NAME_SPACE.svc.cluster.local:8200
     tlsSecret: vault-server-tls
     syncUsers:
       role: operator

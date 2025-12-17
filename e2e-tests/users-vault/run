@@ -129,7 +129,8 @@ DNS.1 = ${service_name}
 DNS.2 = *.${service_name}
 DNS.3 = *.${service_name}.${namespace}
 DNS.4 = *.${service_name}.${namespace}.svc
-DNS.5 = *.${service_name}.${namespace}.svc.cluster.local
+DNS.5 = ${service_name}.${namespace}.svc.cluster.local
+DNS.6 = *.${service_name}.${namespace}.svc.cluster.local
 IP.1 = 127.0.0.1
 EOF
 	openssl req -new \

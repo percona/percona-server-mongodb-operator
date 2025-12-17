@@ -120,7 +120,7 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 		if c {
 			changed = true
 			keys := changedKeys(data, newData)
-			data = newData
+			maps.Copy(data, newData)
 			log.Info("Changes in the secret provider detected. Updating users secret", "cluster", cr.Name, "namespace", cr.Namespace, "secret provider", p.Name(), "changed keys", keys)
 		}
 	}
