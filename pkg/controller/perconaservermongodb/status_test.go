@@ -325,7 +325,7 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 	}
 }
 
-func TestIsAwaitingSmartUpgrade(t *testing.T) {
+func TestIsAwaitingSmartUpdate(t *testing.T) {
 	ctx := t.Context()
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
