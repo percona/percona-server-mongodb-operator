@@ -139,7 +139,6 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 				return false, errors.Wrap(err, "failed to fill secret from secret provider")
 			}
 			log.Error(err, "failed to fill secret from secret provider")
-			return false, nil
 		}
 	}
 
