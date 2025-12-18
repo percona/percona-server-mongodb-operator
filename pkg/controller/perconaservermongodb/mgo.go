@@ -737,9 +737,9 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
 			}
 
-			out := strings.Trim(stdout.String(), "\n")
+			out := strings.TrimSpace(stdout.String())
 			if out != "true" {
-				return errors.New(pod.Name + " is not the writable primary")
+				return errors.Errorf("%s is not the writable primary", pod.Name)
 			}
 
 			log.Info(pod.Name+" is the writable primary", "replset", replsetName)
