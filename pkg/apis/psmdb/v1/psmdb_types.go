@@ -1502,7 +1502,7 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	LogRotate                *LogRotateSpec              `json:"logRotate,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
 }
 
 type LogRotateSpec struct {

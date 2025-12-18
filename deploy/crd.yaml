@@ -1555,7 +1555,7 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
-                  logRotate:
+                  logrotate:
                     properties:
                       configuration:
                         type: string
