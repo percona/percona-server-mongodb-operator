@@ -1511,6 +1511,10 @@ type LogRotateSpec struct {
 	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
 	// This should be a reference to a ConfigMap in the same namespace.
 	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

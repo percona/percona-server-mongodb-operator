@@ -108,6 +108,12 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 				MountPath: custonConfigDir,
 			})
 		}
+		if cr.Spec.LogCollector.LogRotate.Schedule != "" {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "LOGROTATE_SCHEDULE",
+				Value: cr.Spec.LogCollector.LogRotate.Schedule,
+			})
+		}
 	}
 
 	return &container, nil

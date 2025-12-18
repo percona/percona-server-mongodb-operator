@@ -709,6 +709,9 @@ spec:
                             type: string
                         type: object
                         x-kubernetes-map-type: atomic
+                      schedule:
+                        default: 0 0 * * *
+                        type: string
                     type: object
                   resources:
                     properties:
