@@ -260,7 +260,6 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	}
 
 	return nil
-
 }
 
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
@@ -990,7 +989,7 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 		return
 	}
 
-	if votes%2 == 0 {
+	if votes%2 == 0 && !unsafePSA {
 		for j := lastVoteIdx; j >= 0; j-- {
 			if []ConfigMember(*m)[j].Votes == 0 {
 				continue
