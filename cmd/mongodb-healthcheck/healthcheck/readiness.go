@@ -51,6 +51,9 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		cnf.Timeout = time.Second
 		client, err := db.Dial(ctx, cnf)
 		if err != nil {
+			// The operator waits for the StatefulSet to be ready before initializing the database.
+			// Until then, it is not possible to connect to it.
+			// We should ignore any errors from Dial to allow the cluster to be deployed.
 			return nil, nil
 		}
 		defer func() {
