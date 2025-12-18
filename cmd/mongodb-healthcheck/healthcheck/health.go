@@ -120,10 +120,11 @@ type OplogRs struct {
 }
 
 func CheckState(rs mongo.Status, startupDelaySeconds int64, oplogSize int64) error {
-	if rs.GetSelf() == nil {
-		return errors.New("invalid replset status")
+	self := rs.GetSelf()
+	if self == nil {
+		return errors.New("self member is not found")
 	}
-	uptime := rs.GetSelf().Uptime
+	uptime := self.Uptime
 
 	switch rs.MyState {
 	case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:

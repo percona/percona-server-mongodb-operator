@@ -34,6 +34,9 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 
 	var d net.Dialer
 
+	if len(cnf.Hosts) == 0 {
+		return errors.New("no hosts found")
+	}
 	addr := cnf.Hosts[0]
 	log.V(1).Info("Connecting to " + addr)
 	conn, err := d.DialContext(ctx, "tcp", addr)
@@ -59,6 +62,7 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		rs, err = client.RSStatus(ctx)
 		if err != nil {
 			if errors.Is(err, mongo.ErrInvalidReplsetConfig) {
+				log.Info("Couldn't connect to mongo due to invalid replset config. Ignoring", "error", err)
 				return nil, nil
 			}
 			return nil, err
@@ -66,7 +70,7 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		return &rs, nil
 	}()
 	if err != nil || s == nil {
-		return err
+		return errors.Wrap(err, "failed to get rs status")
 	}
 
 	if err := CheckState(*s, 0, 0); err != nil {
