@@ -235,7 +235,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	cr.Status.RemoveCondition(api.ConditionTypePendingSmartUpdate)
 	if awaiting, err := r.isAwaitingSmartUpdate(ctx, cr); err != nil {
-		return fmt.Errorf("cannot check if awaiting smart update: %v", err)
+		return errors.Wrap(err, "cannot check if awaiting smart update")
 	} else if cr.Status.Ready == cr.Status.Size && awaiting {
 		cr.Status.AddCondition(api.ClusterCondition{
 			Type:    api.ConditionTypePendingSmartUpdate,
