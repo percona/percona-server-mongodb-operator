@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -11,11 +10,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
+	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
 )
 
 func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string) (corev1.Secret, error) {
@@ -72,18 +73,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		&secretObj,
 	)
 	if err == nil {
-		shouldUpdate, err := fillSecretData(cr, secretObj.Data)
+		shouldUpdate, err := fillSecretData(ctx, cr, secretObj.Data, true, r.secretProviderHandler)
 		if err != nil {
 			return errors.Wrap(err, "failed to fill secret data")
-		}
-		if cr.CompareVersion("1.2.0") < 0 {
-			for _, v := range []string{api.EnvMongoDBClusterMonitorUser, api.EnvMongoDBClusterMonitorPassword} {
-				escaped, ok := secretObj.Data[v+"_ESCAPED"]
-				if !ok || url.QueryEscape(string(secretObj.Data[v])) != string(escaped) {
-					secretObj.Data[v+"_ESCAPED"] = []byte(url.QueryEscape(string(secretObj.Data[v])))
-					shouldUpdate = true
-				}
-			}
 		}
 		if shouldUpdate {
 			err = r.client.Update(ctx, &secretObj)
@@ -96,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	}
 
 	data := make(map[string][]byte)
-	_, err = fillSecretData(cr, data)
+	_, err = fillSecretData(ctx, cr, data, false, r.secretProviderHandler)
 	if err != nil {
 		return errors.Wrap(err, "fill users secret")
 	}
@@ -120,10 +112,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 	return nil
 }
 
-func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
+func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, secretExists bool, ph *pkgSecret.ProviderHandler) (bool, error) {
+	log := logf.FromContext(ctx)
+
 	if data == nil {
 		data = make(map[string][]byte)
 	}
+
+	var changes bool
+	var err error
+
+	if ph != nil {
+		changes, err = ph.FillSecretData(ctx, cr, data)
+		if err != nil {
+			if pkgSecret.IsCriticalErr(err) || !secretExists {
+				return false, errors.Wrap(err, "failed to fill secret from secret provider")
+			}
+			log.Error(err, "failed to fill secret from secret provider")
+		}
+	}
+
 	userMap := map[string]string{
 		api.EnvMongoDBBackupUser:         string(api.RoleBackup),
 		api.EnvMongoDBClusterAdminUser:   string(api.RoleClusterAdmin),
@@ -141,7 +149,6 @@ func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (bool,
 		passKeys = append(passKeys, api.EnvMongoDBDatabaseAdminPassword)
 	}
 
-	changes := false
 	for user, role := range userMap {
 		if _, ok := data[user]; !ok {
 			data[user] = []byte(role)
@@ -149,7 +156,6 @@ func fillSecretData(cr *api.PerconaServerMongoDB, data map[string][]byte) (bool,
 		}
 	}
 
-	var err error
 	for _, k := range passKeys {
 		if _, ok := data[k]; !ok {
 			data[k], err = secret.GeneratePassword()
