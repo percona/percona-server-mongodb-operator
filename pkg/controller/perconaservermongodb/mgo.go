@@ -731,7 +731,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			var stderr, stdout bytes.Buffer
 
 			hello := []string{"sh", "-c",
-				mongoCmd + " --eval 'db.runCommand({ hello: 1 }).isWritablePrimary'"}
+				mongoCmd + " --quiet --eval 'db.runCommand({ hello: 1 }).isWritablePrimary'"}
 			err = r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
 			if err != nil {
 				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
@@ -739,7 +739,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 			out := strings.Trim(stdout.String(), "\n")
 			if out != "true" {
-				return errors.New("is not the writable primary")
+				return errors.New(pod.Name + " is not the writable primary")
 			}
 
 			log.Info(pod.Name+" is the writable primary", "replset", replsetName)
