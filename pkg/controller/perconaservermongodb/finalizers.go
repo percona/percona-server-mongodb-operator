@@ -186,29 +186,33 @@ func (r *ReconcilePerconaServerMongoDB) deleteReplsetPods(ctx context.Context, c
 		return pods.Items[i].Name < pods.Items[j].Name
 	})
 
-	switch *sts.Spec.Replicas {
-	case 0:
+	switch {
+	case *sts.Spec.Replicas == 0:
 		rs.Size = 0
 		if len(pods.Items) == 0 {
 			return nil
 		}
 		return errWaitingTermination
-	case 1:
+	case *sts.Spec.Replicas == 1 || len(pods.Items) == 1:
 		rs.Size = 1
 		// If there is one pod left, we need to be sure that it's the primary.
 		if len(pods.Items) != 1 {
 			return errWaitingTermination
 		}
 
-		isPrimary, err := r.isPodPrimary(ctx, cr, pods.Items[0], rs)
-		if err != nil {
-			return errors.Wrap(err, "is pod primary")
-		}
-		if !isPrimary {
-			return errWaitingFirstPrimary
+		firstPod := pods.Items[0]
+		// If it's not ready, we can delete it
+		if isContainerAndPodRunning(firstPod, "mongod") && isPodReady(firstPod) {
+			isPrimary, err := r.isPodPrimary(ctx, cr, firstPod, rs)
+			if err != nil {
+				return errors.Wrap(err, "is pod primary")
+			}
+			if !isPrimary {
+				return errWaitingFirstPrimary
+			}
+			// If true, we should resize the replset to 0
 		}
 
-		// If true, we should resize the replset to 0
 		rs.Size = 0
 		return errWaitingTermination
 	default:
