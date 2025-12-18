@@ -10,7 +10,7 @@ IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-backup-mongodb:2.11.0"}
+IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
@@ -307,6 +307,8 @@ wait_for_pbm_operations() {
 
 run_restore() {
 	local backup_name=$1
+
+	log "running restore restore-$backup_name"
 
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
@@ -939,9 +941,13 @@ run_mongo() {
 	local uri="$2"
 	local driver=${3:-mongodb+srv}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	local replica_set=${6:-"rs0"}
+	if [[ $uri == *cfg* ]]; then
+		replica_set="cfg"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
@@ -1080,6 +1086,7 @@ compare_mongo_cmd() {
 	local collection="${6:-test}"
 	local sort="$7"
 	local tls="${8:-false}"
+	local replicaset="$9"
 
 	local full_command="db.${collection}.${command}()"
 	if [[ -n ${sort} ]]; then
@@ -1094,7 +1101,7 @@ compare_mongo_cmd() {
 		mongo_command=run_mongo
 	fi
 
-	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" \
+	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
 		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
@@ -1121,6 +1128,8 @@ compare_mongos_cmd() {
 	else
 		mongos_command=run_mongos
 	fi
+
+	log "running db.${collection}.command() in ${database}"
 
 	$mongos_command "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
 		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
@@ -1560,7 +1569,7 @@ run_backup() {
 	local backup_name=${2:-"backup-${storage}"}
 	local type=${3:-"logical"}
 
-	desc "run backup $backup_name"
+	log "running backup $backup_name"
 
 	yq eval '.metadata.name = "'${backup_name}'"
 			| .spec.storageName = "'${storage}'"
