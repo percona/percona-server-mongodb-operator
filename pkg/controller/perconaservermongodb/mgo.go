@@ -731,8 +731,8 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			var stderr, stdout bytes.Buffer
 
 			hello := []string{"sh", "-c",
-				mongoCmd + " --quiet --eval 'db.runCommand({ hello: 1 }).isWritablePrimary'"}
-			err = r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
+				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'"}
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
 			if err != nil {
 				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
 			}
