@@ -355,6 +355,9 @@ func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: ls,
+			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
