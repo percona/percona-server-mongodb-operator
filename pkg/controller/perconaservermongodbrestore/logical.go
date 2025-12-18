@@ -60,7 +60,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 		}
 
 		log.Info("Starting restore", "backup", backupName)
-		status.PBMname, err = runRestore(ctx, backupName, pbmc, cr.Spec.PITR, cr.Spec.Selective)
+		status.PBMname, err = runRestore(ctx, backupName, pbmc, cr)
 		status.State = psmdbv1.RestoreStateRequested
 		return status, err
 	}
@@ -110,7 +110,7 @@ func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec
 	return
 }
 
-func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdbv1.PITRestoreSpec, selective *psmdbv1.SelectiveRestoreOpts) (string, error) {
+func runRestore(ctx context.Context, backup string, pbmc backup.PBM, cr *psmdbv1.PerconaServerMongoDBRestore) (string, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Starting logical restore", "backup", backup)
 
@@ -119,49 +119,31 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, pitr *psmdb
 		rName = time.Now().UTC().Format(time.RFC3339Nano)
 	)
 
-	switch {
-	case pitr == nil:
-		cmd = ctrl.Cmd{
-			Cmd: ctrl.CmdRestore,
-			Restore: &ctrl.RestoreCmd{
-				Name:          rName,
-				BackupName:    backup,
-				Namespaces:    selective.GetNamespaces(),
-				UsersAndRoles: selective.GetWithUsersAndRoles(),
-			},
-		}
-	case pitr.Type == psmdbv1.PITRestoreTypeDate:
-		ts := pitr.Date.Unix()
+	cmd = ctrl.Cmd{
+		Cmd: ctrl.CmdRestore,
+		Restore: &ctrl.RestoreCmd{
+			Name:          rName,
+			BackupName:    backup,
+			RSMap:         cr.Spec.RSMap,
+			Namespaces:    cr.Spec.Selective.GetNamespaces(),
+			UsersAndRoles: cr.Spec.Selective.GetWithUsersAndRoles(),
+		},
+	}
 
-		if _, err := pbmc.GetPITRChunkContains(ctx, ts); err != nil {
-			return "", err
-		}
-
-		cmd = ctrl.Cmd{
-			Cmd: ctrl.CmdRestore,
-			Restore: &ctrl.RestoreCmd{
-				Name:          rName,
-				BackupName:    backup,
-				OplogTS:       primitive.Timestamp{T: uint32(ts)},
-				Namespaces:    selective.GetNamespaces(),
-				UsersAndRoles: selective.GetWithUsersAndRoles(),
-			},
-		}
-	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
-		tl, err := pbmc.GetLatestTimelinePITR(ctx)
-		if err != nil {
-			return "", err
-		}
-
-		cmd = ctrl.Cmd{
-			Cmd: ctrl.CmdRestore,
-			Restore: &ctrl.RestoreCmd{
-				Name:          rName,
-				BackupName:    backup,
-				OplogTS:       primitive.Timestamp{T: tl.End},
-				Namespaces:    selective.GetNamespaces(),
-				UsersAndRoles: selective.GetWithUsersAndRoles(),
-			},
+	if pitr := cr.Spec.PITR; pitr != nil {
+		switch pitr.Type {
+		case psmdbv1.PITRestoreTypeDate:
+			ts := pitr.Date.Unix()
+			if _, err := pbmc.GetPITRChunkContains(ctx, ts); err != nil {
+				return "", err
+			}
+			cmd.Restore.OplogTS = primitive.Timestamp{T: uint32(ts)}
+		case psmdbv1.PITRestoreTypeLatest:
+			tl, err := pbmc.GetLatestTimelinePITR(ctx)
+			if err != nil {
+				return "", err
+			}
+			cmd.Restore.OplogTS = primitive.Timestamp{T: tl.End}
 		}
 	}
 

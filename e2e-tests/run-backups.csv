@@ -23,5 +23,7 @@ pitr-physical
 pitr-physical-backup-source
 pitr-sharded
 pitr-to-new-cluster
+replset-remapping
+replset-remapping-sharded
 scheduled-backup
 upgrade-partial-backup

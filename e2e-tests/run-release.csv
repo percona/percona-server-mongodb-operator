@@ -53,6 +53,8 @@ preinit-updates
 pvc-resize
 recover-no-primary
 replset-overrides
+replset-remapping
+replset-remapping-sharded
 rs-shard-migration
 scaling
 scheduled-backup

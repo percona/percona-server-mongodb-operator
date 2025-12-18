@@ -9,6 +9,9 @@ spec:
 #    withUsersAndRoles: true
 #    namespaces:
 #    - "db.collection"
+#  replsetRemapping:
+#    rs0: shard0
+#    rs1: shard1
 #  pitr:
 #    type: date
 #    date: YYYY-MM-DD HH:MM:SS

@@ -145,9 +145,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 		var restoreCommand []string
 		if cr.Spec.PITR != nil {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", cr.Status.PITRTarget, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				"--base-snapshot", bcp.Status.PBMname,
+				"--time", cr.Status.PITRTarget,
+				"--out", "json",
+			}
 		} else {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				bcp.Status.PBMname,
+				"--out", "json",
+			}
+		}
+
+		if cr.Spec.RSMap != nil {
+			var rsMap []string
+			for k, v := range cr.Spec.RSMap {
+				rsMap = append(rsMap, fmt.Sprintf("%s=%s", v, k))
+			}
+			restoreCommand = append(restoreCommand, "--replset-remapping", strings.Join(rsMap, ","))
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
