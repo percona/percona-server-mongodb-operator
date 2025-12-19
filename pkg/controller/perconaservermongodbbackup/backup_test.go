@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -27,6 +28,7 @@ func TestBackup_Status(t *testing.T) {
 		setupMock      func(*MockPBM)
 		inputCR        *api.PerconaServerMongoDBBackup
 		expectedStatus api.PerconaServerMongoDBBackupStatus
+		cluster        *api.PerconaServerMongoDB
 	}{
 		"backup metadata not found": {
 			setupMock: func(mockPBM *MockPBM) {
@@ -196,6 +198,50 @@ func TestBackup_Status(t *testing.T) {
 				PBMPods: map[string]string{"rs0": "node1"},
 			},
 		},
+		"backup in starting state beyond custom deadline": {
+			setupMock: func(mockPBM *MockPBM) {
+				now := time.Now().UTC()
+				startTime := now.Add(-20 * time.Second) // Beyond deadline (10s)
+				mockPBM.EXPECT().
+					GetBackupMeta(gomock.Any(), "test-backup").
+					Return(&pbmBackup.BackupMeta{
+						Name:             "test-backup",
+						Status:           defs.StatusStarting,
+						StartTS:          startTime.Unix(),
+						LastTransitionTS: startTime.Unix(),
+					}, nil)
+				mockPBM.EXPECT().
+					Node(gomock.Any()).
+					Return("test-node", nil)
+				mockPBM.EXPECT().
+					GetBackupMeta(gomock.Any(), "test-backup").
+					Return(&pbmBackup.BackupMeta{
+						Name:     "test-backup",
+						Replsets: []pbmBackup.BackupReplset{{Name: "rs0", Node: "node1"}},
+					}, nil)
+			},
+			inputCR: &api.PerconaServerMongoDBBackup{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
+				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Status: api.PerconaServerMongoDBBackupStatus{
+					PBMname: "test-backup",
+				},
+			},
+			cluster: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					Backup: api.BackupSpec{
+						PBMStartingDeadlineSeconds: ptr.To(int64(10)),
+					},
+				},
+			},
+			expectedStatus: api.PerconaServerMongoDBBackupStatus{
+				PBMname: "test-backup",
+				State:   api.BackupStateError,
+				Error:   pbmStartingDeadlineErrMsg,
+				Type:    defs.LogicalBackup,
+				PBMPods: map[string]string{"rs0": "node1"},
+			},
+		},
 		"backup in running state": {
 			setupMock: func(mockPBM *MockPBM) {
 				mockPBM.EXPECT().
@@ -284,7 +330,11 @@ func TestBackup_Status(t *testing.T) {
 				pbm: mockPBM,
 			}
 
-			status, err := backup.Status(ctx, tt.inputCR)
+			cluster := tt.cluster
+			if cluster == nil {
+				cluster = new(api.PerconaServerMongoDB)
+			}
+			status, err := backup.Status(ctx, tt.inputCR, cluster)
 			assert.NoError(t, err)
 
 			assert.Equal(t, tt.expectedStatus.State, status.State)

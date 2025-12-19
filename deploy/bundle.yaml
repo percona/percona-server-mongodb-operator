@@ -964,6 +964,9 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  pbmStartingDeadlineSeconds:
+                    format: int64
+                    type: integer
                   pitr:
                     properties:
                       compressionLevel:

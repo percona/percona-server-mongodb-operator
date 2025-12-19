@@ -1109,21 +1109,22 @@ type BackupConfig struct {
 }
 
 type BackupSpec struct {
-	Enabled                  bool                         `json:"enabled"`
-	Annotations              map[string]string            `json:"annotations,omitempty"`
-	Labels                   map[string]string            `json:"labels,omitempty"`
-	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
-	Image                    string                       `json:"image"`
-	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
-	ServiceAccountName       string                       `json:"serviceAccountName,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
-	Resources                corev1.ResourceRequirements  `json:"resources,omitempty"`
-	RuntimeClassName         *string                      `json:"runtimeClassName,omitempty"`
-	PITR                     PITRSpec                     `json:"pitr,omitempty"`
-	Configuration            BackupConfig                 `json:"configuration,omitempty"`
-	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	Enabled                    bool                         `json:"enabled"`
+	Annotations                map[string]string            `json:"annotations,omitempty"`
+	Labels                     map[string]string            `json:"labels,omitempty"`
+	Storages                   map[string]BackupStorageSpec `json:"storages,omitempty"`
+	Image                      string                       `json:"image"`
+	Tasks                      []BackupTaskSpec             `json:"tasks,omitempty"`
+	ServiceAccountName         string                       `json:"serviceAccountName,omitempty"`
+	PodSecurityContext         *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext   *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	Resources                  corev1.ResourceRequirements  `json:"resources,omitempty"`
+	RuntimeClassName           *string                      `json:"runtimeClassName,omitempty"`
+	PITR                       PITRSpec                     `json:"pitr,omitempty"`
+	Configuration              BackupConfig                 `json:"configuration,omitempty"`
+	VolumeMounts               []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
+	StartingDeadlineSeconds    *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	PBMStartingDeadlineSeconds *int64                       `json:"pbmStartingDeadlineSeconds,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
