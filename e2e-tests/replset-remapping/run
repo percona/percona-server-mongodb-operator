@@ -1,0 +1,112 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+source_cluster="some-name-source"
+target_cluster="some-name-target"
+
+function setup_infra() {
+	create_infra ${namespace}
+
+	kubectl_bin apply \
+		-f ${conf_dir}/client.yml \
+		-f ${conf_dir}/secrets_with_tls.yml \
+		-f ${conf_dir}/minio-secret.yml
+
+	deploy_minio
+}
+
+function setup_source_cluster() {
+	desc "setting up source cluster: ${source_cluster}"
+
+	log "creating PSMDB cluster: ${source_cluster}"
+	apply_cluster ${test_dir}/conf/${source_cluster}.yml
+	wait_for_running ${source_cluster}-rs0 3
+	wait_cluster_consistency "${source_cluster}"
+
+	log "writing some data"
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}"
+	compare_mongo_cmd \
+		"find" \
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}" \
+		"" \
+		".svc.cluster.local" \
+		myApp \
+		test \
+		'' \
+		false \
+		rs0
+
+	run_backup "minio" "backup-minio-logical"
+	wait_backup "backup-minio-logical"
+
+	run_backup "minio" "backup-minio-physical"
+	wait_backup "backup-minio-physical"
+
+	log "deleting PSMDB cluster: ${source_cluster}"
+	kubectl_bin delete psmdb ${source_cluster}
+	wait_for_delete psmdb/${source_cluster}
+	wait_for_delete pod/${source_cluster}-rs0-0
+}
+
+function setup_target_cluster() {
+	desc "setting up target cluster: ${target_cluster}"
+
+	log "creating PSMDB cluster: ${target_cluster}"
+	kubectl_bin apply -f ${conf_dir}/secrets_with_tls.yml
+	apply_cluster ${test_dir}/conf/${target_cluster}.yml
+	wait_for_running ${target_cluster}-replset0 3
+	wait_cluster_consistency "${target_cluster}"
+}
+
+function test_restores() {
+	desc "CASE 1: Logical restore with replset remapping"
+	run_restore backup-minio-logical
+	wait_restore backup-minio-logical ${target_cluster}
+	wait_cluster_consistency "${target_cluster}"
+	compare_mongo_cmd \
+		"find" \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
+		"" \
+		".svc.cluster.local" \
+		myApp \
+		test \
+		'' \
+		false \
+		replset0
+	desc "CASE 1: PASSED"
+
+	log "dropping test collection"
+	run_mongo 'use myApp\n db.test.drop()' \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
+		"mongodb" ".svc.cluster.local" "" "replset0"
+
+	desc "CASE 2: Physical restore with replset remapping"
+	run_restore backup-minio-physical
+	wait_restore backup-minio-physical ${target_cluster}
+	wait_cluster_consistency "${target_cluster}"
+	compare_mongo_cmd \
+		"find" \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
+		"" \
+		".svc.cluster.local" \
+		myApp \
+		test \
+		'' \
+		false \
+		replset0
+	desc "CASE 2: PASSED"
+}
+
+setup_infra
+setup_source_cluster
+setup_target_cluster
+test_restores
+desc 'test passed'
+destroy $namespace
