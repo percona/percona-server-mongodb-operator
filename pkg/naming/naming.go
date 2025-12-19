@@ -68,3 +68,11 @@ func HiddenConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSp
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentArbiter)
 }
+
+func HookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, component string) string {
+	return fmt.Sprintf("%s-%s-%s-hookscript", cr.Name, rs.Name, component)
+}
+
+func MongosHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-%s-hookscript", cr.Name, ComponentMongos)
+}

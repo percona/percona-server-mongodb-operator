@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -139,26 +140,23 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		},
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
+	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: config.MongosConfigDir,
 		})
 	}
 
-	if cr.CompareVersion("1.8.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{
-			Name:      "users-secret-file",
-			MountPath: "/etc/users-secret",
-			ReadOnly:  true,
-		})
-	}
+	volumes = append(volumes, corev1.VolumeMount{
+		Name:      "users-secret-file",
+		MountPath: "/etc/users-secret",
+		ReadOnly:  true,
+	}, corev1.VolumeMount{
+		Name:      config.BinVolumeName,
+		MountPath: config.BinMountPath,
+	})
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
-	}
-
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
 				Name:      config.LDAPTLSVolClaimName,
@@ -170,6 +168,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 				MountPath: config.LDAPConfDir,
 			},
 		}...)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Sharding.Mongos != nil && cr.Spec.Sharding.Mongos.HookScript != "" {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.HookscriptVolClaimName,
+			MountPath: config.HookscriptMountPath,
+		})
 	}
 
 	container := corev1.Container{
@@ -214,17 +219,11 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
 		Resources:       cr.Spec.Sharding.Mongos.Resources,
 		VolumeMounts:    volumes,
-		Command:         []string{"/data/db/ps-entry.sh"},
+		Command:         []string{config.BinMountPath + "/ps-entry.sh"},
 	}
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
-	}
-
-	if cr.CompareVersion("1.15.0") >= 0 {
-		container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
-		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
-	}
+	container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+	container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 
 	return container, nil
 }
@@ -290,10 +289,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType) []corev1.Volume {
 	fvar, tvar := false, true
 
-	sslVolumeOptional := &cr.Spec.UnsafeConf
-	if cr.CompareVersion("1.16.0") >= 0 {
-		sslVolumeOptional = &cr.Spec.Unsafe.TLS
-	}
+	sslVolumeOptional := &cr.Spec.Unsafe.TLS
 
 	volumes := []corev1.Volume{
 		{
@@ -332,20 +328,17 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-	}
-
-	if cr.CompareVersion("1.8.0") >= 0 {
-		volumes = append(volumes, corev1.Volume{
+		{
 			Name: "users-secret-file",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: api.InternalUserSecretName(cr),
 				},
 			},
-		})
+		},
 	}
 
-	if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos != nil {
+	if cr.Spec.Sharding.Mongos != nil {
 		volumes = append(volumes, cr.Spec.Sharding.Mongos.SidecarVolumes...)
 
 		for _, v := range cr.Spec.Sharding.Mongos.SidecarPVCs {
@@ -360,43 +353,53 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 		}
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configSource.IsUsable() {
+	if configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 {
-		volumes = append(volumes, corev1.Volume{
-			Name: config.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+	volumes = append(volumes, corev1.Volume{
+		Name: config.BinVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	if cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.Volume{
+			{
+				Name: config.LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &tvar,
+						DefaultMode: &secretFileMode,
+					},
+				},
 			},
-		})
+			{
+				Name: config.LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}...)
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 {
-		if cr.Spec.Secrets.LDAPSecret != "" {
-			volumes = append(volumes, []corev1.Volume{
-				{
-					Name: config.LDAPTLSVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName:  cr.Spec.Secrets.LDAPSecret,
-							Optional:    &tvar,
-							DefaultMode: &secretFileMode,
-						},
+	if m := cr.Spec.Sharding.Mongos; cr.CompareVersion("1.22.0") >= 0 && m != nil && m.HookScript != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: config.HookscriptVolClaimName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: naming.MongosHookScriptConfigMapName(cr),
 					},
+					Optional: ptr.To(true),
 				},
-				{
-					Name: config.LDAPConfVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-			}...)
-		}
+			},
+		})
 	}
 
 	return volumes

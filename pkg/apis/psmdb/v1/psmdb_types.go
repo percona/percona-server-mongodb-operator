@@ -407,6 +407,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    string                            `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 

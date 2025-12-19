@@ -183,6 +183,9 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
+#    hookscript: |
+#      #!/usr/bin/env bash
+#      echo "Hookscript started"
 #    sidecars:
 #    - image: busybox
 #      command: ["/bin/sh"]
@@ -295,6 +298,9 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookscript: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -356,6 +362,9 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookscript: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -408,6 +417,9 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookscript: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -499,6 +511,9 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookscript: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -604,6 +619,9 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookscript: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]

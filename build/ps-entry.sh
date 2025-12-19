@@ -68,9 +68,9 @@ _mongod_hack_have_arg() {
 	local arg
 	for arg; do
 		case "$arg" in
-		"$checkArg" | "$checkArg"=*)
-			return 0
-			;;
+			"$checkArg" | "$checkArg"=*)
+				return 0
+				;;
 		esac
 	done
 	return 1
@@ -83,14 +83,14 @@ _mongod_hack_get_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-		"$checkArg")
-			echo "$1"
-			return 0
-			;;
-		"$checkArg"=*)
-			echo "${arg#"$checkArg"=}"
-			return 0
-			;;
+			"$checkArg")
+				echo "$1"
+				return 0
+				;;
+			"$checkArg"=*)
+				echo "${arg#"$checkArg"=}"
+				return 0
+				;;
 		esac
 	done
 	return 1
@@ -131,14 +131,14 @@ _mongod_hack_ensure_no_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-		"$ensureNoArg")
-			shift # also skip the value
-			continue
-			;;
-		"$ensureNoArg"=*)
-			# value is already included
-			continue
-			;;
+			"$ensureNoArg")
+				shift # also skip the value
+				continue
+				;;
+			"$ensureNoArg"=*)
+				# value is already included
+				continue
+				;;
 		esac
 		mongodHackedArgs+=("$arg")
 	done
@@ -282,10 +282,10 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		# if we've got any /docker-entrypoint-initdb.d/* files to parse later, we should initdb
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-			*.sh | *.js) # this should match the set of files we check for below
-				shouldPerformInitdb="$f"
-				break
-				;;
+				*.sh | *.js) # this should match the set of files we check for below
+					shouldPerformInitdb="$f"
+					break
+					;;
 			esac
 		done
 	fi
@@ -387,17 +387,17 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		echo
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-			*.sh)
-				echo "$0: running $f"
-				# shellcheck source=/dev/null
-				. "$f"
-				;;
-			*.js)
-				echo "$0: running $f"
-				"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
-				echo
-				;;
-			*) echo "$0: ignoring $f" ;;
+				*.sh)
+					echo "$0: running $f"
+					# shellcheck source=/dev/null
+					. "$f"
+					;;
+				*.js)
+					echo "$0: running $f"
+					"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
+					echo
+					;;
+				*) echo "$0: ignoring $f" ;;
 			esac
 			echo
 		done
@@ -508,6 +508,8 @@ if [[ $originalArgOne == mongo* ]]; then
 fi
 
 rm -f "$jsonConfigFile" "$tempConfigFile"
+
+test -e /opt/percona/hookscript/hook.sh && source /opt/percona/hookscript/hook.sh
 
 set -o xtrace
 exec "$@"

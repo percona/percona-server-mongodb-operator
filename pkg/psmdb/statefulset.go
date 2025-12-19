@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -117,15 +118,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			},
 		},
-	}
-
-	if cr.CompareVersion("1.13.0") >= 0 {
-		volumes = append(volumes, corev1.Volume{
+		{
 			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
-		})
+		},
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
@@ -137,7 +135,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		})
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
+	if configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configs.MongoDConf.Type.VolumeSource(configName),
@@ -221,13 +219,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  api.SSLSecretName(cr),
-				Optional:    &cr.Spec.UnsafeConf,
+				Optional:    &cr.Spec.Unsafe.TLS,
 				DefaultMode: &secretFileMode,
 			},
 		},
-	}
-	if cr.CompareVersion("1.16.0") >= 0 {
-		sslVolume.VolumeSource.Secret.Optional = &cr.Spec.Unsafe.TLS
 	}
 
 	// add TLS/SSL Volume
@@ -253,7 +248,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			},
 		},
 	)
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
@@ -322,6 +317,20 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			}
 			containers = append(containers, logCollectorCs...)
 		}
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: config.HookscriptVolClaimName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: naming.HookScriptConfigMapName(cr, replset, ls[naming.LabelKubernetesComponent]),
+					},
+					Optional: ptr.To(true),
+				},
+			},
+		})
 	}
 
 	volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), volumes)
