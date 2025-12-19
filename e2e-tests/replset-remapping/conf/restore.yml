@@ -1,0 +1,9 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  name:
+spec:
+  clusterName: some-name-target
+  backupName:
+  replsetRemapping:
+    rs0: replset0
