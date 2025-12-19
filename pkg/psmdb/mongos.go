@@ -438,9 +438,10 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       config.MongosPortName,
-				Port:       cr.Spec.Sharding.Mongos.GetPort(),
-				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				Name:        config.MongosPortName,
+				Port:        cr.Spec.Sharding.Mongos.GetPort(),
+				TargetPort:  intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				AppProtocol: naming.AppProtocol(cr),
 			},
 		},
 		Selector:              ls,
