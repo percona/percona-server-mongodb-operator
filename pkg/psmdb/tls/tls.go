@@ -207,11 +207,14 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		}...)
-	}
-	if cr.CompareVersion("1.13.0") >= 0 {
-		sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
-	}
 
+		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
+			for _, domain := range replset.GetHorizons(false) {
+				sans = append(sans, domain)
+			}
+		}
+	}
+	sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
 	sans = append(sans, getShardingSans(cr)...)
 
 	return sans

@@ -273,23 +273,9 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		member.Priority = *overrides.Priority
 	}
 
-	horizons := make(map[string]string)
-	for h, domain := range rs.Horizons[pod.Name] {
-		d := domain
-		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
-		}
-		horizons[h] = d
-	}
-	for h, domain := range overrides.Horizons {
-		d := domain
-		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
-		}
-		horizons[h] = d
-	}
+	horizons := rs.GetHorizons(true)
 	if len(horizons) > 0 {
-		member.Horizons = horizons
+		member.Horizons = rs.GetHorizons(true)
 	}
 
 	tags := util.MapMerge(mongo.ReplsetTags{

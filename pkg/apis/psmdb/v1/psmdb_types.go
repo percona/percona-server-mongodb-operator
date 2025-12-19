@@ -751,6 +751,33 @@ type ReplsetSpec struct {
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 }
 
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]string {
+	horizons := make(map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				d, ok := overrides.Horizons[h]
+				if ok {
+					domain = d
+				}
+			}
+
+			idx := strings.IndexRune(domain, ':')
+			if withPorts && idx == -1 {
+				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+			}
+			if !withPorts && idx != -1 {
+				domain = domain[:idx]
+			}
+			horizons[h] = domain
+		}
+	}
+	return horizons
+}
+
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
 	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
