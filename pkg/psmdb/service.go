@@ -38,9 +38,10 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       config.MongodPortName,
-					Port:       replset.GetPort(),
-					TargetPort: intstr.FromInt(int(replset.GetPort())),
+					Name:        config.MongodPortName,
+					Port:        replset.GetPort(),
+					TargetPort:  intstr.FromInt(int(replset.GetPort())),
+					AppProtocol: naming.AppProtocol(cr),
 				},
 			},
 			ClusterIP: "None",
@@ -57,7 +58,6 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			svc.Labels[k] = v
 		}
 	}
-
 	return svc
 }
 
@@ -86,9 +86,10 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	svc.Spec = corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       config.MongodPortName,
-				Port:       replset.GetPort(),
-				TargetPort: intstr.FromInt(int(replset.GetPort())),
+				Name:        config.MongodPortName,
+				Port:        replset.GetPort(),
+				TargetPort:  intstr.FromInt(int(replset.GetPort())),
+				AppProtocol: naming.AppProtocol(cr),
 			},
 		},
 		Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": podName},
@@ -127,7 +128,6 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	default:
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-
 	return svc
 }
 

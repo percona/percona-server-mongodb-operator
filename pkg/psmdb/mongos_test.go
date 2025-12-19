@@ -34,9 +34,10 @@ func TestMongosService(t *testing.T) {
 				PublishNotReadyAddresses: false,
 				Ports: []corev1.ServicePort{
 					{
-						Name:       "mongos",
-						Port:       27017,
-						TargetPort: intstr.FromInt(27017),
+						Name:        "mongos",
+						Port:        27017,
+						TargetPort:  intstr.FromInt(27017),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -64,9 +65,10 @@ func TestMongosService(t *testing.T) {
 				PublishNotReadyAddresses: false,
 				Ports: []corev1.ServicePort{
 					{
-						Name:       "mongos",
-						Port:       27017,
-						TargetPort: intstr.FromInt(27017),
+						Name:        "mongos",
+						Port:        27017,
+						TargetPort:  intstr.FromInt(27017),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -97,9 +99,10 @@ func TestMongosService(t *testing.T) {
 				PublishNotReadyAddresses: false,
 				Ports: []corev1.ServicePort{
 					{
-						Name:       "mongos",
-						Port:       27017,
-						TargetPort: intstr.FromInt(27017),
+						Name:        "mongos",
+						Port:        27017,
+						TargetPort:  intstr.FromInt(27017),
+						AppProtocol: ptr.To("mongo"),
 					},
 				},
 				Selector: map[string]string{

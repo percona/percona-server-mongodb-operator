@@ -41,6 +41,7 @@ func TestReconcileReplsetServices(t *testing.T) {
 		for i := range svcList.Items {
 			svcList.Items[i].APIVersion = "v1"
 			svcList.Items[i].Kind = "Service"
+			delete(svcList.Items[i].Annotations, "percona.com/last-config-hash")
 		}
 
 		yamlCompare(t, ns, filename, svcList)

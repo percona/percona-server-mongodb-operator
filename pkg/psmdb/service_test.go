@@ -168,9 +168,10 @@ func TestExternalService(t *testing.T) {
 					PublishNotReadyAddresses: true,
 					Ports: []corev1.ServicePort{
 						{
-							Name:       "mongodb",
-							Port:       27017,
-							TargetPort: intstr.FromInt(27017),
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: ptr.To("mongo"),
 						},
 					},
 					Selector: map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -220,9 +221,10 @@ func TestExternalService(t *testing.T) {
 					PublishNotReadyAddresses: true,
 					Ports: []corev1.ServicePort{
 						{
-							Name:       "mongodb",
-							Port:       27017,
-							TargetPort: intstr.FromInt(27017),
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: ptr.To("mongo"),
 						},
 					},
 					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -275,9 +277,10 @@ func TestExternalService(t *testing.T) {
 					PublishNotReadyAddresses: true,
 					Ports: []corev1.ServicePort{
 						{
-							Name:       "mongodb",
-							Port:       27017,
-							TargetPort: intstr.FromInt(27017),
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: ptr.To("mongo"),
 						},
 					},
 					Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
