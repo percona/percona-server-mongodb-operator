@@ -464,13 +464,20 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	if cnf.Members.AddNew(ctx, members) {
+	if cnf.Members.RemoveArbiterIfNeeded(ctx, unsafePSA) {
+		cnf.Version++
+
+		log.Info("Removing arbiter members", "replset", rs.Name)
+
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
+			return rsMembers, 0, errors.Wrap(err, "remove arbiter if needed: write mongo config")
+		}
+	} else if cnf.Members.AddNew(ctx, members) {
 		cnf.Version++
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf, false)
-		if err != nil {
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return rsMembers, 0, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
