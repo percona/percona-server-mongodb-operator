@@ -28,7 +28,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: perconalab/percona-server-mongodb-operator:main
+#  initImage: perconalab/percona-server-mongodb-operator:K8SPSMDB-1448-CUSTOM
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
