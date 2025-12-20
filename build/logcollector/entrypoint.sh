@@ -11,6 +11,11 @@ if [ -f /opt/percona/logcollector/logrotate/conf.d/mongodb.conf ]; then
 	LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/mongodb.conf"
 fi
 
+LOGROTATE_CUSTOM_CONF_FILE=""
+if [ -f /opt/percona/logcollector/logrotate/conf.d/custom.conf ]; then
+	LOGROTATE_CUSTOM_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/custom.conf"
+fi
+
 if [ "$1" = 'logrotate' ]; then
 	if [[ $EUID != 1001 ]]; then
 		# logrotate requires UID in /etc/passwd
@@ -18,8 +23,7 @@ if [ "$1" = 'logrotate' ]; then
 		cat /tmp/passwd >/etc/passwd
 		rm -rf /tmp/passwd
 	fi
-	echo "Running logrotate with schedule $LOGROTATE_SCHEDULE and config file $LOGROTATE_CONF_FILE"
-	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "logrotate -s /data/db/logs/logrotate.status $LOGROTATE_CONF_FILE;"
+	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "logrotate -s /data/db/logs/logrotate.status $LOGROTATE_CONF_FILE $LOGROTATE_CUSTOM_CONF_FILE;"
 else
 	if [ "$1" = 'fluent-bit' ]; then
 		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'

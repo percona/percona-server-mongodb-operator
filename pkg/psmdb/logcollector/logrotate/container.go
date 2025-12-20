@@ -18,7 +18,7 @@ const (
 
 	MongodbConfig = "mongodb.conf"
 
-	custonConfigDir = "/opt/percona/logcollector/logrotate/conf.d"
+	customConfigDir = "/opt/percona/logcollector/logrotate/conf.d"
 )
 
 func ConfigMapName(prefix string) string {
@@ -99,13 +99,13 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 		if cr.Spec.LogCollector.LogRotate.Configuration != "" {
 			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 				Name:      VolumeName,
-				MountPath: custonConfigDir,
+				MountPath: customConfigDir,
 			})
 		}
 		if cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
 			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 				Name:      CustomVolumeName,
-				MountPath: custonConfigDir,
+				MountPath: customConfigDir,
 			})
 		}
 		if cr.Spec.LogCollector.LogRotate.Schedule != "" {

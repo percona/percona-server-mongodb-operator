@@ -184,7 +184,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateExtraConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         logrotate.CustomVolumeName,
-			VolumeSource: configs.LogRotateConf.Type.VolumeSource(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name),
+			VolumeSource: configs.LogRotateExtraConf.Type.VolumeSource(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name),
 		})
 	}
 
