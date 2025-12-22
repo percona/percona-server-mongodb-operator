@@ -1509,7 +1509,8 @@ type LogRotateSpec struct {
 	// Configuration allows overriding the default logrotate configuration.
 	Configuration string `json:"configuration,omitempty"`
 	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
-	// This should be a reference to a ConfigMap in the same namespace.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Must contain the key `custom.conf` with the logrotate configuration.
 	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
 	// Schedule allows specifying the schedule for logrotate.
 	// This should be a valid cron expression.
