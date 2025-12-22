@@ -712,6 +712,9 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
+#    hookScript: |
+#      #!/usr/bin/env bash
+#      echo "Hookscript started"
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
