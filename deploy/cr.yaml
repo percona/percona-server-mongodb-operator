@@ -183,7 +183,7 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
-#    hookscript: |
+#    hookScript: |
 #      #!/usr/bin/env bash
 #      echo "Hookscript started"
 #    sidecars:
@@ -298,7 +298,7 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookscript: |
+#      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
 #      annotations:
@@ -362,7 +362,7 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookscript: |
+#      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
 #      annotations:
@@ -417,7 +417,7 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookscript: |
+#      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
 #      annotations:
@@ -511,7 +511,7 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
-#      hookscript: |
+#      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
 #      sidecars:
@@ -619,7 +619,7 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
-#      hookscript: |
+#      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
 #      sidecars:
