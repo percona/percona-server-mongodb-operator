@@ -209,8 +209,10 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 		}...)
 
 		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
-			for _, domain := range replset.GetHorizons(false) {
-				sans = append(sans, domain)
+			for _, podMap := range replset.GetHorizons(false) {
+				for _, domain := range podMap {
+					sans = append(sans, domain)
+				}
 			}
 		}
 	}

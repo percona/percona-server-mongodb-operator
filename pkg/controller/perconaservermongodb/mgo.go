@@ -273,9 +273,9 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		member.Priority = *overrides.Priority
 	}
 
-	horizons := rs.GetHorizons(true)
-	if len(horizons) > 0 {
-		member.Horizons = rs.GetHorizons(true)
+	horizons, ok := rs.GetHorizons(true)[pod.Name]
+	if ok && len(horizons) > 0 {
+		member.Horizons = horizons
 	}
 
 	tags := util.MapMerge(mongo.ReplsetTags{
