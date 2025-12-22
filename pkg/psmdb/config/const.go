@@ -94,23 +94,22 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 
 func (s VolumeSourceType) VolumeProjection(name string) corev1.VolumeProjection {
 	t := true
+	localObj := corev1.LocalObjectReference{
+		Name: name,
+	}
 	switch s {
 	case VolumeSourceConfigMap:
 		return corev1.VolumeProjection{
 			ConfigMap: &corev1.ConfigMapProjection{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: name,
-				},
-				Optional: &t,
+				LocalObjectReference: localObj,
+				Optional:             &t,
 			},
 		}
 	case VolumeSourceSecret:
 		return corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: name,
-				},
-				Optional: &t,
+				LocalObjectReference: localObj,
+				Optional:             &t,
 			},
 		}
 	default:
