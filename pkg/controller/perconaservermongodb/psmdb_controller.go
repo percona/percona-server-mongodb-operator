@@ -413,6 +413,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
 	}
 
+	err = r.reconcileBackups(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
+	}
 	if cr.Spec.Backup.Enabled {
 		err = r.reconcileBackupTasks(ctx, cr)
 		if err != nil {
@@ -1179,9 +1183,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 	reconcileConfigMap := func() error {
 		name := naming.MongosCustomConfigName(cr)
 		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
-			err := deleteConfigMapIfExists(ctx, r.client, cr, name)
-			if err != nil {
-				return errors.Wrap(err, "failed to delete mongos config map")
+			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
 			}
 
 			return nil
@@ -1206,9 +1209,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 	reconcileHookscript := func() error {
 		name := naming.MongosHookScriptConfigMapName(cr)
 		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.HookScript == "" {
-			err := deleteConfigMapIfExists(ctx, r.client, cr, name)
-			if err != nil {
-				return errors.Wrap(err, "failed to delete mongos config map")
+			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
 			}
 
 			return nil

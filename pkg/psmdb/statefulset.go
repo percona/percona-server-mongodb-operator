@@ -303,6 +303,20 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				rsName = name
 			}
 			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
+
+			if cr.Spec.Backup.HookScript != "" {
+				volumes = append(volumes, corev1.Volume{
+					Name: config.PBMHookscriptVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: naming.PBMHookScriptConfigMapName(cr),
+							},
+							Optional: ptr.To(true),
+						},
+					},
+				})
+			}
 		}
 
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
@@ -396,6 +410,8 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		Name:            naming.ContainerBackupAgent,
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Command:         []string{config.BinMountPath + "/pbm-entry.sh"},
+		Args:            []string{"pbm-agent-entrypoint"},
 		Env: []corev1.EnvVar{
 			{
 				Name: "PBM_AGENT_MONGODB_USERNAME",
@@ -429,32 +445,18 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name:  "PBM_MONGODB_PORT",
 				Value: strconv.Itoa(int(port)),
 			},
+			{
+				Name:  "PBM_AGENT_SIDECAR",
+				Value: "true",
+			},
+			{
+				Name:  "PBM_AGENT_SIDECAR_SLEEP",
+				Value: "5",
+			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
-	}
-	if cr.CompareVersion("1.19.0") < 0 {
-		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
-		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
-	}
-
-	if cr.CompareVersion("1.13.0") >= 0 {
-		c.Command = []string{config.BinMountPath + "/pbm-entry.sh"}
-		c.Args = []string{"pbm-agent"}
-		if cr.CompareVersion("1.14.0") >= 0 {
-			c.Args = []string{"pbm-agent-entrypoint"}
-			c.Env = append(c.Env, []corev1.EnvVar{
-				{
-					Name:  "PBM_AGENT_SIDECAR",
-					Value: "true",
-				},
-				{
-					Name:  "PBM_AGENT_SIDECAR_SLEEP",
-					Value: "5",
-				},
-			}...)
-		}
-		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
+		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "ssl",
 				MountPath: config.SSLDir,
@@ -465,53 +467,55 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				MountPath: config.BinMountPath,
 				ReadOnly:  true,
 			},
-		}...)
+			{
+				Name:      config.MongodDataVolClaimName,
+				MountPath: config.MongodContainerDataDir,
+				ReadOnly:  false,
+			},
+		},
+	}
+	if cr.CompareVersion("1.19.0") < 0 {
+		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
+		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
 
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		c.Env = append(c.Env, []corev1.EnvVar{
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
+	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+	if cr.CompareVersion("1.20.0") >= 0 {
+		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+	}
+
+	c.Env = append(c.Env, []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
 				},
 			},
-		}...)
-
-		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
-		if cr.CompareVersion("1.20.0") >= 0 {
-			mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
-		}
-
-		c.Env = append(c.Env, corev1.EnvVar{
+		},
+		{
 			Name:  "PBM_MONGODB_URI",
 			Value: mongoDBURI,
-		})
-
-		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
-			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
-				ReadOnly:  false,
-			},
-		}...)
-	}
-
-	if cr.CompareVersion("1.16.0") >= 0 {
-		c.Env = append(c.Env, corev1.EnvVar{
+		},
+		{
 			Name:  "PBM_AGENT_TLS_ENABLED",
 			Value: strconv.FormatBool(tlsEnabled),
-		})
-	}
+		},
+	}...)
 
 	if len(cr.Spec.Backup.VolumeMounts) > 0 {
 		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript != "" {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      config.HookscriptVolClaimName,
+			MountPath: config.HookscriptMountPath,
+		})
 	}
 
 	return c

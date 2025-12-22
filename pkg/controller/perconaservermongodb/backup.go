@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -31,6 +32,50 @@ import (
 type BackupScheduleJob struct {
 	api.BackupTaskSpec
 	JobID cron.EntryID
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if err := r.reconcileBackupHookscript(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup hookscript")
+	}
+
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if err := r.reconcileBackupTasks(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup tasks")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookscript(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	name := naming.PBMHookScriptConfigMapName(cr)
+	if cr.Spec.Backup.HookScript == "" {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+			return errors.Wrapf(err, "failed to delete backup config map %s", name)
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			"hook.sh": string(cr.Spec.Backup.HookScript),
+		},
+	}
+	if err := controllerutil.SetControllerReference(cr, cm, r.scheme); err != nil {
+		return errors.Wrap(err, "set controller reference")
+	}
+	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
+		return errors.Wrap(err, "create or update config map")
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {

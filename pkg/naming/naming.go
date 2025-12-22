@@ -76,3 +76,7 @@ func HookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Repls
 func MongosHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s-%s-hookscript", cr.Name, ComponentMongos)
 }
+
+func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-pbm-hookscript", cr.Name)
+}

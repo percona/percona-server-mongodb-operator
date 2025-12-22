@@ -7,4 +7,6 @@ if [[ -z ${PBM_AGENT_TLS_ENABLED} ]] || [[ ${PBM_AGENT_TLS_ENABLED} == "true" ]]
 	fi
 fi
 
+test -e /opt/percona/pbm-hookscript/hook.sh && source /opt/percona/pbm-hookscript/hook.sh
+
 exec "$@"

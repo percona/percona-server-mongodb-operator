@@ -1125,6 +1125,7 @@ type BackupSpec struct {
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	HookScript               string                       `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
