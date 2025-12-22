@@ -226,12 +226,8 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 	}
 
-	if cr.CompareVersion("1.21.0") >= 0 {
-		if cr.Spec.Sharding.Mongos.ContainerEnv != nil {
-			for _, env := range cr.Spec.Sharding.Mongos.ContainerEnv {
-				container.Env = append(container.Env, env)
-			}
-		}
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
 	}
 
 	return container, nil

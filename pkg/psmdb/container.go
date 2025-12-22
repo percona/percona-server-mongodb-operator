@@ -13,12 +13,34 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
-	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
-	containerSecurityContext *corev1.SecurityContext, containerEnv []corev1.EnvVar,
-) (corev1.Container, error) {
-	fvar := false
+type containerFnParams struct {
+	replset                  *api.ReplsetSpec
+	name                     string
+	resources                corev1.ResourceRequirements
+	ikeyName                 string
+	useConfigFile            bool
+	livenessProbe            *api.LivenessProbeExtended
+	readinessProbe           *corev1.Probe
+	containerSecurityContext *corev1.SecurityContext
+	containerEnv             []corev1.EnvVar
+	containerFromEnv         []corev1.EnvFromSource
+}
 
+func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
+	var (
+		replset                  = params.replset
+		name                     = params.name
+		resources                = params.resources
+		ikeyName                 = params.ikeyName
+		useConfigFile            = params.useConfigFile
+		livenessProbe            = params.livenessProbe
+		readinessProbe           = params.readinessProbe
+		containerSecurityContext = params.containerSecurityContext
+		containerEnv             = params.containerEnv
+		containerFromEnv         = params.containerFromEnv
+	)
+
+	fvar := false
 	volumes := []corev1.VolumeMount{
 		{
 			Name:      config.MongodDataVolClaimName,
@@ -187,12 +209,9 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}
 	}
 
-	if cr.CompareVersion("1.21.0") >= 0 {
-		if containerEnv != nil {
-			for _, env := range containerEnv {
-				container.Env = append(container.Env, env)
-			}
-		}
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, containerEnv...)
+		container.EnvFrom = append(container.EnvFrom, containerFromEnv...)
 	}
 	return container, nil
 }

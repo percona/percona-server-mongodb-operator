@@ -503,9 +503,16 @@ func (in *HiddenSpec) DeepCopyInto(out *HiddenSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ContainerEnv != nil {
-		in, out := &in.ContainerEnv, &out.ContainerEnv
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -833,9 +840,16 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ContainerEnv != nil {
-		in, out := &in.ContainerEnv, &out.ContainerEnv
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1024,9 +1038,16 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ContainerEnv != nil {
-		in, out := &in.ContainerEnv, &out.ContainerEnv
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1843,9 +1864,16 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.ContainerEnv != nil {
-		in, out := &in.ContainerEnv, &out.ContainerEnv
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
 		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

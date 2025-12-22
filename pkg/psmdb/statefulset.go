@@ -58,7 +58,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumeSpec := replset.VolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
-	containerEnv := replset.ContainerEnv
+	containerEnv := replset.Env
+	containerFromEnv := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -77,7 +78,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		containerEnv = replset.NonVoting.ContainerEnv
+		containerEnv = replset.NonVoting.Env
+		containerFromEnv = replset.NonVoting.EnvFrom
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
@@ -89,7 +91,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.Hidden.Resources
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
-		containerEnv = replset.Hidden.ContainerEnv
+		containerEnv = replset.Hidden.Env
+		containerFromEnv = replset.Hidden.EnvFrom
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
@@ -186,9 +189,19 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			)
 		}
 	}
-
-	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
-		livenessProbe, readinessProbe, containerSecurityContext, containerEnv)
+	params := containerFnParams{
+		replset:                  replset,
+		name:                     containerName,
+		resources:                resources,
+		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
+		livenessProbe:            livenessProbe,
+		readinessProbe:           readinessProbe,
+		containerSecurityContext: containerSecurityContext,
+		containerEnv:             containerEnv,
+		containerFromEnv:         containerFromEnv,
+	}
+	c, err := container(ctx, cr, params)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}

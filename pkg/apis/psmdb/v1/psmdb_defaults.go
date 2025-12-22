@@ -216,10 +216,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
-		if cr.CompareVersion("1.21.0") >= 0 && cr.Spec.Sharding.Mongos.ContainerEnv == nil {
-			cr.Spec.Sharding.Mongos.ContainerEnv = make([]corev1.EnvVar, 0)
-		}
-
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		for i := range cr.Spec.Replsets {
@@ -762,10 +758,6 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
-	if cr.CompareVersion("1.21.0") >= 0 && rs.ContainerEnv == nil {
-		rs.ContainerEnv = make([]corev1.EnvVar, 0)
-	}
-
 	if len(rs.ExternalNodes) > 0 && !rs.Expose.Enabled {
 		log.Info("Replset is not exposed. Make sure each pod in the replset can reach each other.", "replset", rs.Name)
 	}
@@ -899,10 +891,6 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ContainerSecurityContext = rs.ContainerSecurityContext
 	}
 
-	if cr.CompareVersion("1.21.0") >= 0 && nv.ContainerEnv == nil {
-		nv.ContainerEnv = rs.ContainerEnv
-	}
-
 	if nv.PodSecurityContext == nil {
 		nv.PodSecurityContext = rs.PodSecurityContext
 	}
@@ -1008,10 +996,6 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 
 	if h.ContainerSecurityContext == nil {
 		h.ContainerSecurityContext = rs.ContainerSecurityContext
-	}
-
-	if cr.CompareVersion("1.21.0") >= 0 && h.ContainerEnv == nil {
-		h.ContainerEnv = rs.ContainerEnv
 	}
 
 	if h.PodSecurityContext == nil {
