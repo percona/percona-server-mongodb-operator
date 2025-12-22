@@ -71,11 +71,19 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		},
 	}
 
+	envsFrom := []corev1.EnvFromSource{}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		envs = append(envs, cr.Spec.LogCollector.Env...)
+		envsFrom = append(envsFrom, cr.Spec.LogCollector.EnvFrom...)
+	}
+
 	container := corev1.Container{
 		Name:            "logs",
 		Image:           cr.Spec.LogCollector.Image,
 		ImagePullPolicy: cr.Spec.LogCollector.ImagePullPolicy,
 		Env:             envs,
+		EnvFrom:         envsFrom,
 		Args: []string{
 			"fluent-bit",
 		},
