@@ -169,10 +169,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  pbmStartingDeadlineSeconds:
-                    format: int64
-                    minimum: 1
-                    type: integer
                   pitr:
                     properties:
                       compressionLevel:

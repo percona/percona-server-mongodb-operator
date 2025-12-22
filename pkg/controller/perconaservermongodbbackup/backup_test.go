@@ -230,7 +230,7 @@ func TestBackup_Status(t *testing.T) {
 			cluster: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					Backup: api.BackupSpec{
-						PBMStartingDeadlineSeconds: ptr.To(int64(10)),
+						StartingDeadlineSeconds: ptr.To(int64(10)),
 					},
 				},
 			},

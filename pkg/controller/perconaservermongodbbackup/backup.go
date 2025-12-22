@@ -227,7 +227,7 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup,
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
 
 		timeoutSeconds := defaultPBMStartingDeadline
-		if s := cluster.Spec.Backup.PBMStartingDeadlineSeconds; s != nil && *s > 0 {
+		if s := cluster.Spec.Backup.StartingDeadlineSeconds; s != nil && *s > 0 {
 			timeoutSeconds = *s
 		}
 		if passed >= time.Duration(timeoutSeconds)*time.Second {

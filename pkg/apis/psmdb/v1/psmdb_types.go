@@ -1191,8 +1191,6 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 	// +kubebuilder:validation:Minimum=1
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
-	// +kubebuilder:validation:Minimum=1
-	PBMStartingDeadlineSeconds *int64 `json:"pbmStartingDeadlineSeconds,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
