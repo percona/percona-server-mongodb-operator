@@ -7,6 +7,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 )
 
@@ -156,6 +157,47 @@ func TestIsResyncNeeded(t *testing.T) {
 				},
 			},
 			false,
+		},
+		{
+			"gcs: bucket changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing-1",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing-2",
+					},
+				},
+			},
+			true,
+		},
+		{
+			"gcs: prefix changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing",
+						Prefix: "prefix",
+					},
+				},
+			},
+			true,
 		},
 		{
 			"azure: endpointUrl changed",

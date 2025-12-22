@@ -145,9 +145,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 		var restoreCommand []string
 		if cr.Spec.PITR != nil {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", cr.Status.PITRTarget, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				"--base-snapshot", bcp.Status.PBMname,
+				"--time", cr.Status.PITRTarget,
+				"--out", "json",
+			}
 		} else {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				bcp.Status.PBMname,
+				"--out", "json",
+			}
+		}
+
+		if cr.Spec.RSMap != nil {
+			var rsMap []string
+			for k, v := range cr.Spec.RSMap {
+				rsMap = append(rsMap, fmt.Sprintf("%s=%s", v, k))
+			}
+			restoreCommand = append(restoreCommand, "--replset-remapping", strings.Join(rsMap, ","))
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
@@ -800,6 +817,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
+	log := logf.FromContext(ctx)
+
 	secret := corev1.Secret{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: r.pbmConfigName(cluster), Namespace: cluster.Namespace}, &secret)
 	if client.IgnoreNotFound(err) != nil {
@@ -810,6 +829,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer func() {
+		if err := pbmC.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	// PBM uses main storage to store restore metadata
 	// regardless of backup storage. See PBM-1503.

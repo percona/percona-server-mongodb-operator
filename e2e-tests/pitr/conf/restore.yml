@@ -3,7 +3,7 @@ kind: PerconaServerMongoDBRestore
 metadata:
   name:
 spec:
-  clusterName: some-name
+  clusterName:
   backupName:
   storageName: minio
   pitr:

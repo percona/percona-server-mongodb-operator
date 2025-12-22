@@ -7,13 +7,17 @@ PBM_AGENT_LOG=/tmp/pbm-agent.log
 MONGOD_LOG=/tmp/mongod.log
 PHYSICAL_RESTORE_DIR=/data/db/pbm-restore-logs
 
+function log() {
+	echo "[$(date +%Y-%m-%dT%H:%M:%S%z)]" $*
+}
+
 function handle_sigterm() {
-	echo "Received SIGTERM, cleaning up..."
+	log "Received SIGTERM, cleaning up..."
 
 	mkdir ${PHYSICAL_RESTORE_DIR}
 	mv pbm.restore.log.* ${PBM_AGENT_LOG} ${MONGOD_LOG} ${PHYSICAL_RESTORE_DIR}/
 
-	echo "Restore finished, you can find logs in ${PHYSICAL_RESTORE_DIR}"
+	log "Restore finished, you can find logs in ${PHYSICAL_RESTORE_DIR}"
 	exit 0
 }
 
@@ -35,9 +39,12 @@ pbm_pid=$!
 mongod_pid=$!
 
 set +o xtrace
-echo "Physical restore in progress... pbm-agent logs: ${PBM_AGENT_LOG} mongod logs: ${MONGOD_LOG}"
-echo "Script PID: $$, pbm-agent PID: $pbm_pid, mongod PID: $mongod_pid"
+log "Physical restore in progress... pbm-agent logs: ${PBM_AGENT_LOG} mongod logs: ${MONGOD_LOG}"
+log "Script PID: $$, pbm-agent PID: $pbm_pid, mongod PID: $mongod_pid"
 while true; do
-    echo "Still in progress at $(date)"
-    sleep 120
+	sleep 30
+	log "Still in progress"
+	ps -eFH
+	log "Last 10 lines of ${PBM_AGENT_LOG}:"
+	tail -n 10 ${PBM_AGENT_LOG}
 done

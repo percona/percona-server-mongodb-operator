@@ -43,6 +43,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -86,6 +88,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create client")
 	}
+	secretProviders := []pkgSecret.Provider{
+		new(vault.Provider),
+	}
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 client,
@@ -97,6 +102,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
+		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
 		initImage: initImage,
 
@@ -178,11 +184,12 @@ type ReconcilePerconaServerMongoDB struct {
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	crons               CronRegistry
-	clientcmd           *clientcmd.Client
-	serverVersion       *version.ServerVersion
-	reconcileIn         time.Duration
-	mongoClientProvider MongoClientProvider
+	crons                 CronRegistry
+	clientcmd             *clientcmd.Client
+	serverVersion         *version.ServerVersion
+	reconcileIn           time.Duration
+	mongoClientProvider   MongoClientProvider
+	secretProviderHandler *pkgSecret.ProviderHandler
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
@@ -302,6 +309,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 		err = errors.Wrap(err, "wrong psmdb options")
 		return reconcile.Result{}, err
+	}
+
+	if err := r.secretProviderHandler.Update(ctx, r.client, cr); err != nil {
+		if pkgSecret.IsCriticalErr(err) {
+			return reconcile.Result{}, errors.Wrap(err, "update secret providers")
+		}
+		log.Error(err, "failed update secret providers")
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
@@ -548,6 +562,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			return "", errors.Wrapf(err, "reconcile replset %s", replset.Name)
 		}
 
+		// TODO: why do we do it for each replset??
 		if err := r.fetchVersionFromMongo(ctx, cr, replset); err != nil {
 			return "", errors.Wrap(err, "update mongo version")
 		}
@@ -1116,34 +1131,57 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			}
 		}
 
-		if !rs.NonVoting.Enabled {
-			continue
-		}
+		if rs.NonVoting.Enabled {
+			name = naming.NonVotingConfigMapName(cr, rs)
+			if rs.NonVoting.Configuration == "" {
+				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+					return errors.Wrap(err, "failed to delete nonvoting config map")
+				}
 
-		name = naming.NonVotingConfigMapName(cr, rs)
-		if rs.NonVoting.Configuration == "" {
-			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
-				return errors.Wrap(err, "failed to delete nonvoting mongod config map")
+				continue
 			}
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+					Labels:    naming.RSLabels(cr, rs),
+				},
+				Data: map[string]string{
+					"mongod.conf": string(rs.NonVoting.Configuration),
+				},
+			}
+			if cr.CompareVersion("1.17.0") < 0 {
+				cm.Labels = nil
+			}
+			err := r.createOrUpdateConfigMap(ctx, cr, cm)
+			if err != nil {
+				return errors.Wrap(err, "create or update nonvoting config map")
+			}
+		}
 
-			continue
-		}
-		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.RSLabels(cr, rs),
-			},
-			Data: map[string]string{
-				"mongod.conf": string(rs.NonVoting.Configuration),
-			},
-		}
-		if cr.CompareVersion("1.17.0") < 0 {
-			cm.Labels = nil
-		}
-		err := r.createOrUpdateConfigMap(ctx, cr, cm)
-		if err != nil {
-			return errors.Wrap(err, "create or update nonvoting config map")
+		if rs.Hidden.Enabled {
+			name = naming.HiddenConfigMapName(cr, rs)
+			if rs.Hidden.Configuration == "" {
+				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+					return errors.Wrap(err, "failed to delete hidden config map")
+				}
+
+				continue
+			}
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: cr.Namespace,
+					Labels:    naming.RSLabels(cr, rs),
+				},
+				Data: map[string]string{
+					"mongod.conf": string(rs.Hidden.Configuration),
+				},
+			}
+			err := r.createOrUpdateConfigMap(ctx, cr, cm)
+			if err != nil {
+				return errors.Wrap(err, "create or update hidden config map")
+			}
 		}
 	}
 

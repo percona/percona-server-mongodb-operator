@@ -15,12 +15,12 @@ import (
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreSpec struct {
 	ClusterName  string                            `json:"clusterName,omitempty"`
-	Replset      string                            `json:"replset,omitempty"`
 	BackupName   string                            `json:"backupName,omitempty"`
 	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
 	StorageName  string                            `json:"storageName,omitempty"`
 	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
 	Selective    *SelectiveRestoreOpts             `json:"selective,omitempty"`
+	RSMap        map[string]string                 `json:"replsetRemapping,omitempty"`
 }
 
 type SelectiveRestoreOpts struct {
@@ -119,8 +119,12 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
-		if len(r.Spec.StorageName) == 0 && r.Spec.BackupSource.S3 == nil && r.Spec.BackupSource.Azure == nil && r.Spec.BackupSource.Filesystem == nil {
-			return errors.New("one of storageName, backupSource.s3, backupSource.azure or backupSource.filesystem is required")
+		if len(r.Spec.StorageName) == 0 &&
+			r.Spec.BackupSource.S3 == nil &&
+			r.Spec.BackupSource.GCS == nil &&
+			r.Spec.BackupSource.Azure == nil &&
+			r.Spec.BackupSource.Filesystem == nil {
+			return errors.New("one of storageName, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
 		}
 	}
 

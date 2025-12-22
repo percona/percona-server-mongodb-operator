@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: false
 #  enableExternalVolumeAutoscaling: false
-  crVersion: 1.21.0
+  crVersion: 1.22.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -49,6 +49,14 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
@@ -60,12 +68,20 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
+#    resources:
+#      requests:
+#        memory: 150M
+#        cpu: 300m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
+
   replsets:
   - name: rs0
     size: 3
@@ -237,11 +253,11 @@ spec:
 #      externalTrafficPolicy: Local
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "600m"
+        memory: "1Gi"
       requests:
         cpu: "300m"
-        memory: "0.5G"
+        memory: "1Gi"
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:
@@ -262,7 +278,7 @@ spec:
       enabled: false
 #      podSecurityContext: {}
 #      containerSecurityContext: {}
-      size: 3
+      size: 2
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        operationProfiling:
@@ -298,11 +314,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -359,11 +375,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -409,11 +425,11 @@ spec:
 #    schedulerName: "default"
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
@@ -512,11 +528,11 @@ spec:
 #        externalTrafficPolicy: Local
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -605,11 +621,11 @@ spec:
         maxUnavailable: 1
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       expose:
         type: ClusterIP
 #        servicePerPod: true
@@ -691,10 +707,10 @@ spec:
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "1.2G"
+#        memory: "1.2Gi"
 #      requests:
 #        cpu: "300m"
-#        memory: "1G"
+#        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
@@ -721,12 +737,16 @@ spec:
 #          insecureSkipTLSVerify: false
 #      gcs:
 #        type: gcs
-#        s3:
+#        gcs:
 #          bucket: GCS-BACKUP-BUCKET-NAME-HERE
 #          prefix: ""
 #          credentialsSecret: my-cluster-name-backup-gcs
 #          chunkSize: 10485760
-#      minio:
+#          retryer:
+#            backoffInitial: 1
+#            backoffMax: 30
+#            backoffMultiplier: 2
+#      minio-s3:
 #        type: s3
 #        s3:
 #          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
@@ -735,6 +755,16 @@ spec:
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
 #          prefix: ""
+#      minio:
+#        type: minio
+#        minio:
+#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+#          region: us-east-1
+#          credentialsSecret: my-cluster-name-backup-minio
+#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
+#          insecureSkipTLSVerify: false
+#          prefix: ""
+#          secure: false
 #      azure-blob:
 #        type: azure
 #        azure:

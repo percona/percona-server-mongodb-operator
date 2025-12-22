@@ -180,3 +180,5 @@ check_service "cfg"
 check_service "mongos"
 
 destroy "$namespace"
+
+desc 'test passed'
