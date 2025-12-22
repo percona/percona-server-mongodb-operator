@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}"/../functions
+set_debug
+
+psmdb='unsafe-psa'
+cluster="$psmdb-rs0"
+
+function run_recovery_check() {
+	local cluster=$1
+	local backup1=$2
+
+	desc 'write data after backup'
+	run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@${cluster}.${namespace}"
+
+	desc 'recover backup'
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-2nd" ".svc.cluster.local" "myApp" "test"
+	run_restore "${backup1}"
+	wait_restore "${backup1}" "$psmdb"
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "" ".svc.cluster.local" "myApp" "test"
+
+	kubectl_bin delete -f "$test_dir/conf/${backup1}.yml"
+	wait_for_running "${cluster}" 1
+	wait_cluster_consistency "$psmdb"
+}
+
+function patch_pvc_request() {
+	local cluster=$1
+	local size=$2
+
+	echo "Patching PVC request to ${size} in ${cluster}"
+
+	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "replace", "path": "/spec/replsets/0/volumeSpec/persistentVolumeClaim/resources/requests/storage", "value":"'"${size}"'"}]'
+}
+
+function main() {
+	create_infra "$namespace"
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "${conf_dir}/client.yml" \
+		-f "${conf_dir}/secrets.yml" \
+		-f "${conf_dir}/minio-secret.yml"
+    
+	deploy_minio
+	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "3"
+	wait_cluster_consistency "$psmdb"
+
+	desc 'resizing PVCs'
+    patch_pvc_request "$psmdb" "2G"
+    wait_cluster_consistency "$psmdb"
+    wait_all_pvc_resize "2Gi"
+
+	desc 'run backup on minio'
+	run_backup "minio"
+	wait_backup "backup-minio"
+	run_recovery_check "$cluster" "backup-minio"
+
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main
