@@ -43,21 +43,20 @@ function main() {
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml" \
 		-f "${conf_dir}/minio-secret.yml"
-    
+
 	deploy_minio
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "3"
 	wait_cluster_consistency "$psmdb"
 
 	desc 'resizing PVCs'
-    patch_pvc_request "$psmdb" "2G"
-    wait_cluster_consistency "$psmdb"
-    wait_all_pvc_resize "2Gi"
+	patch_pvc_request "$psmdb" "2G"
+	wait_cluster_consistency "$psmdb"
+	wait_all_pvc_resize "2Gi"
 
 	desc 'run backup on minio'
 	run_backup "minio"
 	wait_backup "backup-minio"
 	run_recovery_check "$cluster" "backup-minio"
-
 
 	destroy "$namespace"
 
