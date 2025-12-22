@@ -171,6 +171,7 @@ spec:
                     type: object
                   pbmStartingDeadlineSeconds:
                     format: int64
+                    minimum: 1
                     type: integer
                   pitr:
                     properties:
@@ -303,6 +304,7 @@ spec:
                     type: string
                   startingDeadlineSeconds:
                     format: int64
+                    minimum: 1
                     type: integer
                   storages:
                     additionalProperties:
