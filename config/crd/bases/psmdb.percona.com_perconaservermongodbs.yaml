@@ -24867,6 +24867,29 @@ spec:
                   - roles
                   type: object
                 type: array
+              vault:
+                properties:
+                  endpointURL:
+                    type: string
+                    x-kubernetes-validations:
+                    - message: endpointURL must be a valid URL
+                      rule: isURL(self)
+                  syncUsers:
+                    properties:
+                      keyPath:
+                        type: string
+                      mountPath:
+                        type: string
+                      role:
+                        type: string
+                      tokenSecret:
+                        type: string
+                    type: object
+                  tlsSecret:
+                    type: string
+                required:
+                - endpointURL
+                type: object
             required:
             - image
             type: object
