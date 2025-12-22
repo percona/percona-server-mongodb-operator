@@ -92,6 +92,32 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 	}
 }
 
+func (s VolumeSourceType) VolumeProjection(name string) corev1.VolumeProjection {
+	t := true
+	switch s {
+	case VolumeSourceConfigMap:
+		return corev1.VolumeProjection{
+			ConfigMap: &corev1.ConfigMapProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name,
+				},
+				Optional: &t,
+			},
+		}
+	case VolumeSourceSecret:
+		return corev1.VolumeProjection{
+			Secret: &corev1.SecretProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name,
+				},
+				Optional: &t,
+			},
+		}
+	default:
+		return corev1.VolumeProjection{}
+	}
+}
+
 type HashableObject interface {
 	GetRuntimeObject() client.Object
 	GetHashHex() (string, error)

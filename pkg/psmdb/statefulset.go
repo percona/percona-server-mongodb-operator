@@ -175,16 +175,22 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
+
+	logrotateConfigVolumeProjections := []corev1.VolumeProjection{}
 	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateConf.Type.IsUsable() {
-		volumes = append(volumes, corev1.Volume{
-			Name:         logrotate.VolumeName,
-			VolumeSource: configs.LogRotateConf.Type.VolumeSource(logRotateConfigName),
-		})
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateConf.Type.VolumeProjection(logRotateConfigName))
 	}
 	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateExtraConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateExtraConf.Type.VolumeProjection(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name))
+	}
+	if len(logrotateConfigVolumeProjections) > 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name:         logrotate.CustomVolumeName,
-			VolumeSource: configs.LogRotateExtraConf.Type.VolumeSource(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name),
+			Name: logrotate.VolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: logrotateConfigVolumeProjections,
+				},
+			},
 		})
 	}
 

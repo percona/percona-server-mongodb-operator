@@ -11,14 +11,11 @@ import (
 )
 
 const (
-	ConfigMapNameSuffix = "log-rotate-config"
+	ConfigMapNameSuffix = "logrotate-config"
+	VolumeName          = "logrotate-config"
+	MongodbConfig       = "mongodb.conf"
 
-	VolumeName       = "log-rotate-volume"
-	CustomVolumeName = "custom-log-rotate-volume"
-
-	MongodbConfig = "mongodb.conf"
-
-	customConfigDir = "/opt/percona/logcollector/logrotate/conf.d"
+	configDir = "/opt/percona/logcollector/logrotate/conf.d"
 )
 
 func ConfigMapName(prefix string) string {
@@ -96,16 +93,10 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 	}
 
 	if cr.Spec.LogCollector != nil && cr.Spec.LogCollector.LogRotate != nil {
-		if cr.Spec.LogCollector.LogRotate.Configuration != "" {
+		if cr.Spec.LogCollector.LogRotate.Configuration != "" || cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
 			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 				Name:      VolumeName,
-				MountPath: customConfigDir,
-			})
-		}
-		if cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
-			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-				Name:      CustomVolumeName,
-				MountPath: customConfigDir,
+				MountPath: configDir,
 			})
 		}
 		if cr.Spec.LogCollector.LogRotate.Schedule != "" {
