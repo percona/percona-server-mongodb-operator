@@ -83,5 +83,5 @@ func TestGetCertificateSans(t *testing.T) {
 		"*.mydb-" + api.ConfigReplSetName + ".myns.clusters.example",
 	}
 
-	assert.ElementsMatch(t, expected, actual)
+	assert.Equal(t, expected, actual)
 }

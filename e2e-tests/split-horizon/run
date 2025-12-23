@@ -27,15 +27,23 @@ configure_client_hostAliases() {
 
 main() {
 	create_infra "${namespace}"
+	deploy_cert_manager
 
 	cluster="some-name"
 	kubectl_bin apply \
-		-f "${conf_dir}"/secrets_with_tls.yml \
+		-f "${conf_dir}"/secrets.yml \
 		-f "${conf_dir}"/client_with_tls.yml
 
 	apply_cluster "${test_dir}"/conf/${cluster}-3horizons.yml
 	wait_for_running "${cluster}-rs0" 3
 	wait_cluster_consistency ${cluster}
+
+	desc 'compare certificates and issuers'
+	compare_kubectl "certificate/${cluster}-ssl"
+	compare_kubectl "certificate/${cluster}-ssl-internal"
+	compare_kubectl "certificate/${cluster}-ca-cert"
+	compare_kubectl "issuer/$cluster-psmdb-ca-issuer"
+	compare_kubectl "issuer/$cluster-psmdb-issuer"
 
 	configure_client_hostAliases
 

@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"slices"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -209,11 +210,14 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 		}...)
 
 		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
+			horizonSans := []string{}
 			for _, podMap := range replset.GetHorizons(false) {
 				for _, domain := range podMap {
-					sans = append(sans, domain)
+					horizonSans = append(horizonSans, domain)
 				}
 			}
+			slices.Sort(horizonSans)
+			sans = append(sans, horizonSans...)
 		}
 	}
 	sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
