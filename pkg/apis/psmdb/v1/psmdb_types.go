@@ -1547,6 +1547,7 @@ type LogCollectorSpec struct {
 	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
 }
 
+// LogRotateSpec defines the configuration for the logrotate container.
 type LogRotateSpec struct {
 	// Configuration allows overriding the default logrotate configuration.
 	Configuration string `json:"configuration,omitempty"`
