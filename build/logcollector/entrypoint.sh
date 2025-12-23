@@ -25,9 +25,10 @@ if [ "$1" = 'logrotate' ]; then
 	fi
 	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "logrotate -s /data/db/logs/logrotate.status $LOGROTATE_CONF_FILE $LOGROTATE_CUSTOM_CONF_FILE;"
 else
+	fluentbit_opt=()
 	if [ "$1" = 'fluent-bit' ]; then
-		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'
+		fluentbit_opt=(-c /opt/percona/logcollector/fluentbit/fluentbit.conf)
 	fi
 
-	exec "$@" "$fluentbit_opt"
+	exec "$@" "${fluentbit_opt[@]}"
 fi
