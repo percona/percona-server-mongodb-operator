@@ -3,7 +3,9 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -343,6 +345,52 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.Enabled {
+		cas := collectStorageCABundles(cr)
+
+		if len(cas) == 1 {
+			volumes = append(volumes, corev1.Volume{
+				Name: "ca-bundle",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: cas[0].Name,
+						Items: []corev1.KeyToPath{
+							{Key: cas[0].Key, Path: naming.BackupStorageCAFileName},
+						},
+					},
+				},
+			})
+		} else if len(cas) > 1 {
+			var sources []corev1.VolumeProjection
+			for _, ca := range cas {
+				safeName := strings.ReplaceAll(ca.Name, ".", "_")
+				safeKey := strings.ReplaceAll(ca.Key, ".", "_")
+				sources = append(sources, corev1.VolumeProjection{
+					Secret: &corev1.SecretProjection{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ca.Name},
+						Items: []corev1.KeyToPath{
+							{Key: ca.Key, Path: fmt.Sprintf("%s_%s.crt", safeName, safeKey)},
+						},
+					},
+				})
+			}
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: "ca-bundle-in",
+					VolumeSource: corev1.VolumeSource{
+						Projected: &corev1.ProjectedVolumeSource{Sources: sources},
+					},
+				},
+				corev1.Volume{
+					Name: "ca-bundle",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			)
+		}
+	}
+
 	return appsv1.StatefulSetSpec{
 		ServiceName: cr.Name + "-" + replset.Name,
 		Replicas:    &size,
@@ -505,6 +553,35 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		cas := collectStorageCABundles(cr)
+		if len(cas) == 1 {
+			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+				Name:      naming.BackupStorageCAFileVolumeName,
+				MountPath: naming.BackupStorageCAFileDirectory,
+				ReadOnly:  true,
+			})
+
+		} else if len(cas) > 1 {
+			c.VolumeMounts = append(c.VolumeMounts,
+				corev1.VolumeMount{
+					Name:      "ca-bundle-in",
+					MountPath: "/etc/s3/certs-in",
+					ReadOnly:  true,
+				},
+				corev1.VolumeMount{
+					Name:      naming.BackupStorageCAFileVolumeName,
+					MountPath: naming.BackupStorageCAFileDirectory,
+					ReadOnly:  false,
+				},
+			)
+		}
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "SSL_CERT_FILE",
+			Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
+		})
+	}
+
 	return c
 }
 
@@ -619,4 +696,29 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 		result = append(result, tsc)
 	}
 	return result
+}
+
+type caRef struct{ Name, Key string }
+
+func collectStorageCABundles(cr *api.PerconaServerMongoDB) []caRef {
+	seen := map[string]struct{}{}
+	var out []caRef
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageMinio {
+			if storage.Minio.CABundle != nil &&
+				storage.Minio.CABundle.Name != "" &&
+				storage.Minio.CABundle.Key != "" &&
+				!storage.Minio.InsecureSkipTLSVerify {
+
+				k := storage.Minio.CABundle.Name + "/" + storage.Minio.CABundle.Key
+				if _, ok := seen[k]; !ok {
+					out = append(out, caRef{storage.Minio.CABundle.Name, storage.Minio.CABundle.Key})
+					seen[k] = struct{}{}
+				}
+			}
+		}
+	}
+
+	return out
 }

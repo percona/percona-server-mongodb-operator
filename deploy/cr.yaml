@@ -705,7 +705,7 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
-#    storages:
+    storages:
 #      s3-us-west:
 #        main: true
 #        type: s3
@@ -755,6 +755,9 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
+#          caBundle:
+#           name: minio-ca-bundle
+#           key: ca.crt
 #          prefix: ""
 #          secure: false
 #      azure-blob:

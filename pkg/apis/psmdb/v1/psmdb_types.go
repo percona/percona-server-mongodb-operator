@@ -1027,33 +1027,35 @@ type S3Retryer struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket                string                  `json:"bucket"`
-	Prefix                string                  `json:"prefix,omitempty"`
-	Region                string                  `json:"region,omitempty"`
-	EndpointURL           string                  `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
-	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
-	MaxUploadParts        int32                   `json:"maxUploadParts,omitempty"`
-	StorageClass          string                  `json:"storageClass,omitempty"`
-	InsecureSkipTLSVerify bool                    `json:"insecureSkipTLSVerify,omitempty"`
-	ForcePathStyle        *bool                   `json:"forcePathStyle,omitempty"`
-	DebugLogLevels        string                  `json:"debugLogLevels,omitempty"`
-	Retryer               *S3Retryer              `json:"retryer,omitempty"`
-	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
+	Bucket                string                    `json:"bucket"`
+	Prefix                string                    `json:"prefix,omitempty"`
+	Region                string                    `json:"region,omitempty"`
+	EndpointURL           string                    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                    `json:"credentialsSecret,omitempty"`
+	UploadPartSize        int                       `json:"uploadPartSize,omitempty"`
+	MaxUploadParts        int32                     `json:"maxUploadParts,omitempty"`
+	StorageClass          string                    `json:"storageClass,omitempty"`
+	InsecureSkipTLSVerify bool                      `json:"insecureSkipTLSVerify,omitempty"`
+	CABundle              *corev1.SecretKeySelector `json:"caBundle,omitempty"`
+	ForcePathStyle        *bool                     `json:"forcePathStyle,omitempty"`
+	DebugLogLevels        string                    `json:"debugLogLevels,omitempty"`
+	Retryer               *S3Retryer                `json:"retryer,omitempty"`
+	ServerSideEncryption  S3ServiceSideEncryption   `json:"serverSideEncryption,omitempty"`
 }
 
 type BackupStorageMinioSpec struct {
-	Bucket                string        `json:"bucket,omitempty"`
-	Prefix                string        `json:"prefix,omitempty"`
-	Region                string        `json:"region,omitempty"`
-	EndpointURL           string        `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
-	PartSize              int64         `json:"partSize,omitempty"`
-	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
-	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
-	DebugTrace            bool          `json:"debugTrace,omitempty"`
-	Retryer               *MinioRetryer `json:"retryer,omitempty"`
-	Secure                bool          `json:"secure,omitempty"`
+	Bucket                string                    `json:"bucket,omitempty"`
+	Prefix                string                    `json:"prefix,omitempty"`
+	Region                string                    `json:"region,omitempty"`
+	EndpointURL           string                    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                    `json:"credentialsSecret,omitempty"`
+	PartSize              int64                     `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool                      `json:"insecureSkipTLSVerify,omitempty"`
+	CABundle              *corev1.SecretKeySelector `json:"caBundle,omitempty"`
+	ForcePathStyle        *bool                     `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool                      `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer             `json:"retryer,omitempty"`
+	Secure                bool                      `json:"secure,omitempty"`
 }
 
 func (spec BackupStorageMinioSpec) Validate() error {
