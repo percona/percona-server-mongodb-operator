@@ -24,7 +24,6 @@ spec:
           insecureSkipTLSVerify: false
   sharding:
     enabled: true
-
     configsvrReplSet:
       size: 3
       affinity:
