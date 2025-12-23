@@ -313,12 +313,11 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != secret.Name {
 						continue
 					}
-					// cert-manager sets the Certificate as the controller owner.
-					// In that case, the operator should not set a new controller reference.
-					if metav1.GetControllerOf(secret) != nil {
-						continue
-					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
+						var alreadyOwnedErr *controllerutil.AlreadyOwnedError
+						if errors.As(err, &alreadyOwnedErr) {
+							continue
+						}
 						return errors.Wrap(err, "set controller reference")
 					}
 					if err = c.cl.Update(ctx, secret); err != nil {
