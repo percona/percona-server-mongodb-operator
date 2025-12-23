@@ -8,6 +8,9 @@ spec:
   imagePullPolicy: Always
   backup:
     enabled: true
+    hookScript: |
+      #!/usr/bin/env bash
+      echo "Backup Hookscript started"
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
       aws-s3:
@@ -74,9 +77,15 @@ spec:
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: cfg-sidecar-1
       runtimeClassName: container-rc
+      hookScript: |
+        #!/usr/bin/env bash
+        echo "CFG Hookscript started"
 
     mongos:
       size: 3
+      hookScript: |
+        #!/usr/bin/env bash
+        echo "Mongos Hookscript started"
       configuration: |
         net:
           port: 27019
@@ -113,6 +122,9 @@ spec:
           requests:
             storage: 1Gi
     runtimeClassName: container-rc
+    hookScript: |
+      #!/usr/bin/env bash
+      echo "RS0 Hookscript started"
     size: 3
     configuration: |
       net:
@@ -156,6 +168,9 @@ spec:
           requests:
             storage: 1Gi
     size: 3
+    hookScript: |
+      #!/usr/bin/env bash
+      echo "RS1 Hookscript started"
     configuration: |
       net:
         port: 27016
@@ -182,6 +197,9 @@ spec:
   - name: rs2
     affinity:
       antiAffinityTopologyKey: none
+    hookScript: |
+      #!/usr/bin/env bash
+      echo "RS2 Hookscript started"
     expose:
       enabled: true
       type: ClusterIP

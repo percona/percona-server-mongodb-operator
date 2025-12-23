@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -1133,10 +1132,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			},
 		}
 
-		if err := controllerutil.SetControllerReference(cr, cm, r.scheme); err != nil {
-			return errors.Wrap(err, "set controller reference")
-		}
-
 		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 			return errors.Wrap(err, "create or update config map")
 		}
@@ -1147,7 +1142,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 		if err := reconcileConfigMap(rs, naming.MongodCustomConfigName(cr, rs), string(rs.Configuration)); err != nil {
 			return errors.Wrap(err, "failed to reconcile config map")
 		}
-		if err := reconcileHookscript(rs, naming.ComponentMongod, rs.HookScript); err != nil {
+		component := naming.ComponentMongod
+		if rs.ClusterRole == api.ClusterRoleConfigSvr {
+			component = api.ConfigReplSetName
+		}
+		if err := reconcileHookscript(rs, component, rs.HookScript); err != nil {
 			return errors.Wrap(err, "failed to reconcile hookscript")
 		}
 
@@ -1224,9 +1223,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 			Data: map[string]string{
 				"hook.sh": string(cr.Spec.Sharding.Mongos.HookScript),
 			},
-		}
-		if err := controllerutil.SetControllerReference(cr, cm, r.scheme); err != nil {
-			return errors.Wrap(err, "set controller reference")
 		}
 		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 			return errors.Wrap(err, "create or update configmap")

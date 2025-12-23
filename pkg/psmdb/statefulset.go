@@ -406,6 +406,34 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
+	attachHookScript := cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript != ""
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "ssl",
+			MountPath: config.SSLDir,
+			ReadOnly:  true,
+		},
+		{
+			Name:      config.BinVolumeName,
+			MountPath: config.BinMountPath,
+			ReadOnly:  !attachHookScript,
+		},
+		{
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
+			ReadOnly:  false,
+		},
+	}
+	if len(cr.Spec.Backup.VolumeMounts) > 0 {
+		volumeMounts = append(volumeMounts, cr.Spec.Backup.VolumeMounts...)
+	}
+	if attachHookScript {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      config.PBMHookscriptVolClaimName,
+			MountPath: config.PBMHookscriptMountPath,
+		})
+	}
+
 	c := corev1.Container{
 		Name:            naming.ContainerBackupAgent,
 		Image:           cr.Spec.Backup.Image,
@@ -456,23 +484,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "ssl",
-				MountPath: config.SSLDir,
-				ReadOnly:  true,
-			},
-			{
-				Name:      config.BinVolumeName,
-				MountPath: config.BinMountPath,
-				ReadOnly:  true,
-			},
-			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
-				ReadOnly:  false,
-			},
-		},
+		VolumeMounts:    volumeMounts,
 	}
 	if cr.CompareVersion("1.19.0") < 0 {
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
@@ -506,17 +518,6 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 			Value: strconv.FormatBool(tlsEnabled),
 		},
 	}...)
-
-	if len(cr.Spec.Backup.VolumeMounts) > 0 {
-		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
-	}
-
-	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript != "" {
-		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-			Name:      config.HookscriptVolClaimName,
-			MountPath: config.HookscriptMountPath,
-		})
-	}
 
 	return c
 }

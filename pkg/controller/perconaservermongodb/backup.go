@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -67,9 +66,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookscript(ctx context.Co
 		Data: map[string]string{
 			"hook.sh": string(cr.Spec.Backup.HookScript),
 		},
-	}
-	if err := controllerutil.SetControllerReference(cr, cm, r.scheme); err != nil {
-		return errors.Wrap(err, "set controller reference")
 	}
 	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 		return errors.Wrap(err, "create or update config map")
