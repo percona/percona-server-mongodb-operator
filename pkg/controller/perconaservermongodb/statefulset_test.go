@@ -115,27 +115,27 @@ func TestReconcileStatefulSet(t *testing.T) {
 			component:   naming.ComponentMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
 		},
-		// {
-		// 	name:        "cfg-arbiter",
-		// 	cr:          defaultCR.DeepCopy(),
-		// 	rsName:      "cfg",
-		// 	component:   naming.ComponentArbiter,
-		// 	expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
-		// },
-		// {
-		// 	name:        "cfg-non-voting",
-		// 	cr:          defaultCR.DeepCopy(),
-		// 	rsName:      "cfg",
-		// 	component:   naming.ComponentNonVoting,
-		// 	expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
-		// },
-		// {
-		// 	name:        "cfg-hidden",
-		// 	cr:          defaultCR.DeepCopy(),
-		// 	rsName:      "cfg",
-		// 	component:   naming.ComponentHidden,
-		// 	expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
-		// },
+		{
+			name:        "cfg-arbiter",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			component:   naming.ComponentArbiter,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
+		},
+		{
+			name:        "cfg-non-voting",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			component:   naming.ComponentNonVoting,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
+		},
+		{
+			name:        "cfg-hidden",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			component:   naming.ComponentHidden,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
+		},
 	}
 
 	for _, tt := range tests {
