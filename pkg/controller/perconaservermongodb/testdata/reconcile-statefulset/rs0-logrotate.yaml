@@ -31,7 +31,7 @@ spec:
   template:
     metadata:
       annotations:
-        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7ed5869b9777a1e0b836e3f097b38dd5abd5869b9777a1e0b836e3f097b38dd5ab
+        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e43d4608f2939c9b53ea870c45ed554cbd5869b9777a1e0b836e3f097b38dd5ab
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: reconcile-statefulset-cr

@@ -44,13 +44,13 @@ func TestReconcileStatefulSet(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		cr            *api.PerconaServerMongoDB
-		rsName        string
-		component     string
-		ls            map[string]string
-		crUpdate      func(cr *api.PerconaServerMongoDB)
-		additonalObjs []client.Object
+		name           string
+		cr             *api.PerconaServerMongoDB
+		rsName         string
+		component      string
+		ls             map[string]string
+		crUpdate       func(cr *api.PerconaServerMongoDB)
+		additionalObjs []client.Object
 
 		expectedSts *appsv1.StatefulSet
 	}{
@@ -125,14 +125,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Schedule: "0 0 */2 * *",
 				}
 			},
-			additonalObjs: []client.Object{
+			additionalObjs: []client.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      logrotate.ConfigMapName(crName),
 						Namespace: ns,
 					},
 					Data: map[string]string{
-						"custom.conf": "custom-config",
+						logrotate.MongodbConfig: "custom-config",
 					},
 				},
 				&corev1.ConfigMap{
@@ -182,7 +182,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 				},
 			}
 
-			mockObjs = append(mockObjs, tt.additonalObjs...)
+			mockObjs = append(mockObjs, tt.additionalObjs...)
 			r := buildFakeClient(mockObjs...)
 
 			if tt.crUpdate != nil {
