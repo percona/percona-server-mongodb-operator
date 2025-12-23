@@ -28,6 +28,7 @@ func TestGetCertificateSans(t *testing.T) {
 					Horizons: map[string]map[string]string{
 						"mydb-rs0-0": {"ext": "rs0-0.example.com:27017"},
 						"mydb-rs0-1": {"ext": "rs0-1.example.com"},
+						"mydb-rs0-2": {"ext": "rs0-0.example.com:27018"},
 					},
 				},
 				{

@@ -210,14 +210,18 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 		}...)
 
 		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
-			horizonSans := []string{}
+			horizonSans := make(map[string]struct{})
 			for _, podMap := range replset.GetHorizons(false) {
 				for _, domain := range podMap {
-					horizonSans = append(horizonSans, domain)
+					horizonSans[domain] = struct{}{}
 				}
 			}
-			slices.Sort(horizonSans)
-			sans = append(sans, horizonSans...)
+			var uniqueHorizonSans []string
+			for domain := range horizonSans {
+				uniqueHorizonSans = append(uniqueHorizonSans, domain)
+			}
+			slices.Sort(uniqueHorizonSans)
+			sans = append(sans, uniqueHorizonSans...)
 		}
 	}
 	sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
