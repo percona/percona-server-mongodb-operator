@@ -151,6 +151,37 @@ spec:
               latestRestorableTime:
                 format: date-time
                 type: string
+              minio:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  debugTrace:
+                    type: boolean
+                  endpointUrl:
+                    type: string
+                  forcePathStyle:
+                    type: boolean
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  partSize:
+                    format: int64
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      numMaxRetries:
+                        type: integer
+                    required:
+                    - numMaxRetries
+                    type: object
+                  secure:
+                    type: boolean
+                type: object
               pbmName:
                 type: string
               pbmPod:
@@ -345,6 +376,37 @@ spec:
                   latestRestorableTime:
                     format: date-time
                     type: string
+                  minio:
+                    properties:
+                      bucket:
+                        type: string
+                      credentialsSecret:
+                        type: string
+                      debugTrace:
+                        type: boolean
+                      endpointUrl:
+                        type: string
+                      forcePathStyle:
+                        type: boolean
+                      insecureSkipTLSVerify:
+                        type: boolean
+                      partSize:
+                        format: int64
+                        type: integer
+                      prefix:
+                        type: string
+                      region:
+                        type: string
+                      retryer:
+                        properties:
+                          numMaxRetries:
+                            type: integer
+                        required:
+                        - numMaxRetries
+                        type: object
+                      secure:
+                        type: boolean
+                    type: object
                   pbmName:
                     type: string
                   pbmPod:
@@ -433,8 +495,10 @@ spec:
                     ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'))
                 - message: Date should not be used when 'latest' type is used
                   rule: self.type != 'latest' || !has(self.date)
-              replset:
-                type: string
+              replsetRemapping:
+                additionalProperties:
+                  type: string
+                type: object
               selective:
                 properties:
                   namespaces:
@@ -1152,6 +1216,37 @@ spec:
                           type: object
                         main:
                           type: boolean
+                        minio:
+                          properties:
+                            bucket:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            debugTrace:
+                              type: boolean
+                            endpointUrl:
+                              type: string
+                            forcePathStyle:
+                              type: boolean
+                            insecureSkipTLSVerify:
+                              type: boolean
+                            partSize:
+                              format: int64
+                              type: integer
+                            prefix:
+                              type: string
+                            region:
+                              type: string
+                            retryer:
+                              properties:
+                                numMaxRetries:
+                                  type: integer
+                              required:
+                              - numMaxRetries
+                              type: object
+                            secure:
+                              type: boolean
+                          type: object
                         s3:
                           properties:
                             bucket:
@@ -25636,6 +25731,29 @@ spec:
                   - roles
                   type: object
                 type: array
+              vault:
+                properties:
+                  endpointURL:
+                    type: string
+                    x-kubernetes-validations:
+                    - message: endpointURL must be a valid URL
+                      rule: isURL(self)
+                  syncUsers:
+                    properties:
+                      keyPath:
+                        type: string
+                      mountPath:
+                        type: string
+                      role:
+                        type: string
+                      tokenSecret:
+                        type: string
+                    type: object
+                  tlsSecret:
+                    type: string
+                required:
+                - endpointURL
+                type: object
             required:
             - image
             type: object

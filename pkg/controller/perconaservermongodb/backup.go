@@ -30,7 +30,8 @@ import (
 
 type BackupScheduleJob struct {
 	api.BackupTaskSpec
-	JobID cron.EntryID
+	JobID       cron.EntryID
+	ClusterName string
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -125,6 +126,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 	r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
 		BackupTaskSpec: task,
 		JobID:          jobID,
+		ClusterName:    cr.NamespacedName().String(),
 	})
 	return nil
 }
@@ -134,6 +136,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 	r.crons.backupJobs.Range(func(k, v interface{}) bool {
 		item := v.(BackupScheduleJob)
+
+		if item.ClusterName != "" && item.ClusterName != cr.NamespacedName().String() {
+			return true
+		}
+
 		if spec, ok := ctasks[item.Name]; ok {
 			// TODO: make .keep to work with incremental backups
 			if spec.Type == defs.IncrementalBackup {
