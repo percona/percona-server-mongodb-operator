@@ -92,7 +92,7 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 		},
 	}
 
-	if cr.Spec.LogCollector != nil && cr.Spec.LogCollector.LogRotate != nil {
+	if cr.Spec.LogCollector.LogRotate != nil {
 		if cr.Spec.LogCollector.LogRotate.Configuration != "" || cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
 			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 				Name:      VolumeName,
