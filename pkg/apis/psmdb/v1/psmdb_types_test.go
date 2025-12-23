@@ -44,13 +44,11 @@ func TestMongoConfiguration_GetPort(t *testing.T) {
 				assert.Equal(t, tt.expectPort, port)
 				assert.NoError(t, err)
 			}
-
 		})
 	}
 }
 
 func TestMongoConfiguration_SetPort(t *testing.T) {
-
 	tests := map[string]struct {
 		expectedConf MongoConfiguration
 		actualConf   MongoConfiguration
@@ -144,6 +142,61 @@ func TestReplsetSpec_GetPort(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+func TestReplsetSpec_GetHorizons(t *testing.T) {
+	r := &ReplsetSpec{
+		Horizons: map[string]map[string]string{
+			"pod-0": {
+				"ext": "a.example.com",
+				"int": "a.internal:27018",
+			},
+			"pod-1": {
+				"ext": "b.example.com:27019",
+			},
+		},
+		ReplsetOverrides: map[string]ReplsetOverride{
+			"pod-0": {
+				Horizons: map[string]string{
+					"ext": "override.example.com",
+				},
+			},
+		},
+		Configuration: `net:
+  port: 27017`,
+	}
+
+	t.Run("withPorts=true", func(t *testing.T) {
+		expected := r.GetHorizons(true)
+
+		actual := map[string]map[string]string{
+			"pod-0": {
+				"ext": "override.example.com:27017",
+				"int": "a.internal:27018",
+			},
+			"pod-1": {
+				"ext": "b.example.com:27019",
+			},
+		}
+
+		assert.Equal(t, actual, expected, "GetHorizons(true) mismatch")
+	})
+
+	t.Run("withPorts=false", func(t *testing.T) {
+		expected := r.GetHorizons(false)
+
+		actual := map[string]map[string]string{
+			"pod-0": {
+				"ext": "override.example.com",
+				"int": "a.internal",
+			},
+			"pod-1": {
+				"ext": "b.example.com",
+			},
+		}
+
+		assert.Equal(t, actual, expected, "GetHorizons(false) mismatch")
+	})
 }
 
 func TestBackupSpec_MainStorage(t *testing.T) {
