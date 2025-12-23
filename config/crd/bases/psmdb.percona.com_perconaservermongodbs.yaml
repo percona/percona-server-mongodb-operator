@@ -163,6 +163,8 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  hookScript:
+                    type: string
                   image:
                     type: string
                   labels:
