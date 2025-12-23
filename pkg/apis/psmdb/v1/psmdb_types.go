@@ -517,8 +517,6 @@ type NonVotingSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
-	Env                      []corev1.EnvVar            `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -539,8 +537,6 @@ type HiddenSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
-	Env                      []corev1.EnvVar            `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 
 	MultiAZ `json:",inline"`
 }

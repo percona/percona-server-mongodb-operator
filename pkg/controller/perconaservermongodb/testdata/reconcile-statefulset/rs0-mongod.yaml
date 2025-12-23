@@ -83,6 +83,10 @@ spec:
           value: rs0
         - name: LOGCOLLECTOR_ENABLED
           value: "true"
+        - name: TEST_ENV1
+          value: test-value1
+        - name: TEST_ENV2
+          value: test-value2
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
@@ -194,10 +198,6 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        - name: TEST_ENV1
-          value: test-value1
-        - name: TEST_ENV2
-          value: test-value2
         image: perconalab/percona-server-mongodb-operator:main-backup
         imagePullPolicy: Always
         name: backup-agent

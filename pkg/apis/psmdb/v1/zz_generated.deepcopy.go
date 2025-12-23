@@ -503,20 +503,6 @@ func (in *HiddenSpec) DeepCopyInto(out *HiddenSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Env != nil {
-		in, out := &in.Env, &out.Env
-		*out = make([]corev1.EnvVar, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.EnvFrom != nil {
-		in, out := &in.EnvFrom, &out.EnvFrom
-		*out = make([]corev1.EnvFromSource, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 }
 
@@ -1051,20 +1037,6 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 		in, out := &in.ContainerSecurityContext, &out.ContainerSecurityContext
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
-	}
-	if in.Env != nil {
-		in, out := &in.Env, &out.Env
-		*out = make([]corev1.EnvVar, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.EnvFrom != nil {
-		in, out := &in.EnvFrom, &out.EnvFrom
-		*out = make([]corev1.EnvFromSource, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
 	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 }

@@ -59,7 +59,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
 	containerEnv := replset.Env
-	containerFromEnv := replset.EnvFrom
+	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -78,8 +78,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.NonVoting.Resources
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		containerEnv = replset.NonVoting.Env
-		containerFromEnv = replset.NonVoting.EnvFrom
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
@@ -91,8 +89,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		resources = replset.Hidden.Resources
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
-		containerEnv = replset.Hidden.Env
-		containerFromEnv = replset.Hidden.EnvFrom
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
@@ -199,7 +195,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		readinessProbe:           readinessProbe,
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
-		containerFromEnv:         containerFromEnv,
+		containerEnvFrom:         containerEnvFrom,
 	}
 	c, err := container(ctx, cr, params)
 	if err != nil {

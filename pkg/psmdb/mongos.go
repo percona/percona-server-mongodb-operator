@@ -228,6 +228,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
+		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
 	}
 
 	return container, nil

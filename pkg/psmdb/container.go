@@ -23,7 +23,7 @@ type containerFnParams struct {
 	readinessProbe           *corev1.Probe
 	containerSecurityContext *corev1.SecurityContext
 	containerEnv             []corev1.EnvVar
-	containerFromEnv         []corev1.EnvFromSource
+	containerEnvFrom         []corev1.EnvFromSource
 }
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
@@ -37,7 +37,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		readinessProbe           = params.readinessProbe
 		containerSecurityContext = params.containerSecurityContext
 		containerEnv             = params.containerEnv
-		containerFromEnv         = params.containerFromEnv
+		containerEnvFrom         = params.containerEnvFrom
 	)
 
 	fvar := false
@@ -211,7 +211,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, containerEnv...)
-		container.EnvFrom = append(container.EnvFrom, containerFromEnv...)
+		container.EnvFrom = append(container.EnvFrom, containerEnvFrom...)
 	}
 	return container, nil
 }
