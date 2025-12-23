@@ -440,7 +440,7 @@ spec:
 #      value: VALUE
 #    envFrom:
 #    - configMapRef:
-#      name: configmap-name
+#       name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -517,7 +517,7 @@ spec:
 #        value: VALUE
 #      envFrom:
 #      - configMapRef:
-#        name: configmap-name
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -628,7 +628,7 @@ spec:
 #        value: VALUE
 #      envFrom:
 #      - configMapRef:
-#        name: configmap-name
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
