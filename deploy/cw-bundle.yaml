@@ -1159,6 +1159,7 @@ spec:
                     type: string
                   startingDeadlineSeconds:
                     format: int64
+                    minimum: 1
                     type: integer
                   storages:
                     additionalProperties:

@@ -278,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
-		updatedStatus, err := bcp.Status(ctx, cr)
+		updatedStatus, err := bcp.Status(ctx, cr, cluster)
 		if err == nil {
 			status = updatedStatus
 		}
