@@ -435,7 +435,12 @@ spec:
 #      hostnames:
 #      - "host1"
 #      - "host2"
-
+#    env:
+#    - name: KEY
+#      value: VALUE
+#    envFrom:
+#    - configMapRef:
+#      name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -507,6 +512,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#        name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -612,6 +623,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#        name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
