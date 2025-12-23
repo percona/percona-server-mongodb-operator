@@ -49,6 +49,14 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
@@ -738,7 +746,7 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
-#      minio:
+#      minio-s3:
 #        type: s3
 #        s3:
 #          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
@@ -747,6 +755,16 @@ spec:
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
 #          prefix: ""
+#      minio:
+#        type: minio
+#        minio:
+#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+#          region: us-east-1
+#          credentialsSecret: my-cluster-name-backup-minio
+#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
+#          insecureSkipTLSVerify: false
+#          prefix: ""
+#          secure: false
 #      azure-blob:
 #        type: azure
 #        azure:
