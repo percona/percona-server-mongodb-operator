@@ -174,7 +174,7 @@ _mongod_hack_rename_arg_save_val() {
 			val="$1"
 			shift
 			continue
-		elif [[ $arg =~ "$oldArg"=(.*) ]]; then
+		elif [[ $arg =~ ^${oldArg}=(.*)$ ]]; then
 			val=${BASH_REMATCH[1]}
 			continue
 		fi
@@ -509,6 +509,7 @@ fi
 
 rm -f "$jsonConfigFile" "$tempConfigFile"
 
+# shellcheck disable=SC1091
 test -e /opt/percona/hookscript/hook.sh && source /opt/percona/hookscript/hook.sh
 
 set -o xtrace
