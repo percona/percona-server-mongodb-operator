@@ -13,6 +13,9 @@ import (
 )
 
 func TestContainers(t *testing.T) {
+	testEnvVar := []corev1.EnvVar{
+		{Name: "TEST_ENV1", Value: "test-value1"},
+	}
 	tests := map[string]struct {
 		logCollector           *api.LogCollectorSpec
 		secrets                *corev1.Secret
@@ -35,7 +38,7 @@ func TestContainers(t *testing.T) {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers(""),
+			expectedContainers:     expectedContainers("", nil),
 		},
 		"logcollector enabled with configuration": {
 			logCollector: &api.LogCollectorSpec{
@@ -45,7 +48,18 @@ func TestContainers(t *testing.T) {
 				Configuration:   "my-config",
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config"),
+			expectedContainers:     expectedContainers("my-config", nil),
+		},
+		"logcollector enabled with env variable": {
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				Configuration:   "my-config",
+				Env:             testEnvVar,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("my-config", testEnvVar),
 		},
 	}
 
@@ -85,32 +99,34 @@ func TestContainers(t *testing.T) {
 	}
 }
 
-func expectedContainers(configuration string) []corev1.Container {
+func expectedContainers(configuration string, envVars []corev1.EnvVar) []corev1.Container {
+	envs := []corev1.EnvVar{
+		{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
+		{
+			Name: "POD_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+	}
+	envs = append(envs, envVars...)
 	logsC := corev1.Container{
 		Name:            "logs",
 		Image:           "log-test-image",
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Env: []corev1.EnvVar{
-			{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
-			{
-				Name: "POD_NAMESPACE",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.namespace",
-					},
-				},
-			},
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-		},
-		Args:    []string{"fluent-bit"},
-		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
+		Env:             envs,
+		Args:            []string{"fluent-bit"},
+		Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
