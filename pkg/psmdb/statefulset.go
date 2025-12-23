@@ -87,7 +87,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
-	logRotateConfigName := logrotate.ConfigMapName(cr.Name)
 
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentArbiter:
@@ -175,23 +174,11 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
-
-	logrotateConfigVolumeProjections := []corev1.VolumeProjection{}
-	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateConf.Type.IsUsable() {
-		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateConf.Type.VolumeProjection(logRotateConfigName))
-	}
-	if cr.CompareVersion("1.22.0") >= 0 && configs.LogRotateExtraConf.Type.IsUsable() {
-		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateExtraConf.Type.VolumeProjection(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name))
-	}
-	if len(logrotateConfigVolumeProjections) > 0 {
-		volumes = append(volumes, corev1.Volume{
-			Name: logrotate.VolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: logrotateConfigVolumeProjections,
-				},
-			},
-		})
+	if cr.CompareVersion("1.22.0") >= 0 {
+		vol := logRotateConfigVolume(configs, cr)
+		if vol != nil {
+			volumes = append(volumes, *vol)
+		}
 	}
 
 	encryptionEnabled, err := replset.IsEncryptionEnabled()
@@ -417,6 +404,27 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		UpdateStrategy:       updateStrategy,
 		VolumeClaimTemplates: volumeClaimTemplates,
 	}, nil
+}
+
+func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMongoDB) *corev1.Volume {
+	logrotateConfigVolumeProjections := []corev1.VolumeProjection{}
+	if configs.LogRotateConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateConf.Type.VolumeProjection(logrotate.ConfigMapName(cr.GetName())))
+	}
+	if configs.LogRotateExtraConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateExtraConf.Type.VolumeProjection(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name))
+	}
+	if len(logrotateConfigVolumeProjections) > 0 {
+		return &corev1.Volume{
+			Name: logrotate.VolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: logrotateConfigVolumeProjections,
+				},
+			},
+		}
+	}
+	return nil
 }
 
 // backupAgentContainer creates the container object for a backup agent

@@ -120,16 +120,18 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check if log collection custom configuration exists")
 	}
 
-	logRotateCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
-	if err != nil {
-		return nil, errors.Wrap(err, "check if log rotate configuration exists")
-	}
-
-	logRotateExtraConfig := psmdbconfig.CustomConfig{}
-	if cr.Spec.LogCollector != nil && cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
-		logRotateExtraConfig, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+	var logRotateCustomConfig, logRotateExtraConfig psmdbconfig.CustomConfig
+	if cr.CompareVersion("1.22.0") >= 0 {
+		logRotateCustomConfig, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
 		if err != nil {
-			return nil, errors.Wrap(err, "check if log rotate extra configuration exists")
+			return nil, errors.Wrap(err, "check if log rotate configuration exists")
+		}
+
+		if cr.Spec.LogCollector != nil && cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
+			logRotateExtraConfig, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+			if err != nil {
+				return nil, errors.Wrap(err, "check if log rotate extra configuration exists")
+			}
 		}
 	}
 
