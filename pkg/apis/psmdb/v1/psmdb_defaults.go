@@ -215,7 +215,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				}
 			}
 		}
-
 		cr.Spec.Sharding.ConfigsvrReplSet.Name = ConfigReplSetName
 
 		for i := range cr.Spec.Replsets {
