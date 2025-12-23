@@ -57,6 +57,59 @@ wait_for_running $cluster-mongos 3
 
 compare_kubectl statefulset/$cluster-mongos "-secret"
 
+desc 'checking hookscripts'
+
+kubectl_bin logs "$cluster-rs0-0" backup-agent | grep -q 'Backup Hookscript started' \
+	|| {
+		echo "Missing: rs0 backup-agent hookscript"
+		exit 1
+	}
+kubectl_bin logs "$cluster-rs0-0" | grep -q 'RS0 Hookscript started' \
+	|| {
+		echo "Missing: rs0 mongod hookscript"
+		exit 1
+	}
+
+kubectl_bin logs "$cluster-rs1-0" backup-agent | grep -q 'Backup Hookscript started' \
+	|| {
+		echo "Missing: rs1 backup-agent hookscript"
+		exit 1
+	}
+kubectl_bin logs "$cluster-rs1-0" | grep -q 'RS1 Hookscript started' \
+	|| {
+		echo "Missing: rs1 mongod hookscript"
+		exit 1
+	}
+
+kubectl_bin logs "$cluster-rs2-0" backup-agent | grep -q 'Backup Hookscript started' \
+	|| {
+		echo "Missing: rs2 backup-agent hookscript"
+		exit 1
+	}
+kubectl_bin logs "$cluster-rs2-0" | grep -q 'RS2 Hookscript started' \
+	|| {
+		echo "Missing: rs2 mongod hookscript"
+		exit 1
+	}
+
+kubectl_bin logs "$cluster-cfg-0" backup-agent | grep -q 'Backup Hookscript started' \
+	|| {
+		echo "Missing: cfg backup-agent hookscript"
+		exit 1
+	}
+
+kubectl_bin logs "$cluster-cfg-0" | grep -q 'CFG Hookscript started' \
+	|| {
+		echo "Missing: cfg mongod hookscript"
+		exit 1
+	}
+
+kubectl_bin logs "$cluster-mongos-0" | grep -q 'Mongos Hookscript started' \
+	|| {
+		echo "Missing: cfg mongos hookscript"
+		exit 1
+	}
+
 desc 'write data, read from all'
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"},{db:"myApp1",role:"readWrite"},{db:"myApp2",role:"readWrite"}]})' \
@@ -72,7 +125,7 @@ run_mongos \
 	"clusterAdmin:clusterAdmin123456@$cluster-mongos.$namespace" "" "" "" "$custom_port"
 insert_data_mongos "100500" "myApp" "" "$custom_port"
 insert_data_mongos "100500" "myApp1" "" "$custom_port"
-insert_data_mongos "100500" "myApp2" ""  "$custom_port"
+insert_data_mongos "100500" "myApp2" "" "$custom_port"
 minikube_sleep
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "" "" "" "" "$custom_port"
 

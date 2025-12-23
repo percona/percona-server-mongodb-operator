@@ -1022,6 +1022,8 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  hookScript:
+                    type: string
                   image:
                     type: string
                   labels:
@@ -2629,6 +2631,8 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          type: string
                         labels:
                           additionalProperties:
                             type: string
@@ -5121,6 +5125,8 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          type: string
                         labels:
                           additionalProperties:
                             type: string
@@ -7311,6 +7317,8 @@ spec:
                       - enabled
                       - size
                       type: object
+                    hookScript:
+                      type: string
                     hostAliases:
                       items:
                         properties:
@@ -7944,6 +7952,8 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          type: string
                         labels:
                           additionalProperties:
                             type: string
@@ -13294,6 +13304,8 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            type: string
                           labels:
                             additionalProperties:
                               type: string
@@ -15786,6 +15798,8 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            type: string
                           labels:
                             additionalProperties:
                               type: string
@@ -17976,6 +17990,8 @@ spec:
                         - enabled
                         - size
                         type: object
+                      hookScript:
+                        type: string
                       hostAliases:
                         items:
                           properties:
@@ -18609,6 +18625,8 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            type: string
                           labels:
                             additionalProperties:
                               type: string
@@ -23534,6 +23552,8 @@ spec:
                           type:
                             type: string
                         type: object
+                      hookScript:
+                        type: string
                       hostAliases:
                         items:
                           properties:

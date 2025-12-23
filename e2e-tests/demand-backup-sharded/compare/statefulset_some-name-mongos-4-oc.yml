@@ -141,6 +141,8 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /opt/percona/hookscript
+              name: hookscript
           workingDir: /data/db
         - args:
             - -c
@@ -202,5 +204,10 @@ spec:
           name: config
         - emptyDir: {}
           name: bin
+        - configMap:
+            defaultMode: 420
+            name: some-name-mongos-hookscript
+            optional: true
+          name: hookscript
   updateStrategy:
     type: OnDelete
