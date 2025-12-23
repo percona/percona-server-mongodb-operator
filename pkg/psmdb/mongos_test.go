@@ -13,7 +13,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -252,13 +251,13 @@ func TestMongosContainer(t *testing.T) {
 	assert.NotNil(t, container.EnvFrom[1].SecretRef)
 }
 
-func readDefaultCR(name, namespace string) (*psmdbv1.PerconaServerMongoDB, error) {
+func readDefaultCR(name, namespace string) (*api.PerconaServerMongoDB, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "deploy", "cr.yaml"))
 	if err != nil {
 		return nil, err
 	}
 
-	cr := &psmdbv1.PerconaServerMongoDB{}
+	cr := &api.PerconaServerMongoDB{}
 
 	if err := yaml.Unmarshal(data, cr); err != nil {
 		return nil, err
