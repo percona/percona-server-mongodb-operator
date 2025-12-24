@@ -167,9 +167,9 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 	}
 
 	t.Run("withPorts=true", func(t *testing.T) {
-		expected := r.GetHorizons(true)
+		actual := r.GetHorizons(true)
 
-		actual := map[string]map[string]string{
+		expected := map[string]map[string]string{
 			"pod-0": {
 				"ext": "override.example.com:27017",
 				"int": "a.internal:27018",
@@ -179,13 +179,13 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, actual, expected, "GetHorizons(true) mismatch")
+		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
 	})
 
 	t.Run("withPorts=false", func(t *testing.T) {
-		expected := r.GetHorizons(false)
+		actual := r.GetHorizons(false)
 
-		actual := map[string]map[string]string{
+		expected := map[string]map[string]string{
 			"pod-0": {
 				"ext": "override.example.com",
 				"int": "a.internal",
@@ -195,7 +195,7 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, actual, expected, "GetHorizons(false) mismatch")
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
 	})
 }
 

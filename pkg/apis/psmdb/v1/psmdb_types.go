@@ -784,7 +784,7 @@ func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 				domain = domain[:idx]
 			}
 
-			if m, ok := horizons[podName]; !ok || m == nil {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
 				horizons[podName] = make(map[string]string)
 			}
 			horizons[podName][h] = domain
