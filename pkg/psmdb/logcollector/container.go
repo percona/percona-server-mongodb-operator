@@ -101,6 +101,11 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		})
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, cr.Spec.LogCollector.Env...)
+		container.EnvFrom = append(container.EnvFrom, cr.Spec.LogCollector.EnvFrom...)
+	}
+
 	return &container, nil
 }
 
