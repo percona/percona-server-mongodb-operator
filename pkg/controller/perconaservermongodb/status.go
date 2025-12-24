@@ -469,7 +469,11 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 		return api.AppStateInit, nil
 	}
 
-	if len(cr.Spec.Backup.Storages) > 0 && cr.Status.BackupConfigHash == "" {
+	if len(cr.Spec.Backup.Storages) < 1 {
+		return api.AppStateReady, nil
+	}
+
+	if cr.Status.BackupConfigHash == "" {
 		return api.AppStateInit, nil
 	}
 
@@ -487,35 +491,20 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 	}
 
 	for _, agent := range agents {
-		if !agent.PBMStatus.OK {
-			log.Info("Agent is not OK",
-				"node", agent.Node,
-				"rs", agent.RS,
-				"err", agent.PBMStatus.Err)
-			return api.AppStateInit, nil
+		var agentErr string
+		switch {
+		case !agent.PBMStatus.OK:
+			agentErr = agent.PBMStatus.Err
+		case !agent.StorageStatus.OK:
+			agentErr = agent.StorageStatus.Err
+		case !agent.NodeStatus.OK:
+			agentErr = agent.NodeStatus.Err
+		case agent.Err != "":
+			agentErr = agent.Err
 		}
 
-		if !agent.StorageStatus.OK {
-			log.Info("Agent is not OK",
-				"node", agent.Node,
-				"rs", agent.RS,
-				"err", agent.StorageStatus.Err)
-			return api.AppStateInit, nil
-		}
-
-		if !agent.NodeStatus.OK {
-			log.Info("Agent is not OK",
-				"node", agent.Node,
-				"rs", agent.RS,
-				"err", agent.NodeStatus.Err)
-			return api.AppStateInit, nil
-		}
-
-		if agent.Err != "" {
-			log.Info("Agent is not OK",
-				"node", agent.Node,
-				"rs", agent.RS,
-				"err", agent.Err)
+		if agentErr != "" {
+			log.Info("Agent is not OK", "node", agent.Node, "rs", agent.RS, "err", agentErr)
 			return api.AppStateInit, nil
 		}
 	}
