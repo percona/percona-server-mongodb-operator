@@ -1544,6 +1544,21 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Must contain the key `custom.conf` with the logrotate configuration.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

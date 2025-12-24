@@ -1,8 +1,20 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 set -o xtrace
 
 export PATH="$PATH":/opt/fluent-bit/bin
+
+LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 * * *}"
+
+LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/logrotate.conf"
+if [ -f /opt/percona/logcollector/logrotate/conf.d/mongodb.conf ]; then
+	LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/mongodb.conf"
+fi
+
+LOGROTATE_CUSTOM_CONF_FILE=""
+if [ -f /opt/percona/logcollector/logrotate/conf.d/custom.conf ]; then
+	LOGROTATE_CUSTOM_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/custom.conf"
+fi
 
 if [ "$1" = 'logrotate' ]; then
 	if [[ $EUID != 1001 ]]; then
@@ -11,11 +23,12 @@ if [ "$1" = 'logrotate' ]; then
 		cat /tmp/passwd >/etc/passwd
 		rm -rf /tmp/passwd
 	fi
-	exec go-cron "0 0 * * *" sh -c "logrotate -s /data/db/logs/logrotate.status /opt/percona/logcollector/logrotate/logrotate.conf;"
+	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "logrotate -s /data/db/logs/logrotate.status $LOGROTATE_CONF_FILE $LOGROTATE_CUSTOM_CONF_FILE;"
 else
+	fluentbit_opt=()
 	if [ "$1" = 'fluent-bit' ]; then
-		fluentbit_opt+='-c /opt/percona/logcollector/fluentbit/fluentbit.conf'
+		fluentbit_opt=(-c /opt/percona/logcollector/fluentbit/fluentbit.conf)
 	fi
 
-	exec "$@" $fluentbit_opt
+	exec "$@" "${fluentbit_opt[@]}"
 fi

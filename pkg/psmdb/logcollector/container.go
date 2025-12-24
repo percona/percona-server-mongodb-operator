@@ -2,13 +2,13 @@ package logcollector
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 )
 
 const (
@@ -35,7 +35,7 @@ func Containers(cr *api.PerconaServerMongoDB, mongoPort int32) ([]corev1.Contain
 		return nil, err
 	}
 
-	logRotationCont, err := logRotationContainer(cr, mongoPort)
+	logRotationCont, err := logrotate.Container(cr, mongoPort)
 	if err != nil {
 		return nil, err
 	}
@@ -101,74 +101,5 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		})
 	}
 
-	return &container, nil
-}
-
-func logRotationContainer(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container, error) {
-	if cr.Spec.LogCollector == nil {
-		return nil, errors.New("logcollector can't be nil")
-	}
-
-	boolFalse := false
-
-	usersSecretName := api.UserSecretName(cr)
-
-	envs := []corev1.EnvVar{
-		{
-			Name:  "MONGODB_HOST",
-			Value: "localhost",
-		},
-		{
-			Name:  "MONGODB_PORT",
-			Value: strconv.Itoa(int(mongoPort)),
-		},
-		{
-			Name: "MONGODB_USER",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
-					Optional: &boolFalse,
-				},
-			},
-		},
-		{
-			Name: "MONGODB_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
-					Optional: &boolFalse,
-				},
-			},
-		},
-	}
-
-	container := corev1.Container{
-		Name:            "logrotate",
-		Image:           cr.Spec.LogCollector.Image,
-		Env:             envs,
-		ImagePullPolicy: cr.Spec.LogCollector.ImagePullPolicy,
-		SecurityContext: cr.Spec.LogCollector.ContainerSecurityContext,
-		Resources:       cr.Spec.LogCollector.Resources,
-		Args: []string{
-			"logrotate",
-		},
-		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
-			},
-			{
-				Name:      config.BinVolumeName,
-				MountPath: config.BinMountPath,
-			},
-		},
-	}
 	return &container, nil
 }

@@ -13,7 +13,9 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
@@ -118,6 +120,21 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check if log collection custom configuration exists")
 	}
 
+	var logRotateCustomConfig, logRotateExtraConfig psmdbconfig.CustomConfig
+	if cr.CompareVersion("1.22.0") >= 0 {
+		logRotateCustomConfig, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
+		if err != nil {
+			return nil, errors.Wrap(err, "check if log rotate configuration exists")
+		}
+
+		if cr.Spec.LogCollector != nil && cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
+			logRotateExtraConfig, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+			if err != nil {
+				return nil, errors.Wrap(err, "check if log rotate extra configuration exists")
+			}
+		}
+	}
+
 	usersSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.UserSecretName(cr), Namespace: cr.Namespace}, usersSecret)
 	if client.IgnoreNotFound(err) != nil {
@@ -130,16 +147,20 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
+	configs := psmdb.StatefulConfigParams{
+		MongoDConf:         mongodCustomConfig,
+		LogCollectionConf:  logCollectionCustomConfig,
+		LogRotateConf:      logRotateCustomConfig,
+		LogRotateExtraConf: logRotateExtraConfig,
+	}
+	secrets := psmdb.StatefulSpecSecretParams{
+		UsersSecret: usersSecret,
+		SSLSecret:   sslSecret,
+	}
 	sfsSpec, err := psmdb.StatefulSpec(
 		ctx, cr, rs, ls, r.initImage,
-		psmdb.StatefulConfigParams{
-			MongoDConf:        mongodCustomConfig,
-			LogCollectionConf: logCollectionCustomConfig,
-		},
-		psmdb.StatefulSpecSecretParams{
-			UsersSecret: usersSecret,
-			SSLSecret:   sslSecret,
-		},
+		configs,
+		secrets,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
