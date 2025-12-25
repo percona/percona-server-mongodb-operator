@@ -465,6 +465,10 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 		return api.AppStateReady, nil
 	}
 
+	if cr.Spec.Pause {
+		return api.AppStatePaused, nil
+	}
+
 	if cr.Status.BackupVersion == "" {
 		return api.AppStateInit, nil
 	}
