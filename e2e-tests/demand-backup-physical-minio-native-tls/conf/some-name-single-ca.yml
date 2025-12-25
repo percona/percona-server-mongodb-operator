@@ -13,7 +13,7 @@ spec:
     mode: requireTLS
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.12.0
+    image: -backup
     storages:
       minio:
         main: true
@@ -22,7 +22,7 @@ spec:
           credentialsSecret: minio-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: https://minio-service:9000
+          endpointUrl: minio-service:9000
           insecureSkipTLSVerify: false
           secure: true
           caBundle:
