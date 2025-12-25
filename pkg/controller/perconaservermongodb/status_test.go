@@ -2,8 +2,11 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -14,10 +17,10 @@ import (
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
-	"github.com/stretchr/testify/assert"
 )
 
 // creates a fake client to mock API calls with the mock objects
@@ -47,30 +50,304 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 	}
 }
 
+func mockReadyReplsetSts(name, namespace, crName, rsName, component string, replicas int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				naming.LabelKubernetesInstance:  crName,
+				naming.LabelKubernetesReplset:   rsName,
+				naming.LabelKubernetesComponent: component,
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas:     replicas,
+			UpdatedReplicas:   replicas,
+			CurrentReplicas:   replicas,
+			AvailableReplicas: replicas,
+		},
+	}
+}
+
+func mockReadyReplsetPod(name, namespace, crName, rsName, component string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				naming.LabelKubernetesName:      "percona-server-mongodb",
+				naming.LabelKubernetesManagedBy: "percona-server-mongodb-operator",
+				naming.LabelKubernetesPartOf:    "percona-server-mongodb",
+				naming.LabelKubernetesInstance:  crName,
+				naming.LabelKubernetesReplset:   rsName,
+				naming.LabelKubernetesComponent: component,
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.ContainersReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
+		},
+	}
+}
+
 func TestUpdateStatus(t *testing.T) {
-	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
-		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.12.0",
-			Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
-			Sharding:  api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
-			TLS: &api.TLSSpec{
-				Mode: api.TLSModePrefer,
+	tests := []struct {
+		name          string
+		cr            *api.PerconaServerMongoDB
+		reconcileErr  error
+		clusterState  api.AppState
+		expectedState api.AppState
+		runtimeObjs   []client.Object
+	}{
+		{
+			name: "single replset-initializing",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+				},
+			},
+			clusterState:  api.AppStateInit,
+			expectedState: api.AppStateInit,
+		},
+		{
+			name: "single replset-reconcile error",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+				},
+			},
+			reconcileErr:  fmt.Errorf("test"),
+			clusterState:  api.AppStateInit,
+			expectedState: api.AppStateError,
+		},
+		{
+			name: "single replset-ready",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+					Backup: api.BackupSpec{
+						Enabled: false,
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Host: "some-name-rs0.some-namespace",
+				},
+			},
+			clusterState:  api.AppStateReady,
+			expectedState: api.AppStateReady,
+			runtimeObjs: []client.Object{
+				mockReadyReplsetSts("some-name-rs0", "some-namespace", "some-name", "rs0", "mongod", 3),
+				mockReadyReplsetPod("some-name-rs0-0", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-1", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-2", "some-namespace", "some-name", "rs0", "mongod"),
+			},
+		},
+		{
+			name: "single replset-backup version is empty",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Host: "some-name-rs0.some-namespace",
+				},
+			},
+			clusterState:  api.AppStateReady,
+			expectedState: api.AppStateInit,
+			runtimeObjs: []client.Object{
+				mockReadyReplsetSts("some-name-rs0", "some-namespace", "some-name", "rs0", "mongod", 3),
+				mockReadyReplsetPod("some-name-rs0-0", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-1", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-2", "some-namespace", "some-name", "rs0", "mongod"),
+			},
+		},
+		{
+			name: "single replset-no storages",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Host:          "some-name-rs0.some-namespace",
+					BackupVersion: "2.12.0",
+				},
+			},
+			clusterState:  api.AppStateReady,
+			expectedState: api.AppStateReady,
+			runtimeObjs: []client.Object{
+				mockReadyReplsetSts("some-name-rs0", "some-namespace", "some-name", "rs0", "mongod", 3),
+				mockReadyReplsetPod("some-name-rs0-0", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-1", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-2", "some-namespace", "some-name", "rs0", "mongod"),
+			},
+		},
+		{
+			name: "single replset-backup config hash is empty",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+						Storages: map[string]api.BackupStorageSpec{
+							"s3": api.BackupStorageSpec{
+								S3: api.BackupStorageS3Spec{
+									Bucket: "operator-testing",
+								},
+							},
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Host:          "some-name-rs0.some-namespace",
+					BackupVersion: "2.12.0",
+				},
+			},
+			clusterState:  api.AppStateReady,
+			expectedState: api.AppStateInit,
+			runtimeObjs: []client.Object{
+				mockReadyReplsetSts("some-name-rs0", "some-namespace", "some-name", "rs0", "mongod", 3),
+				mockReadyReplsetPod("some-name-rs0-0", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-1", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-2", "some-namespace", "some-name", "rs0", "mongod"),
+			},
+		},
+		{
+			name: "single replset-PBM is ready",
+			cr: &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-name",
+					Namespace: "some-namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Size: 3,
+						},
+					},
+					Sharding: api.Sharding{
+						Enabled: false,
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+						Storages: map[string]api.BackupStorageSpec{
+							"s3": api.BackupStorageSpec{
+								S3: api.BackupStorageS3Spec{
+									Bucket: "operator-testing",
+								},
+							},
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Host:             "some-name-rs0.some-namespace",
+					BackupVersion:    "2.12.0",
+					BackupConfigHash: "9a8a1b4b11b0605c99c5f7575a5c83be0a2567115984ee0046b50f80a3503eb5",
+				},
+			},
+			clusterState:  api.AppStateReady,
+			expectedState: api.AppStateReady,
+			runtimeObjs: []client.Object{
+				mockReadyReplsetSts("some-name-rs0", "some-namespace", "some-name", "rs0", "mongod", 3),
+				mockReadyReplsetPod("some-name-rs0-0", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-1", "some-namespace", "some-name", "rs0", "mongod"),
+				mockReadyReplsetPod("some-name-rs0-2", "some-namespace", "some-name", "rs0", "mongod"),
 			},
 		},
 	}
 
-	rs0 := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock-rs0", Namespace: "psmdb"}}
-	rs1 := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock-rs1", Namespace: "psmdb"}}
-
-	r := buildFakeClient(cr, rs0, rs1)
-
-	if err := r.updateStatus(context.TODO(), cr, nil, api.AppStateInit); err != nil {
-		t.Error(err)
-	}
-
-	if cr.Status.State != api.AppStateInit {
-		t.Errorf("cr.Status.State got %#v, want %#v", cr.Status.State, api.AppStateInit)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objs := append([]client.Object{tt.cr}, tt.runtimeObjs...)
+			r := buildFakeClient(objs...)
+			err := r.updateStatus(t.Context(), tt.cr, tt.reconcileErr, tt.clusterState)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedState, tt.cr.Status.State)
+		})
 	}
 }
 
