@@ -23,7 +23,7 @@ spec:
           region: us-east-1
           bucket: operator-testing
           endpointUrl: minio-service:9000
-          insecureSkipTLSVerify: false
+          insecureSkipTLSVerify: true
           secure: true
           caBundle:
             name: minio-ca-bundle

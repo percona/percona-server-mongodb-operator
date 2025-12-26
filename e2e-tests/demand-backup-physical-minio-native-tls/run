@@ -102,37 +102,6 @@ cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -
 [ "$cert_count" = "1" ]
 
 ###############################################################################
-# Backup & restore (single CA)
-###############################################################################
-
-desc 'Backup & restore with single CA'
-
-sleep 30
-wait_for_pbm_operations ${cluster}
-
-run_mongo_tls \
-  'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
-  "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
-
-run_mongo_tls \
-  'db.getSiblingDB("myApp").test.insert({ x: 100500 })' \
-  "myApp:myPass@${cluster}-rs0.${namespace}"
-
-backup_name_single="backup-minio"
-run_backup minio ${backup_name_single} 'physical'
-wait_backup "${backup_name_single}"
-
-check_backup_in_storage ${backup_name_single} minio rs0 filelist.pbm https
-
-run_mongo_tls \
-  'db.getSiblingDB("myApp").test.drop()' \
-  "myApp:myPass@${cluster}-rs0.${namespace}"
-
-# TODO: pbm can't restore backup if we use self-signed certificate.
-#run_restore ${backup_name_single}
-#run_recovery_check ${backup_name_single} "" "" "true"
-
-###############################################################################
 # Phase 2: Second MinIO
 ###############################################################################
 
@@ -206,7 +175,7 @@ kubectl_bin patch psmdb ${cluster} -n ${namespace} --type=merge -p '
   }
 }'
 
-sleep 30
+sleep 300
 wait_cluster_consistency ${cluster}
 
 desc "Verify merged CA bundle"
@@ -215,23 +184,30 @@ cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -
 
 [ "$cert_count" = "2" ]
 
+desc 'Backup & restore with merged CA'
+
+wait_for_pbm_operations ${cluster}
+
 run_mongo_tls \
-  'db.getSiblingDB("myApp").test.insert({ y: 200600 })' \
+  'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+  "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+
+run_mongo_tls \
+  'db.getSiblingDB("myApp").test.insert({ x: 100500 })' \
   "myApp:myPass@${cluster}-rs0.${namespace}"
 
-backup_name_merged="backup-merged"
-run_backup minio ${backup_name_merged} 'physical'
-wait_backup "${backup_name_merged}"
+backup_name_single="backup-minio"
+run_backup minio ${backup_name_single} 'physical'
+wait_backup "${backup_name_single}"
 
-check_backup_in_storage ${backup_name_merged} minio rs0 filelist.pbm https
+check_backup_in_storage ${backup_name_single} minio rs0 filelist.pbm https
 
 run_mongo_tls \
   'db.getSiblingDB("myApp").test.drop()' \
   "myApp:myPass@${cluster}-rs0.${namespace}"
 
-# TODO: pbm can't restore backup if we use self-signed certificate.
-#run_restore ${backup_name_merged}
-#run_recovery_check ${backup_name_merged} "_merged" "" "true"
+run_restore ${backup_name_single}
+run_recovery_check ${backup_name_single} "" "" "true"
 
 rm -f /tmp/minio-cert.pem /tmp/minio-key.pem
 rm -f /tmp/minio2-cert.pem /tmp/minio2-key.pem

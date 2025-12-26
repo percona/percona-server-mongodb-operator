@@ -708,9 +708,7 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []caRef {
 		if storage.Type == api.BackupStorageMinio {
 			if storage.Minio.CABundle != nil &&
 				storage.Minio.CABundle.Name != "" &&
-				storage.Minio.CABundle.Key != "" &&
-				!storage.Minio.InsecureSkipTLSVerify {
-
+				storage.Minio.CABundle.Key != "" {
 				k := storage.Minio.CABundle.Name + "/" + storage.Minio.CABundle.Key
 				if _, ok := seen[k]; !ok {
 					out = append(out, caRef{storage.Minio.CABundle.Name, storage.Minio.CABundle.Key})
