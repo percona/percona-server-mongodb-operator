@@ -43,3 +43,4 @@ tls-issue-cert-manager
 upgrade
 upgrade-sharded
 users
+users-vault
