@@ -2123,7 +2123,7 @@ func (in *TLSSpec) DeepCopyInto(out *TLSSpec) {
 	out.CertValidityDuration = in.CertValidityDuration
 	if in.IssuerConf != nil {
 		in, out := &in.IssuerConf, &out.IssuerConf
-		*out = new(metav1.IssuerReference)
+		*out = new(metav1.ObjectReference)
 		**out = **in
 	}
 }
