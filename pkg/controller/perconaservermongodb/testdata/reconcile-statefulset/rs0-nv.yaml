@@ -190,8 +190,6 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        - name: SSL_CERT_FILE
-          value: /etc/s3/certs/ca-bundle.crt
         image: perconalab/percona-server-mongodb-operator:main-backup
         imagePullPolicy: Always
         name: backup-agent
