@@ -576,10 +576,12 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				},
 			)
 		}
-		c.Env = append(c.Env, corev1.EnvVar{
-			Name:  "SSL_CERT_FILE",
-			Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
-		})
+		if len(cas) > 0 {
+			c.Env = append(c.Env, corev1.EnvVar{
+				Name:  "SSL_CERT_FILE",
+				Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
+			})
+		}
 	}
 
 	return c
