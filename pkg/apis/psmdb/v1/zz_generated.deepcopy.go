@@ -588,6 +588,20 @@ func (in *LogCollectorSpec) DeepCopyInto(out *LogCollectorSpec) {
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.LogRotate != nil {
 		in, out := &in.LogRotate, &out.LogRotate
 		*out = new(LogRotateSpec)
@@ -846,6 +860,20 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		in, out := &in.ContainerSecurityContext, &out.ContainerSecurityContext
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.HostAliases != nil {
 		in, out := &in.HostAliases, &out.HostAliases
@@ -1841,6 +1869,20 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = make(PrimaryPreferTagSelectorSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
+		}
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }
