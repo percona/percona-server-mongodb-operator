@@ -718,15 +718,16 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []caRef {
 	var out []caRef
 
 	for _, storage := range cr.Spec.Backup.Storages {
-		if storage.Type == api.BackupStorageMinio {
-			if storage.Minio.CABundle != nil &&
-				storage.Minio.CABundle.Name != "" &&
-				storage.Minio.CABundle.Key != "" {
-				k := storage.Minio.CABundle.Name + "/" + storage.Minio.CABundle.Key
-				if _, ok := seen[k]; !ok {
-					out = append(out, caRef{storage.Minio.CABundle.Name, storage.Minio.CABundle.Key})
-					seen[k] = struct{}{}
-				}
+		if storage.Type != api.BackupStorageMinio {
+			continue
+		}
+		if storage.Minio.CABundle != nil &&
+			storage.Minio.CABundle.Name != "" &&
+			storage.Minio.CABundle.Key != "" {
+			k := storage.Minio.CABundle.Name + "/" + storage.Minio.CABundle.Key
+			if _, ok := seen[k]; !ok {
+				out = append(out, caRef{storage.Minio.CABundle.Name, storage.Minio.CABundle.Key})
+				seen[k] = struct{}{}
 			}
 		}
 	}
