@@ -722,11 +722,16 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []caRef {
 			continue
 		}
 		if storage.Minio.CABundle != nil &&
-			storage.Minio.CABundle.Name != "" &&
-			storage.Minio.CABundle.Key != "" {
-			k := storage.Minio.CABundle.Name + "/" + storage.Minio.CABundle.Key
+			storage.Minio.CABundle.Name != "" {
+
+			key := storage.Minio.CABundle.Key
+			if key == "" {
+				key = "ca.crt"
+			}
+
+			k := storage.Minio.CABundle.Name + "/" + key
 			if _, ok := seen[k]; !ok {
-				out = append(out, caRef{storage.Minio.CABundle.Name, storage.Minio.CABundle.Key})
+				out = append(out, caRef{storage.Minio.CABundle.Name, key})
 				seen[k] = struct{}{}
 			}
 		}
