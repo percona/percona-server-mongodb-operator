@@ -60,6 +60,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumeSpec := replset.VolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
+	containerEnv := replset.Env
+	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -185,10 +187,19 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			)
 		}
 	}
-
-	c, err := container(ctx, cr, replset, containerName, resources,
-		cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
-		livenessProbe, readinessProbe, containerSecurityContext)
+	params := containerFnParams{
+		replset:                  replset,
+		name:                     containerName,
+		resources:                resources,
+		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
+		livenessProbe:            livenessProbe,
+		readinessProbe:           readinessProbe,
+		containerSecurityContext: containerSecurityContext,
+		containerEnv:             containerEnv,
+		containerEnvFrom:         containerEnvFrom,
+	}
+	c, err := container(ctx, cr, params)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
