@@ -20,6 +20,7 @@ demand-backup-physical-gcp-s3
 demand-backup-physical-gcp-native
 demand-backup-physical-minio
 demand-backup-physical-minio-native
+demand-backup-physical-minio-native-tls
 demand-backup-physical-sharded-parallel
 demand-backup-physical-sharded-aws
 demand-backup-physical-sharded-azure
