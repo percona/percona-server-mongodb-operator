@@ -1,10 +1,8 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"container/heap"
 	"context"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -19,12 +17,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
@@ -402,118 +397,4 @@ func isPodUpToDate(pod *corev1.Pod, stsRevision, image string) bool {
 	}
 
 	return true
-}
-
-func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
-
-	if !cr.Spec.Backup.Enabled {
-		return nil
-	}
-
-	if cr.Status.State != api.AppStateReady {
-		return nil
-	}
-
-	if cr.Status.BackupVersion != "" && cr.Status.BackupImage == cr.Spec.Backup.Image {
-		return nil
-	}
-
-	if len(cr.Spec.Replsets) < 1 {
-		return errors.New("no replsets found")
-	}
-
-	var rs *api.ReplsetSpec
-	for _, r := range cr.Spec.Replsets {
-		rs = r
-		break
-	}
-
-	stsName := naming.MongodStatefulSetName(cr, rs)
-	sts := psmdb.NewStatefulSet(stsName, cr.Namespace)
-	err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), sts)
-	if err != nil {
-		return errors.Wrapf(err, "get statefulset/%s", stsName)
-	}
-
-	matchLabels := naming.RSLabels(cr, rs)
-	label, ok := sts.Labels[naming.LabelKubernetesComponent]
-	if ok {
-		matchLabels[naming.LabelKubernetesComponent] = label
-	}
-
-	podList := corev1.PodList{}
-	if err := r.client.List(ctx,
-		&podList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(matchLabels),
-		},
-	); err != nil {
-		return errors.Wrap(err, "get pod list")
-	}
-
-	var pod *corev1.Pod
-	for _, p := range podList.Items {
-		if !k8s.IsPodReady(p) {
-			continue
-		}
-
-		if !isPodUpToDate(&p, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
-			continue
-		}
-
-		pod = &p
-		break
-	}
-	if pod == nil {
-		log.V(1).Error(nil, "no ready pods to get pbm-agent version")
-		return nil
-	}
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	cmd := []string{"pbm-agent", "version", "--short"}
-
-	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, stdout, stderr, false)
-	if err != nil {
-		return errors.Wrap(err, "get pbm-agent version")
-	}
-
-	// PBM v2.9.0 and above prints version to stderr, below prints it to stdout
-	stdoutStr := strings.TrimSpace(stdout.String())
-	stderrStr := strings.TrimSpace(stderr.String())
-	if stdoutStr != "" && stderrStr != "" {
-		log.V(1).Info("pbm-agent version found in both stdout and stderr; using stdout",
-			"stdout", stdoutStr, "stderr", stderrStr)
-		cr.Status.BackupVersion = stdoutStr
-	} else if stdoutStr != "" {
-		cr.Status.BackupVersion = stdoutStr
-	} else if stderrStr != "" {
-		cr.Status.BackupVersion = stderrStr
-	} else {
-		return errors.New("pbm-agent version not found in stdout or stderr")
-	}
-
-	cr.Status.BackupImage = cr.Spec.Backup.Image
-
-	log.Info("pbm-agent version",
-		"pod", pod.Name,
-		"image", cr.Status.BackupImage,
-		"version", cr.Status.BackupVersion)
-
-	pbmInfo := pbmVersion.Current()
-
-	compare, err := cr.ComparePBMAgentVersion(pbmInfo.Version)
-	if err != nil {
-		return errors.Wrap(err, "compare pbm-agent version with go module")
-	}
-
-	if compare != 0 {
-		log.Info("pbm-agent version is different than the go module, this might create problems",
-			"pbmAgentVersion", cr.Status.BackupVersion,
-			"goModuleVersion", pbmInfo.Version)
-	}
-
-	return nil
 }
