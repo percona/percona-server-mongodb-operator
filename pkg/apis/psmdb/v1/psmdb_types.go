@@ -766,6 +766,35 @@ type ReplsetSpec struct {
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 }
 
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	horizons := make(map[string]map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				if d, ok := overrides.Horizons[h]; ok {
+					domain = d
+				}
+			}
+
+			idx := strings.IndexRune(domain, ':')
+			if withPorts && idx == -1 {
+				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+			} else if !withPorts && idx != -1 {
+				domain = domain[:idx]
+			}
+
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			horizons[podName][h] = domain
+		}
+	}
+	return horizons
+}
+
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
 	return fmt.Sprintf("%s-%s-%d", cr.Name, r.Name, idx)
 }
