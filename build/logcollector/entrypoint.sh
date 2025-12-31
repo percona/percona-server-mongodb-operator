@@ -9,11 +9,21 @@ LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 * * *}"
 LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/logrotate.conf"
 if [ -f /opt/percona/logcollector/logrotate/conf.d/mongodb.conf ]; then
 	LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/mongodb.conf"
+	logrotate -d $LOGROTATE_CONF_FILE || EC=$?
+	if [ -n "$EC" ]; then
+		echo "Logrotate configuration is invalid, fallback to default configuration"
+		LOGROTATE_CONF_FILE="/opt/percona/logcollector/logrotate/logrotate.conf"
+	fi
 fi
 
 LOGROTATE_CUSTOM_CONF_FILE=""
 if [ -f /opt/percona/logcollector/logrotate/conf.d/custom.conf ]; then
 	LOGROTATE_CUSTOM_CONF_FILE="/opt/percona/logcollector/logrotate/conf.d/custom.conf"
+	logrotate -d $LOGROTATE_CUSTOM_CONF_FILE || EC=$?
+	if [ -n "$EC" ]; then
+		echo "Logrotate additional configuration is invalid, it will be ignored"
+		LOGROTATE_CUSTOM_CONF_FILE=""
+	fi
 fi
 
 if [ "$1" = 'logrotate' ]; then
