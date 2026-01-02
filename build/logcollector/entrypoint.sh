@@ -98,4 +98,5 @@ case "$1" in
 	*)
 		echo "Invalid argument: $1"
 		exit 1
+		;;
 esac
