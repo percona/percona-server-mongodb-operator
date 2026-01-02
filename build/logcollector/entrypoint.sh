@@ -13,7 +13,10 @@ is_logrotate_config_invalid() {
 	# Specifying -d runs in debug mode, so even in case of errors, it will exit with 0.
 	# We need to check the output for "error" but skip those lines that are related to the missing logrotate.status file.
 	# Filter out logrotate.status lines first, then check for remaining errors
-	(set +e; logrotate -d "$config_file" 2>&1 | grep -v "logrotate.status" | grep -qi "error")
+	(
+		set +e
+		logrotate -d "$config_file" 2>&1 | grep -v "logrotate.status" | grep -qi "error"
+	)
 	return $?
 }
 
