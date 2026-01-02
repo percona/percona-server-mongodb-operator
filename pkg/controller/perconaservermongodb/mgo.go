@@ -1006,9 +1006,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
-	if cr.CompareVersion("1.13.0") >= 0 {
-		users = append(users, api.RoleDatabaseAdmin)
+	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
+	if cr.CompareVersion("1.22.0") >= 0 {
+		users = append(users, api.RoleUserAdmin)
 	}
 
 	for _, role := range users {
