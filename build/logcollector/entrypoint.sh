@@ -42,7 +42,6 @@ run_logrotate() {
 			[ -f "$conf_file" ] || continue
 			# Skip mongodb.conf as it's already processed above
 			[ "$(basename "$conf_file")" = "mongodb.conf" ] && continue
-			
 			if is_logrotate_config_invalid "$conf_file"; then
 				echo "Logrotate configuration file $conf_file is invalid, it will be ignored"
 			else
