@@ -68,17 +68,34 @@ run_logrotate() {
 }
 
 run_fluentbit() {
-	local fluentbit_opt=()
-	if [ "$1" = 'fluent-bit' ]; then
-		fluentbit_opt=(-c /opt/percona/logcollector/fluentbit/fluentbit.conf)
-	fi
-
+	local fluentbit_opt=(-c /opt/percona/logcollector/fluentbit/fluentbit.conf)
+	
+	set +e
+	mkdir -p /tmp/fluentbit/custom
+	local fluentbit_conf_dir="/opt/percona/logcollector/fluentbit/custom"
+	for conf_file in $fluentbit_conf_dir/*.conf; do
+		[ -f "$conf_file" ] || continue
+		if ! fluent-bit --dry-run -c "$conf_file" >/dev/null 2>&1; then
+			echo "Warning: Fluentbit configuration file $conf_file is invalid, it will be ignored"
+		else
+			cp "$conf_file" /tmp/fluentbit/custom/
+		fi
+	done
+	touch /tmp/fluentbit/custom/default.conf || true
+	
+	set -e
 	set -o xtrace
 	exec "$@" "${fluentbit_opt[@]}"
 }
 
-if [ "$1" = 'logrotate' ]; then
-	run_logrotate
-else
-	run_fluentbit "$@"
-fi
+case "$1" in
+	logrotate)
+		run_logrotate
+		;;
+	fluent-bit)
+		run_fluentbit "$@"
+		;;
+	*)
+		echo "Invalid argument: $1"
+		exit 1
+esac
