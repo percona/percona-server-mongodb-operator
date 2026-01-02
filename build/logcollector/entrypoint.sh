@@ -42,7 +42,6 @@ run_logrotate() {
 			logrotate_custom_conf_file=""
 		fi
 	fi
-	
 	# Ensure logrotate can run with current UID
 	if [[ $EUID != 1001 ]]; then
 		# logrotate requires UID in /etc/passwd
