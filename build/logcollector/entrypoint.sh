@@ -69,7 +69,6 @@ run_logrotate() {
 
 run_fluentbit() {
 	local fluentbit_opt=(-c /opt/percona/logcollector/fluentbit/fluentbit.conf)
-	
 	set +e
 	mkdir -p /tmp/fluentbit/custom
 	local fluentbit_conf_dir="/opt/percona/logcollector/fluentbit/custom"
