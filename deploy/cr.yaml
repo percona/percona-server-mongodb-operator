@@ -888,5 +888,4 @@ spec:
 #      configuration: ""
 #      extraConfig:
 #        name: logrotate-config
-#        key: custom.conf
 #      schedule: "0 0 * * *"
