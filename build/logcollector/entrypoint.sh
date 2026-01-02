@@ -23,24 +23,33 @@ is_logrotate_config_invalid() {
 run_logrotate() {
 	local logrotate_status_file="/data/db/logs/logrotate.status"
 	local logrotate_conf_file="/opt/percona/logcollector/logrotate/logrotate.conf"
-	local logrotate_custom_conf_file=""
+	local logrotate_additional_conf_files=()
+	local conf_d_dir="/opt/percona/logcollector/logrotate/conf.d"
 
 	# Check if mongodb.conf exists and validate it
-	if [ -f /opt/percona/logcollector/logrotate/conf.d/mongodb.conf ]; then
-		logrotate_conf_file="/opt/percona/logcollector/logrotate/conf.d/mongodb.conf"
+	if [ -f "$conf_d_dir/mongodb.conf" ]; then
+		logrotate_conf_file="$conf_d_dir/mongodb.conf"
 		if is_logrotate_config_invalid "$logrotate_conf_file"; then
 			echo "Logrotate configuration is invalid, fallback to default configuration"
 			logrotate_conf_file="/opt/percona/logcollector/logrotate/logrotate.conf"
 		fi
 	fi
 
-	# Check if custom.conf exists and validate it
-	if [ -f /opt/percona/logcollector/logrotate/conf.d/custom.conf ]; then
-		logrotate_custom_conf_file="/opt/percona/logcollector/logrotate/conf.d/custom.conf"
-		if is_logrotate_config_invalid "$logrotate_custom_conf_file"; then
-			echo "Logrotate additional configuration is invalid, it will be ignored"
-			logrotate_custom_conf_file=""
-		fi
+	# Process all .conf files in conf.d directory (excluding mongodb.conf which is already handled)
+	if [ -d "$conf_d_dir" ]; then
+		for conf_file in "$conf_d_dir"/*.conf; do
+			# Check if glob matched any files (if no .conf files exist, the glob returns itself)
+			[ -f "$conf_file" ] || continue
+			
+			# Skip mongodb.conf as it's already processed above
+			[ "$(basename "$conf_file")" = "mongodb.conf" ] && continue
+			
+			if is_logrotate_config_invalid "$conf_file"; then
+				echo "Logrotate configuration file $conf_file is invalid, it will be ignored"
+			else
+				logrotate_additional_conf_files+=("$conf_file")
+			fi
+		done
 	fi
 	# Ensure logrotate can run with current UID
 	if [[ $EUID != 1001 ]]; then
@@ -50,10 +59,10 @@ run_logrotate() {
 		rm -rf /tmp/passwd
 	fi
 
-	local logrotate_cmd="logrotate -s $logrotate_status_file \"$logrotate_conf_file\""
-	if [ -n "$logrotate_custom_conf_file" ]; then
-		logrotate_cmd="$logrotate_cmd \"$logrotate_custom_conf_file\""
-	fi
+	local logrotate_cmd="logrotate -s \"$logrotate_status_file\" \"$logrotate_conf_file\""
+	for additional_conf in "${logrotate_additional_conf_files[@]}"; do
+		logrotate_cmd="$logrotate_cmd \"$additional_conf\""
+	done
 
 	set -o xtrace
 	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "$logrotate_cmd"
