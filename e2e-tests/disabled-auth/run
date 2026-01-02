@@ -81,16 +81,14 @@ echo "Find after restore: $count_no_auth_restored"
 
 desc 'enable authentication'
 kubectl_bin apply -f "$conf_dir/secrets.yml"
+
+pause_cluster "$cluster"
+wait_for_cluster_state "${cluster}" "paused"
+
 apply_cluster "$test_dir/conf/cluster-with-auth.yml"
 
-desc 'wait for cluster to restart with auth enabled'
-wait_for_running $cluster-rs0 3
-wait_for_running $cluster-rs1 3
-wait_for_running $cluster-rs2 3
-wait_for_running $cluster-cfg 3 "false"
-wait_for_running $cluster-mongos 3
-
-sleep 30
+unpause_cluster "$cluster"
+wait_for_cluster_state "${cluster}" "ready"
 
 desc 'create users with auth enabled'
 run_mongos \
