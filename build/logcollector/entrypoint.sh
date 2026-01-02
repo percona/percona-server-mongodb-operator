@@ -40,7 +40,6 @@ run_logrotate() {
 		for conf_file in "$conf_d_dir"/*.conf; do
 			# Check if glob matched any files (if no .conf files exist, the glob returns itself)
 			[ -f "$conf_file" ] || continue
-			
 			# Skip mongodb.conf as it's already processed above
 			[ "$(basename "$conf_file")" = "mongodb.conf" ] && continue
 			
