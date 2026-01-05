@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 
@@ -39,6 +40,35 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
+	}
+
+	defaultCR.Spec.Replsets[0].Env = []corev1.EnvVar{
+		{Name: "TEST_ENV1", Value: "test-value1"},
+		{Name: "TEST_ENV2", Value: "test-value2"},
+	}
+	defaultCR.Spec.Replsets[0].EnvFrom = []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "test-configmap",
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Env = []corev1.EnvVar{
+		{Name: "CFG_TEST_ENV1", Value: "cfg-test-value1"},
+		{Name: "CFG_TEST_ENV2", Value: "cfg-test-value2"},
+	}
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.EnvFrom = []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "test-configmap-cfg",
+				},
+				Optional: ptr.To(true),
+			},
+		},
 	}
 
 	tests := []struct {

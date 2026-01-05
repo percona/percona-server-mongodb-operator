@@ -83,10 +83,17 @@ spec:
           value: cfg
         - name: LOGCOLLECTOR_ENABLED
           value: "true"
+        - name: CFG_TEST_ENV1
+          value: cfg-test-value1
+        - name: CFG_TEST_ENV2
+          value: cfg-test-value2
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
+        - configMapRef:
+            name: test-configmap-cfg
+            optional: true
         image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:

@@ -447,7 +447,12 @@ spec:
 #      hostnames:
 #      - "host1"
 #      - "host2"
-
+#    env:
+#    - name: KEY
+#      value: VALUE
+#    envFrom:
+#    - configMapRef:
+#       name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -522,6 +527,12 @@ spec:
 #      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -630,6 +641,12 @@ spec:
 #      hookScript: |
 #        #!/usr/bin/env bash
 #        echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
