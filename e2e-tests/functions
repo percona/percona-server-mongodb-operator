@@ -2467,3 +2467,40 @@ check_backup_in_storage() {
 			;;
 	esac
 }
+
+function wait_all_pvc_resize() {
+	local expected_size=$1
+	local max_retry=${2:-120}
+	local sleep_time=${3:-5}
+
+	for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
+		if ! wait_pvc_resize "$pvc" "$expected_size" "$max_retry" "$sleep_time"; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+function wait_pvc_resize() {
+	local pvc=$1
+	local expected_size=$2
+	local max_retry=${3:-120}
+	local sleep_time=${4:-5}
+
+	local retry=0
+	echo "Waiting for $pvc to be resized"
+	until [[ $(kubectl_bin get "$pvc" -o jsonpath='{.status.capacity.storage}') == "$expected_size" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "$pvc was not resized, max retries exceeded"
+			return 1
+		fi
+		echo -n "."
+		sleep "$sleep_time"
+
+		retry=$((retry + 1))
+	done
+	echo
+	echo "${pvc} was resized"
+	return 0
+}
