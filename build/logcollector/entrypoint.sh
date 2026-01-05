@@ -5,6 +5,11 @@ export PATH="$PATH:/opt/fluent-bit/bin"
 
 LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 * * *}"
 
+# Validates logrotate configuration file.
+# Returns 0 (success) when the config is VALID.
+# Returns 1 (failure) when the config is INVALID.
+# Note: Despite the function name suggesting otherwise, this follows shell convention
+# where 0 indicates success/valid and non-zero indicates failure/invalid.
 is_logrotate_config_invalid() {
 	local config_file="$1"
 	if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
