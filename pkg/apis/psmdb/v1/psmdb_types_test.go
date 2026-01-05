@@ -230,7 +230,7 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 			},
 		}
 
-		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
 	})
 }
 
