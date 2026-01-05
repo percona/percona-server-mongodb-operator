@@ -30,7 +30,7 @@ run_logrotate() {
 	if [ -f "$conf_d_dir/mongodb.conf" ]; then
 		logrotate_conf_file="$conf_d_dir/mongodb.conf"
 		if is_logrotate_config_invalid "$logrotate_conf_file"; then
-			echo "Logrotate configuration is invalid, fallback to default configuration"
+			echo "ERROR: Logrotate configuration is invalid, fallback to default configuration"
 			logrotate_conf_file="/opt/percona/logcollector/logrotate/logrotate.conf"
 		fi
 	fi
@@ -43,7 +43,7 @@ run_logrotate() {
 			# Skip mongodb.conf as it's already processed above
 			[ "$(basename "$conf_file")" = "mongodb.conf" ] && continue
 			if is_logrotate_config_invalid "$conf_file"; then
-				echo "Logrotate configuration file $conf_file is invalid, it will be ignored"
+				echo "ERROR: Logrotate configuration file $conf_file is invalid, it will be ignored"
 			else
 				logrotate_additional_conf_files+=("$conf_file")
 			fi
@@ -74,7 +74,7 @@ run_fluentbit() {
 	for conf_file in $fluentbit_conf_dir/*.conf; do
 		[ -f "$conf_file" ] || continue
 		if ! fluent-bit --dry-run -c "$conf_file" >/dev/null 2>&1; then
-			echo "Warning: Fluentbit configuration file $conf_file is invalid, it will be ignored"
+			echo "ERROR: Fluentbit configuration file $conf_file is invalid, it will be ignored"
 		else
 			cp "$conf_file" /tmp/fluentbit/custom/
 		fi
