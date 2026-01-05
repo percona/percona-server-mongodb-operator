@@ -15,6 +15,7 @@ deploy_minio
 
 desc "create PSMDB sharded cluster without auth"
 cluster="some-name"
+kubectl_bin apply -f "$conf_dir/secrets.yml"
 kubectl_bin apply -f "$conf_dir/client.yml"
 
 apply_s3_storage_secrets
@@ -62,10 +63,7 @@ run_mongos \
 	"@$cluster-mongos.$namespace" "" "" "" "$custom_port"
 
 desc 'verify new data exists'
-count_no_auth_after=$(run_mongos \
-	'use myApp\n db.test.find()' \
-	"@$cluster-mongos.$namespace" "" "" "" "$custom_port")
-echo "Find after insert: $count_no_auth_after"
+compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-insert" "" "myApp" "test" "$custom_port"
 
 desc 'restore from backup (no auth)'
 run_restore "$backup_name_no_auth"
@@ -74,14 +72,9 @@ wait_restore "$backup_name_no_auth" "$cluster"
 sleep 20
 
 desc 'verify data was restored to original state'
-count_no_auth_restored=$(run_mongos \
-	'use myApp\n db.test.find()' \
-	"@$cluster-mongos.$namespace" "" "" "" "$custom_port")
-echo "Find after restore: $count_no_auth_restored"
+compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-restore" "" "myApp" "test" "$custom_port"
 
 desc 'enable authentication'
-kubectl_bin apply -f "$conf_dir/secrets.yml"
-
 pause_cluster "$cluster"
 wait_for_cluster_state "${cluster}" "paused"
 
@@ -96,10 +89,7 @@ run_mongos \
 	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" "" "$custom_port"
 
 desc 'verify existing data is still accessible with auth'
-count_with_auth=$(run_mongos \
-	'use myApp\n db.test.find()' \
-	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port")
-echo "Find with auth enabled: $count_with_auth"
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-with-auth" "" "myApp" "test" "$custom_port"
 
 desc 'insert new data with auth'
 run_mongos \
@@ -125,10 +115,7 @@ run_mongos \
 	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port"
 
 desc 'verify new data exists'
-count_with_auth_after=$(run_mongos \
-	'use myApp\n db.test.find()' \
-	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port")
-echo "Find after insert with auth: $count_with_auth_after"
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-insert-auth" "" "myApp" "test" "$custom_port"
 
 desc 'restore from backup (with auth)'
 run_restore "$backup_name_with_auth"
@@ -137,10 +124,7 @@ wait_restore "$backup_name_with_auth" "$cluster"
 sleep 10
 
 desc 'verify data was restored to state before last insert'
-count_with_auth_restored=$(run_mongos \
-	'use myApp\n db.test.find()' \
-	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port")
-echo "Find after restore with auth: $count_with_auth_restored"
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-restore-auth" "" "myApp" "test" "$custom_port"
 
 desc 'cleanup backups'
 kubectl_bin delete psmdb-backup --all

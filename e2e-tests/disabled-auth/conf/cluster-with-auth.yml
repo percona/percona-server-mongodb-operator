@@ -6,6 +6,8 @@ spec:
   image:
   imagePullPolicy: Always
   updateStrategy: SmartUpdate
+  secrets:
+    users: some-users
   tls:
     mode: preferTLS
   backup:
