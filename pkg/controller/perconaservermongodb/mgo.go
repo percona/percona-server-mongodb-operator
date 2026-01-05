@@ -809,12 +809,6 @@ func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Rol
 				{DB: "admin", Role: "directShardOperations"},
 			}
 		}
-	case api.RoleUserAdmin:
-		if cr.CompareVersion("1.22.0") >= 0 {
-			roles = []mongo.Role{
-				{DB: "admin", Role: "userAdminAnyDatabase"},
-			}
-		}
 	}
 	roles = append(roles, mongo.Role{DB: "admin", Role: string(role)})
 	return roles
@@ -1013,10 +1007,6 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
-	// When handleReplsetInit is not executed, e.g. when auth is disabled, the UserAdmin role should be created.
-	if cr.CompareVersion("1.22.0") >= 0 {
-		users = append(users, api.RoleUserAdmin)
-	}
 
 	for _, role := range users {
 		creds, err := getInternalCredentials(ctx, r.client, cr, role)
