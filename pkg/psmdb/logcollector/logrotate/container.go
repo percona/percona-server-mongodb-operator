@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -51,7 +51,7 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: usersSecretName,
 					},
-					Optional: pointer.Bool(false),
+					Optional: ptr.To(false),
 				},
 			},
 		},
@@ -63,7 +63,7 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: usersSecretName,
 					},
-					Optional: pointer.Bool(false),
+					Optional: ptr.To(false),
 				},
 			},
 		},

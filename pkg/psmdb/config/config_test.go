@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestVolumeProjection(t *testing.T) {
@@ -24,7 +24,7 @@ func TestVolumeProjection(t *testing.T) {
 			expected: corev1.VolumeProjection{
 				ConfigMap: &corev1.ConfigMapProjection{
 					LocalObjectReference: localObj,
-					Optional:             pointer.Bool(true),
+					Optional:             ptr.To(true),
 				},
 			},
 		},
@@ -34,7 +34,7 @@ func TestVolumeProjection(t *testing.T) {
 			expected: corev1.VolumeProjection{
 				Secret: &corev1.SecretProjection{
 					LocalObjectReference: localObj,
-					Optional:             pointer.Bool(true),
+					Optional:             ptr.To(true),
 				},
 			},
 		},
