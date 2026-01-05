@@ -80,7 +80,7 @@ run_fluentbit() {
 		fi
 	done
 	touch /tmp/fluentbit/custom/default.conf || true
-	
+
 	set -e
 	set -o xtrace
 	exec "$@" "${fluentbit_opt[@]}"
