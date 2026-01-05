@@ -1278,7 +1278,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogRotateConfigMaps(ctx context
 		return nil
 	}
 
-	if cr.Spec.LogCollector == nil || cr.Spec.LogCollector.LogRotate == nil || cr.Spec.LogCollector.LogRotate.Configuration == "" {
+	if cr.Spec.LogCollector.LogRotate == nil || cr.Spec.LogCollector.LogRotate.Configuration == "" {
 		if err := deleteConfigMapIfExists(ctx, r.client, cr, logrotate.ConfigMapName(cr.Name)); err != nil {
 			return errors.Wrap(err, "failed to delete log rotate config map when the configuration is empty")
 		}
