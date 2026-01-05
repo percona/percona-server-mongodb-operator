@@ -226,6 +226,11 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
+		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
+	}
+
 	return container, nil
 }
 
@@ -438,9 +443,10 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       config.MongosPortName,
-				Port:       cr.Spec.Sharding.Mongos.GetPort(),
-				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				Name:        config.MongosPortName,
+				Port:        cr.Spec.Sharding.Mongos.GetPort(),
+				TargetPort:  intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				AppProtocol: naming.AppProtocol(cr),
 			},
 		},
 		Selector:              ls,
