@@ -1190,6 +1190,7 @@ type BackupSpec struct {
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
 }
 
