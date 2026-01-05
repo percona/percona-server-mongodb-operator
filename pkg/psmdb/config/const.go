@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -93,7 +94,6 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 }
 
 func (s VolumeSourceType) VolumeProjection(name string) corev1.VolumeProjection {
-	t := true
 	localObj := corev1.LocalObjectReference{
 		Name: name,
 	}
@@ -102,14 +102,14 @@ func (s VolumeSourceType) VolumeProjection(name string) corev1.VolumeProjection 
 		return corev1.VolumeProjection{
 			ConfigMap: &corev1.ConfigMapProjection{
 				LocalObjectReference: localObj,
-				Optional:             &t,
+				Optional:             pointer.Bool(true),
 			},
 		}
 	case VolumeSourceSecret:
 		return corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
 				LocalObjectReference: localObj,
-				Optional:             &t,
+				Optional:             pointer.Bool(true),
 			},
 		}
 	default:
