@@ -647,7 +647,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 }
 
 // handleReplsetInit initializes the replset within the first running pod's mongod container.
-// This must be ran from within the running container to utilize the MongoDB Localhost Exception.
+// This must be run from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
@@ -807,6 +807,12 @@ func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Rol
 		if cr.CompareVersion("1.20.0") >= 0 {
 			roles = []mongo.Role{
 				{DB: "admin", Role: "directShardOperations"},
+			}
+		}
+	case api.RoleUserAdmin:
+		if cr.CompareVersion("1.22.0") >= 0 {
+			roles = []mongo.Role{
+				{DB: "admin", Role: "userAdminAnyDatabase"},
 			}
 		}
 	}
@@ -1007,6 +1013,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
+	// When handleReplsetInit is not executed, e.g. when auth is disabled, the UserAdmin role should be created.
 	if cr.CompareVersion("1.22.0") >= 0 {
 		users = append(users, api.RoleUserAdmin)
 	}
