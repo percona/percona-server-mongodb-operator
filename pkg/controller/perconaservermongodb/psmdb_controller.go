@@ -430,13 +430,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
 	}
-	if cr.Spec.Backup.Enabled {
-		err = r.reconcileBackupTasks(ctx, cr)
-		if err != nil {
-			err = errors.Wrap(err, "reconcile backup tasks")
-			return reconcile.Result{}, err
-		}
-	}
 
 	clusterStatus, err = r.reconcileReplsets(ctx, cr, repls)
 	if err != nil {

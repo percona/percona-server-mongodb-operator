@@ -35,7 +35,7 @@ type BackupScheduleJob struct {
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if err := r.reconcileBackupHookscript(ctx, cr); err != nil {
+	if err := r.reconcileBackupHookScript(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile backup hookscript")
 	}
 
@@ -49,9 +49,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookscript(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	name := naming.PBMHookScriptConfigMapName(cr)
-	if cr.Spec.Backup.HookScript == "" {
+	if cr.Spec.Backup.HookScript == "" || !cr.Spec.Backup.Enabled {
 		if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 			return errors.Wrapf(err, "failed to delete backup config map %s", name)
 		}
@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookscript(ctx context.Co
 			Labels:    naming.ClusterLabels(cr),
 		},
 		Data: map[string]string{
-			"hook.sh": string(cr.Spec.Backup.HookScript),
+			"hook.sh": cr.Spec.Backup.HookScript,
 		},
 	}
 	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
