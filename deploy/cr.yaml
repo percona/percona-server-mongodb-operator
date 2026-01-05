@@ -49,6 +49,14 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
@@ -427,7 +435,12 @@ spec:
 #      hostnames:
 #      - "host1"
 #      - "host2"
-
+#    env:
+#    - name: KEY
+#      value: VALUE
+#    envFrom:
+#    - configMapRef:
+#       name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -499,6 +512,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -604,6 +623,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
