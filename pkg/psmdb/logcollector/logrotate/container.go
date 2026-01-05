@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/pointer"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -31,8 +32,6 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 		return nil, errors.New("logcollector can't be nil")
 	}
 
-	boolFalse := false
-
 	usersSecretName := api.UserSecretName(cr)
 
 	envs := []corev1.EnvVar{
@@ -52,7 +51,7 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: usersSecretName,
 					},
-					Optional: &boolFalse,
+					Optional: pointer.Bool(false),
 				},
 			},
 		},
@@ -64,7 +63,7 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: usersSecretName,
 					},
-					Optional: &boolFalse,
+					Optional: pointer.Bool(false),
 				},
 			},
 		},
