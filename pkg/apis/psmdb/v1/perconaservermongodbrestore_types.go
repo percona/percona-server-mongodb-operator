@@ -15,12 +15,12 @@ import (
 // PerconaServerMongoDBRestoreSpec defines the desired state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreSpec struct {
 	ClusterName  string                            `json:"clusterName,omitempty"`
-	Replset      string                            `json:"replset,omitempty"`
 	BackupName   string                            `json:"backupName,omitempty"`
 	BackupSource *PerconaServerMongoDBBackupStatus `json:"backupSource,omitempty"`
 	StorageName  string                            `json:"storageName,omitempty"`
 	PITR         *PITRestoreSpec                   `json:"pitr,omitempty"`
 	Selective    *SelectiveRestoreOpts             `json:"selective,omitempty"`
+	RSMap        map[string]string                 `json:"replsetRemapping,omitempty"`
 }
 
 type SelectiveRestoreOpts struct {
