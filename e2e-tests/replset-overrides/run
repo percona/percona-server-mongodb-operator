@@ -61,6 +61,7 @@ test_override_host_after_deploy() {
 	echo "patching PSMDB cluster with replsetOverrides: ${cluster}"
 	sed "s/NAMESPACE/${namespace}/g" ${test_dir}/conf/${cluster}-overridden.yml > ${tmp_dir}/${cluster}-overridden.yml
 	apply_cluster ${tmp_dir}/${cluster}-overridden.yml
+	sleep_with_log 10 "wait for replset reconfiguration"
 	wait_for_cluster_state ${cluster} "ready"
 
 	echo "checking if we can read existing data"

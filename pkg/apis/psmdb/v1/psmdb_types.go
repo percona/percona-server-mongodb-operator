@@ -1438,6 +1438,15 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
+func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, 0)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}
+
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if backup is allowed")

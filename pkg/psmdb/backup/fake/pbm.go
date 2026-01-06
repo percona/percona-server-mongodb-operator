@@ -29,7 +29,7 @@ func (p *fakePBM) Conn() *mongo.Client {
 	return nil
 }
 
-func (p *fakePBM) AgentStatuses(ctx context.Context) ([]topo.AgentStat, error) {
+func (p *fakePBM) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
 	return nil, nil
 }
 

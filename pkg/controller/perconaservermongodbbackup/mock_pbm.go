@@ -62,18 +62,18 @@ func (mr *MockPBMMockRecorder) AddProfile(ctx, k8sclient, cluster, name, stg int
 }
 
 // AgentStatuses mocks base method.
-func (m *MockPBM) AgentStatuses(ctx context.Context) ([]topo.AgentStat, error) {
+func (m *MockPBM) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AgentStatuses", ctx)
+	ret := m.ctrl.Call(m, "AgentStatuses", ctx, hosts)
 	ret0, _ := ret[0].([]topo.AgentStat)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AgentStatuses indicates an expected call of AgentStatuses.
-func (mr *MockPBMMockRecorder) AgentStatuses(ctx interface{}) *gomock.Call {
+func (mr *MockPBMMockRecorder) AgentStatuses(ctx, hosts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentStatuses", reflect.TypeOf((*MockPBM)(nil).AgentStatuses), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentStatuses", reflect.TypeOf((*MockPBM)(nil).AgentStatuses), ctx, hosts)
 }
 
 // Close mocks base method.

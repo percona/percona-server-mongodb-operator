@@ -460,6 +460,43 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	return status, nil
 }
 
+func replsetOverridesUsed(cr *api.PerconaServerMongoDB) bool {
+	replsets := cr.GetReplsets()
+	for _, rs := range replsets {
+		if len(rs.ReplsetOverrides) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func pbmAgentHosts(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+	replsets := cr.GetReplsets()
+
+	pods := make(map[string][]corev1.Pod)
+	for _, rs := range replsets {
+		podList, err := psmdb.GetRSPods(ctx, cl, cr, rs.Name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get replset/%s pods", rs.Name)
+		}
+		pods[rs.Name] = podList.Items
+	}
+
+	hosts := make([]string, 0)
+	for _, rs := range replsets {
+		for _, pod := range pods[rs.Name] {
+			host, err := psmdb.MongoHost(ctx, cl, cr,
+				cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
+			if err != nil {
+				return hosts, errors.Wrapf(err, "get host for %s", pod.Name)
+			}
+			hosts = append(hosts, host)
+		}
+	}
+
+	return hosts, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
 	if !cr.Spec.Backup.Enabled {
 		return api.AppStateReady, nil
@@ -489,7 +526,15 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 	}
 	defer pbm.Close(ctx) // nolint:errcheck
 
-	agents, err := pbm.AgentStatuses(ctx)
+	var hosts []string
+	if replsetOverridesUsed(cr) {
+		hosts, err = pbmAgentHosts(ctx, r.client, cr)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "get pbm agent hosts")
+		}
+	}
+
+	agents, err := pbm.AgentStatuses(ctx, hosts)
 	if err != nil {
 		return api.AppStateError, errors.Wrap(err, "get agent statuses")
 	}

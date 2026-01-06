@@ -66,7 +66,7 @@ type BackupMeta = backup.BackupMeta
 
 type PBM interface {
 	Conn() *mongo.Client
-	AgentStatuses(ctx context.Context) ([]topo.AgentStat, error)
+	AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error)
 
 	GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error)
 	GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error)
@@ -794,11 +794,16 @@ func (b *pbmC) ValidateBackupInStorage(ctx context.Context, cfg *config.Config, 
 	return nil
 }
 
-func (b *pbmC) AgentStatuses(ctx context.Context) ([]topo.AgentStat, error) {
+func (b *pbmC) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
 	var agents []topo.AgentStat
 
+	filter := bson.M{}
+	if len(hosts) > 0 {
+		filter = bson.M{"n": bson.M{"$in": hosts}}
+	}
+
 	col := b.AgentsStatusCollection()
-	cur, err := col.Find(ctx, bson.D{})
+	cur, err := col.Find(ctx, filter)
 	if err != nil {
 		return agents, errors.Wrap(err, "get agent statuses")
 	}
