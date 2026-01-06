@@ -149,7 +149,7 @@ func TestWaitForCerts(t *testing.T) {
 		},
 	}
 
-	certName := CACertificateSecretName(cr)
+	certName := CertificateCA(cr).SecretName()
 
 	tests := map[string]struct {
 		certificate *cm.Certificate
@@ -256,7 +256,7 @@ func TestWaitForCerts(t *testing.T) {
 				dryRun: false,
 			}
 
-			err := controller.WaitForCerts(ctx, cr, certName)
+			err := controller.WaitForCerts(ctx, cr, CertificateCA(cr))
 			assert.NoError(t, err)
 		})
 	}
