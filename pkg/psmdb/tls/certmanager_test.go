@@ -272,6 +272,9 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 
 	s.AddKnownTypes(api.SchemeGroupVersion,
 		new(api.PerconaServerMongoDB),
+	)
+
+	s.AddKnownTypes(cm.SchemeGroupVersion,
 		new(cm.Issuer),
 		new(cm.Certificate),
 	)
