@@ -27,6 +27,7 @@ demand-backup-physical-sharded-gcp-native
 demand-backup-physical-sharded-minio
 demand-backup-physical-sharded-minio-native
 demand-backup-sharded
+disabled-auth
 expose-sharded
 finalizer
 ignore-labels-annotations
