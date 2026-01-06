@@ -67,6 +67,7 @@ split-horizon
 stable-resource-version
 storage
 tls-issue-cert-manager
+unsafe-psa
 upgrade
 upgrade-consistency
 upgrade-consistency-sharded-tls

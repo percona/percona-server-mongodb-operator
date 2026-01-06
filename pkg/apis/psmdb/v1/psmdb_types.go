@@ -793,6 +793,37 @@ type ReplsetSpec struct {
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
+	Env                      []corev1.EnvVar              `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+}
+
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	horizons := make(map[string]map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				if d, ok := overrides.Horizons[h]; ok {
+					domain = d
+				}
+			}
+
+			idx := strings.IndexRune(domain, ':')
+			if withPorts && idx == -1 {
+				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+			} else if !withPorts && idx != -1 {
+				domain = domain[:idx]
+			}
+
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			horizons[podName][h] = domain
+		}
+	}
+	return horizons
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -927,6 +958,8 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	Env                      []corev1.EnvVar            `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
@@ -1557,6 +1590,8 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	Env                      []corev1.EnvVar             `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
