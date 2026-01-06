@@ -70,6 +70,9 @@ func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Replse
 }
 
 func HookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, component string) string {
+	if rs == nil {
+		return fmt.Sprintf("%s-%s-hookscript", cr.Name, component)
+	}
 	return fmt.Sprintf("%s-%s-%s-hookscript", cr.Name, rs.Name, component)
 }
 

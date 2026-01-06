@@ -315,13 +315,17 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			}
 			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
 
-			if cr.Spec.Backup.HookScript != "" {
+			if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified() {
+				name := cr.Spec.Backup.HookScript.ConfigMapRef.Name
+				if name == "" {
+					name = naming.PBMHookScriptConfigMapName(cr)
+				}
 				volumes = append(volumes, corev1.Volume{
 					Name: config.PBMHookscriptVolClaimName,
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: naming.PBMHookScriptConfigMapName(cr),
+								Name: name,
 							},
 							Optional: ptr.To(true),
 						},
@@ -344,13 +348,17 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript != "" {
+	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript.Specified() {
+		name := multiAZ.HookScript.ConfigMapRef.Name
+		if name == "" {
+			name = naming.HookScriptConfigMapName(cr, replset, ls[naming.LabelKubernetesComponent])
+		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: naming.HookScriptConfigMapName(cr, replset, ls[naming.LabelKubernetesComponent]),
+						Name: name,
 					},
 					Optional: ptr.To(true),
 				},
@@ -417,7 +425,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
-	attachHookScript := cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript != ""
+	attachHookScript := cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified()
 	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "ssl",

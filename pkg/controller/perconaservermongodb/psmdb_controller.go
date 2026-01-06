@@ -1120,9 +1120,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 		return nil
 	}
 
-	reconcileHookscript := func(rs *api.ReplsetSpec, component string, hookscript string) error {
+	reconcileHookscript := func(rs *api.ReplsetSpec, component string, hookscript api.HookScriptSpec) error {
 		name := naming.HookScriptConfigMapName(cr, rs, component)
-		if hookscript == "" {
+		if hookscript.Script == "" || hookscript.ConfigMapRef.Name != "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongod config map %s", name)
 			}
@@ -1135,7 +1135,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 				Labels:    naming.RSLabels(cr, rs),
 			},
 			Data: map[string]string{
-				"hook.sh": string(hookscript),
+				"hook.sh": hookscript.Script,
 			},
 		}
 
@@ -1214,7 +1214,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 
 	reconcileHookscript := func() error {
 		name := naming.MongosHookScriptConfigMapName(cr)
-		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.HookScript == "" {
+		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.HookScript.ConfigMapRef.Name != "" || cr.Spec.Sharding.Mongos.HookScript.Script == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
 			}
@@ -1228,7 +1228,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 				Labels:    naming.MongosLabels(cr),
 			},
 			Data: map[string]string{
-				"hook.sh": string(cr.Spec.Sharding.Mongos.HookScript),
+				"hook.sh": cr.Spec.Sharding.Mongos.HookScript.Script,
 			},
 		}
 		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {

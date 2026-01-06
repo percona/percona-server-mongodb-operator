@@ -51,7 +51,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	name := naming.PBMHookScriptConfigMapName(cr)
-	if cr.Spec.Backup.HookScript == "" || !cr.Spec.Backup.Enabled {
+	if b := cr.Spec.Backup; b.HookScript.ConfigMapRef.Name != "" || b.HookScript.Script == "" || !b.Enabled {
 		if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 			return errors.Wrapf(err, "failed to delete backup config map %s", name)
 		}
@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 			Labels:    naming.ClusterLabels(cr),
 		},
 		Data: map[string]string{
-			"hook.sh": cr.Spec.Backup.HookScript,
+			"hook.sh": cr.Spec.Backup.HookScript.Script,
 		},
 	}
 	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {

@@ -170,7 +170,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		}...)
 	}
 
-	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Sharding.Mongos != nil && cr.Spec.Sharding.Mongos.HookScript != "" {
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Sharding.Mongos != nil && cr.Spec.Sharding.Mongos.HookScript.Specified() {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.HookscriptVolClaimName,
 			MountPath: config.HookscriptMountPath,
@@ -393,13 +393,17 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 		}...)
 	}
 
-	if m := cr.Spec.Sharding.Mongos; cr.CompareVersion("1.22.0") >= 0 && m != nil && m.HookScript != "" {
+	if m := cr.Spec.Sharding.Mongos; cr.CompareVersion("1.22.0") >= 0 && m != nil && m.HookScript.Specified() {
+		name := m.HookScript.ConfigMapRef.Name
+		if name == "" {
+			name = naming.MongosHookScriptConfigMapName(cr)
+		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: naming.MongosHookScriptConfigMapName(cr),
+						Name: name,
 					},
 					Optional: ptr.To(true),
 				},

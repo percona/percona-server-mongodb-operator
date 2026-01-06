@@ -191,9 +191,12 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
-#    hookScript: |
-#      #!/usr/bin/env bash
-#      echo "Hookscript started"
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    sidecars:
 #    - image: busybox
 #      command: ["/bin/sh"]
@@ -306,9 +309,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookScript: |
-#        #!/usr/bin/env bash
-#        echo "Hookscript started"
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -370,9 +376,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookScript: |
-#        #!/usr/bin/env bash
-#        echo "Hookscript started"
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -425,9 +434,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
-#      hookScript: |
-#        #!/usr/bin/env bash
-#        echo "Hookscript started"
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -524,9 +536,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
-#      hookScript: |
-#        #!/usr/bin/env bash
-#        echo "Hookscript started"
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      env:
 #      - name: KEY
 #        value: VALUE
@@ -638,9 +653,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
-#      hookScript: |
-#        #!/usr/bin/env bash
-#        echo "Hookscript started"
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      env:
 #      - name: KEY
 #        value: VALUE
@@ -737,9 +755,12 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
-#    hookScript: |
-#      #!/usr/bin/env bash
-#      echo "Hookscript started"
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:

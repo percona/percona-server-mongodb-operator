@@ -1023,7 +1023,15 @@ spec:
                   enabled:
                     type: boolean
                   hookScript:
-                    type: string
+                    properties:
+                      configMapRef:
+                        properties:
+                          name:
+                            type: string
+                        type: object
+                      script:
+                        type: string
+                    type: object
                   image:
                     type: string
                   labels:
@@ -2740,7 +2748,15 @@ spec:
                         enabled:
                           type: boolean
                         hookScript:
-                          type: string
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -5346,7 +5362,15 @@ spec:
                         enabled:
                           type: boolean
                         hookScript:
-                          type: string
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -7542,7 +7566,15 @@ spec:
                       - size
                       type: object
                     hookScript:
-                      type: string
+                      properties:
+                        configMapRef:
+                          properties:
+                            name:
+                              type: string
+                          type: object
+                        script:
+                          type: string
+                      type: object
                     hostAliases:
                       items:
                         properties:
@@ -8177,7 +8209,15 @@ spec:
                         enabled:
                           type: boolean
                         hookScript:
-                          type: string
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -13537,7 +13577,15 @@ spec:
                           enabled:
                             type: boolean
                           hookScript:
-                            type: string
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -16143,7 +16191,15 @@ spec:
                           enabled:
                             type: boolean
                           hookScript:
-                            type: string
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -18339,7 +18395,15 @@ spec:
                         - size
                         type: object
                       hookScript:
-                        type: string
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
+                            type: string
+                        type: object
                       hostAliases:
                         items:
                           properties:
@@ -18974,7 +19038,15 @@ spec:
                           enabled:
                             type: boolean
                           hookScript:
-                            type: string
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -24017,7 +24089,15 @@ spec:
                             type: string
                         type: object
                       hookScript:
-                        type: string
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
+                            type: string
+                        type: object
                       hostAliases:
                         items:
                           properties:
