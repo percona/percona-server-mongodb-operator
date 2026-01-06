@@ -799,13 +799,13 @@ func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 
 	for podName, m := range r.ReplsetOverrides {
 		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
 			if _, ok := horizons[podName][h]; ok {
 				continue
 			}
 
-			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
-				horizons[podName] = make(map[string]string)
-			}
 			horizons[podName][h] = fixDomain(domain)
 		}
 	}
