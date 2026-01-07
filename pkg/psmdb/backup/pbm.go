@@ -68,8 +68,8 @@ type BackupMeta = backup.BackupMeta
 type PBM interface {
 	Conn() *mongo.Client
 
-	GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error)
-	GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error)
+	GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error)
+	GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error)
 	PITRGetChunksSlice(ctx context.Context, rs string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error)
 	PITRChunksCollection() *mongo.Collection
 
@@ -905,19 +905,21 @@ func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) 
 	return c, nil
 }
 
-func (b *pbmC) GetTimelinesPITR(ctx context.Context) ([]oplog.Timeline, error) {
+func (b *pbmC) GetTimelinesPITR(ctx context.Context, rsMap map[string]string) ([]oplog.Timeline, error) {
 	var (
-		now       = time.Now().UTC().Unix()
+		now       = primitive.Timestamp{T: uint32(time.Now().UTC().Unix())}
 		timelines [][]oplog.Timeline
 	)
-
 	shards, err := topo.ClusterMembers(ctx, b.Client.MongoClient())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting cluster members")
 	}
 
+	reverseMap := util.MakeReverseRSMapFunc(rsMap)
 	for _, s := range shards {
-		rsTimelines, err := oplog.PITRGetValidTimelines(ctx, b.Client, s.RS, primitive.Timestamp{T: uint32(now)})
+		rs := reverseMap(s.RS)
+
+		rsTimelines, err := oplog.PITRGetValidTimelines(ctx, b.Client, rs, now)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
 		}
@@ -928,8 +930,8 @@ func (b *pbmC) GetTimelinesPITR(ctx context.Context) ([]oplog.Timeline, error) {
 	return oplog.MergeTimelines(timelines...), nil
 }
 
-func (b *pbmC) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error) {
-	timelines, err := b.GetTimelinesPITR(ctx)
+func (b *pbmC) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error) {
+	timelines, err := b.GetTimelinesPITR(ctx, rsMap)
 	if err != nil {
 		return oplog.Timeline{}, err
 	}
@@ -966,13 +968,16 @@ func (b *pbmC) pitrGetChunkContains(ctx context.Context, rs string, ts primitive
 	return chnk, errors.Wrap(err, "decode")
 }
 
-func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error) {
+func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error) {
 	nodeInfo, err := topo.GetNodeInfo(ctx, b.Client.MongoClient())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
 
-	c, err := b.pitrGetChunkContains(ctx, nodeInfo.SetName, primitive.Timestamp{T: uint32(unixTS)})
+	reverseMap := util.MakeReverseRSMapFunc(rsMap)
+	rs := reverseMap(nodeInfo.SetName)
+
+	c, err := b.pitrGetChunkContains(ctx, rs, primitive.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrNoOplogsForPITR

@@ -307,10 +307,11 @@ wait_for_pbm_operations() {
 
 run_restore() {
 	local backup_name=$1
+	local restore_file=${2:-$test_dir/conf/restore.yml}
 
 	log "running restore restore-$backup_name"
 
-	cat $test_dir/conf/restore.yml \
+	cat ${restore_file} \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
 		| kubectl_bin apply -f -
