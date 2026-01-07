@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,6 +16,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -41,8 +43,31 @@ type StatefulSpecSecretParams struct {
 }
 
 type StatefulConfigParams struct {
-	MongoDConf        config.CustomConfig
-	LogCollectionConf config.CustomConfig
+	MongoDConf         config.CustomConfig
+	LogCollectionConf  config.CustomConfig
+	LogRotateConf      config.CustomConfig
+	LogRotateExtraConf config.CustomConfig
+}
+
+func (p *StatefulConfigParams) HashHex(cr *api.PerconaServerMongoDB) string {
+	var b strings.Builder
+	if p.MongoDConf.Type.IsUsable() {
+		b.WriteString(p.MongoDConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 && p.LogCollectionConf.Type.IsUsable() {
+		b.WriteString(p.LogCollectionConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		if p.LogRotateConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateConf.HashHex)
+		}
+		if p.LogRotateExtraConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateExtraConf.HashHex)
+		}
+	}
+	return b.String()
 }
 
 // StatefulSpec returns spec for stateful set
@@ -58,6 +83,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumeSpec := replset.VolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
+	containerEnv := replset.Env
+	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -149,6 +176,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
+	if cr.CompareVersion("1.22.0") >= 0 {
+		vol := logRotateConfigVolume(configs, cr)
+		if vol != nil {
+			volumes = append(volumes, *vol)
+		}
+	}
+
 	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
@@ -183,10 +217,19 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			)
 		}
 	}
-
-	c, err := container(ctx, cr, replset, containerName, resources,
-		cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
-		livenessProbe, readinessProbe, containerSecurityContext)
+	params := containerFnParams{
+		replset:                  replset,
+		name:                     containerName,
+		resources:                resources,
+		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
+		livenessProbe:            livenessProbe,
+		readinessProbe:           readinessProbe,
+		containerSecurityContext: containerSecurityContext,
+		containerEnv:             containerEnv,
+		containerEnvFrom:         containerEnvFrom,
+	}
+	c, err := container(ctx, cr, params)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -206,12 +249,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if configs.MongoDConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
-	}
-
-	if cr.CompareVersion("1.21.0") >= 0 && configs.LogCollectionConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = annotations["percona.com/configuration-hash"] + configs.LogCollectionConf.HashHex
+	if hash := configs.HashHex(cr); hash != "" {
+		annotations["percona.com/configuration-hash"] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
@@ -376,6 +415,27 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		UpdateStrategy:       updateStrategy,
 		VolumeClaimTemplates: volumeClaimTemplates,
 	}, nil
+}
+
+func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMongoDB) *corev1.Volume {
+	logrotateConfigVolumeProjections := []corev1.VolumeProjection{}
+	if configs.LogRotateConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateConf.Type.VolumeProjection(logrotate.ConfigMapName(cr.GetName())))
+	}
+	if configs.LogRotateExtraConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateExtraConf.Type.VolumeProjection(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name))
+	}
+	if len(logrotateConfigVolumeProjections) > 0 {
+		return &corev1.Volume{
+			Name: logrotate.VolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: logrotateConfigVolumeProjections,
+				},
+			},
+		}
+	}
+	return nil
 }
 
 // backupAgentContainer creates the container object for a backup agent

@@ -3,17 +3,17 @@
 set -o errexit
 set -o xtrace
 
-test_dir=$(realpath $(dirname $0))
-. ${test_dir}/../functions
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}"/../functions
 
 configure_client_hostAliases() {
 	local hostAliasesJson='[]'
 
 	for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do
-		hostname=$(echo ${svc} | awk -F '|' '{print $2}')
-		ip=$(echo ${svc} | awk -F '|' '{print $1}')
+		hostname=$(echo "${svc}" | awk -F '|' '{print $2}')
+		ip=$(echo "${svc}" | awk -F '|' '{print $1}')
 		hostAlias="{\"ip\": \"${ip}\", \"hostnames\": [\"${hostname}.clouddemo.xyz\"]}"
-		hostAliasesJson=$(echo $hostAliasesJson | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
+		hostAliasesJson=$(echo "$hostAliasesJson" | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
 	done
 
 	kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/replicas', 'value': 0}]"
@@ -22,83 +22,95 @@ configure_client_hostAliases() {
 
 	kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/hostAliases', 'value': $hostAliasesJson}, {'op': 'replace', 'path': '/spec/replicas', 'value': 1}]"
 
-	wait_pod $(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	wait_pod "$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')"
 }
 
-create_infra ${namespace}
+main() {
+	create_infra "${namespace}"
+	deploy_cert_manager
 
-cluster="some-name"
-kubectl_bin apply \
-	-f ${conf_dir}/secrets_with_tls.yml \
-	-f ${conf_dir}/client_with_tls.yml
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "${conf_dir}"/secrets.yml \
+		-f "${conf_dir}"/client_with_tls.yml
 
-apply_cluster ${test_dir}/conf/${cluster}-3horizons.yml
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	apply_cluster "${test_dir}"/conf/${cluster}-3horizons.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-configure_client_hostAliases
+	desc 'compare certificates and issuers'
+	compare_kubectl "certificate/${cluster}-ssl"
+	compare_kubectl "certificate/${cluster}-ssl-internal"
+	compare_kubectl "certificate/${cluster}-ca-cert"
+	compare_kubectl "issuer/$cluster-psmdb-ca-issuer"
+	compare_kubectl "issuer/$cluster-psmdb-issuer"
 
-sleep 10 # give some time for client pod to be ready
+	configure_client_hostAliases
 
-run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
-	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons-3.json
-diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
+	sleep 10 # give some time for client pod to be ready
 
-isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
-if [ "${isMaster}" != "true" ]; then
-	echo "mongo client should've redirect the connection to primary"
-	exit 1
-fi
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons-3.json
+	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons-3.json
 
-# stepping down to ensure we haven't redirected to primary just because primary is pod-0
-run_mongo_tls "rs.stepDown()" \
-	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet"
+	isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
+	if [ "${isMaster}" != "true" ]; then
+		echo "mongo client should've redirect the connection to primary"
+		exit 1
+	fi
 
-sleep 10 # give some time for re-election
+	# stepping down to ensure we haven't redirected to primary just because primary is pod-0
+	run_mongo_tls "rs.stepDown()" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet"
 
-isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
-if [ "${isMaster}" != "true" ]; then
-	echo "mongo client should've redirect the connection to primary"
-	exit 1
-fi
+	sleep 10 # give some time for re-election
 
-desc "scaling up the cluster"
+	isMaster=$(run_mongo_tls "db.hello().isWritablePrimary" "clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' | grep -v certificateNames)
+	if [ "${isMaster}" != "true" ]; then
+		echo "mongo client should've redirect the connection to primary"
+		exit 1
+	fi
 
-apply_cluster ${test_dir}/conf/${cluster}-5horizons.yml
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	desc "scaling up the cluster"
 
-# scale up and down
-kubectl_bin patch psmdb ${cluster} \
-	--type='json' \
-	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
-wait_for_running "${cluster}-rs0" 5
-wait_cluster_consistency ${cluster}
+	apply_cluster "${test_dir}"/conf/${cluster}-5horizons.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
-	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons-5.json
-diff $test_dir/compare/horizons-5.json $tmp_dir/horizons-5.json
+	# scale up and down
+	kubectl_bin patch psmdb ${cluster} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
+	wait_for_running "${cluster}-rs0" 5
+	wait_cluster_consistency ${cluster}
 
-desc "scaling down the cluster"
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons-5.json
+	diff "$test_dir"/compare/horizons-5.json "$tmp_dir"/horizons-5.json
 
-kubectl_bin patch psmdb ${cluster} \
-	--type='json' \
-	-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	desc "scaling down the cluster"
 
-run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
-	"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
-	mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >${tmp_dir}/horizons.json
-diff $test_dir/compare/horizons-3.json $tmp_dir/horizons-3.json
+	kubectl_bin patch psmdb ${cluster} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
 
-desc "remove horizon configuration"
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons.json
+	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons-3.json
 
-apply_cluster ${test_dir}/conf/${cluster}.yml
-wait_for_running "${cluster}-rs0" 3
-wait_cluster_consistency ${cluster}
+	desc "remove horizon configuration"
 
-destroy ${namespace}
+	apply_cluster "${test_dir}"/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	destroy "${namespace}"
+}
+
+main

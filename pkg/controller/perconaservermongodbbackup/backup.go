@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	// pbmStartingDeadline is timeout after which continuous starting state is considered as error
-	pbmStartingDeadline       = time.Duration(120) * time.Second
-	pbmStartingDeadlineErrMsg = "backup did not progress from 'starting' state within the allowed timeout"
+	// defaultPBMStartingDeadline is timeout after which continuous starting state is considered as error
+	defaultPBMStartingDeadline int64 = 120
+	pbmStartingDeadlineErrMsg        = "backup did not progress from 'starting' state within the allowed timeout"
 )
 
 var defaultBackoff = wait.Backoff{
@@ -136,6 +136,17 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 		if !strings.HasPrefix(stg.S3.Bucket, "s3://") {
 			status.Destination = "s3://" + status.Destination
 		}
+	case api.BackupStorageMinio:
+		status.Minio = &stg.Minio
+
+		status.Destination = stg.Minio.Bucket
+
+		if stg.Minio.Prefix != "" {
+			status.Destination = stg.Minio.Bucket + "/" + stg.Minio.Prefix
+		}
+		if !strings.HasPrefix(stg.Minio.Bucket, "s3://") {
+			status.Destination = "s3://" + status.Destination
+		}
 	case api.BackupStorageGCS:
 		status.GCS = &stg.GCS
 
@@ -172,7 +183,7 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 }
 
 // Status return backup status
-func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup, cluster *api.PerconaServerMongoDB) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
@@ -214,7 +225,12 @@ func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup)
 		}
 	case defs.StatusStarting:
 		passed := time.Now().UTC().Sub(time.Unix(meta.StartTS, 0))
-		if passed >= pbmStartingDeadline {
+
+		timeoutSeconds := defaultPBMStartingDeadline
+		if s := cluster.Spec.Backup.StartingDeadlineSeconds; s != nil && *s > 0 {
+			timeoutSeconds = *s
+		}
+		if passed >= time.Duration(timeoutSeconds)*time.Second {
 			status.State = api.BackupStateError
 			status.Error = pbmStartingDeadlineErrMsg
 			break

@@ -308,6 +308,8 @@ wait_for_pbm_operations() {
 run_restore() {
 	local backup_name=$1
 
+	log "running restore restore-$backup_name"
+
 	cat $test_dir/conf/restore.yml \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
@@ -552,7 +554,7 @@ deploy_operator_gh_release() {
 		((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
 		((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' "${tmp_dir}/${operator_yaml}_${git_tag}.yaml" \
 		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
- 
+
 	sleep 20
 	wait_operator_pod "$(get_operator_pod)"
 	echo "Print operator info from log"
@@ -601,40 +603,46 @@ create_minio_bucket() {
 }
 
 deploy_vault() {
-	name=${1:-vault-service}
+	local name=${1:-vault-service}
+	if [[ $# -gt 0 ]]; then
+		shift
+	fi
 
 	desc "install Vault $name"
-	helm uninstall vault-service || :
+	helm uninstall "$name" || :
 	helm repo remove hashicorp || :
 	helm repo add hashicorp https://helm.releases.hashicorp.com
 
-	destroy_vault
+	destroy_vault "$name"
 
 	if [[ -n ${OPENSHIFT} ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
 
-		retry 10 60 helm install $name hashicorp/vault \
+		retry 10 60 helm install "$name" hashicorp/vault \
 			--disable-openapi-validation \
 			--set dataStorage.enabled=false \
 			--set global.openshift=true \
 			--set injector.image.repository="docker.io/hashicorp/vault-k8s" \
 			--set injector.agentImage.repository="docker.io/hashicorp/vault" \
-			--set server.image.repository="docker.io/hashicorp/vault"
+			--set server.image.repository="docker.io/hashicorp/vault" "$@"
 	else
-		retry 10 60 helm install $name hashicorp/vault \
+		retry 10 60 helm install "$name" hashicorp/vault \
 			--disable-openapi-validation \
-			--set dataStorage.enabled=false
+			--set dataStorage.enabled=false "$@"
 	fi
 
-	until kubectl_bin get pod/vault-service-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
+	until kubectl_bin get pod/"$name"-0 -o jsonpath='{.status.phase}' 2>/dev/null | grep 'Running'; do
 		sleep 1
 	done
 
-	kubectl_bin exec pod/vault-service-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json >"${tmp_dir}"/vault-init
-	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"${tmp_dir}"/vault-init)
-	local token=$(jq -r ".root_token" <"${tmp_dir}"/vault-init)
-	kubectl_bin exec pod/vault-service-0 -- vault operator unseal "${unsealKey}"
-	kubectl_bin exec -it pod/vault-service-0 -- sh <<EOF
+	sleep 5
+	kubectl_bin exec pod/"$name"-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json >"${tmp_dir}"/vault-init
+	local unsealKey
+	unsealKey=$(jq -r ".unseal_keys_b64[]" <"${tmp_dir}"/vault-init)
+	local token
+	token=$(jq -r ".root_token" <"${tmp_dir}"/vault-init)
+	kubectl_bin exec pod/"$name"-0 -- vault operator unseal "${unsealKey}"
+	kubectl_bin exec -it pod/"$name"-0 -- sh <<EOF
 vault login "${token}"
 vault secrets enable -path secret kv-v2
 EOF
@@ -642,17 +650,22 @@ EOF
 }
 
 destroy_vault() {
-	local vault_ns=$(helm list --all-namespaces --filter vault-service | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
+	local name=${1:-vault-service}
+	local vault_ns
+	vault_ns="$(helm list --all-namespaces --filter "$name" | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')"
 
 	desc 'destroy vault'
-	for i in $(kubectl api-resources | grep vault | awk '{print $1}'); do timeout 30 kubectl delete ${i} --all --all-namespaces || :; done
+	for i in $(kubectl api-resources | grep vault | awk '{print $1}'); do timeout 30 kubectl delete "${i}" --all --all-namespaces || :; done
 	if [ -n "${vault_ns}" ]; then
-		helm uninstall vault-service --namespace ${vault_ns} || :
+		helm uninstall "$name" --namespace "${vault_ns}" || :
 	fi
-	timeout 30 kubectl delete crd $(kubectl get crd | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole | grep 'vault' | awk '{print $1}') || :
-	timeout 30 kubectl delete mutatingwebhookconfiguration $(kubectl get mutatingwebhookconfiguration | grep 'vault' | awk '{print $1}') || :
+
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
+	# shellcheck disable=SC2046
+	timeout 30 kubectl delete mutatingwebhookconfiguration $(kubectl get mutatingwebhookconfiguration -l "app.kubernetes.io/instance=$name" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}') || :
 }
 
 deploy_chaos_mesh() {
@@ -939,9 +952,13 @@ run_mongo() {
 	local uri="$2"
 	local driver=${3:-mongodb+srv}
 	local suffix=${4:-.svc.cluster.local}
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	local mongo_flag="$5"
-	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	local replica_set=${6:-"rs0"}
+	if [[ $uri == *cfg* ]]; then
+		replica_set="cfg"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
@@ -1080,6 +1097,7 @@ compare_mongo_cmd() {
 	local collection="${6:-test}"
 	local sort="$7"
 	local tls="${8:-false}"
+	local replicaset="$9"
 
 	local full_command="db.${collection}.${command}()"
 	if [[ -n ${sort} ]]; then
@@ -1094,7 +1112,7 @@ compare_mongo_cmd() {
 		mongo_command=run_mongo
 	fi
 
-	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" \
+	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
 		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
@@ -1121,6 +1139,8 @@ compare_mongos_cmd() {
 	else
 		mongos_command=run_mongos
 	fi
+
+	log "running db.${collection}.command() in ${database}"
 
 	$mongos_command "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
 		| grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
@@ -1231,6 +1251,10 @@ deploy_cert_manager() {
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+	for arg in "$@"; do
+		kubectl_bin patch deployment cert-manager -n cert-manager --type='json' \
+			-p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"'"$arg"'"}]'
+	done
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
 	sleep 120
 }
@@ -1433,6 +1457,7 @@ cat_config() {
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| $sed -e "s/NAME_SPACE/${namespace}/g" \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
 
@@ -1560,13 +1585,79 @@ run_backup() {
 	local backup_name=${2:-"backup-${storage}"}
 	local type=${3:-"logical"}
 
-	desc "run backup $backup_name"
+	log "running backup $backup_name"
 
 	yq eval '.metadata.name = "'${backup_name}'"
 			| .spec.storageName = "'${storage}'"
 			| .spec.type = "'${type}'"' \
 		$test_dir/conf/backup-$storage.yml \
 		| kubectl_bin apply -f -
+}
+
+function check_backup_deletion_aws() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	storage_name="aws-s3"
+	retry=0
+
+	while aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+}
+
+function check_backup_deletion_gcs() {
+	backup_dest_gcp=$1
+	obj=$2
+	storage_name="gcp-cs"
+	retry=0
+	gcs_path="gs://${backup_dest_gcp}${obj}"
+
+	while gsutil ls "$gcs_path" >/dev/null 2>&1; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup $gcs_path still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup $gcs_path not found in $storage_name"
+}
+
+function check_backup_deletion_azure() {
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
+	blob=$2
+	storage_name="azure-blob"
+	retry=0
+	blob_path="${blob_prefix}${blob}"
+
+	while az storage blob show --container-name "$container" --name "$blob_path" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup ${blob_path} in container $container not found in $storage_name"
 }
 
 check_backup_deletion() {
@@ -1584,6 +1675,119 @@ check_backup_deletion() {
 		sleep $((10 * 2 ** retry))
 		((retry += 1))
 	done
+}
+
+function setup_aws_credentials() {
+	local secret_name="aws-s3-secret"
+
+	if [[ -n $AWS_ACCESS_KEY_ID ]] && [[ -n $AWS_SECRET_ACCESS_KEY ]]; then
+		echo "AWS credentials already set in environment"
+		return 0
+	fi
+
+	echo "Setting up AWS credentials from secret: $secret_name"
+
+	# Disable tracing for the entire credential section
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+
+	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
+		# Re-enable tracing before error message if it was on
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "Failed to extract AWS credentials from secret"
+		return 1
+	fi
+
+	export AWS_ACCESS_KEY_ID
+	export AWS_SECRET_ACCESS_KEY
+
+	# Re-enable tracing if it was on
+	[[ $trace_was_on -eq 1 ]] && set -x
+
+	echo "AWS credentials configured successfully"
+}
+
+function setup_gcs_credentials() {
+	local secret_name="gcp-cs-secret"
+
+	if gsutil ls >/dev/null 2>&1; then
+		echo "GCS credentials already set in environment"
+		return 0
+	fi
+
+	echo "Setting up GCS credentials from K8s secret: $secret_name"
+
+	# Disable tracing for the entire credential section
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+
+	ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+	SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+
+	if [[ -z $ACCESS_KEY_ID ]] || [[ -z $SECRET_ACCESS_KEY ]]; then
+		# Re-enable tracing before error message if it was on
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "Failed to extract GCS credentials from secret" >&2
+		return 1
+	fi
+
+	boto_tmp=$(mktemp /tmp/boto.XXXXXX)
+	chmod 600 "$boto_tmp"
+
+	cat <<EOF >"$boto_tmp"
+[Credentials]
+gs_access_key_id = ${ACCESS_KEY_ID}
+gs_secret_access_key = ${SECRET_ACCESS_KEY}
+EOF
+
+	export BOTO_CONFIG="$boto_tmp"
+
+	unset ACCESS_KEY_ID
+	unset SECRET_ACCESS_KEY
+
+	[[ $trace_was_on -eq 1 ]] && set -x
+
+	echo "GCS credentials configured successfully"
+}
+
+function setup_azure_credentials() {
+	local secret_name="azure-secret"
+
+	echo "Setting up Azure credentials from K8s secret: $secret_name"
+
+	# Disable tracing for the entire credential section
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+
+	AZURE_STORAGE_ACCOUNT=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_NAME}' 2>/dev/null | base64 -d 2>/dev/null)
+	AZURE_STORAGE_KEY=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+
+	if [[ -z $AZURE_STORAGE_ACCOUNT ]] || [[ -z $AZURE_STORAGE_KEY ]]; then
+		# Re-enable tracing before error message if it was on
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "Failed to extract Azure credentials from secret" >&2
+		return 1
+	fi
+
+	export AZURE_STORAGE_ACCOUNT
+	export AZURE_STORAGE_KEY
+
+	# Re-enable tracing if it was on
+	[[ $trace_was_on -eq 1 ]] && set -x
+
+	echo "Azure credentials configured successfully"
 }
 
 create_infra() {
@@ -2152,6 +2356,73 @@ wait_for_oplogs() {
 	done
 }
 
+function check_backup_existence_aws() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	storage_name="aws-s3"
+	retry=0
+
+	until aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 30 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup was not found in bucket -- $storage_name"
+			exit 1
+		fi
+		echo "waiting for backup $bucket/$key_prefix/$key in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup $bucket/$key_prefix/$key found in $storage_name"
+}
+
+function check_backup_existence_gcs() {
+	backup_dest_gcp=$1
+	obj=$2
+	storage_name="gcp-cs"
+	retry=0
+
+	gcs_path="gs://${backup_dest_gcp}${obj}"
+
+	until gsutil ls "$gcs_path" >/dev/null 2>&1; do
+		if [ $retry -ge 30 ]; then
+			echo "Max retry count $retry reached. Something went wrong with operator or Kubernetes cluster."
+			echo "Backup was not found in bucket -- $storage_name"
+			exit 1
+		fi
+		echo "Waiting for backup $gcs_path in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup $gcs_path found in $storage_name"
+}
+
+function check_backup_existence_azure() {
+	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
+	container=$(echo "$url_path" | cut -d'/' -f1)
+	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
+
+	blob=$2
+	storage_name="azure-blob"
+	retry=0
+	blob_path="${blob_prefix}${blob}"
+
+	until az storage blob show --container-name "$container" --name "$blob_path" &>/dev/null; do
+		if [ $retry -ge 30 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup was not found in container -- $storage_name"
+			exit 1
+		fi
+		echo "waiting for backup $blob_path in $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup $blob_path found in $storage_name"
+}
+
 check_backup_in_storage() {
 	local backup=$1
 	local storage_type=$2
@@ -2159,41 +2430,77 @@ check_backup_in_storage() {
 	local file=${4:-"filelist.pbm"}
 
 	local endpoint
+	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
 	case ${storage_type} in
 		s3)
 			endpoint="s3.amazonaws.com"
+			setup_aws_credentials
+			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
+			setup_gcs_credentials
+			check_backup_existence_gcs "$backup_dest" "/${replset}/${file}"
 			;;
 		azure)
 			endpoint="engk8soperators.blob.core.windows.net"
+			setup_azure_credentials
+			check_backup_existence_azure "$backup_dest" "/${replset}/${file}"
 			;;
 		minio)
 			endpoint="minio-service"
+			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+				/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+				| grep "${file}"; do
+				sleep 1
+				let retry+=1
+				if [ $retry -ge 60 ]; then
+					log "Max retry count $retry reached. Something went wrong with writing backup"
+					exit 1
+				fi
+			done
 			;;
 		*)
 			echo "unsupported storage type: ${storage_type}"
 			exit 1
 			;;
 	esac
+}
 
-	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
-	if [[ ${storage_type} == 'minio' ]]; then
-		until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-			/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-			/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
-			| grep "${file}"; do
-			sleep 1
-			let retry+=1
-			if [ $retry -ge 60 ]; then
-				log "Max retry count $retry reached. Something went wrong with writing backup"
-				exit 1
-			fi
-		done
-	else
-		local url="https://${endpoint}/${backup_dest}/${replset}/${file}"
-		log "checking if ${url} exists"
-		curl --fail --head "${url}"
-	fi
+function wait_all_pvc_resize() {
+	local expected_size=$1
+	local max_retry=${2:-120}
+	local sleep_time=${3:-5}
+
+	for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
+		if ! wait_pvc_resize "$pvc" "$expected_size" "$max_retry" "$sleep_time"; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+function wait_pvc_resize() {
+	local pvc=$1
+	local expected_size=$2
+	local max_retry=${3:-120}
+	local sleep_time=${4:-5}
+
+	local retry=0
+	echo "Waiting for $pvc to be resized"
+	until [[ $(kubectl_bin get "$pvc" -o jsonpath='{.status.capacity.storage}') == "$expected_size" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "$pvc was not resized, max retries exceeded"
+			return 1
+		fi
+		echo -n "."
+		sleep "$sleep_time"
+
+		retry=$((retry + 1))
+	done
+	echo
+	echo "${pvc} was resized"
+	return 0
 }

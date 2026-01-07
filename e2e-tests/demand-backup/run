@@ -188,7 +188,7 @@ wait_backup_agent $cluster-1
 wait_backup_agent $cluster-2
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	desc 'Check GCS pfofiles'
+	desc 'Check GCS profiles'
 	compare_pbm_profile_setup "some-name" "gcp-cs-s3"
 	compare_pbm_profile_setup "some-name" "gcp-cs-sa"
 fi
@@ -223,22 +223,25 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	check_backup_in_storage ${backup_name_aws} s3 rs0 'myApp.test.gz'
+	setup_aws_credentials
+	check_backup_existence_aws ${backup_dest_aws} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-s3'
 	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
-	check_backup_in_storage ${backup_name_gcp_s3} gcs rs0 'myApp.test.gz'
+	setup_gcs_credentials
+	check_backup_existence_gcs ${backup_dest_gcp_s3} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_gcp_s3" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-sa'
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
-	check_backup_in_storage ${backup_name_gcp_sa} gcs rs0 'myApp.test.gz'
+	check_backup_existence_gcs ${backup_dest_gcp_sa} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_gcp_sa" "$cluster"
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	check_backup_in_storage ${backup_name_azure} azure rs0 'myApp.test.gz'
+	setup_azure_credentials
+	check_backup_existence_azure ${backup_dest_azure} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
 fi
 
@@ -285,10 +288,10 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_s3}" "gcp-cs-s3"
-	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_sa}" "gcp-cs-sa"
-	check_backup_deletion "${backup_dest_azure}" "azure-blob"
+	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
+	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 fi
 
 desc 'checking backup deletion without cr'
@@ -327,10 +330,10 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_s3}" "gcp-cs-s3"
-	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp_sa}" "gcp-cs-sa"
-	check_backup_deletion "${backup_dest_azure}" "azure-blob"
+	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
+	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 fi
 
 # Temporarily skipping this check

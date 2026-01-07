@@ -40,9 +40,12 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
+	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -86,6 +89,9 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create client")
 	}
+	secretProviders := []pkgSecret.Provider{
+		new(vault.Provider),
+	}
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 client,
@@ -97,6 +103,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
+		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
 		initImage: initImage,
 
@@ -178,11 +185,12 @@ type ReconcilePerconaServerMongoDB struct {
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
-	crons               CronRegistry
-	clientcmd           *clientcmd.Client
-	serverVersion       *version.ServerVersion
-	reconcileIn         time.Duration
-	mongoClientProvider MongoClientProvider
+	crons                 CronRegistry
+	clientcmd             *clientcmd.Client
+	serverVersion         *version.ServerVersion
+	reconcileIn           time.Duration
+	mongoClientProvider   MongoClientProvider
+	secretProviderHandler *pkgSecret.ProviderHandler
 
 	newCertManagerCtrlFunc tls.NewCertManagerControllerFunc
 
@@ -304,6 +312,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	if err := r.secretProviderHandler.Update(ctx, r.client, cr); err != nil {
+		if pkgSecret.IsCriticalErr(err) {
+			return reconcile.Result{}, errors.Wrap(err, "update secret providers")
+		}
+		log.Error(err, "failed update secret providers")
+	}
+
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		rec, err := r.checkFinalizers(ctx, cr)
 		if rec || err != nil {
@@ -347,6 +362,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if cr.CompareVersion("1.21.0") >= 0 {
 		if err := r.reconcileLogCollectorConfigMaps(ctx, cr); err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "reconcile log collector config map")
+		}
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		if err := r.reconcileLogRotateConfigMaps(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "reconcile log rotate config map")
 		}
 	}
 
@@ -1238,6 +1259,40 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx cont
 		},
 		Data: map[string]string{
 			logcollector.FluentBitCustomConfigurationFile: cr.Spec.LogCollector.Configuration,
+		},
+	}
+
+	err := r.createOrUpdateConfigMap(ctx, cr, cm)
+	if err != nil {
+		return errors.Wrap(err, "create or update config map")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileLogRotateConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.IsLogCollectorEnabled() {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logrotate.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log rotate config map when log collector is disabled")
+		}
+		return nil
+	}
+
+	if cr.Spec.LogCollector.LogRotate == nil || cr.Spec.LogCollector.LogRotate.Configuration == "" {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logrotate.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log rotate config map when the configuration is empty")
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      logrotate.ConfigMapName(cr.Name),
+			Namespace: cr.GetNamespace(),
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			logrotate.MongodbConfig: cr.Spec.LogCollector.LogRotate.Configuration,
 		},
 	}
 

@@ -260,7 +260,6 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	}
 
 	return nil
-
 }
 
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
@@ -901,6 +900,37 @@ func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
 	return false
 }
 
+func (m *ConfigMembers) RemoveArbiterIfNeeded(ctx context.Context, unsafePSA bool) bool {
+	if !unsafePSA {
+		return false
+	}
+
+	votingMembers := 0
+	hasArbiter := false
+	for _, member := range *m {
+		if member.ArbiterOnly {
+			hasArbiter = true
+			continue
+		}
+		if member.Votes > 0 {
+			votingMembers++
+		}
+	}
+	if !hasArbiter || votingMembers > 1 {
+		return false
+	}
+	log := logf.FromContext(ctx)
+
+	for i := len(*m) - 1; i >= 0 && len(*m) > 1; i-- {
+		member := []ConfigMember(*m)[i]
+		if member.ArbiterOnly {
+			log.Info("Removing arbiter member because of 1 writable node", "_id", member.ID, "host", member.Host)
+			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
+		}
+	}
+	return true
+}
+
 func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
 	(*m)[i].Votes = votes
 	(*m)[i].Priority = priority
@@ -990,7 +1020,7 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 		return
 	}
 
-	if votes%2 == 0 {
+	if votes%2 == 0 && !unsafePSA {
 		for j := lastVoteIdx; j >= 0; j-- {
 			if []ConfigMember(*m)[j].Votes == 0 {
 				continue

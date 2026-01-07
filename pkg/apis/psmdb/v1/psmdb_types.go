@@ -99,6 +99,7 @@ type PerconaServerMongoDBSpec struct {
 	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
 	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
+	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -339,6 +340,10 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
+// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
+// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
+const ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+
 type ClusterCondition struct {
 	Status             ConditionStatus `json:"status"`
 	Type               AppState        `json:"type"`
@@ -355,6 +360,14 @@ func (s *PerconaServerMongoDBStatus) FindCondition(conditionType AppState) *Clus
 		}
 	}
 	return nil
+}
+
+func (s *PerconaServerMongoDBStatus) IsStatusConditionTrue(conditionType AppState) bool {
+	cond := s.FindCondition(conditionType)
+	if cond == nil {
+		return false
+	}
+	return cond.Status == ConditionTrue
 }
 
 type PMMSpec struct {
@@ -749,6 +762,37 @@ type ReplsetSpec struct {
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
+	Env                      []corev1.EnvVar              `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+}
+
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	horizons := make(map[string]map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				if d, ok := overrides.Horizons[h]; ok {
+					domain = d
+				}
+			}
+
+			idx := strings.IndexRune(domain, ':')
+			if withPorts && idx == -1 {
+				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+			} else if !withPorts && idx != -1 {
+				domain = domain[:idx]
+			}
+
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			horizons[podName][h] = domain
+		}
+	}
+	return horizons
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -839,6 +883,22 @@ type SecretsSpec struct {
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
 }
 
+type VaultSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="isURL(self)",message="endpointURL must be a valid URL"
+	EndpointURL string `json:"endpointURL,omitempty"`
+	TLSSecret   string `json:"tlsSecret,omitempty"`
+	//+optional
+	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+}
+
+type SyncUsersSpec struct {
+	Role        string `json:"role,omitempty"`
+	TokenSecret string `json:"tokenSecret,omitempty"`
+	MountPath   string `json:"mountPath,omitempty"`
+	KeyPath     string `json:"keyPath,omitempty"`
+}
+
 func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
 	if s == nil || s.InternalKey == "" {
 		return cr.Name + "-mongodb-keyfile"
@@ -867,6 +927,8 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	Env                      []corev1.EnvVar            `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
@@ -1030,6 +1092,38 @@ type BackupStorageS3Spec struct {
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
+type BackupStorageMinioSpec struct {
+	Bucket                string        `json:"bucket,omitempty"`
+	Prefix                string        `json:"prefix,omitempty"`
+	Region                string        `json:"region,omitempty"`
+	EndpointURL           string        `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
+	PartSize              int64         `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
+	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool          `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer `json:"retryer,omitempty"`
+	Secure                bool          `json:"secure,omitempty"`
+}
+
+func (spec BackupStorageMinioSpec) Validate() error {
+	if spec.EndpointURL == "" {
+		return errors.New("endpointURL is required")
+	}
+	if spec.Bucket == "" {
+		return errors.New("bucket is required")
+	}
+	if spec.CredentialsSecret == "" {
+		return errors.New("credentialsSecret is required")
+	}
+	return nil
+}
+
+type MinioRetryer struct {
+	// NumMaxRetries is the number of max retries that will be performed.
+	NumMaxRetries int `json:"numMaxRetries"`
+}
+
 type GCSRetryer struct {
 	BackoffInitial    time.Duration `json:"backoffInitial"`
 	BackoffMax        time.Duration `json:"backoffMax"`
@@ -1062,12 +1156,17 @@ const (
 	BackupStorageS3         BackupStorageType = "s3"
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageMinio      BackupStorageType = "minio"
 )
 
 type BackupStorageSpec struct {
-	Type       BackupStorageType           `json:"type"`
-	Main       bool                        `json:"main,omitempty"`
-	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Type BackupStorageType   `json:"type"`
+	Main bool                `json:"main,omitempty"`
+	S3   BackupStorageS3Spec `json:"s3,omitempty"`
+	// Not all S3-compatible storage services support Signature Version 4 (SigV4) used in AWS SDK v2,
+	// which may result in compatibility and connectivity issues.
+	// PBM (v2.12.0+) allows setting a `minio` backup storage type which uses the MinIo Go client.
+	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
@@ -1123,7 +1222,9 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1302,11 +1403,18 @@ const (
 type SystemUserRole string
 
 const (
-	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
-	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
-	RoleUserAdmin      SystemUserRole = "userAdmin"
+	// RoleDatabaseAdmin is general-purpose superuser account for cluster administration.
+	// This user is not used by the operator; it is intended for end-user access and management tasks.
+	RoleDatabaseAdmin SystemUserRole = "databaseAdmin"
+	// RoleClusterAdmin is used by the operator to perform cluster management operations
+	// such as adding/removing replica set members and managing sharded cluster topology.
+	RoleClusterAdmin SystemUserRole = "clusterAdmin"
+	// RoleUserAdmin is used by the operator to manage MongoDB users and their permissions.
+	RoleUserAdmin SystemUserRole = "userAdmin"
+	// RoleClusterMonitor is used for monitoring purposes, including PMM (Percona Monitoring and Management).
 	RoleClusterMonitor SystemUserRole = "clusterMonitor"
-	RoleBackup         SystemUserRole = "backup"
+	// RoleBackup is used by the operator for backup and restore operations via PBM (Percona Backup for MongoDB).
+	RoleBackup SystemUserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
@@ -1342,6 +1450,10 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 		return nil
 	}
 
+	if cr.Status.State == AppStateInit && cr.Status.IsStatusConditionTrue(ConditionTypePendingSmartUpdate) {
+		return nil
+	}
+
 	if cr.CompareVersion("1.15.0") <= 0 && !cr.Spec.UnsafeConf {
 		return errors.Errorf("allowUnsafeConfigurations must be true to run backup on cluster with status %s", cr.Status.State)
 	}
@@ -1368,6 +1480,15 @@ func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *PerconaServerMongoDBStatus) RemoveCondition(conditionType AppState) {
+	for i, c := range s.Conditions {
+		if c.Type == conditionType {
+			s.Conditions = append(s.Conditions[:i], s.Conditions[i+1:]...)
+			return
+		}
+	}
 }
 
 func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
@@ -1458,6 +1579,25 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	Env                      []corev1.EnvVar             `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Key must contain the .conf extension to be processed correctly.
+	//
+	// NOTE: mongodb.conf is reserved for the default configuration specified by .configuration field.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

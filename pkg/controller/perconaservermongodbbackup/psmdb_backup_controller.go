@@ -278,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
-		updatedStatus, err := bcp.Status(ctx, cr)
+		updatedStatus, err := bcp.Status(ctx, cr, cluster)
 		if err == nil {
 			status = updatedStatus
 		}
@@ -372,7 +372,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		if strings.Contains(s3Conf.EndpointURL, s3.GCSEndpointURL) {
+		if strings.Contains(s3Conf.EndpointURL, naming.GCSEndpointURL) {
 			gcsConf := &gcs.Config{
 				Bucket:    cr.Status.S3.Bucket,
 				Prefix:    cr.Status.S3.Prefix,
@@ -569,6 +569,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.S3 != nil:
 		storage.Type = psmdbv1.BackupStorageS3
 		storage.S3 = *cr.Status.S3
+	case cr.Status.Minio != nil:
+		storage.Type = psmdbv1.BackupStorageMinio
+		storage.Minio = *cr.Status.Minio
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure
