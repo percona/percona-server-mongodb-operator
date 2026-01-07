@@ -108,9 +108,10 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://s3.amazonaws.com/${backup_dest_aws}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	setup_aws_credentials
+	check_backup_existence_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+	check_backup_existence_aws "$backup_dest_aws" "/rs1/myApp1.test.gz"
+	check_backup_existence_aws "$backup_dest_aws" "/rs2/myApp2.test.gz"
 	insert_data_mongos "100501" "myApp" "" "$custom_port"
 	insert_data_mongos "100501" "myApp1" "" "$custom_port"
 	insert_data_mongos "100501" "myApp2" "" "$custom_port"
@@ -121,9 +122,10 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- gcp-cs'
 	backup_dest_gcp=$(get_backup_dest "$backup_name_gcp")
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://storage.googleapis.com/${backup_dest_gcp}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	setup_gcs_credentials
+	check_backup_existence_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
+	check_backup_existence_gcs "$backup_dest_gcp" "/rs1/myApp1.test.gz"
+	check_backup_existence_gcs "$backup_dest_gcp" "/rs2/myApp2.test.gz"
 	insert_data_mongos "100501" "myApp" "" "$custom_port"
 	insert_data_mongos "100501" "myApp1" "" "$custom_port"
 	insert_data_mongos "100501" "myApp2" "" "$custom_port"
@@ -134,9 +136,10 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 
 	desc 'check backup and restore -- azure-blob'
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
-	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs0/myApp.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs1/myApp1.test.gz" | gunzip >/dev/null
-	curl -s "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}/rs2/myApp2.test.gz" | gunzip >/dev/null
+	setup_azure_credentials
+	check_backup_existence_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_existence_azure "$backup_dest_azure" "/rs1/myApp1.test.gz"
+	check_backup_existence_azure "$backup_dest_azure" "/rs2/myApp2.test.gz"
 	insert_data_mongos "100501" "myApp" "" "$custom_port"
 	insert_data_mongos "100501" "myApp1" "" "$custom_port"
 	insert_data_mongos "100501" "myApp2" "" "$custom_port"
@@ -169,9 +172,9 @@ if [[ $backup_exists -eq 1 ]]; then
 fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	check_backup_deletion "https://s3.amazonaws.com/${backup_dest_aws}" "aws-s3"
-	check_backup_deletion "https://storage.googleapis.com/${backup_dest_gcp}" "gcp-cs"
-	check_backup_deletion "https://engk8soperators.blob.core.windows.net/${backup_dest_azure}" "azure-blob"
+	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+	check_backup_deletion_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
+	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 fi
 
 # Temporarily skipping this check
@@ -180,3 +183,4 @@ fi
 
 kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 destroy "$namespace"
+desc 'test passed'
