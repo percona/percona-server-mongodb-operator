@@ -29,8 +29,6 @@ wait_for_running $cluster-rs2 3
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 
-sleep 10
-
 desc 'write data without auth'
 run_mongos \
 	'use myApp\n db.createCollection("test")' \
@@ -55,8 +53,6 @@ desc 'run backup without auth'
 run_backup minio ${backup_name_no_auth}
 wait_backup "$backup_name_no_auth"
 
-sleep 5
-
 desc 'insert new data without auth'
 run_mongos \
 	'use myApp\n db.test.insert({x: 100501})' \
@@ -68,8 +64,6 @@ compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-insert" "" "myAp
 desc 'restore from backup (no auth)'
 run_restore "$backup_name_no_auth"
 wait_restore "$backup_name_no_auth" "$cluster"
-
-sleep 20
 
 desc 'verify data was restored to original state'
 compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-restore" "" "myApp" "test" "$custom_port"
@@ -107,8 +101,6 @@ desc 'run backup with auth enabled'
 run_backup minio ${backup_name_with_auth}
 wait_backup "$backup_name_with_auth"
 
-sleep 5
-
 desc 'insert more data with auth'
 run_mongos \
 	'use myApp\n db.test.insert({x: 200501})' \
@@ -120,8 +112,6 @@ compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-inse
 desc 'restore from backup (with auth)'
 run_restore "$backup_name_with_auth"
 wait_restore "$backup_name_with_auth" "$cluster"
-
-sleep 10
 
 desc 'verify data was restored to state before last insert'
 compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-restore-auth" "" "myApp" "test" "$custom_port"
