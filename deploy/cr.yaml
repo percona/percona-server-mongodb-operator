@@ -692,7 +692,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.12.0
+    image: percona/percona-backup-mongodb:2.11.0
 #    startingDeadlineSeconds: 300
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
