@@ -9,6 +9,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -25,8 +26,16 @@ func TestContainers(t *testing.T) {
 			},
 		},
 	}
+	testLogRotate := &api.LogRotateSpec{
+		Configuration: "my-logrotate-config",
+		ExtraConfig: corev1.LocalObjectReference{
+			Name: "my-logrotate-extra-config",
+		},
+		Schedule: "0 0 * * *",
+	}
 	tests := map[string]struct {
 		logCollector           *api.LogCollectorSpec
+		logRotate              *api.LogRotateSpec
 		secrets                *corev1.Secret
 		expectedContainerNames []string
 		expectedContainers     []corev1.Container
@@ -47,7 +56,7 @@ func TestContainers(t *testing.T) {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil),
+			expectedContainers:     expectedContainers("", nil, nil, nil),
 		},
 		"logcollector enabled with configuration": {
 			logCollector: &api.LogCollectorSpec{
@@ -57,7 +66,7 @@ func TestContainers(t *testing.T) {
 				Configuration:   "my-config",
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", nil, nil),
+			expectedContainers:     expectedContainers("my-config", nil, nil, nil),
 		},
 		"logcollector enabled with env variable": {
 			logCollector: &api.LogCollectorSpec{
@@ -69,11 +78,25 @@ func TestContainers(t *testing.T) {
 				EnvFrom:         testEnvFrom,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom),
+			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom, nil),
+		},
+		"logcollector enabled with logrotate": {
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			logRotate:              testLogRotate,
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, testLogRotate),
 		},
 	}
 
 	for name, tt := range tests {
+		logColl := tt.logCollector
+		if tt.logRotate != nil {
+			logColl.LogRotate = tt.logRotate
+		}
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
@@ -82,7 +105,7 @@ func TestContainers(t *testing.T) {
 				},
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion:    version.Version(),
-					LogCollector: tt.logCollector,
+					LogCollector: logColl,
 					Secrets: &api.SecretsSpec{
 						Users: "users-secret",
 					},
@@ -109,7 +132,12 @@ func TestContainers(t *testing.T) {
 	}
 }
 
-func expectedContainers(configuration string, envVars []corev1.EnvVar, envFrom []corev1.EnvFromSource) []corev1.Container {
+func expectedContainers(
+	configuration string,
+	envVars []corev1.EnvVar,
+	envFrom []corev1.EnvFromSource,
+	logrotateConfig *api.LogRotateSpec,
+) []corev1.Container {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
 		{
@@ -191,6 +219,21 @@ func expectedContainers(configuration string, envVars []corev1.EnvVar, envFrom [
 			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
 		},
+	}
+
+	if logrotateConfig != nil {
+		if logrotateConfig.Configuration != "" || logrotateConfig.ExtraConfig.Name != "" {
+			logRotateC.VolumeMounts = append(logRotateC.VolumeMounts, corev1.VolumeMount{
+				Name:      logrotate.VolumeName,
+				MountPath: "/opt/percona/logcollector/logrotate/conf.d",
+			})
+		}
+		if logrotateConfig.Schedule != "" {
+			logRotateC.Env = append(logRotateC.Env, corev1.EnvVar{
+				Name:  "LOGROTATE_SCHEDULE",
+				Value: logrotateConfig.Schedule,
+			})
+		}
 	}
 
 	return []corev1.Container{logsC, logRotateC}
