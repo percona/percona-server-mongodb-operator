@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 
@@ -179,7 +180,7 @@ func TestWaitForCerts(t *testing.T) {
 							Kind:       cm.CertificateKind,
 							Name:       certName,
 							UID:        "cert-uid-456",
-							Controller: pointer(true),
+							Controller: ptr.To(true),
 						},
 					},
 				},
@@ -260,10 +261,6 @@ func TestWaitForCerts(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
-}
-
-func pointer(b bool) *bool {
-	return &b
 }
 
 // creates a fake client to mock API calls with the mock objects
