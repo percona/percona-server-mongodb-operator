@@ -26217,6 +26217,23 @@ spec:
                 required:
                 - enabled
                 type: object
+              storageAutoscaling:
+                properties:
+                  enabled:
+                    type: boolean
+                  growthStepGi:
+                    default: 2
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  maxSize:
+                    type: string
+                  triggerThresholdPercent:
+                    default: 80
+                    maximum: 95
+                    minimum: 50
+                    type: integer
+                type: object
               tls:
                 properties:
                   allowInvalidCertificates:
@@ -26423,6 +26440,28 @@ spec:
                 type: integer
               state:
                 type: string
+              storageAutoscaling:
+                additionalProperties:
+                  properties:
+                    currentSize:
+                      type: string
+                    lastCheckTime:
+                      format: date-time
+                      type: string
+                    lastError:
+                      type: string
+                    lastResizeTime:
+                      format: date-time
+                      type: string
+                    lastUsagePercent:
+                      type: integer
+                    pvcName:
+                      type: string
+                    resizeCount:
+                      format: int32
+                      type: integer
+                  type: object
+                type: object
             required:
             - ready
             - size

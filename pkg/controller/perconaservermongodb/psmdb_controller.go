@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -89,6 +91,13 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create client")
 	}
+
+	// used for storage autoscaling
+	metricsClient, err := metricsclientset.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, errors.Wrap(err, "create metrics client")
+	}
+
 	secretProviders := []pkgSecret.Provider{
 		new(vault.Provider),
 	}
@@ -102,6 +111,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
+		metricsClient:          metricsClient,
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
@@ -177,16 +187,22 @@ func NewCronRegistry() CronRegistry {
 	return c
 }
 
+// ClientCmd is an interface for executing commands in pods
+type ClientCmd interface {
+	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+}
+
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client     client.Client
-	scheme     *runtime.Scheme
-	restConfig *rest.Config
+	client        client.Client
+	scheme        *runtime.Scheme
+	restConfig    *rest.Config
+	metricsClient metricsclientset.Interface
 
 	crons                 CronRegistry
-	clientcmd             *clientcmd.Client
+	clientcmd             ClientCmd
 	serverVersion         *version.ServerVersion
 	reconcileIn           time.Duration
 	mongoClientProvider   MongoClientProvider

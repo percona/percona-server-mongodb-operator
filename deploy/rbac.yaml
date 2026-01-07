@@ -102,6 +102,13 @@ rules:
   - create
   - patch
 - apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - certmanager.k8s.io
   - cert-manager.io
   resources:
