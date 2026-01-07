@@ -767,6 +767,16 @@ type ReplsetSpec struct {
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	fixDomain := func(domain string) string {
+		idx := strings.IndexRune(domain, ':')
+		if withPorts && idx == -1 {
+			domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+		} else if !withPorts && idx != -1 {
+			domain = domain[:idx]
+		}
+		return domain
+	}
+
 	horizons := make(map[string]map[string]string)
 	for podName, m := range r.Horizons {
 		overrides, ok := r.ReplsetOverrides[podName]
@@ -779,19 +789,27 @@ func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 				}
 			}
 
-			idx := strings.IndexRune(domain, ':')
-			if withPorts && idx == -1 {
-				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
-			} else if !withPorts && idx != -1 {
-				domain = domain[:idx]
-			}
-
 			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
 				horizons[podName] = make(map[string]string)
 			}
-			horizons[podName][h] = domain
+			horizons[podName][h] = fixDomain(domain)
+		}
+
+	}
+
+	for podName, m := range r.ReplsetOverrides {
+		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			if _, ok := horizons[podName][h]; ok {
+				continue
+			}
+
+			horizons[podName][h] = fixDomain(domain)
 		}
 	}
+
 	return horizons
 }
 
