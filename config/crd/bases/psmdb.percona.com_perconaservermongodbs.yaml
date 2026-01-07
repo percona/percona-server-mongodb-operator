@@ -309,7 +309,9 @@ spec:
                   serviceAccountName:
                     type: string
                   startingDeadlineSeconds:
+                    default: 120
                     format: int64
+                    minimum: 1
                     type: integer
                   storages:
                     additionalProperties:
@@ -816,6 +818,21 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  logrotate:
+                    properties:
+                      configuration:
+                        type: string
+                      extraConfig:
+                        properties:
+                          name:
+                            default: ""
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      schedule:
+                        default: 0 0 * * *
+                        type: string
+                    type: object
                   resources:
                     properties:
                       claims:

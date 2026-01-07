@@ -68,7 +68,9 @@ spec:
               compressionType:
                 type: string
               startingDeadlineSeconds:
+                default: 120
                 format: int64
+                minimum: 1
                 type: integer
               storageName:
                 type: string
