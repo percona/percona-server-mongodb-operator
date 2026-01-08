@@ -333,7 +333,7 @@ func updateLatestRestorableTime(ctx context.Context, cl client.Client, pbm backu
 
 	log := logf.FromContext(ctx)
 
-	tl, err := pbm.GetLatestTimelinePITR(ctx)
+	tl, err := pbm.GetLatestTimelinePITR(ctx, nil)
 	if err != nil {
 		if err == backup.ErrNoOplogsForPITR {
 			return nil
