@@ -1005,7 +1005,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(
 	if err != nil {
 		return "", errors.Wrap(err, "new PBM connection")
 	}
-	defer pbmc.Close(ctx)
+	defer pbmc.Close(ctx) //nolint:errcheck
 
 	timeline, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
 	if err != nil {
