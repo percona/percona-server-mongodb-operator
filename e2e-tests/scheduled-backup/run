@@ -187,7 +187,7 @@ wait_backup "$backup_name_minio"
 sleep 5
 
 desc 'check backup and restore -- minio'
-run_restore "$backup_name_minio" 3
+run_restore "$backup_name_minio"
 wait_restore "$backup_name_minio" "${cluster/-rs0/}"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"

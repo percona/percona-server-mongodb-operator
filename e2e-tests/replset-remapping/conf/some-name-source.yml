@@ -13,6 +13,11 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
+    pitr:
+      enabled: true
+      oplogSpanMin: 1
+      compressionType: gzip
+      compressionLevel: 6
     storages:
       minio:
         type: s3
@@ -28,6 +33,9 @@ spec:
     expose:
       enabled: false
       exposeType: ClusterIP
+    configuration: |
+      security:
+        enableEncryption: false
     resources:
       limits:
         cpu: 300m
