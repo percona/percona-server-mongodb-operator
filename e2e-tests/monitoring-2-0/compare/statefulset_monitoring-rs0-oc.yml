@@ -103,6 +103,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
