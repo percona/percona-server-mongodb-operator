@@ -42,12 +42,17 @@ function setup_source_cluster() {
 		'' \
 		false \
 		rs0
+	run_backup "minio" "backup-minio-physical" "physical"
+	wait_backup "backup-minio-physical"
 
 	run_backup "minio" "backup-minio-logical"
 	wait_backup "backup-minio-logical"
 
-	run_backup "minio" "backup-minio-physical"
-	wait_backup "backup-minio-physical"
+	log "writing more data for PiTR"
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100501 })' \
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}"
+	sleep_with_log 70 "wait for oplog chunk upload"
 
 	log "deleting PSMDB cluster: ${source_cluster}"
 	kubectl_bin delete psmdb ${source_cluster}
@@ -66,9 +71,9 @@ function setup_target_cluster() {
 }
 
 function test_restores() {
-	desc "CASE 1: Logical restore with replset remapping"
-	run_restore backup-minio-logical
-	wait_restore backup-minio-logical ${target_cluster}
+	desc "CASE 1: Physical restore with replset remapping"
+	run_restore backup-minio-physical
+	wait_restore backup-minio-physical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongo_cmd \
 		"find" \
@@ -87,14 +92,14 @@ function test_restores() {
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
 		"mongodb" ".svc.cluster.local" "" "replset0"
 
-	desc "CASE 2: Physical restore with replset remapping"
-	run_restore backup-minio-physical
-	wait_restore backup-minio-physical ${target_cluster}
+	desc "CASE 2: Logical restore with replset remapping"
+	run_restore backup-minio-logical ${test_dir}/conf/restore-pitr.yml
+	wait_restore backup-minio-logical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongo_cmd \
 		"find" \
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
-		"" \
+		"-2nd" \
 		".svc.cluster.local" \
 		myApp \
 		test \
