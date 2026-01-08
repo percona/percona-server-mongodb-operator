@@ -884,3 +884,8 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    logrotate:
+#      configuration: ""
+#      extraConfig:
+#        name: logrotate-config
+#      schedule: "0 0 * * *"
