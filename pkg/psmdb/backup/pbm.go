@@ -921,7 +921,7 @@ func (b *pbmC) GetTimelinesPITR(ctx context.Context, rsMap map[string]string) ([
 
 		rsTimelines, err := oplog.PITRGetValidTimelines(ctx, b.Client, rs, now)
 		if err != nil {
-			return nil, errors.Wrapf(err, "getting timelines for %s", s.RS)
+			return nil, errors.Wrapf(err, "getting timelines for %s", rs)
 		}
 
 		timelines = append(timelines, rsTimelines)
@@ -982,7 +982,7 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrNoOplogsForPITR
 		}
-		return nil, errors.Wrap(err, "getting PITR chunk for ts")
+		return nil, errors.Wrapf(err, "get PITR chunk that contains %d for %s", unixTS, rs)
 	}
 
 	if c == nil {
