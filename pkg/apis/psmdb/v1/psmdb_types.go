@@ -798,6 +798,16 @@ type ReplsetSpec struct {
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	fixDomain := func(domain string) string {
+		idx := strings.IndexRune(domain, ':')
+		if withPorts && idx == -1 {
+			domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+		} else if !withPorts && idx != -1 {
+			domain = domain[:idx]
+		}
+		return domain
+	}
+
 	horizons := make(map[string]map[string]string)
 	for podName, m := range r.Horizons {
 		overrides, ok := r.ReplsetOverrides[podName]
@@ -810,19 +820,27 @@ func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 				}
 			}
 
-			idx := strings.IndexRune(domain, ':')
-			if withPorts && idx == -1 {
-				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
-			} else if !withPorts && idx != -1 {
-				domain = domain[:idx]
-			}
-
 			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
 				horizons[podName] = make(map[string]string)
 			}
-			horizons[podName][h] = domain
+			horizons[podName][h] = fixDomain(domain)
+		}
+
+	}
+
+	for podName, m := range r.ReplsetOverrides {
+		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			if _, ok := horizons[podName][h]; ok {
+				continue
+			}
+
+			horizons[podName][h] = fixDomain(domain)
 		}
 	}
+
 	return horizons
 }
 
@@ -1253,7 +1271,9 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1592,6 +1612,23 @@ type LogCollectorSpec struct {
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Key must contain the .conf extension to be processed correctly.
+	//
+	// NOTE: mongodb.conf is reserved for the default configuration specified by .configuration field.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

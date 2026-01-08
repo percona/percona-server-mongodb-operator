@@ -2,13 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    app.kubernetes.io/component: arbiter
+    app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: reconcile-statefulset-cr
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
     app.kubernetes.io/replset: rs0
-  name: reconcile-statefulset-cr-rs0-arbiter
+  name: reconcile-statefulset-cr-rs0
   namespace: reconcile-statefulset
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1
@@ -18,10 +18,10 @@ metadata:
     uid: ""
   resourceVersion: "1"
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
-      app.kubernetes.io/component: arbiter
+      app.kubernetes.io/component: mongod
       app.kubernetes.io/instance: reconcile-statefulset-cr
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
@@ -31,9 +31,9 @@ spec:
   template:
     metadata:
       annotations:
-        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e
+        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e43d4608f2939c9b53ea870c45ed554cbd5869b9777a1e0b836e3f097b38dd5ab
       labels:
-        app.kubernetes.io/component: arbiter
+        app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: reconcile-statefulset-cr
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
@@ -45,7 +45,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
-                app.kubernetes.io/component: arbiter
+                app.kubernetes.io/component: mongod
                 app.kubernetes.io/instance: reconcile-statefulset-cr
                 app.kubernetes.io/managed-by: percona-server-mongodb-operator
                 app.kubernetes.io/name: percona-server-mongodb
@@ -114,7 +114,7 @@ spec:
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
-        name: mongod-arbiter
+        name: mongod
         ports:
         - containerPort: 27017
           name: mongodb
@@ -126,12 +126,6 @@ spec:
             - readiness
             - --component
             - mongod
-            - --ssl
-            - --sslInsecure
-            - --sslCAFile
-            - /etc/mongodb-ssl/ca.crt
-            - --sslPEMKeyFile
-            - /tmp/tls.pem
           failureThreshold: 8
           initialDelaySeconds: 10
           periodSeconds: 3
@@ -147,7 +141,6 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
-        topologySpreadConstraints: null
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
@@ -170,6 +163,117 @@ spec:
         - mountPath: /etc/users-secret
           name: users-secret-file
         workingDir: /data/db
+      - args:
+        - pbm-agent-entrypoint
+        command:
+        - /opt/percona/pbm-entry.sh
+        env:
+        - name: PBM_AGENT_MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_BACKUP_USER_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        - name: PBM_AGENT_MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_BACKUP_PASSWORD_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        - name: PBM_MONGODB_REPLSET
+          value: rs0
+        - name: PBM_MONGODB_PORT
+          value: "27017"
+        - name: PBM_AGENT_SIDECAR
+          value: "true"
+        - name: PBM_AGENT_SIDECAR_SLEEP
+          value: "5"
+        - name: SHARDED
+          value: "TRUE"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: PBM_MONGODB_URI
+          value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
+        - name: PBM_AGENT_TLS_ENABLED
+          value: "true"
+        image: perconalab/percona-server-mongodb-operator:main-backup
+        imagePullPolicy: Always
+        name: backup-agent
+        resources: {}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /opt/percona
+          name: bin
+          readOnly: true
+        - mountPath: /data/db
+          name: mongod-data
+      - name: logs
+        image: perconalab/fluentbit:main-logcollector
+        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
+        args: [ "fluent-bit" ]
+        env:
+          - name: LOG_DATA_DIR
+            value: /data/db/logs
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        resources:
+          requests:
+            cpu: 200m
+            memory: 100M
+        volumeMounts:
+          - mountPath: /data/db
+            name: mongod-data
+          - mountPath: /opt/percona
+            name: bin
+          - mountPath: /opt/percona/logcollector/fluentbit/custom
+            name: log-collector-volume
+      - name: logrotate
+        image: perconalab/fluentbit:main-logcollector
+        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
+        args: [ "logrotate" ]
+        env:
+          - name: MONGODB_HOST
+            value: localhost
+          - name: MONGODB_PORT
+            value: "27017"
+          - name: MONGODB_USER
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
+          - name: MONGODB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+                name: internal-reconcile-statefulset-cr-users
+                optional: false
+          - name: LOGROTATE_SCHEDULE
+            value: "0 0 */2 * *"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 100M
+        volumeMounts:
+          - mountPath: /data/db
+            name: mongod-data
+          - mountPath: /opt/percona
+            name: bin
+          - mountPath: /opt/percona/logcollector/logrotate/conf.d
+            name: logrotate-config
       initContainers:
       - command:
         - /init-entrypoint.sh
@@ -191,6 +295,8 @@ spec:
       restartPolicy: Always
       securityContext:
         fsGroup: 1001
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 60
       volumes:
       - name: reconcile-statefulset-cr-mongodb-keyfile
         secret:
@@ -205,6 +311,15 @@ spec:
           name: reconcile-statefulset-cr-log-collector-config
           optional: true
         name: log-collector-volume
+      - name: logrotate-config
+        projected:
+          sources:
+          - configMap:
+              name: reconcile-statefulset-cr-logrotate-config
+              optional: true
+          - configMap:
+              name: extra-config
+              optional: true
       - name: my-cluster-name-mongodb-encryption-key
         secret:
           defaultMode: 288
@@ -223,7 +338,17 @@ spec:
       - name: users-secret-file
         secret:
           secretName: internal-reconcile-statefulset-cr-users
-      - emptyDir: {}
-        name: mongod-data
   updateStrategy:
     type: OnDelete
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mongod-data
+      namespace: reconcile-statefulset
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 3Gi
