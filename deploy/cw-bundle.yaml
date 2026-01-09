@@ -26445,16 +26445,11 @@ spec:
                   properties:
                     currentSize:
                       type: string
-                    lastCheckTime:
-                      format: date-time
-                      type: string
                     lastError:
                       type: string
                     lastResizeTime:
                       format: date-time
                       type: string
-                    lastUsagePercent:
-                      type: integer
                     resizeCount:
                       format: int32
                       type: integer

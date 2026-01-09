@@ -12,7 +12,12 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-#  enableVolumeExpansion: false
+  enableVolumeExpansion: true
+  storageAutoscaling:
+    enabled: true
+    triggerThresholdPercent: 80
+    growthStepGi: 2
+    maxSize: "10Gi"
 #  enableExternalVolumeAutoscaling: false
   crVersion: 1.22.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0

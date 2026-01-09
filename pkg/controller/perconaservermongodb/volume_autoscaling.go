@@ -209,7 +209,7 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	}
 
 	status := cr.Status.StorageAutoscaling[pvc.Name]
-	status.LastResizeTime = &metav1.Time{Time: time.Now()}
+	status.LastResizeTime = metav1.Time{Time: time.Now()}
 	status.ResizeCount++
 	cr.Status.StorageAutoscaling[pvc.Name] = status
 
@@ -232,12 +232,9 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 	}
 
 	status := cr.Status.StorageAutoscaling[pvcName]
-	now := metav1.Time{Time: time.Now()}
-	status.LastCheckTime = &now
 
 	if usage != nil {
 		status.CurrentSize = resource.NewQuantity(usage.TotalBytes, resource.BinarySI).String()
-		status.LastUsagePercent = usage.UsagePercent
 		status.LastError = ""
 	}
 

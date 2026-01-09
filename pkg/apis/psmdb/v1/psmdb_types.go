@@ -949,23 +949,10 @@ type StorageAutoscalingSpec struct {
 
 // StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
 type StorageAutoscalingStatus struct {
-	// CurrentSize is the current size of the PVC
-	CurrentSize string `json:"currentSize,omitempty"`
-
-	// LastResizeTime is the timestamp of the last resize operation
-	LastResizeTime *metav1.Time `json:"lastResizeTime,omitempty"`
-
-	// ResizeCount is the number of times the PVC has been resized
-	ResizeCount int32 `json:"resizeCount,omitempty"`
-
-	// LastCheckTime is the timestamp of the last storage check
-	LastCheckTime *metav1.Time `json:"lastCheckTime,omitempty"`
-
-	// LastUsagePercent is the last recorded disk usage percentage
-	LastUsagePercent int `json:"lastUsagePercent,omitempty"`
-
-	// LastError contains the error message from the last failed resize attempt
-	LastError string `json:"lastError,omitempty"`
+	CurrentSize    string      `json:"currentSize,omitempty"`
+	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
+	ResizeCount    int32       `json:"resizeCount,omitempty"`
+	LastError      string      `json:"lastError,omitempty"`
 }
 
 type SecretsSpec struct {
