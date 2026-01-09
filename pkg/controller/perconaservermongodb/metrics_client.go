@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // PVCUsage contains information about PVC disk usage

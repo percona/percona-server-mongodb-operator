@@ -104,7 +104,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 	}
-	
 	if err := cr.validateStorageAutoscaling(); err != nil {
 		return errors.Wrap(err, "validate storage autoscaling")
 	}
