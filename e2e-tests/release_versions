@@ -1,7 +1,7 @@
 IMAGE_OPERATOR=percona/percona-server-mongodb-operator:1.21.2
 IMAGE_MONGOD80=percona/percona-server-mongodb:8.0.17-6
 IMAGE_MONGOD70=percona/percona-server-mongodb:7.0.28-15
-IMAGE_MONGOD60=percona/percona-server-mongodb:6.0.25-20
+IMAGE_MONGOD60=percona/percona-server-mongodb:6.0.27-21
 IMAGE_BACKUP=percona/percona-backup-mongodb:2.11.0
 IMAGE_PMM_CLIENT=percona/pmm-client:2.44.1-1
 IMAGE_PMM_SERVER=percona/pmm-server:2.44.1
