@@ -563,44 +563,67 @@ deploy_operator_gh_release() {
 }
 
 deploy_minio() {
-	desc 'install Minio'
-	helm uninstall minio-service || :
-	helm repo remove minio || :
-	helm repo add minio https://charts.min.io/
-	# kubectl_bin delete pvc minio-service --force
-	retry 10 60 helm install minio-service \
-		--version $MINIO_VER \
-		--set replicas=1 \
-		--set mode=standalone \
-		--set resources.requests.memory=256Mi \
-		--set rootUser=rootuser \
-		--set rootPassword=rootpass123 \
-		--set "users[0].accessKey=some-access-key" \
-		--set "users[0].secretKey=some-secret-key" \
-		--set "users[0].policy=consoleAdmin" \
-		--set service.type=ClusterIP \
-		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size=2G \
-		--set securityContext.enabled=false \
-		minio/minio
-	MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-	wait_pod $MINIO_POD
+  local cert_secret="$1"
+  local service_name="${2:-minio-service}"
 
-	if [ -n "$OPERATOR_NS" ]; then
-		kubectl_bin create svc -n ${OPERATOR_NS} externalname minio-service --external-name="minio-service.${namespace}.svc.cluster.local" --tcp="9000"
-	fi
+  desc "install MinIO: ${service_name}"
 
-	create_minio_bucket operator-testing
+  # Cleanup old installation
+  helm uninstall "${service_name}" 2>/dev/null || :
+  helm repo remove minio 2>/dev/null || :
+  helm repo add minio https://charts.min.io/
+
+  local endpoint="http://${service_name}:9000"
+  local minio_args=(
+    --version $MINIO_VER
+    --set replicas=1
+    --set mode=standalone
+    --set resources.requests.memory=256Mi
+    --set rootUser=rootuser
+    --set rootPassword=rootpass123
+    --set "users[0].accessKey=some-access-key"
+    --set "users[0].secretKey=some-secret-key"
+    --set "users[0].policy=consoleAdmin"
+    --set service.type=ClusterIP
+    --set configPathmc=/tmp/
+    --set securityContext.enabled=false
+    --set persistence.size=2G
+    --set fullnameOverride="${service_name}"
+    --set serviceAccount.create=true
+    --set serviceAccount.name="${service_name}-sa"
+  )
+
+  if [[ -n $cert_secret ]]; then
+    endpoint="https://${service_name}:9000"
+    minio_args+=(
+      --set tls.enabled=true
+      --set tls.certSecret="$cert_secret"
+    )
+  fi
+
+  retry 10 60 helm install "${service_name}" "${minio_args[@]}" minio/minio
+
+  local MINIO_POD=$(kubectl_bin get pods --selector=release="${service_name}" -o 'jsonpath={.items[].metadata.name}')
+  wait_pod $MINIO_POD
+
+  if [ -n "$OPERATOR_NS" ]; then
+    kubectl_bin create svc -n ${OPERATOR_NS} externalname "${service_name}" \
+      --external-name="${service_name}.${namespace}.svc.cluster.local" \
+      --tcp="9000" 2>/dev/null || :
+  fi
+
+  create_minio_bucket operator-testing $endpoint
 }
 
 create_minio_bucket() {
 	local bucket=$1
+	local endpoint=$2
 
 	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
 		AWS_SECRET_ACCESS_KEY=some-secret-key \
 		AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://${bucket}"
+        /usr/bin/aws --no-verify-ssl --endpoint-url ${endpoint} s3 mb s3://${bucket}"
 }
 
 deploy_vault() {
@@ -2429,6 +2452,7 @@ check_backup_in_storage() {
 	local storage_type=$2
 	local replset=$3
 	local file=${4:-"filelist.pbm"}
+	local protocol=${5:-"http"}
 
 	local endpoint
 	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
@@ -2452,7 +2476,7 @@ check_backup_in_storage() {
 			endpoint="minio-service"
 			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-				/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+				/usr/bin/aws --no-verify-ssl --endpoint-url "${protocol}://${endpoint}:9000" s3 ls "s3://${backup_dest}/${replset}/${file}" \
 				| grep "${file}"; do
 				sleep 1
 				let retry+=1
