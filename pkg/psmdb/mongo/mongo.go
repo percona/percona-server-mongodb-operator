@@ -25,6 +25,7 @@ type Config struct {
 	Password    string
 	TLSConf     *tls.Config
 	Direct      bool
+	Timeout     time.Duration
 }
 
 type Client interface {
@@ -75,9 +76,11 @@ func ToInterface(client *mongo.Client) Client {
 	return &mongoClient{client}
 }
 
-func Dial(conf *Config) (Client, error) {
-	ctx, connectcancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer connectcancel()
+func Dial(ctx context.Context, conf *Config) (Client, error) {
+	timeout := 10 * time.Second
+	if conf.Timeout != 0 {
+		timeout = conf.Timeout
+	}
 
 	journal := true
 	wc := writeconcern.Majority()
@@ -88,8 +91,8 @@ func Dial(conf *Config) (Client, error) {
 		SetReadPreference(readpref.Primary()).
 		SetTLSConfig(conf.TLSConf).
 		SetDirect(conf.Direct).
-		SetConnectTimeout(10 * time.Second).
-		SetServerSelectionTimeout(10 * time.Second)
+		SetConnectTimeout(timeout).
+		SetServerSelectionTimeout(timeout)
 
 	if conf.ReplSetName != "" {
 		opts.SetReplicaSet(conf.ReplSetName)
@@ -101,24 +104,24 @@ func Dial(conf *Config) (Client, error) {
 		})
 	}
 
-	client, err := mongo.Connect(ctx, opts)
+	tCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	client, err := mongo.Connect(tCtx, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo rs")
 	}
-
 	defer func() {
 		if err != nil {
-			derr := client.Disconnect(ctx)
+			derr := client.Disconnect(tCtx)
 			if derr != nil {
 				log.Error(err, "failed to disconnect")
 			}
 		}
 	}()
 
-	ctx, pingcancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer pingcancel()
-
-	err = client.Ping(ctx, readpref.Primary())
+	tCtx, cancel = context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err = client.Ping(tCtx, readpref.Primary())
 	if err != nil {
 		return nil, errors.Wrap(err, "ping mongo")
 	}
@@ -260,7 +263,6 @@ func (client *mongoClient) UpdateRole(ctx context.Context, db string, role Role)
 	}
 
 	return nil
-
 }
 
 func (client *mongoClient) GetRole(ctx context.Context, db, role string) (*Role, error) {
@@ -373,11 +375,18 @@ func (client *mongoClient) WriteConfig(ctx context.Context, cfg RSConfig, force 
 	return nil
 }
 
+var ErrInvalidReplsetConfig = errors.New("invalid replicaset config")
+
 func (client *mongoClient) RSStatus(ctx context.Context) (Status, error) {
 	status := Status{}
 
 	resp := client.Database("admin").RunCommand(ctx, bson.D{{Key: "replSetGetStatus", Value: 1}})
 	if resp.Err() != nil {
+		if cmdErr, ok := resp.Err().(mongo.CommandError); ok {
+			if cmdErr.Code == 93 {
+				return status, ErrInvalidReplsetConfig
+			}
+		}
 		return status, errors.Wrap(resp.Err(), "replSetGetStatus")
 	}
 
@@ -901,6 +910,37 @@ func (m *ConfigMembers) AddNew(ctx context.Context, from ConfigMembers) bool {
 	return false
 }
 
+func (m *ConfigMembers) RemoveArbiterIfNeeded(ctx context.Context, unsafePSA bool) bool {
+	if !unsafePSA {
+		return false
+	}
+
+	votingMembers := 0
+	hasArbiter := false
+	for _, member := range *m {
+		if member.ArbiterOnly {
+			hasArbiter = true
+			continue
+		}
+		if member.Votes > 0 {
+			votingMembers++
+		}
+	}
+	if !hasArbiter || votingMembers > 1 {
+		return false
+	}
+	log := logf.FromContext(ctx)
+
+	for i := len(*m) - 1; i >= 0 && len(*m) > 1; i-- {
+		member := []ConfigMember(*m)[i]
+		if member.ArbiterOnly {
+			log.Info("Removing arbiter member because of 1 writable node", "_id", member.ID, "host", member.Host)
+			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
+		}
+	}
+	return true
+}
+
 func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
 	(*m)[i].Votes = votes
 	(*m)[i].Priority = priority
@@ -990,7 +1030,7 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 		return
 	}
 
-	if votes%2 == 0 {
+	if votes%2 == 0 && !unsafePSA {
 		for j := lastVoteIdx; j >= 0; j-- {
 			if []ConfigMember(*m)[j].Votes == 0 {
 				continue
