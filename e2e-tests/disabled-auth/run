@@ -1,0 +1,123 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+custom_port='27019'
+
+create_infra "$namespace"
+
+deploy_minio
+
+desc "create PSMDB sharded cluster without auth"
+cluster="some-name"
+kubectl_bin apply -f "$conf_dir/secrets.yml"
+kubectl_bin apply -f "$conf_dir/client.yml"
+
+apply_s3_storage_secrets
+
+apply_cluster "$test_dir/conf/cluster-no-auth.yml"
+
+desc 'wait for all pods to start'
+wait_for_running $cluster-rs0 3
+wait_for_running $cluster-rs1 3
+wait_for_running $cluster-rs2 3
+wait_for_running $cluster-cfg 3 "false"
+wait_for_running $cluster-mongos 3
+
+desc 'write data without auth'
+run_mongos \
+	'use myApp\n db.createCollection("test")' \
+	"@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+run_mongos \
+	'use myApp\n db.test.insert({x: 100500})' \
+	"@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'verify data was written'
+run_mongos \
+	'use myApp\n db.test.find()' \
+	"@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'wait for backup agents'
+wait_backup_agent $cluster-rs0-0
+wait_backup_agent $cluster-rs1-0
+wait_backup_agent $cluster-rs2-0
+
+backup_name_no_auth="backup-no-auth"
+
+desc 'run backup without auth'
+run_backup minio ${backup_name_no_auth}
+wait_backup "$backup_name_no_auth"
+
+desc 'insert new data without auth'
+run_mongos \
+	'use myApp\n db.test.insert({x: 100501})' \
+	"@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'verify new data exists'
+compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-insert" "" "myApp" "test" "$custom_port"
+
+desc 'restore from backup (no auth)'
+run_restore "$backup_name_no_auth"
+wait_restore "$backup_name_no_auth" "$cluster"
+
+desc 'verify data was restored to original state'
+compare_mongos_cmd "find" "@$cluster-mongos.$namespace" "-after-restore" "" "myApp" "test" "$custom_port"
+
+desc 'enable authentication'
+pause_cluster "$cluster"
+wait_for_cluster_state "${cluster}" "paused"
+
+apply_cluster "$test_dir/conf/cluster-with-auth.yml"
+
+unpause_cluster "$cluster"
+wait_for_cluster_state "${cluster}" "ready"
+
+desc 'create users with auth enabled'
+run_mongos \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'verify existing data is still accessible with auth'
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-with-auth" "" "myApp" "test" "$custom_port"
+
+desc 'insert new data with auth'
+run_mongos \
+	'use myApp\n db.test.insert({x: 200500})' \
+	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'wait for backup agents after auth change'
+wait_backup_agent $cluster-rs0-0
+wait_backup_agent $cluster-rs1-0
+wait_backup_agent $cluster-rs2-0
+
+backup_name_with_auth="backup-with-auth"
+
+desc 'run backup with auth enabled'
+run_backup minio ${backup_name_with_auth}
+wait_backup "$backup_name_with_auth"
+
+desc 'insert more data with auth'
+run_mongos \
+	'use myApp\n db.test.insert({x: 200501})' \
+	"myApp:myPass@$cluster-mongos.$namespace" "" "" "" "$custom_port"
+
+desc 'verify new data exists'
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-insert-auth" "" "myApp" "test" "$custom_port"
+
+desc 'restore from backup (with auth)'
+run_restore "$backup_name_with_auth"
+wait_restore "$backup_name_with_auth" "$cluster"
+
+desc 'verify data was restored to state before last insert'
+compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace" "-after-restore-auth" "" "myApp" "test" "$custom_port"
+
+desc 'cleanup backups'
+kubectl_bin delete psmdb-backup --all
+
+destroy "$namespace"
+desc 'test passed'

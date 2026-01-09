@@ -234,6 +234,69 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 	})
 }
 
+func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
+	tests := map[string]struct {
+		conf     MongoConfiguration
+		expected bool
+	}{
+		"no security section": {
+			conf: `systemLog:
+  verbosity: 1`,
+			expected: true,
+		},
+		"empty config": {
+			conf:     MongoConfiguration(""),
+			expected: true,
+		},
+		"security section without authorization": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile`,
+			expected: true,
+		},
+		"authorization explicitly enabled": {
+			conf: `security:
+  authorization: enabled`,
+			expected: true,
+		},
+		"authorization explicitly disabled": {
+			conf: `security:
+  authorization: disabled`,
+			expected: false,
+		},
+		"authorization with other string value": {
+			conf: `security:
+  authorization: someOtherValue`,
+			expected: true,
+		},
+		"authorization with empty string": {
+			conf: `security:
+  authorization: ""`,
+			expected: true,
+		},
+		"complete security config with authorization enabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: enabled
+  clusterAuthMode: keyFile`,
+			expected: true,
+		},
+		"complete security config with authorization disabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: disabled
+  clusterAuthMode: keyFile`,
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.conf.IsAuthorizationEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestBackupSpec_MainStorage(t *testing.T) {
 	tests := map[string]struct {
 		spec        BackupSpec
