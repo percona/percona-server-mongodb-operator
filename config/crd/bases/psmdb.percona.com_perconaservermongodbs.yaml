@@ -25594,8 +25594,6 @@ spec:
                       type: string
                     lastUsagePercent:
                       type: integer
-                    pvcName:
-                      type: string
                     resizeCount:
                       format: int32
                       type: integer
