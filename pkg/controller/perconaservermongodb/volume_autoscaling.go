@@ -232,7 +232,6 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 	}
 
 	status := cr.Status.StorageAutoscaling[pvcName]
-	status.PVCName = pvcName
 	now := metav1.Time{Time: time.Now()}
 	status.LastCheckTime = &now
 

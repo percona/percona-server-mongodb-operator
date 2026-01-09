@@ -949,9 +949,6 @@ type StorageAutoscalingSpec struct {
 
 // StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
 type StorageAutoscalingStatus struct {
-	// PVCName is the name of the PVC
-	PVCName string `json:"pvcName,omitempty"`
-
 	// CurrentSize is the current size of the PVC
 	CurrentSize string `json:"currentSize,omitempty"`
 
