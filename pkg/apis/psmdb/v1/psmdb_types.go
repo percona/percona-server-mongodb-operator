@@ -451,6 +451,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -514,6 +515,23 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 	}
 
 	return rv
+}
+
+type HookScriptSpec struct {
+	Script       string             `json:"script,omitempty"`
+	ConfigMapRef ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+func (s HookScriptSpec) Specified() bool {
+	return s.Script != "" || s.ConfigMapRef.Name != ""
+}
+
+// ConfigMapReference references a ConfigMap.
+// Usage of corev1.LocalObjectReference is discouraged; prefer this type instead.
+type ConfigMapReference struct {
+	// Name is the name of the referenced ConfigMap.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -670,6 +688,25 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	}
 
 	return b
+}
+
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
 }
 
 // GetPort returns the net.port of the mongo configuration.
@@ -1273,7 +1310,8 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=120
-	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
+	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
