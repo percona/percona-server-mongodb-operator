@@ -39,6 +39,12 @@ const (
 	MongodSecretsDir = "/etc/mongodb-secrets"
 	MongodPortName   = "mongodb"
 	MongosPortName   = "mongos"
+
+	HookscriptVolClaimName = "hookscript"
+	HookscriptMountPath    = "/opt/percona/hookscript"
+
+	PBMHookscriptVolClaimName = "pbm-hookscript"
+	PBMHookscriptMountPath    = "/opt/percona/pbm-hookscript"
 )
 
 type CustomConfig struct {
