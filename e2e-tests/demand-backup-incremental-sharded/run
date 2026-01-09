@@ -156,23 +156,23 @@ wait_backup "${backup_name_minio_not_base}"
 check_backup_in_storage ${backup_name_minio_not_base} minio rs0
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	run_restore "${backup_name_aws}" "_restore_sharded"
+	run_restore "${backup_name_aws}"
 	run_recovery_check "${backup_name_aws}" "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 
-	run_restore "${backup_name_gcp}" "_restore_sharded"
+	run_restore "${backup_name_gcp}"
 	run_recovery_check "${backup_name_gcp}" "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 
-	run_restore "${backup_name_azure}" "_restore_sharded"
+	run_restore "${backup_name_azure}"
 	run_recovery_check "${backup_name_azure}" "_restore_sharded"
 	check_exported_mongos_service_endpoint "$lbEndpoint"
 fi
 
-run_restore ${backup_name_minio_not_base} "_restore_sharded"
+run_restore ${backup_name_minio_not_base}
 run_recovery_check ${backup_name_minio_not_base} "_restore_sharded" false
 
-run_restore ${backup_name_minio} "_restore_sharded"
+run_restore ${backup_name_minio}
 run_recovery_check ${backup_name_minio} "_restore_sharded"
 
 destroy "$namespace"

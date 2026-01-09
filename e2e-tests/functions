@@ -61,7 +61,7 @@ minikube_sleep() {
 	fi
 }
 
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "-eks-") ]; then
 	EKS=1
 else
 	EKS=0
@@ -131,7 +131,7 @@ create_namespace() {
 		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
-			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
+			| grep -E -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -307,10 +307,11 @@ wait_for_pbm_operations() {
 
 run_restore() {
 	local backup_name=$1
+	local restore_file=${2:-$test_dir/conf/restore.yml}
 
 	log "running restore restore-$backup_name"
 
-	cat $test_dir/conf/restore.yml \
+	cat ${restore_file} \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
 		| kubectl_bin apply -f -
@@ -1058,7 +1059,7 @@ get_pmm_service_ip() {
 	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1081,7 +1082,7 @@ get_service_ip() {
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1113,7 +1114,7 @@ compare_mongo_cmd() {
 	fi
 
 	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
-		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -1143,7 +1144,7 @@ compare_mongos_cmd() {
 	log "running db.${collection}.command() in ${database}"
 
 	$mongos_command "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -1158,7 +1159,7 @@ get_mongo_primary_endpoint() {
 	local uri="$1"
 
 	run_mongo 'db.hello().me' "$uri" "mongodb" ":27017" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| grep -E -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| grep ":27017$"
 }
@@ -1216,7 +1217,7 @@ compare_mongo_user() {
 	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| grep -E -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| $sed -e '/"ok" : 1/,+4d' \
 		| sed -e '$s/,$/}/' \
@@ -1251,6 +1252,10 @@ deploy_cert_manager() {
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+	for arg in "$@"; do
+		kubectl_bin patch deployment cert-manager -n cert-manager --type='json' \
+			-p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"'"$arg"'"}]'
+	done
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
 	sleep 120
 }
@@ -1550,7 +1555,7 @@ getSecretData() {
 check_mongo_auth() {
 	local uri="$1"
 
-	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
+	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
 	desc "ping return"
 	if [ "${ping}" != "1" ]; then
 		return 1

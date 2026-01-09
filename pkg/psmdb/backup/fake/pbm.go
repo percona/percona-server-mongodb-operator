@@ -29,11 +29,11 @@ func (p *fakePBM) Conn() *mongo.Client {
 	return nil
 }
 
-func (p *fakePBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error) {
+func (p *fakePBM) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error) {
 	return nil, nil
 }
 
-func (p *fakePBM) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error) {
+func (p *fakePBM) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error) {
 	return oplog.Timeline{}, nil
 }
 

@@ -158,7 +158,8 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 		ReplsetOverrides: map[string]ReplsetOverride{
 			"pod-0": {
 				Horizons: map[string]string{
-					"ext": "override.example.com",
+					"ext":      "override.example.com",
+					"external": "override.example.com:10000",
 				},
 			},
 		},
@@ -171,8 +172,9 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 
 		expected := map[string]map[string]string{
 			"pod-0": {
-				"ext": "override.example.com:27017",
-				"int": "a.internal:27018",
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+				"int":      "a.internal:27018",
 			},
 			"pod-1": {
 				"ext": "b.example.com:27019",
@@ -187,11 +189,44 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 
 		expected := map[string]map[string]string{
 			"pod-0": {
-				"ext": "override.example.com",
-				"int": "a.internal",
+				"ext":      "override.example.com",
+				"external": "override.example.com",
+				"int":      "a.internal",
 			},
 			"pod-1": {
 				"ext": "b.example.com",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
+	})
+
+	t.Run("withPorts=true only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(true)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
+	})
+
+	t.Run("withPorts=false only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(false)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com",
+				"external": "override.example.com",
 			},
 		}
 

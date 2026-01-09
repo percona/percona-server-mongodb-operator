@@ -40,6 +40,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -354,13 +355,19 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongod configmaps")
 	}
 
-	if err := r.reconcileMongosConfigMap(ctx, cr); err != nil {
+	if err := r.reconcileMongosConfigMaps(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos config map")
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		if err := r.reconcileLogCollectorConfigMaps(ctx, cr); err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "reconcile log collector config map")
+		}
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		if err := r.reconcileLogRotateConfigMaps(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "reconcile log rotate config map")
 		}
 	}
 
@@ -426,12 +433,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
 	}
 
-	if cr.Spec.Backup.Enabled {
-		err = r.reconcileBackupTasks(ctx, cr)
-		if err != nil {
-			err = errors.Wrap(err, "reconcile backup tasks")
-			return reconcile.Result{}, err
-		}
+	err = r.reconcileBackups(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
 	}
 
 	clusterStatus, err = r.reconcileReplsets(ctx, cr, repls)
@@ -1100,87 +1104,87 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	for _, rs := range repls {
-		name := naming.MongodCustomConfigName(cr, rs)
-
-		if rs.Configuration == "" {
+	reconcileConfigMap := func(rs *api.ReplsetSpec, name string, configuration string) error {
+		if configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
-				return errors.Wrap(err, "failed to delete mongod config map")
+				return errors.Wrapf(err, "failed to delete mongod config map %s", name)
 			}
-		} else {
-			cm := &corev1.ConfigMap{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "v1",
-					Kind:       "ConfigMap",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: cr.Namespace,
-					Labels:    naming.RSLabels(cr, rs),
-				},
-				Data: map[string]string{
-					"mongod.conf": string(rs.Configuration),
-				},
+			return nil
+		}
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+				Labels:    naming.RSLabels(cr, rs),
+			},
+			Data: map[string]string{
+				"mongod.conf": string(configuration),
+			},
+		}
+		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
+			return errors.Wrap(err, "create or update config map")
+		}
+		return nil
+	}
+
+	reconcileHookscript := func(rs *api.ReplsetSpec, component string, hookscript api.HookScriptSpec) error {
+		name := naming.HookScriptConfigMapName(cr, rs, component)
+		if hookscript.Script == "" || hookscript.ConfigMapRef.Name != "" {
+			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+				return errors.Wrapf(err, "failed to delete mongod config map %s", name)
 			}
-			if cr.CompareVersion("1.17.0") < 0 {
-				cm.Labels = nil
-			}
-			err := r.createOrUpdateConfigMap(ctx, cr, cm)
-			if err != nil {
-				return errors.Wrap(err, "create or update config map")
-			}
+			return nil
+		}
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+				Labels:    naming.RSLabels(cr, rs),
+			},
+			Data: map[string]string{
+				"hook.sh": hookscript.Script,
+			},
+		}
+
+		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
+			return errors.Wrap(err, "create or update config map")
+		}
+		return nil
+	}
+
+	for _, rs := range repls {
+		if err := reconcileConfigMap(rs, naming.MongodCustomConfigName(cr, rs), string(rs.Configuration)); err != nil {
+			return errors.Wrap(err, "failed to reconcile config map")
+		}
+		component := naming.ComponentMongod
+		if rs.ClusterRole == api.ClusterRoleConfigSvr {
+			component = api.ConfigReplSetName
+		}
+		if err := reconcileHookscript(rs, component, rs.HookScript); err != nil {
+			return errors.Wrap(err, "failed to reconcile hookscript")
 		}
 
 		if rs.NonVoting.Enabled {
-			name = naming.NonVotingConfigMapName(cr, rs)
-			if rs.NonVoting.Configuration == "" {
-				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
-					return errors.Wrap(err, "failed to delete nonvoting config map")
-				}
-
-				continue
+			if err := reconcileConfigMap(rs, naming.NonVotingConfigMapName(cr, rs), string(rs.NonVoting.Configuration)); err != nil {
+				return errors.Wrap(err, "failed to reconcile config map")
 			}
-			cm := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: cr.Namespace,
-					Labels:    naming.RSLabels(cr, rs),
-				},
-				Data: map[string]string{
-					"mongod.conf": string(rs.NonVoting.Configuration),
-				},
-			}
-			if cr.CompareVersion("1.17.0") < 0 {
-				cm.Labels = nil
-			}
-			err := r.createOrUpdateConfigMap(ctx, cr, cm)
-			if err != nil {
-				return errors.Wrap(err, "create or update nonvoting config map")
+			if err := reconcileHookscript(rs, naming.ComponentNonVoting, rs.NonVoting.HookScript); err != nil {
+				return errors.Wrap(err, "failed to reconcile hookscript")
 			}
 		}
 
 		if rs.Hidden.Enabled {
-			name = naming.HiddenConfigMapName(cr, rs)
-			if rs.Hidden.Configuration == "" {
-				if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
-					return errors.Wrap(err, "failed to delete hidden config map")
-				}
+			if err := reconcileConfigMap(rs, naming.HiddenConfigMapName(cr, rs), string(rs.Hidden.Configuration)); err != nil {
+				return errors.Wrap(err, "failed to reconcile config map")
+			}
+			if err := reconcileHookscript(rs, naming.ComponentHidden, rs.Hidden.HookScript); err != nil {
+				return errors.Wrap(err, "failed to reconcile hookscript")
+			}
+		}
 
-				continue
-			}
-			cm := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: cr.Namespace,
-					Labels:    naming.RSLabels(cr, rs),
-				},
-				Data: map[string]string{
-					"mongod.conf": string(rs.Hidden.Configuration),
-				},
-			}
-			err := r.createOrUpdateConfigMap(ctx, cr, cm)
-			if err != nil {
-				return errors.Wrap(err, "create or update hidden config map")
+		if rs.Arbiter.Enabled {
+			if err := reconcileHookscript(rs, naming.ComponentArbiter, rs.Arbiter.HookScript); err != nil {
+				return errors.Wrap(err, "failed to reconcile hookscript")
 			}
 		}
 	}
@@ -1188,38 +1192,64 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	name := naming.MongosCustomConfigName(cr)
+func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	reconcileConfigMap := func() error {
+		name := naming.MongosCustomConfigName(cr)
+		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
+			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
+			}
 
-	if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
-		err := deleteConfigMapIfExists(ctx, r.client, cr, name)
-		if err != nil {
-			return errors.Wrap(err, "failed to delete mongos config map")
+			return nil
 		}
-
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+				Labels:    naming.MongosLabels(cr),
+			},
+			Data: map[string]string{
+				"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
+			},
+		}
+		err := r.createOrUpdateConfigMap(ctx, cr, cm)
+		if err != nil {
+			return errors.Wrap(err, "create or update configmap")
+		}
 		return nil
 	}
 
-	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.MongosLabels(cr),
-		},
-		Data: map[string]string{
-			"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
-		},
+	reconcileHookscript := func() error {
+		name := naming.MongosHookScriptConfigMapName(cr)
+		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.HookScript.ConfigMapRef.Name != "" || cr.Spec.Sharding.Mongos.HookScript.Script == "" {
+			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
+			}
+
+			return nil
+		}
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cr.Namespace,
+				Labels:    naming.MongosLabels(cr),
+			},
+			Data: map[string]string{
+				"hook.sh": cr.Spec.Sharding.Mongos.HookScript.Script,
+			},
+		}
+		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
+			return errors.Wrap(err, "create or update configmap")
+		}
+		return nil
 	}
-	if cr.CompareVersion("1.17.0") < 0 {
-		cm.Labels = nil
+
+	if err := reconcileConfigMap(); err != nil {
+		return errors.Wrap(err, "reconcile configmap")
 	}
-	err := r.createOrUpdateConfigMap(ctx, cr, cm)
-	if err != nil {
-		return err
+
+	if err := reconcileHookscript(); err != nil {
+		return errors.Wrap(err, "reconcile hookscript")
 	}
 
 	return nil
@@ -1252,6 +1282,40 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx cont
 		},
 		Data: map[string]string{
 			logcollector.FluentBitCustomConfigurationFile: cr.Spec.LogCollector.Configuration,
+		},
+	}
+
+	err := r.createOrUpdateConfigMap(ctx, cr, cm)
+	if err != nil {
+		return errors.Wrap(err, "create or update config map")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileLogRotateConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.IsLogCollectorEnabled() {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logrotate.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log rotate config map when log collector is disabled")
+		}
+		return nil
+	}
+
+	if cr.Spec.LogCollector.LogRotate == nil || cr.Spec.LogCollector.LogRotate.Configuration == "" {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, logrotate.ConfigMapName(cr.Name)); err != nil {
+			return errors.Wrap(err, "failed to delete log rotate config map when the configuration is empty")
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      logrotate.ConfigMapName(cr.Name),
+			Namespace: cr.GetNamespace(),
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			logrotate.MongodbConfig: cr.Spec.LogCollector.LogRotate.Configuration,
 		},
 	}
 

@@ -71,7 +71,7 @@ check_cr_config() {
 
 main() {
 	create_infra $namespace
-	deploy_cert_manager
+	deploy_cert_manager "--enable-certificate-owner-ref"
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
