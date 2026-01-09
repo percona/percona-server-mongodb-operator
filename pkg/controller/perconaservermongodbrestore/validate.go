@@ -79,11 +79,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		}
 
 		ts := pitr.Date.Unix()
-		if _, err := pbmc.GetPITRChunkContains(ctx, ts); err != nil {
+		if _, err := pbmc.GetPITRChunkContains(ctx, ts, cr.Spec.RSMap); err != nil {
 			return err
 		}
 	case pitr.Type == psmdbv1.PITRestoreTypeLatest:
-		_, err := pbmc.GetLatestTimelinePITR(ctx)
+		_, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
 		if err != nil {
 			return err
 		}

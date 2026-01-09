@@ -178,18 +178,18 @@ func (mr *MockPBMMockRecorder) GetConfigVar(ctx, key interface{}) *gomock.Call {
 }
 
 // GetLatestTimelinePITR mocks base method.
-func (m *MockPBM) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error) {
+func (m *MockPBM) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLatestTimelinePITR", ctx)
+	ret := m.ctrl.Call(m, "GetLatestTimelinePITR", ctx, rsMap)
 	ret0, _ := ret[0].(oplog.Timeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLatestTimelinePITR indicates an expected call of GetLatestTimelinePITR.
-func (mr *MockPBMMockRecorder) GetLatestTimelinePITR(ctx interface{}) *gomock.Call {
+func (mr *MockPBMMockRecorder) GetLatestTimelinePITR(ctx, rsMap interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestTimelinePITR", reflect.TypeOf((*MockPBM)(nil).GetLatestTimelinePITR), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestTimelinePITR", reflect.TypeOf((*MockPBM)(nil).GetLatestTimelinePITR), ctx, rsMap)
 }
 
 // GetNSetConfig mocks base method.
@@ -221,18 +221,18 @@ func (mr *MockPBMMockRecorder) GetNSetConfigLegacy(ctx, k8sclient, cluster, stg 
 }
 
 // GetPITRChunkContains mocks base method.
-func (m *MockPBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error) {
+func (m *MockPBM) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPITRChunkContains", ctx, unixTS)
+	ret := m.ctrl.Call(m, "GetPITRChunkContains", ctx, unixTS, rsMap)
 	ret0, _ := ret[0].(*oplog.OplogChunk)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPITRChunkContains indicates an expected call of GetPITRChunkContains.
-func (mr *MockPBMMockRecorder) GetPITRChunkContains(ctx, unixTS interface{}) *gomock.Call {
+func (mr *MockPBMMockRecorder) GetPITRChunkContains(ctx, unixTS, rsMap interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPITRChunkContains", reflect.TypeOf((*MockPBM)(nil).GetPITRChunkContains), ctx, unixTS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPITRChunkContains", reflect.TypeOf((*MockPBM)(nil).GetPITRChunkContains), ctx, unixTS, rsMap)
 }
 
 // GetProfile mocks base method.
