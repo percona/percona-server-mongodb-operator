@@ -1541,6 +1541,9 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	annotation["percona.com/ssl-internal-hash"] = ""
 
 	getHash := func(secret *corev1.Secret) string {
+		if secret == nil {
+			return ""
+		}
 		secretString := fmt.Sprintln(secret.Data)
 		return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
 	}
@@ -1568,6 +1571,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			}
 			return nil, errTLSNotReady
 		}
+		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
 	annotation["percona.com/ssl-hash"] = getHash(sslSecret)
 
@@ -1583,28 +1587,11 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			}
 			return nil, errTLSNotReady
 		}
+		return nil, errors.Wrapf(err, "get secret/%s", api.SSLInternalSecretName(cr))
 	}
 	annotation["percona.com/ssl-internal-hash"] = getHash(sslInternalSecret)
 
 	return annotation, nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) getTLSHash(ctx context.Context, cr *api.PerconaServerMongoDB, secretName string) (string, error) {
-	secretObj := corev1.Secret{}
-	err := r.client.Get(ctx,
-		types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      secretName,
-		},
-		&secretObj,
-	)
-	if err != nil {
-		return "", err
-	}
-	secretString := fmt.Sprintln(secretObj.Data)
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
-
-	return hash, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *api.PerconaServerMongoDB, spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
