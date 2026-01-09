@@ -16,6 +16,7 @@ import (
 	oplog "github.com/percona/percona-backup-mongodb/pbm/oplog"
 	restore "github.com/percona/percona-backup-mongodb/pbm/restore"
 	storage "github.com/percona/percona-backup-mongodb/pbm/storage"
+	topo "github.com/percona/percona-backup-mongodb/pbm/topo"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	backup0 "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	primitive "go.mongodb.org/mongo-driver/bson/primitive"
@@ -58,6 +59,21 @@ func (m *MockPBM) AddProfile(ctx context.Context, k8sclient client.Client, clust
 func (mr *MockPBMMockRecorder) AddProfile(ctx, k8sclient, cluster, name, stg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddProfile", reflect.TypeOf((*MockPBM)(nil).AddProfile), ctx, k8sclient, cluster, name, stg)
+}
+
+// AgentStatuses mocks base method.
+func (m *MockPBM) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AgentStatuses", ctx, hosts)
+	ret0, _ := ret[0].([]topo.AgentStat)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AgentStatuses indicates an expected call of AgentStatuses.
+func (mr *MockPBMMockRecorder) AgentStatuses(ctx, hosts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentStatuses", reflect.TypeOf((*MockPBM)(nil).AgentStatuses), ctx, hosts)
 }
 
 // Close mocks base method.

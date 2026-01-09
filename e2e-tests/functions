@@ -2168,7 +2168,7 @@ wait_for_cluster_state() {
 		echo -n '.'
 		if [[ ${timeout} -gt 1500 ]]; then
 			echo
-			echo "Waiting timeout has been reached. Exiting..."
+			log "Waiting timeout has been reached. Exiting..."
 			exit 1
 		fi
 	done
