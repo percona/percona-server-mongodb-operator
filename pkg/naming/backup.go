@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	BackupStorageCAFileDirectory  = "/etc/s3/certs"
-	BackupStorageCAFileName       = "ca-bundle.crt"
-	BackupStorageCAFileVolumeName = "ca-bundle"
+	BackupStorageCAFileDirectory   = "/etc/s3/certs"
+	BackupStorageCAFileName        = "ca-bundle.crt"
+	BackupStorageCAFileVolumeName  = "ca-bundle"
+	BackupStorageCAInputVolumeName = "ca-bundle-in"
 )
 
 func BackupLeaseName(clusterName string) string {
