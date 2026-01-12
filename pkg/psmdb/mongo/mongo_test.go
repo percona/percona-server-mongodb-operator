@@ -210,6 +210,32 @@ func TestVoting(t *testing.T) {
 			true,
 		},
 		{
+			"2 members (unsafe PSA start): 2 rs0 without arbiter",
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
+					Host:     "host0",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Host:     "host1",
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+			},
+			&mongo.ConfigMembers{
+				mongo.ConfigMember{
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+				mongo.ConfigMember{
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				},
+			},
+			true,
+		},
+		{
 			"4 members: 4 rs0",
 			&mongo.ConfigMembers{
 				mongo.ConfigMember{
@@ -1297,7 +1323,7 @@ func TestVoting(t *testing.T) {
 			}
 
 			assert.Falsef(t, votes > mongo.MaxVotingMembers, "there should be max (%d) votes in replset", mongo.MaxVotingMembers)
-			if votes != 0 {
+			if votes != 0 && !c.unsafePSA {
 				assert.Falsef(t, votes%2 == 0, "total votes (%d) should be an odd number", votes)
 			}
 		})
