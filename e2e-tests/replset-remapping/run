@@ -29,19 +29,16 @@ function setup_source_cluster() {
 	wait_cluster_consistency "${source_cluster}"
 
 	log "writing some data"
-	run_mongo \
+	run_mongos \
 		'use myApp\n db.test.insert({ x: 100500 })' \
-		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}"
-	compare_mongo_cmd \
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-mongos.${namespace}"
+	compare_mongos_cmd \
 		"find" \
-		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}" \
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-mongos.${namespace}" \
 		"" \
 		".svc.cluster.local" \
 		myApp \
-		test \
-		'' \
-		false \
-		rs0
+		test
 	run_backup "minio" "backup-minio-physical" "physical"
 	wait_backup "backup-minio-physical"
 
@@ -49,9 +46,9 @@ function setup_source_cluster() {
 	wait_backup "backup-minio-logical"
 
 	log "writing more data for PiTR"
-	run_mongo \
+	run_mongos \
 		'use myApp\n db.test.insert({ x: 100501 })' \
-		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}"
+		"databaseAdmin:databaseAdmin123456@${source_cluster}-mongos.${namespace}"
 	sleep_with_log 70 "wait for oplog chunk upload"
 
 	log "deleting PSMDB cluster: ${source_cluster}"
@@ -75,37 +72,30 @@ function test_restores() {
 	run_restore backup-minio-physical
 	wait_restore backup-minio-physical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
-	compare_mongo_cmd \
+	compare_mongos_cmd \
 		"find" \
-		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}" \
 		"" \
 		".svc.cluster.local" \
 		myApp \
-		test \
-		'' \
-		false \
-		replset0
+		test
 	desc "CASE 1: PASSED"
 
 	log "dropping test collection"
-	run_mongo 'use myApp\n db.test.drop()' \
-		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
-		"mongodb" ".svc.cluster.local" "" "replset0"
+	run_mongos 'use myApp\n db.test.drop()' \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}"
 
 	desc "CASE 2: Logical restore with replset remapping"
 	run_restore backup-minio-logical ${test_dir}/conf/restore-pitr.yml
 	wait_restore backup-minio-logical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
-	compare_mongo_cmd \
+	compare_mongos_cmd \
 		"find" \
-		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
+		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}" \
 		"-2nd" \
 		".svc.cluster.local" \
 		myApp \
-		test \
-		'' \
-		false \
-		replset0
+		test
 	desc "CASE 2: PASSED"
 }
 

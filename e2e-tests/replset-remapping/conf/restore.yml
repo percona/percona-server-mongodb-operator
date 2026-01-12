@@ -7,3 +7,4 @@ spec:
   backupName:
   replsetRemapping:
     rs0: replset0
+    rs1: replset1

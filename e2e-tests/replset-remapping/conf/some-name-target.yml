@@ -43,3 +43,61 @@ spec:
         resources:
           requests:
             storage: 3Gi
+  - name: replset1
+    size: 3
+    expose:
+      enabled: false
+      exposeType: ClusterIP
+    configuration: |
+      security:
+        enableEncryption: false
+    resources:
+      limits:
+        cpu: 300m
+        memory: 0.5G
+      requests:
+        cpu: 300m
+        memory: 0.5G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: false
+        type: ClusterIP
+      resources:
+        limits:
+          cpu: "600m"
+          memory: "1Gi"
+        requests:
+          cpu: "300m"
+          memory: "1Gi"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "600m"
+          memory: "1Gi"
+        requests:
+          cpu: "300m"
+          memory: "1Gi"
+      expose:
+        type: ClusterIP
