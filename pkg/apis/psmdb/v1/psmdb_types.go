@@ -340,9 +340,13 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
-// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
-const ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+const (
+	// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
+	// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
+	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+
+	ConditionTypePBMReady AppState = "PBMReady"
+)
 
 type ClusterCondition struct {
 	Status             ConditionStatus `json:"status"`
@@ -368,6 +372,33 @@ func (s *PerconaServerMongoDBStatus) IsStatusConditionTrue(conditionType AppStat
 		return false
 	}
 	return cond.Status == ConditionTrue
+}
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+	}
+
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
+	}
 }
 
 type PMMSpec struct {
@@ -420,6 +451,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -483,6 +515,23 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 	}
 
 	return rv
+}
+
+type HookScriptSpec struct {
+	Script       string             `json:"script,omitempty"`
+	ConfigMapRef ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+func (s HookScriptSpec) Specified() bool {
+	return s.Script != "" || s.ConfigMapRef.Name != ""
+}
+
+// ConfigMapReference references a ConfigMap.
+// Usage of corev1.LocalObjectReference is discouraged; prefer this type instead.
+type ConfigMapReference struct {
+	// Name is the name of the referenced ConfigMap.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -639,6 +688,25 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	}
 
 	return b
+}
+
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
 }
 
 // GetPort returns the net.port of the mongo configuration.
@@ -1242,7 +1310,8 @@ type BackupSpec struct {
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=120
-	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
+	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1460,6 +1529,15 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
+func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, 0)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}
+
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if backup is allowed")
@@ -1506,33 +1584,6 @@ func (s *PerconaServerMongoDBStatus) RemoveCondition(conditionType AppState) {
 			s.Conditions = append(s.Conditions[:i], s.Conditions[i+1:]...)
 			return
 		}
-	}
-}
-
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	existingCondition := s.FindCondition(c.Type)
-	if existingCondition == nil {
-		if c.LastTransitionTime.IsZero() {
-			c.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-		s.Conditions = append(s.Conditions, c)
-		return
-	}
-
-	if existingCondition.Status != c.Status {
-		existingCondition.Status = c.Status
-		if !c.LastTransitionTime.IsZero() {
-			existingCondition.LastTransitionTime = c.LastTransitionTime
-		} else {
-			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-	}
-
-	if existingCondition.Reason != c.Reason {
-		existingCondition.Reason = c.Reason
-	}
-	if existingCondition.Message != c.Message {
-		existingCondition.Message = c.Message
 	}
 }
 
