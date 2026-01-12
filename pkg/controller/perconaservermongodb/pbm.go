@@ -20,7 +20,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -209,24 +208,7 @@ func hashPBMConfiguration(c []config.Config) (string, error) {
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	if currentCfg.Storage.Type != newCfg.Storage.Type {
-		return true
-	}
-
-	switch currentCfg.Storage.Type {
-	case storage.S3:
-		return !currentCfg.Storage.S3.Equal(newCfg.Storage.S3)
-	case storage.Minio:
-		return !currentCfg.Storage.Minio.Equal(newCfg.Storage.Minio)
-	case storage.GCS:
-		return !currentCfg.Storage.GCS.Equal(newCfg.Storage.GCS)
-	case storage.Azure:
-		return !currentCfg.Storage.Azure.Equal(newCfg.Storage.Azure)
-	case storage.Filesystem:
-		return !currentCfg.Storage.Filesystem.Equal(newCfg.Storage.Filesystem)
-	default:
-		return false
-	}
+	return !currentCfg.Storage.Equal(&newCfg.Storage)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
