@@ -7,6 +7,7 @@ test_dir=$(realpath $(dirname $0))
 set_debug
 
 create_infra $namespace
+deploy_minio
 
 desc 'create secrets and start client'
 kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml

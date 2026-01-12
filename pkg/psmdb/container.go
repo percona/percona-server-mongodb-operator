@@ -218,30 +218,40 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
-		"--auth",
-		"--dbpath=" + config.MongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(replset.GetPort())),
-		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(replset.Storage.Engine),
-		"--relaxPermChecks",
 	}
 
-	name, err := replset.CustomReplsetName()
-	if err == nil {
-		args[4] = "--replSet=" + name
+	if cr.CompareVersion("1.22.0") < 0 || replset.Configuration.IsAuthorizationEnabled() {
+		args = append(args, "--auth")
 	}
+
+	replSetName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		replSetName = name
+	}
+
+	args = append(args,
+		"--dbpath="+config.MongodContainerDataDir,
+		"--port="+strconv.Itoa(int(replset.GetPort())),
+		"--replSet="+replSetName,
+		"--storageEngine="+string(replset.Storage.Engine),
+		"--relaxPermChecks",
+	)
 
 	if *cr.Spec.TLS.AllowInvalidCertificates || cr.CompareVersion("1.16.0") < 0 {
 		args = append(args, "--sslAllowInvalidCertificates")
 	}
 
-	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-		args = append(args,
-			"--clusterAuthMode=keyFile",
-			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
-		)
-	} else if cr.TLSEnabled() {
-		args = append(args, "--clusterAuthMode=x509")
+	// If auth is disabled, we consider that TLS should be also disabled
+	// and for that reason clusterAuthMode should not be even configured.
+	if replset.Configuration.IsAuthorizationEnabled() {
+		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
+			args = append(args,
+				"--clusterAuthMode=keyFile",
+				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
+			)
+		} else if cr.TLSEnabled() {
+			args = append(args, "--clusterAuthMode=x509")
+		}
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 {
