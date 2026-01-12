@@ -21,7 +21,6 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
-
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
