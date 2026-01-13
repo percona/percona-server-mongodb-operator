@@ -1,3 +1,5 @@
+ARG BASE_IMAGE=ubi10
+
 FROM --platform=${BUILDPLATFORM} golang:1.25 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
@@ -34,7 +36,7 @@ RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\
             sh -c 'mkdir -pv /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi") \
                    && cp -v "$0" /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi")' {} \;
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal AS ubi10
+FROM registry.access.redhat.com/${BASE_IMAGE}/ubi-minimal AS ubi
 RUN microdnf update -y && microdnf clean all
 
 LABEL name="Percona Server for MongoDB Operator" \
