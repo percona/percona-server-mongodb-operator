@@ -130,21 +130,16 @@ kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "read
 desc 'test maxSize limit'
 echo "Filling disk again to test continued autoscaling"
 fill_disk_to_threshold "${cluster}-rs0-0" 80 2400
-
-sleep 20
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "5Gi" 60 10
 
 desc 'fill disk to test maxSize enforcement'
 fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
-sleep 20
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
 
 fill_disk_to_threshold "${cluster}-rs0-0" 80 5600
-sleep 20
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
 
 fill_disk_to_threshold "${cluster}-rs0-0" 80 7200
-sleep 20
 
 final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
 if [[ ${final_size} == "10Gi" ]]; then
