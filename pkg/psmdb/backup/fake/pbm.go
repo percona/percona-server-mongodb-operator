@@ -13,20 +13,24 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
 	"github.com/percona/percona-backup-mongodb/pbm/restore"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
+	"github.com/percona/percona-backup-mongodb/pbm/topo"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 type fakePBM struct{}
 
-func NewPBM(_ context.Context, _ client.Client, _ *api.PerconaServerMongoDB) (backup.PBM, error) {
+func NewPBM(_ context.Context, _ client.Client, _ *psmdbv1.PerconaServerMongoDB) (backup.PBM, error) {
 	return new(fakePBM), nil
 }
 
 func (p *fakePBM) Conn() *mongo.Client {
 	return nil
+}
+
+func (p *fakePBM) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
+	return nil, nil
 }
 
 func (p *fakePBM) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error) {
@@ -53,19 +57,19 @@ func (p *fakePBM) GetStorage(ctx context.Context, e pbmLog.LogEvent) (storage.St
 	return nil, nil
 }
 
-func (_ *fakePBM) ResyncMainStorage(ctx context.Context) error {
+func (p *fakePBM) ResyncMainStorage(ctx context.Context) error {
 	return nil
 }
 
-func (_ *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
+func (p *fakePBM) ResyncMainStorageAndWait(ctx context.Context) error {
 	return nil
 }
 
-func (_ *fakePBM) ResyncProfile(ctx context.Context, name string) error {
+func (p *fakePBM) ResyncProfile(ctx context.Context, name string) error {
 	return nil
 }
 
-func (_ *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
+func (p *fakePBM) ResyncProfileAndWait(ctx context.Context, name string) error {
 	return nil
 }
 
@@ -101,15 +105,15 @@ func (p *fakePBM) RemoveProfile(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *fakePBM) AddProfile(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, name string, stg api.BackupStorageSpec) error {
+func (p *fakePBM) AddProfile(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB, name string, stg psmdbv1.BackupStorageSpec) error {
 	return nil
 }
 
-func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB) error {
+func (p *fakePBM) GetNSetConfig(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB) error {
 	return nil
 }
 
-func (p *fakePBM) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, stg api.BackupStorageSpec) error {
+func (p *fakePBM) GetNSetConfigLegacy(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) error {
 	return nil
 }
 
