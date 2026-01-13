@@ -648,6 +648,11 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 }
 
 func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelector {
+
+	if cr.Spec.Backup.Storages == nil {
+		return nil
+	}
+
 	seen := map[string]struct{}{}
 	var out []api.SecretKeySelector
 
@@ -678,7 +683,6 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelect
 }
 
 func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
-
 	var sources []corev1.VolumeProjection
 
 	for i, ca := range cas {
