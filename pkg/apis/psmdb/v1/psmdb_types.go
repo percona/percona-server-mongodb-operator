@@ -1614,11 +1614,11 @@ const (
 	AnnotationResyncPBM                = "percona.com/resync-pbm"
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
-	AnnotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
+	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
 
 func AnnotationPreservedRestartedAt(stsName string) string {
-	return AnnotationPreservedRestartedAtBase + "." + stsName
+	return annotationPreservedRestartedAtBase + "." + stsName
 }
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
