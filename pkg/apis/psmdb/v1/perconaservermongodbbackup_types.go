@@ -17,8 +17,11 @@ type PerconaServerMongoDBBackupSpec struct {
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
 	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
-	Type                    defs.BackupType `json:"type,omitempty"`
-	StartingDeadlineSeconds *int64          `json:"startingDeadlineSeconds,omitempty"`
+	Type defs.BackupType `json:"type,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
 }
 
 type BackupState string
@@ -39,6 +42,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	Destination  string                       `json:"destination,omitempty"`
 	StorageName  string                       `json:"storageName,omitempty"`
 	S3           *BackupStorageS3Spec         `json:"s3,omitempty"`
+	Minio        *BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS          *BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`

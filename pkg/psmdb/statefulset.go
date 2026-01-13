@@ -4,17 +4,20 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -41,8 +44,31 @@ type StatefulSpecSecretParams struct {
 }
 
 type StatefulConfigParams struct {
-	MongoDConf        config.CustomConfig
-	LogCollectionConf config.CustomConfig
+	MongoDConf         config.CustomConfig
+	LogCollectionConf  config.CustomConfig
+	LogRotateConf      config.CustomConfig
+	LogRotateExtraConf config.CustomConfig
+}
+
+func (p *StatefulConfigParams) HashHex(cr *api.PerconaServerMongoDB) string {
+	var b strings.Builder
+	if p.MongoDConf.Type.IsUsable() {
+		b.WriteString(p.MongoDConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.21.0") >= 0 && p.LogCollectionConf.Type.IsUsable() {
+		b.WriteString(p.LogCollectionConf.HashHex)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 {
+		if p.LogRotateConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateConf.HashHex)
+		}
+		if p.LogRotateExtraConf.Type.IsUsable() {
+			b.WriteString(p.LogRotateExtraConf.HashHex)
+		}
+	}
+	return b.String()
 }
 
 // StatefulSpec returns spec for stateful set
@@ -58,6 +84,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	volumeSpec := replset.VolumeSpec
 	podSecurityContext := replset.PodSecurityContext
 	containerSecurityContext := replset.ContainerSecurityContext
+	containerEnv := replset.Env
+	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
@@ -117,18 +145,24 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			},
 		},
+		{
+			Name: config.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 {
+	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: config.BinVolumeName,
+			Name: config.MongoshHomeVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		})
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
+	if configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configs.MongoDConf.Type.VolumeSource(configName),
@@ -140,6 +174,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logCollectionConfigName),
 		})
 	}
+	if cr.CompareVersion("1.22.0") >= 0 {
+		vol := logRotateConfigVolume(configs, cr)
+		if vol != nil {
+			volumes = append(volumes, *vol)
+		}
+	}
+
 	encryptionEnabled, err := replset.IsEncryptionEnabled()
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, errors.Wrap(err, "failed to check if encryption is enabled")
@@ -174,9 +215,19 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			)
 		}
 	}
-
-	c, err := container(ctx, cr, replset, containerName, resources, cr.Spec.Secrets.GetInternalKey(cr), configs.MongoDConf.Type.IsUsable(),
-		livenessProbe, readinessProbe, containerSecurityContext)
+	params := containerFnParams{
+		replset:                  replset,
+		name:                     containerName,
+		resources:                resources,
+		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
+		livenessProbe:            livenessProbe,
+		readinessProbe:           readinessProbe,
+		containerSecurityContext: containerSecurityContext,
+		containerEnv:             containerEnv,
+		containerEnvFrom:         containerEnvFrom,
+	}
+	c, err := container(ctx, cr, params)
 	if err != nil {
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -196,8 +247,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configs.MongoDConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = configs.MongoDConf.HashHex
+	if hash := configs.HashHex(cr); hash != "" {
+		annotations["percona.com/configuration-hash"] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
@@ -207,13 +258,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  api.SSLSecretName(cr),
-				Optional:    &cr.Spec.UnsafeConf,
+				Optional:    &cr.Spec.Unsafe.TLS,
 				DefaultMode: &secretFileMode,
 			},
 		},
-	}
-	if cr.CompareVersion("1.16.0") >= 0 {
-		sslVolume.VolumeSource.Secret.Optional = &cr.Spec.Unsafe.TLS
 	}
 
 	// add TLS/SSL Volume
@@ -239,7 +287,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			},
 		},
 	)
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
@@ -294,6 +342,24 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				rsName = name
 			}
 			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
+
+			if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified() {
+				name := cr.Spec.Backup.HookScript.ConfigMapRef.Name
+				if name == "" {
+					name = naming.PBMHookScriptConfigMapName(cr)
+				}
+				volumes = append(volumes, corev1.Volume{
+					Name: config.PBMHookscriptVolClaimName,
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: name,
+							},
+							Optional: ptr.To(true),
+						},
+					},
+				})
+			}
 		}
 
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
@@ -308,6 +374,24 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			}
 			containers = append(containers, logCollectorCs...)
 		}
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript.Specified() {
+		name := multiAZ.HookScript.ConfigMapRef.Name
+		if name == "" {
+			name = naming.HookScriptConfigMapName(cr, replset, ls[naming.LabelKubernetesComponent])
+		}
+		volumes = append(volumes, corev1.Volume{
+			Name: config.HookscriptVolClaimName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: name,
+					},
+					Optional: ptr.To(true),
+				},
+			},
+		})
 	}
 
 	volumes = multiAZ.WithSidecarVolumes(logf.FromContext(ctx), volumes)
@@ -364,15 +448,66 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}, nil
 }
 
+func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMongoDB) *corev1.Volume {
+	logrotateConfigVolumeProjections := []corev1.VolumeProjection{}
+	if configs.LogRotateConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateConf.Type.VolumeProjection(logrotate.ConfigMapName(cr.GetName())))
+	}
+	if configs.LogRotateExtraConf.Type.IsUsable() {
+		logrotateConfigVolumeProjections = append(logrotateConfigVolumeProjections, configs.LogRotateExtraConf.Type.VolumeProjection(cr.Spec.LogCollector.LogRotate.ExtraConfig.Name))
+	}
+	if len(logrotateConfigVolumeProjections) > 0 {
+		return &corev1.Volume{
+			Name: logrotate.VolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: logrotateConfigVolumeProjections,
+				},
+			},
+		}
+	}
+	return nil
+}
+
 // backupAgentContainer creates the container object for a backup agent
 func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, replsetName string, port int32, tlsEnabled bool, sslSecret *corev1.Secret) corev1.Container {
 	fvar := false
 	usersSecretName := api.UserSecretName(cr)
 
+	attachHookScript := cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified()
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "ssl",
+			MountPath: config.SSLDir,
+			ReadOnly:  true,
+		},
+		{
+			Name:      config.BinVolumeName,
+			MountPath: config.BinMountPath,
+			ReadOnly:  !attachHookScript,
+		},
+		{
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
+			ReadOnly:  false,
+		},
+	}
+	if len(cr.Spec.Backup.VolumeMounts) > 0 {
+		volumeMounts = append(volumeMounts, cr.Spec.Backup.VolumeMounts...)
+	}
+	if attachHookScript {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      config.PBMHookscriptVolClaimName,
+			MountPath: config.PBMHookscriptMountPath,
+		})
+	}
+
 	c := corev1.Container{
 		Name:            naming.ContainerBackupAgent,
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Command:         []string{config.BinMountPath + "/pbm-entry.sh"},
+		Args:            []string{"pbm-agent-entrypoint"},
 		Env: []corev1.EnvVar{
 			{
 				Name: "PBM_AGENT_MONGODB_USERNAME",
@@ -406,90 +541,51 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name:  "PBM_MONGODB_PORT",
 				Value: strconv.Itoa(int(port)),
 			},
+			{
+				Name:  "PBM_AGENT_SIDECAR",
+				Value: "true",
+			},
+			{
+				Name:  "PBM_AGENT_SIDECAR_SLEEP",
+				Value: "5",
+			},
 		},
 		SecurityContext: cr.Spec.Backup.ContainerSecurityContext,
 		Resources:       cr.Spec.Backup.Resources,
+		VolumeMounts:    volumeMounts,
 	}
 	if cr.CompareVersion("1.19.0") < 0 {
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 {
-		c.Command = []string{config.BinMountPath + "/pbm-entry.sh"}
-		c.Args = []string{"pbm-agent"}
-		if cr.CompareVersion("1.14.0") >= 0 {
-			c.Args = []string{"pbm-agent-entrypoint"}
-			c.Env = append(c.Env, []corev1.EnvVar{
-				{
-					Name:  "PBM_AGENT_SIDECAR",
-					Value: "true",
-				},
-				{
-					Name:  "PBM_AGENT_SIDECAR_SLEEP",
-					Value: "5",
-				},
-			}...)
-		}
-		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
-			{
-				Name:      "ssl",
-				MountPath: config.SSLDir,
-				ReadOnly:  true,
-			},
-			{
-				Name:      config.BinVolumeName,
-				MountPath: config.BinMountPath,
-				ReadOnly:  true,
-			},
-		}...)
-	}
-
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		c.Env = append(c.Env, []corev1.EnvVar{
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
+	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
+	if cr.CompareVersion("1.20.0") >= 0 {
+		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+	}
+
+	c.Env = append(c.Env, []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
 				},
 			},
-		}...)
-
-		mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
-		if cr.CompareVersion("1.20.0") >= 0 {
-			mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
-		}
-
-		c.Env = append(c.Env, corev1.EnvVar{
+		},
+		{
 			Name:  "PBM_MONGODB_URI",
 			Value: mongoDBURI,
-		})
-
-		c.VolumeMounts = append(c.VolumeMounts, []corev1.VolumeMount{
-			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
-				ReadOnly:  false,
-			},
-		}...)
-	}
-
-	if cr.CompareVersion("1.16.0") >= 0 {
-		c.Env = append(c.Env, corev1.EnvVar{
+		},
+		{
 			Name:  "PBM_AGENT_TLS_ENABLED",
 			Value: strconv.FormatBool(tlsEnabled),
-		})
-	}
-
-	if len(cr.Spec.Backup.VolumeMounts) > 0 {
-		c.VolumeMounts = append(c.VolumeMounts, cr.Spec.Backup.VolumeMounts...)
-	}
+		},
+	}...)
 
 	return c
 }

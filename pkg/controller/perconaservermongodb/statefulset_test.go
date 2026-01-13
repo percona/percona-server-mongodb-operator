@@ -7,13 +7,20 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -32,16 +39,48 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
 
+	defaultCR.Spec.Replsets[0].Env = []corev1.EnvVar{
+		{Name: "TEST_ENV1", Value: "test-value1"},
+		{Name: "TEST_ENV2", Value: "test-value2"},
+	}
+	defaultCR.Spec.Replsets[0].EnvFrom = []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "test-configmap",
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Env = []corev1.EnvVar{
+		{Name: "CFG_TEST_ENV1", Value: "cfg-test-value1"},
+		{Name: "CFG_TEST_ENV2", Value: "cfg-test-value2"},
+	}
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.EnvFrom = []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "test-configmap-cfg",
+				},
+				Optional: ptr.To(true),
+			},
+		},
+	}
+
 	tests := []struct {
-		name      string
-		cr        *api.PerconaServerMongoDB
-		rsName    string
-		component string
-		ls        map[string]string
+		name           string
+		cr             *api.PerconaServerMongoDB
+		rsName         string
+		component      string
+		ls             map[string]string
+		crUpdate       func(cr *api.PerconaServerMongoDB)
+		additionalObjs []client.Object
 
 		expectedSts *appsv1.StatefulSet
 	}{
@@ -101,26 +140,84 @@ func TestReconcileStatefulSet(t *testing.T) {
 			component:   naming.ComponentHidden,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
 		},
+		{
+			name:        "rs0-logrotate",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-logrotate.yaml"),
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.LogCollector.LogRotate = &api.LogRotateSpec{
+					Configuration: "test-config",
+					ExtraConfig: corev1.LocalObjectReference{
+						Name: "extra-config",
+					},
+					Schedule: "0 0 */2 * *",
+				}
+			},
+			additionalObjs: []client.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      logrotate.ConfigMapName(crName),
+						Namespace: ns,
+					},
+					Data: map[string]string{
+						logrotate.MongodbConfig: "custom-config",
+					},
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "extra-config",
+						Namespace: ns,
+					},
+					Data: map[string]string{
+						"custom.conf": "custom-config",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := buildFakeClient(tt.cr, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      crName + "-ssl",
-					Namespace: tt.cr.Namespace,
+
+			mockObjs := []client.Object{
+				tt.cr,
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      crName + "-ssl",
+						Namespace: tt.cr.Namespace,
+					},
+					Data: map[string][]byte{
+						"ca.crt":  []byte("fake-ca-cert"),
+						"tls.crt": []byte("fake-tls-cert"),
+						"tls.key": []byte("fake-tls-key"),
+					},
 				},
-				Data: map[string][]byte{
-					"ca.crt":  []byte("fake-ca-cert"),
-					"tls.crt": []byte("fake-tls-cert"),
-					"tls.key": []byte("fake-tls-key"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      crName + "-ssl-internal",
+						Namespace: tt.cr.Namespace,
+					},
 				},
-			}, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      crName + "-ssl-internal",
-					Namespace: tt.cr.Namespace,
+
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      logcollector.ConfigMapName(tt.cr.Name),
+						Namespace: tt.cr.Namespace,
+					},
+					Data: map[string]string{
+						"fluentbit_custom.conf": "config",
+					},
 				},
-			})
+			}
+
+			mockObjs = append(mockObjs, tt.additionalObjs...)
+			r := buildFakeClient(mockObjs...)
+
+			if tt.crUpdate != nil {
+				tt.crUpdate(tt.cr)
+			}
 
 			rs := tt.cr.Spec.Replset(tt.rsName)
 
@@ -142,6 +239,15 @@ func TestReconcileStatefulSet(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reconcileStatefulSet() error = %v", err)
 			}
+
+			// Since version v0.22.0 of the runtime controller, it does not return the GVK for a type.
+			// Github issue: https://github.com/kubernetes-sigs/controller-runtime/issues/3302
+			gvk, err := apiutil.GVKForObject(sts, scheme.Scheme)
+			require.NoError(t, err)
+			require.False(t, gvk.Empty())
+
+			sts.Kind = gvk.Kind
+			sts.APIVersion = gvk.GroupVersion().String()
 
 			compareSts(t, sts, tt.expectedSts)
 		})

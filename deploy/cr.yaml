@@ -14,7 +14,7 @@ spec:
 #  unmanaged: false
 #  enableVolumeExpansion: false
 #  enableExternalVolumeAutoscaling: false
-  crVersion: 1.21.0
+  crVersion: 1.22.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -49,6 +49,14 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
@@ -60,12 +68,20 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
+#    resources:
+#      requests:
+#        memory: 150M
+#        cpu: 300m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
+
   replsets:
   - name: rs0
     size: 3
@@ -175,6 +191,12 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    sidecars:
 #    - image: busybox
 #      command: ["/bin/sh"]
@@ -237,11 +259,11 @@ spec:
 #      externalTrafficPolicy: Local
     resources:
       limits:
-        cpu: "300m"
-        memory: "0.5G"
+        cpu: "600m"
+        memory: "1Gi"
       requests:
         cpu: "300m"
-        memory: "0.5G"
+        memory: "1Gi"
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:
@@ -262,7 +284,7 @@ spec:
       enabled: false
 #      podSecurityContext: {}
 #      containerSecurityContext: {}
-      size: 3
+      size: 2
 #      # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
 #      configuration: |
 #        operationProfiling:
@@ -287,6 +309,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -298,11 +326,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -348,6 +376,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -359,11 +393,11 @@ spec:
 #        minAvailable: 0
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #        emptyDir: {}
 #        hostPath:
@@ -400,6 +434,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -409,17 +449,22 @@ spec:
 #    schedulerName: "default"
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
 #    hostAliases:
 #    - ip: "10.10.0.2"
 #      hostnames:
 #      - "host1"
 #      - "host2"
-
+#    env:
+#    - name: KEY
+#      value: VALUE
+#    envFrom:
+#    - configMapRef:
+#       name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -491,6 +536,18 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -512,11 +569,11 @@ spec:
 #        externalTrafficPolicy: Local
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       volumeSpec:
 #       emptyDir: {}
 #       hostPath:
@@ -596,6 +653,18 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -605,11 +674,11 @@ spec:
         maxUnavailable: 1
       resources:
         limits:
-          cpu: "300m"
-          memory: "0.5G"
+          cpu: "600m"
+          memory: "1Gi"
         requests:
           cpu: "300m"
-          memory: "0.5G"
+          memory: "1Gi"
       expose:
         type: ClusterIP
 #        servicePerPod: true
@@ -686,15 +755,21 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
 #      limits:
 #        cpu: "300m"
-#        memory: "1.2G"
+#        memory: "1.2Gi"
 #      requests:
 #        cpu: "300m"
-#        memory: "1G"
+#        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
@@ -721,12 +796,16 @@ spec:
 #          insecureSkipTLSVerify: false
 #      gcs:
 #        type: gcs
-#        s3:
+#        gcs:
 #          bucket: GCS-BACKUP-BUCKET-NAME-HERE
 #          prefix: ""
 #          credentialsSecret: my-cluster-name-backup-gcs
 #          chunkSize: 10485760
-#      minio:
+#          retryer:
+#            backoffInitial: 1
+#            backoffMax: 30
+#            backoffMultiplier: 2
+#      minio-s3:
 #        type: s3
 #        s3:
 #          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
@@ -735,6 +814,16 @@ spec:
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
 #          prefix: ""
+#      minio:
+#        type: minio
+#        minio:
+#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+#          region: us-east-1
+#          credentialsSecret: my-cluster-name-backup-minio
+#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
+#          insecureSkipTLSVerify: false
+#          prefix: ""
+#          secure: false
 #      azure-blob:
 #        type: azure
 #        azure:
@@ -837,3 +926,8 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    logrotate:
+#      configuration: ""
+#      extraConfig:
+#        name: logrotate-config
+#      schedule: "0 0 * * *"

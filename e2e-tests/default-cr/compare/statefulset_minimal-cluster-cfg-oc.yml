@@ -114,6 +114,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 3
             initialDelaySeconds: 10
             periodSeconds: 3
@@ -138,6 +144,8 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: minimal-cluster-mongodb-encryption-key
               readOnly: true
@@ -172,6 +180,8 @@ spec:
             secretName: minimal-cluster-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - name: minimal-cluster-mongodb-encryption-key
           secret:
             defaultMode: 288

@@ -48,7 +48,7 @@ run_backup minio
 wait_backup "$backup_name_minio"
 
 desc 'check backup and restore -- minio'
-run_restore $backup_name_minio 3 1 "-mongos"
+run_restore $backup_name_minio
 
 sleep 120
 wait_restore $backup_name_minio $cluster "ready"

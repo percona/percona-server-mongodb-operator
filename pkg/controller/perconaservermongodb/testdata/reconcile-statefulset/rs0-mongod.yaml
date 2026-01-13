@@ -30,6 +30,8 @@ spec:
   serviceName: reconcile-statefulset-cr-rs0
   template:
     metadata:
+      annotations:
+        percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: reconcile-statefulset-cr
@@ -81,10 +83,17 @@ spec:
           value: rs0
         - name: LOGCOLLECTOR_ENABLED
           value: "true"
+        - name: TEST_ENV1
+          value: test-value1
+        - name: TEST_ENV2
+          value: test-value2
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
+        - configMapRef:
+            name: test-configmap
+            optional: true
         image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
@@ -117,6 +126,12 @@ spec:
             - readiness
             - --component
             - mongod
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
           failureThreshold: 8
           initialDelaySeconds: 10
           periodSeconds: 3
@@ -124,11 +139,11 @@ spec:
           timeoutSeconds: 2
         resources:
           limits:
-            cpu: 300m
-            memory: 500M
+            cpu: 600m
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 500M
+            memory: 1Gi
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -146,6 +161,8 @@ spec:
           readOnly: true
         - mountPath: /opt/percona
           name: bin
+        - mountPath: /.mongodb
+          name: mongosh
         - mountPath: /etc/mongodb-encryption
           name: my-cluster-name-mongodb-encryption-key
           readOnly: true
@@ -227,6 +244,8 @@ spec:
             name: mongod-data
           - mountPath: /opt/percona
             name: bin
+          - mountPath: /opt/percona/logcollector/fluentbit/custom
+            name: log-collector-volume
       - name: logrotate
         image: perconalab/fluentbit:main-logcollector
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
@@ -265,11 +284,11 @@ spec:
         name: mongo-init
         resources:
           limits:
-            cpu: 300m
-            memory: 500M
+            cpu: 600m
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 500M
+            memory: 1Gi
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
@@ -288,6 +307,12 @@ spec:
           secretName: reconcile-statefulset-cr-mongodb-keyfile
       - emptyDir: {}
         name: bin
+      - emptyDir: {}
+        name: mongosh
+      - configMap:
+          name: reconcile-statefulset-cr-log-collector-config
+          optional: true
+        name: log-collector-volume
       - name: my-cluster-name-mongodb-encryption-key
         secret:
           defaultMode: 288

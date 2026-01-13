@@ -9,7 +9,7 @@ compare() {
 	local target="$4"
 
 	run_mongos "use ${database}\n ${command}" "$uri" "mongodb" \
-		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxxesvc/' \
 		| sed '/"userId"/d' \
 			>$tmp_dir/${target}
@@ -20,7 +20,7 @@ compare() {
 check_auth() {
 	local uri="$1"
 
-	ping=$(run_mongos "db.runCommand({ ping: 1 }).ok" "$uri" "" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
+	ping=$(run_mongos "db.runCommand({ ping: 1 }).ok" "$uri" "" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
 	desc "ping return"
 	if [ "${ping}" != "1" ]; then
 		return 1

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -89,6 +90,18 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 	if cr.Spec.Secrets.SSLInternal == "" {
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
+	}
+
+	if cr.Spec.VaultSpec != nil && cr.Spec.VaultSpec.EndpointURL != "" {
+		if cr.Spec.VaultSpec.SyncUsersSpec.Role == "" {
+			cr.Spec.VaultSpec.SyncUsersSpec.Role = "operator"
+		}
+
+		if strings.HasPrefix(cr.Spec.VaultSpec.EndpointURL, "https://") {
+			if cr.Spec.VaultSpec.TLSSecret == "" {
+				return errors.New("spec.vault.tlsSecret must be set when spec.vault.endpointURL uses https")
+			}
+		}
 	}
 
 	t := true
@@ -465,6 +478,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					"k8s", "readiness",
 					"--component", "mongod",
 				},
+			}
+			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
 			}
 
 			if cr.CompareVersion("1.15.0") < 0 {
@@ -843,6 +862,12 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--component", "mongod",
 			},
 		}
+		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
+		}
 
 		if cr.CompareVersion("1.15.0") < 0 {
 			nv.ReadinessProbe.Exec = nil
@@ -927,7 +952,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	}
 }
 
-func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
+func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
 	if h.ReadinessProbe == nil {
 		h.ReadinessProbe = &corev1.Probe{}
 	}
@@ -939,6 +964,12 @@ func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
 				"k8s", "readiness",
 				"--component", "mongod",
 			},
+		}
+		if cr.CompareVersion("1.22.0") >= 0 && cr.TLSEnabled() {
+			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
 		}
 	}
 	if h.ReadinessProbe.InitialDelaySeconds < 1 {
@@ -969,7 +1000,7 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 	}
 
 	h.setLivenessProbe(cr, rs)
-	h.setReadinessProbe(rs)
+	h.setReadinessProbe(cr, rs)
 
 	if len(h.ServiceAccountName) == 0 {
 		h.ServiceAccountName = WorkloadSA

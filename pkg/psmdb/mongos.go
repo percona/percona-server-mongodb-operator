@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -139,26 +140,23 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		},
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
+	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: config.MongosConfigDir,
 		})
 	}
 
-	if cr.CompareVersion("1.8.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{
-			Name:      "users-secret-file",
-			MountPath: "/etc/users-secret",
-			ReadOnly:  true,
-		})
-	}
+	volumes = append(volumes, corev1.VolumeMount{
+		Name:      "users-secret-file",
+		MountPath: "/etc/users-secret",
+		ReadOnly:  true,
+	}, corev1.VolumeMount{
+		Name:      config.BinVolumeName,
+		MountPath: config.BinMountPath,
+	})
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{Name: config.BinVolumeName, MountPath: config.BinMountPath})
-	}
-
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
 				Name:      config.LDAPTLSVolClaimName,
@@ -170,6 +168,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 				MountPath: config.LDAPConfDir,
 			},
 		}...)
+	}
+
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Sharding.Mongos != nil && cr.Spec.Sharding.Mongos.HookScript.Specified() {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.HookscriptVolClaimName,
+			MountPath: config.HookscriptMountPath,
+		})
 	}
 
 	container := corev1.Container{
@@ -214,16 +219,15 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
 		Resources:       cr.Spec.Sharding.Mongos.Resources,
 		VolumeMounts:    volumes,
-		Command:         []string{"/data/db/ps-entry.sh"},
+		Command:         []string{config.BinMountPath + "/ps-entry.sh"},
 	}
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
-	}
+	container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+	container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 
-	if cr.CompareVersion("1.15.0") >= 0 {
-		container.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
-		container.ReadinessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
+		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
 	}
 
 	return container, nil
@@ -256,15 +260,19 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 		"--relaxPermChecks",
 	}...)
 
-	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-		args = append(args,
-			"--clusterAuthMode=keyFile",
-			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
-		)
-	} else if cr.TLSEnabled() {
-		args = append(args,
-			"--clusterAuthMode=x509",
-		)
+	// If auth is disabled, we consider that TLS should be also disabled
+	// and for that reason clusterAuthMode should not be even configured.
+	if cfgRs.Configuration.IsAuthorizationEnabled() {
+		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
+			args = append(args,
+				"--clusterAuthMode=keyFile",
+				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
+			)
+		} else if cr.TLSEnabled() {
+			args = append(args,
+				"--clusterAuthMode=x509",
+			)
+		}
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 {
@@ -290,10 +298,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType) []corev1.Volume {
 	fvar, tvar := false, true
 
-	sslVolumeOptional := &cr.Spec.UnsafeConf
-	if cr.CompareVersion("1.16.0") >= 0 {
-		sslVolumeOptional = &cr.Spec.Unsafe.TLS
-	}
+	sslVolumeOptional := &cr.Spec.Unsafe.TLS
 
 	volumes := []corev1.Volume{
 		{
@@ -332,20 +337,17 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-	}
-
-	if cr.CompareVersion("1.8.0") >= 0 {
-		volumes = append(volumes, corev1.Volume{
+		{
 			Name: "users-secret-file",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: api.InternalUserSecretName(cr),
 				},
 			},
-		})
+		},
 	}
 
-	if cr.CompareVersion("1.11.0") >= 0 && cr.Spec.Sharding.Mongos != nil {
+	if cr.Spec.Sharding.Mongos != nil {
 		volumes = append(volumes, cr.Spec.Sharding.Mongos.SidecarVolumes...)
 
 		for _, v := range cr.Spec.Sharding.Mongos.SidecarPVCs {
@@ -360,43 +362,57 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 		}
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && configSource.IsUsable() {
+	if configSource.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
 			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 
-	if cr.CompareVersion("1.13.0") >= 0 {
-		volumes = append(volumes, corev1.Volume{
-			Name: config.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+	volumes = append(volumes, corev1.Volume{
+		Name: config.BinVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	if cr.Spec.Secrets.LDAPSecret != "" {
+		volumes = append(volumes, []corev1.Volume{
+			{
+				Name: config.LDAPTLSVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  cr.Spec.Secrets.LDAPSecret,
+						Optional:    &tvar,
+						DefaultMode: &secretFileMode,
+					},
+				},
 			},
-		})
+			{
+				Name: config.LDAPConfVolClaimName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}...)
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 {
-		if cr.Spec.Secrets.LDAPSecret != "" {
-			volumes = append(volumes, []corev1.Volume{
-				{
-					Name: config.LDAPTLSVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							SecretName:  cr.Spec.Secrets.LDAPSecret,
-							Optional:    &tvar,
-							DefaultMode: &secretFileMode,
-						},
-					},
-				},
-				{
-					Name: config.LDAPConfVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-			}...)
+	if m := cr.Spec.Sharding.Mongos; cr.CompareVersion("1.22.0") >= 0 && m != nil && m.HookScript.Specified() {
+		name := m.HookScript.ConfigMapRef.Name
+		if name == "" {
+			name = naming.MongosHookScriptConfigMapName(cr)
 		}
+		volumes = append(volumes, corev1.Volume{
+			Name: config.HookscriptVolClaimName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: name,
+					},
+					Optional: ptr.To(true),
+				},
+			},
+		})
 	}
 
 	return volumes
@@ -438,9 +454,10 @@ func MongosServiceSpec(cr *api.PerconaServerMongoDB, podName string) corev1.Serv
 	spec := corev1.ServiceSpec{
 		Ports: []corev1.ServicePort{
 			{
-				Name:       config.MongosPortName,
-				Port:       cr.Spec.Sharding.Mongos.GetPort(),
-				TargetPort: intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				Name:        config.MongosPortName,
+				Port:        cr.Spec.Sharding.Mongos.GetPort(),
+				TargetPort:  intstr.FromInt(int(cr.Spec.Sharding.Mongos.GetPort())),
+				AppProtocol: naming.AppProtocol(cr),
 			},
 		},
 		Selector:              ls,
