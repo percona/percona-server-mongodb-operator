@@ -601,7 +601,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
-		for _, stg := range cr.Spec.Backup.Storages {
+		for name, stg := range cr.Spec.Backup.Storages {
 			if stg.Type != BackupStorageS3 {
 				continue
 			}
@@ -609,6 +609,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 &&
 				len(stg.S3.ServerSideEncryption.SSEAlgorithm) != 0 {
 				return errors.New("For S3 storage only one encryption method can be used. Set either (sseAlgorithm and kmsKeyID) or (sseCustomerAlgorithm and sseCustomerKey)")
+			}
+
+			if cr.CompareVersion("1.22.0") >= 0 && stg.S3.Region == "" {
+				stg.S3.Region = "us-east-1"
+				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
 	}
