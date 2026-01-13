@@ -163,6 +163,16 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  hookScript:
+                    properties:
+                      configMapRef:
+                        properties:
+                          name:
+                            type: string
+                        type: object
+                      script:
+                        type: string
+                    type: object
                   image:
                     type: string
                   labels:
@@ -299,7 +309,9 @@ spec:
                   serviceAccountName:
                     type: string
                   startingDeadlineSeconds:
+                    default: 120
                     format: int64
+                    minimum: 1
                     type: integer
                   storages:
                     additionalProperties:
@@ -819,6 +831,21 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  logrotate:
+                    properties:
+                      configuration:
+                        type: string
+                      extraConfig:
+                        properties:
+                          name:
+                            default: ""
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      schedule:
+                        default: 0 0 * * *
+                        type: string
+                    type: object
                   resources:
                     properties:
                       claims:
@@ -1891,6 +1918,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -4495,6 +4532,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -6689,6 +6736,16 @@ spec:
                       - enabled
                       - size
                       type: object
+                    hookScript:
+                      properties:
+                        configMapRef:
+                          properties:
+                            name:
+                              type: string
+                          type: object
+                        script:
+                          type: string
+                      type: object
                     hostAliases:
                       items:
                         properties:
@@ -7322,6 +7379,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -12680,6 +12747,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -15284,6 +15361,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -17478,6 +17565,16 @@ spec:
                         - enabled
                         - size
                         type: object
+                      hookScript:
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
+                            type: string
+                        type: object
                       hostAliases:
                         items:
                           properties:
@@ -18111,6 +18208,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -23150,6 +23257,16 @@ spec:
                           servicePerPod:
                             type: boolean
                           type:
+                            type: string
+                        type: object
+                      hookScript:
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
                             type: string
                         type: object
                       hostAliases:
