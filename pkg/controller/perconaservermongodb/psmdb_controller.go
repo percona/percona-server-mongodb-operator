@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -92,12 +91,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "create client")
 	}
 
-	// used for storage autoscaling
-	metricsClient, err := metricsclientset.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, errors.Wrap(err, "create metrics client")
-	}
-
 	secretProviders := []pkgSecret.Provider{
 		new(vault.Provider),
 	}
@@ -111,7 +104,6 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
-		metricsClient:          metricsClient,
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
@@ -196,10 +188,9 @@ type ClientCmd interface {
 type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	restConfig    *rest.Config
-	metricsClient metricsclientset.Interface
+	client     client.Client
+	scheme     *runtime.Scheme
+	restConfig *rest.Config
 
 	crons                 CronRegistry
 	clientcmd             ClientCmd
