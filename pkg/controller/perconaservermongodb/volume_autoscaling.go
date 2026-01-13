@@ -149,8 +149,9 @@ func (r *ReconcilePerconaServerMongoDB) shouldTriggerResize(
 	}
 
 	for _, cond := range pvc.Status.Conditions {
-		if cond.Type == corev1.PersistentVolumeClaimResizing ||
-			cond.Type == corev1.PersistentVolumeClaimFileSystemResizePending {
+		if (cond.Type == corev1.PersistentVolumeClaimResizing ||
+			cond.Type == corev1.PersistentVolumeClaimFileSystemResizePending) &&
+			cond.Status == corev1.ConditionTrue {
 			log.V(1).Info("resize already in progress", "condition", cond.Type)
 			return false
 		}
