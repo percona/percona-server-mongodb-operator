@@ -17,6 +17,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -278,22 +280,8 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		member.Priority = *overrides.Priority
 	}
 
-	horizons := make(map[string]string)
-	for h, domain := range rs.Horizons[pod.Name] {
-		d := domain
-		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
-		}
-		horizons[h] = d
-	}
-	for h, domain := range overrides.Horizons {
-		d := domain
-		if !strings.Contains(d, ":") {
-			d = fmt.Sprintf("%s:%d", d, rs.GetPort())
-		}
-		horizons[h] = d
-	}
-	if len(horizons) > 0 {
+	horizons, ok := rs.GetHorizons(true)[pod.Name]
+	if ok && len(horizons) > 0 {
 		member.Horizons = horizons
 	}
 
@@ -376,14 +364,8 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (map[string]api.ReplsetMemberStatus, int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
-	unsafePSA := false
 	rsMembers := make(map[string]api.ReplsetMemberStatus)
-
-	if cr.CompareVersion("1.15.0") <= 0 {
-		unsafePSA = cr.Spec.UnsafeConf && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
-	} else {
-		unsafePSA = cr.Spec.Unsafe.ReplsetSize && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
-	}
+	unsafePSA := cr.Spec.Unsafe.ReplsetSize && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
 
 	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
@@ -470,13 +452,20 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		}
 	}
 
-	if cnf.Members.AddNew(ctx, members) {
+	if cnf.Members.RemoveArbiterIfNeeded(ctx, unsafePSA) {
+		cnf.Version++
+
+		log.Info("Removing arbiter members", "replset", rs.Name)
+
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
+			return rsMembers, 0, errors.Wrap(err, "remove arbiter if needed: write mongo config")
+		}
+	} else if cnf.Members.AddNew(ctx, members) {
 		cnf.Version++
 
 		log.Info("Adding new nodes", "replset", rs.Name)
 
-		err = cli.WriteConfig(ctx, cnf, false)
-		if err != nil {
+		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
 			return rsMembers, 0, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
@@ -652,7 +641,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 }
 
 // handleReplsetInit initializes the replset within the first running pod's mongod container.
-// This must be ran from within the running container to utilize the MongoDB Localhost Exception.
+// This must be run from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
@@ -724,8 +713,35 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
+		backoff := wait.Backoff{
+			Steps:    5,
+			Duration: 50 * time.Millisecond,
+			Factor:   5.0,
+			Jitter:   0.1,
+		}
+		err = retry.OnError(backoff, func(err error) bool { return true }, func() error {
+			var stderr, stdout bytes.Buffer
+
+			hello := []string{"sh", "-c",
+				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'"}
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
+			if err != nil {
+				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
+			}
+
+			out := strings.TrimSpace(stdout.String())
+			if out != "true" {
+				return errors.Errorf("%s is not the writable primary", pod.Name)
+			}
+
+			log.Info(pod.Name+" is the writable primary", "replset", replsetName)
+
+			return nil
+		})
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "wait for replset initialization")
+		}
 		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
-		time.Sleep(time.Second * 5)
 
 		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
@@ -1011,10 +1027,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
-	if cr.CompareVersion("1.13.0") >= 0 {
-		users = append(users, api.RoleDatabaseAdmin)
-	}
+	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
 
 	for _, role := range users {
 		creds, err := getInternalCredentials(ctx, r.client, cr, role)

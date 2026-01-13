@@ -340,9 +340,13 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
-// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
-const ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+const (
+	// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
+	// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
+	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+
+	ConditionTypePBMReady AppState = "PBMReady"
+)
 
 type ClusterCondition struct {
 	Status             ConditionStatus `json:"status"`
@@ -368,6 +372,33 @@ func (s *PerconaServerMongoDBStatus) IsStatusConditionTrue(conditionType AppStat
 		return false
 	}
 	return cond.Status == ConditionTrue
+}
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+	}
+
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
+	}
 }
 
 type PMMSpec struct {
@@ -420,6 +451,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -483,6 +515,23 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 	}
 
 	return rv
+}
+
+type HookScriptSpec struct {
+	Script       string             `json:"script,omitempty"`
+	ConfigMapRef ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+func (s HookScriptSpec) Specified() bool {
+	return s.Script != "" || s.ConfigMapRef.Name != ""
+}
+
+// ConfigMapReference references a ConfigMap.
+// Usage of corev1.LocalObjectReference is discouraged; prefer this type instead.
+type ConfigMapReference struct {
+	// Name is the name of the referenced ConfigMap.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -641,6 +690,25 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	return b
 }
 
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
+}
+
 // GetPort returns the net.port of the mongo configuration.
 // https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port
 func (conf MongoConfiguration) GetPort() (int32, error) {
@@ -764,6 +832,53 @@ type ReplsetSpec struct {
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 	Env                      []corev1.EnvVar              `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+}
+
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	fixDomain := func(domain string) string {
+		idx := strings.IndexRune(domain, ':')
+		if withPorts && idx == -1 {
+			domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+		} else if !withPorts && idx != -1 {
+			domain = domain[:idx]
+		}
+		return domain
+	}
+
+	horizons := make(map[string]map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				if d, ok := overrides.Horizons[h]; ok {
+					domain = d
+				}
+			}
+
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			horizons[podName][h] = fixDomain(domain)
+		}
+
+	}
+
+	for podName, m := range r.ReplsetOverrides {
+		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			if _, ok := horizons[podName][h]; ok {
+				continue
+			}
+
+			horizons[podName][h] = fixDomain(domain)
+		}
+	}
+
+	return horizons
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -1193,7 +1308,10 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
+	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1411,6 +1529,15 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
+func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, 0)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}
+
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if backup is allowed")
@@ -1457,33 +1584,6 @@ func (s *PerconaServerMongoDBStatus) RemoveCondition(conditionType AppState) {
 			s.Conditions = append(s.Conditions[:i], s.Conditions[i+1:]...)
 			return
 		}
-	}
-}
-
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	existingCondition := s.FindCondition(c.Type)
-	if existingCondition == nil {
-		if c.LastTransitionTime.IsZero() {
-			c.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-		s.Conditions = append(s.Conditions, c)
-		return
-	}
-
-	if existingCondition.Status != c.Status {
-		existingCondition.Status = c.Status
-		if !c.LastTransitionTime.IsZero() {
-			existingCondition.LastTransitionTime = c.LastTransitionTime
-		} else {
-			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-	}
-
-	if existingCondition.Reason != c.Reason {
-		existingCondition.Reason = c.Reason
-	}
-	if existingCondition.Message != c.Message {
-		existingCondition.Message = c.Message
 	}
 }
 
@@ -1550,6 +1650,23 @@ type LogCollectorSpec struct {
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Key must contain the .conf extension to be processed correctly.
+	//
+	// NOTE: mongodb.conf is reserved for the default configuration specified by .configuration field.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

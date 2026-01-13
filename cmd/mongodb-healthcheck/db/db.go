@@ -29,25 +29,27 @@ var (
 )
 
 func Dial(ctx context.Context, conf *Config) (mongo.Client, error) {
-	if err := conf.configureTLS(); err != nil {
+	log := logf.FromContext(ctx).WithName("Dial")
+	ctx = logf.IntoContext(ctx, log)
+
+	if err := conf.configureTLS(ctx); err != nil {
 		return nil, errors.Wrap(err, "configure TLS")
 	}
 
-	log := logf.FromContext(ctx)
 	log.V(1).Info("Connecting to mongodb", "hosts", conf.Hosts, "ssl", conf.SSL.Enabled, "ssl_insecure", conf.SSL.Insecure)
 
 	if conf.Username != "" && conf.Password != "" {
 		log.V(1).Info("Enabling authentication for session", "user", conf.Username)
 	}
 
-	cl, err := mongo.Dial(&conf.Config)
+	cl, err := mongo.Dial(ctx, &conf.Config)
 	if err != nil {
 		cfg := conf.Config
 		cfg.Direct = true
 		cfg.ReplSetName = ""
-		cl, err = mongo.Dial(&cfg)
+		cl, err = mongo.Dial(ctx, &cfg)
 		if err != nil {
-			return nil, errors.Wrap(err, "filed to dial mongo")
+			return nil, errors.Wrap(err, "failed to dial mongo")
 		}
 	}
 
