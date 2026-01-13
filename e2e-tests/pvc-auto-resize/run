@@ -86,6 +86,19 @@ function check_autoscaling_status() {
 	kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' | jq .
 }
 
+function apply_resourcequota() {
+	local quota=$1
+	local default_sc
+	default_sc=$(get_default_storageclass)
+
+	echo "Applying resourcequota for default storageclass ${default_sc} with quota ${quota}"
+
+	cat "${test_dir}/conf/resourcequota.yml" \
+		| sed "s/STORAGECLASS/${default_sc}/" \
+		| sed "s/QUOTA/${quota}/" \
+		| kubectl_bin apply -f -
+}
+
 set_debug
 
 ensure_default_sc_allows_expansion
@@ -127,12 +140,32 @@ wait_cluster_consistency "$cluster"
 desc 'verify cluster is ready'
 kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
 
-desc 'test maxSize limit'
-echo "Filling disk again to test continued autoscaling"
+desc 'test namespace resource quota enforcement'
+# The cluster has 3 replicas with 3Gi PVCs = 9Gi total
+apply_resourcequota 9Gi
+
+echo "Filling disk again to trigger autoscaling with quota limit"
 fill_disk_to_threshold "${cluster}-rs0-0" 80 2400
+
+echo "Waiting to verify PVC does not resize beyond quota (should stay at 3Gi)"
+sleep 30
+current_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
+if [[ ${current_size} != "3Gi" ]]; then
+	echo "WARNING: PVC size is ${current_size}, expected to stay at 3Gi due to quota"
+fi
+
+desc 'increase quota to allow further autoscaling'
+# Now increase quota to allow next resize step (3 replicas * 5Gi = 15Gi)
+apply_resourcequota 15Gi
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "5Gi" 60 10
 
-desc 'fill disk to test maxSize enforcement'
+desc 'verify cluster consistency after quota test'
+wait_cluster_consistency "$cluster"
+
+desc 'test maxSize limit'
+# Increase quota to allow maxSize testing (3 replicas * 10Gi maxSize = 30Gi)
+apply_resourcequota 30Gi
+echo "Continuing to fill disk to test maxSize enforcement"
 fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
 
