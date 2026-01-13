@@ -199,9 +199,10 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 
 	patch := client.MergeFrom(cr.DeepCopy())
 
+	// We are modifying cr directly through the pointer. So the original cr object does get the storage size updated.
 	volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = newSize
 
-	if err := r.client.Patch(ctx, cr, patch); err != nil {
+	if err := r.client.Patch(ctx, cr.DeepCopy(), patch); err != nil {
 		return errors.Wrap(err, "patch CR with new storage size")
 	}
 
