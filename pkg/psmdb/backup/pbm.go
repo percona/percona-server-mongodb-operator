@@ -330,6 +330,9 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *psmdbv1
 	if err != nil {
 		return conf, errors.Wrap(err, "get storage config")
 	}
+	if err := storageConf.Cast(); err != nil {
+		return conf, errors.Wrap(err, "cast s3 config")
+	}
 	conf.Storage = storageConf
 
 	return conf, nil
@@ -405,6 +408,7 @@ func GetPBMStorageS3Config(
 			MaxUploadParts:        stg.S3.MaxUploadParts,
 			StorageClass:          stg.S3.StorageClass,
 			InsecureSkipTLSVerify: stg.S3.InsecureSkipTLSVerify,
+			ForcePathStyle:        stg.S3.ForcePathStyle,
 		},
 	}
 
