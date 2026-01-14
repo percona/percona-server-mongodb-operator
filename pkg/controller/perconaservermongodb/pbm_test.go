@@ -10,7 +10,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
-	"k8s.io/utils/ptr"
 )
 
 func TestIsResyncNeeded(t *testing.T) {
@@ -383,31 +382,6 @@ func TestIsResyncNeeded(t *testing.T) {
 						Region:   "us-east-1",
 						Endpoint: "operator-testing.com",
 						Prefix:   "prefix",
-					},
-				},
-			},
-			true,
-		},
-		{
-			"minio: maxObjSizeGB changed",
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Minio,
-					Minio: &mio.Config{
-						Bucket:   "operator-testing",
-						Region:   "us-east-1",
-						Endpoint: "operator-testing.com",
-					},
-				},
-			},
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Minio,
-					Minio: &mio.Config{
-						Bucket:       "operator-testing",
-						Region:       "us-east-1",
-						Endpoint:     "operator-testing.com",
-						MaxObjSizeGB: ptr.To(float64(10)),
 					},
 				},
 			},

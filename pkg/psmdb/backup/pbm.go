@@ -330,9 +330,6 @@ func GetPBMConfig(ctx context.Context, k8sclient client.Client, cluster *psmdbv1
 	if err != nil {
 		return conf, errors.Wrap(err, "get storage config")
 	}
-	if err := storageConf.Cast(); err != nil {
-		return conf, errors.Wrap(err, "cast s3 config")
-	}
 	conf.Storage = storageConf
 
 	return conf, nil

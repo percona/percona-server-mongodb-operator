@@ -208,7 +208,115 @@ func hashPBMConfiguration(c []config.Config) (string, error) {
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	return !currentCfg.Storage.Equal(&newCfg.Storage)
+	if currentCfg.Storage.Type != newCfg.Storage.Type {
+		return true
+	}
+
+	if currentCfg.Storage.S3 != nil && newCfg.Storage.S3 != nil {
+		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region {
+			return true
+		}
+
+		if currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Credentials.AccessKeyID != newCfg.Storage.S3.Credentials.AccessKeyID {
+			return true
+		}
+
+		if currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
+			return true
+		}
+
+	}
+
+	if currentCfg.Storage.Minio != nil && newCfg.Storage.Minio != nil {
+		if currentCfg.Storage.Minio.Bucket != newCfg.Storage.Minio.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.Region != newCfg.Storage.Minio.Region {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.Endpoint != newCfg.Storage.Minio.Endpoint {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.Prefix != newCfg.Storage.Minio.Prefix {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.Credentials.AccessKeyID != newCfg.Storage.Minio.Credentials.AccessKeyID {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.Credentials.SecretAccessKey != newCfg.Storage.Minio.Credentials.SecretAccessKey {
+			return true
+		}
+
+	}
+
+	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
+		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.ClientEmail != newCfg.Storage.GCS.Credentials.ClientEmail {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.PrivateKey != newCfg.Storage.GCS.Credentials.PrivateKey {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.HMACAccessKey != newCfg.Storage.GCS.Credentials.HMACAccessKey {
+			return true
+		}
+
+		if currentCfg.Storage.GCS.Credentials.HMACSecret != newCfg.Storage.GCS.Credentials.HMACSecret {
+			return true
+		}
+	}
+
+	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
+		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
+			return true
+		}
+
+		if currentCfg.Storage.Azure.Credentials.Key != newCfg.Storage.Azure.Credentials.Key {
+			return true
+		}
+	}
+
+	if currentCfg.Storage.Filesystem != nil && newCfg.Storage.Filesystem != nil {
+		if currentCfg.Storage.Filesystem.Path != newCfg.Storage.Filesystem.Path {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
