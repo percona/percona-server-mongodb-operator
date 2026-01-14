@@ -234,7 +234,7 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 			currentCfg.Storage.Minio.Secure != newCfg.Storage.Minio.Secure ||
 			currentCfg.Storage.Minio.InsecureSkipTLSVerify != newCfg.Storage.Minio.InsecureSkipTLSVerify ||
 			currentCfg.Storage.Minio.PartSize != newCfg.Storage.Minio.PartSize ||
-			ptr.To(currentCfg.Storage.Minio.ForcePathStyle) != ptr.To(newCfg.Storage.Minio.ForcePathStyle) ||
+			!ptr.Equal(currentCfg.Storage.Minio.ForcePathStyle, newCfg.Storage.Minio.ForcePathStyle) ||
 			!reflect.DeepEqual(currentCfg.Storage.Minio.Retryer, newCfg.Storage.Minio.Retryer) {
 			return true
 		}
