@@ -214,118 +214,48 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 	}
 
 	if currentCfg.Storage.S3 != nil && newCfg.Storage.S3 != nil {
-		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket {
+		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket ||
+			currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region ||
+			currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL ||
+			currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix ||
+			currentCfg.Storage.S3.Credentials.AccessKeyID != newCfg.Storage.S3.Credentials.AccessKeyID ||
+			currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
 			return true
 		}
-
-		if currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region {
-			return true
-		}
-
-		if currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Credentials.AccessKeyID != newCfg.Storage.S3.Credentials.AccessKeyID {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
-			return true
-		}
-
 	}
 
 	if currentCfg.Storage.Minio != nil && newCfg.Storage.Minio != nil {
-		if currentCfg.Storage.Minio.Bucket != newCfg.Storage.Minio.Bucket {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Region != newCfg.Storage.Minio.Region {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Endpoint != newCfg.Storage.Minio.Endpoint {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Prefix != newCfg.Storage.Minio.Prefix {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Credentials.AccessKeyID != newCfg.Storage.Minio.Credentials.AccessKeyID {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Credentials.SecretAccessKey != newCfg.Storage.Minio.Credentials.SecretAccessKey {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.Secure != newCfg.Storage.Minio.Secure {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.InsecureSkipTLSVerify != newCfg.Storage.Minio.InsecureSkipTLSVerify {
-			return true
-		}
-
-		if currentCfg.Storage.Minio.PartSize != newCfg.Storage.Minio.PartSize {
-			return true
-		}
-
-		if ptr.To(currentCfg.Storage.Minio.ForcePathStyle) != ptr.To(newCfg.Storage.Minio.ForcePathStyle) {
-			return true
-		}
-
-		if !reflect.DeepEqual(currentCfg.Storage.Minio.Retryer, newCfg.Storage.Minio.Retryer) {
+		if currentCfg.Storage.Minio.Bucket != newCfg.Storage.Minio.Bucket ||
+			currentCfg.Storage.Minio.Region != newCfg.Storage.Minio.Region ||
+			currentCfg.Storage.Minio.Endpoint != newCfg.Storage.Minio.Endpoint ||
+			currentCfg.Storage.Minio.Prefix != newCfg.Storage.Minio.Prefix ||
+			currentCfg.Storage.Minio.Credentials.AccessKeyID != newCfg.Storage.Minio.Credentials.AccessKeyID ||
+			currentCfg.Storage.Minio.Credentials.SecretAccessKey != newCfg.Storage.Minio.Credentials.SecretAccessKey ||
+			currentCfg.Storage.Minio.Secure != newCfg.Storage.Minio.Secure ||
+			currentCfg.Storage.Minio.InsecureSkipTLSVerify != newCfg.Storage.Minio.InsecureSkipTLSVerify ||
+			currentCfg.Storage.Minio.PartSize != newCfg.Storage.Minio.PartSize ||
+			ptr.To(currentCfg.Storage.Minio.ForcePathStyle) != ptr.To(newCfg.Storage.Minio.ForcePathStyle) ||
+			!reflect.DeepEqual(currentCfg.Storage.Minio.Retryer, newCfg.Storage.Minio.Retryer) {
 			return true
 		}
 	}
 
 	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
-		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.ClientEmail != newCfg.Storage.GCS.Credentials.ClientEmail {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.PrivateKey != newCfg.Storage.GCS.Credentials.PrivateKey {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.HMACAccessKey != newCfg.Storage.GCS.Credentials.HMACAccessKey {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.HMACSecret != newCfg.Storage.GCS.Credentials.HMACSecret {
+		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket ||
+			currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix ||
+			currentCfg.Storage.GCS.Credentials.ClientEmail != newCfg.Storage.GCS.Credentials.ClientEmail ||
+			currentCfg.Storage.GCS.Credentials.PrivateKey != newCfg.Storage.GCS.Credentials.PrivateKey ||
+			currentCfg.Storage.GCS.Credentials.HMACAccessKey != newCfg.Storage.GCS.Credentials.HMACAccessKey ||
+			currentCfg.Storage.GCS.Credentials.HMACSecret != newCfg.Storage.GCS.Credentials.HMACSecret {
 			return true
 		}
 	}
 
 	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
-		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Credentials.Key != newCfg.Storage.Azure.Credentials.Key {
+		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL ||
+			currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container ||
+			currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account ||
+			currentCfg.Storage.Azure.Credentials.Key != newCfg.Storage.Azure.Credentials.Key {
 			return true
 		}
 	}
