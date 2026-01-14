@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -264,6 +265,25 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 			return true
 		}
 
+		if currentCfg.Storage.Minio.Secure != newCfg.Storage.Minio.Secure {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.InsecureSkipTLSVerify != newCfg.Storage.Minio.InsecureSkipTLSVerify {
+			return true
+		}
+
+		if currentCfg.Storage.Minio.PartSize != newCfg.Storage.Minio.PartSize {
+			return true
+		}
+
+		if ptr.To(currentCfg.Storage.Minio.ForcePathStyle) != ptr.To(newCfg.Storage.Minio.ForcePathStyle) {
+			return true
+		}
+
+		if !reflect.DeepEqual(currentCfg.Storage.Minio.Retryer, newCfg.Storage.Minio.Retryer) {
+			return true
+		}
 	}
 
 	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
