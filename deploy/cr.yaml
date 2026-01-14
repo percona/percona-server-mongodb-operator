@@ -772,7 +772,7 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
-    storages:
+#    storages:
 #      s3-us-west:
 #        main: true
 #        type: s3

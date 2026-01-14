@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,260 +14,288 @@ import (
 )
 
 func TestCollectStorageCABundles(t *testing.T) {
-	t.Run("no storages", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup:    api.BackupSpec{},
-			},
-		}
-
-		cas := collectStorageCABundles(cr)
-		assert.Nil(t, cas)
-	})
-
-	t.Run("storage without CA bundle", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup: api.BackupSpec{
-					Storages: map[string]api.BackupStorageSpec{
-						"minio": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								Bucket: "backups",
-								// No CABundle
-							},
-						},
-					},
+	tests := []struct {
+		name     string
+		cr       *api.PerconaServerMongoDB
+		expected []api.SecretKeySelector
+	}{
+		{
+			name: "no storages",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup:    api.BackupSpec{},
 				},
 			},
-		}
-
-		cas := collectStorageCABundles(cr)
-		assert.Nil(t, cas)
-	})
-
-	t.Run("single CA bundle", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup: api.BackupSpec{
-					Storages: map[string]api.BackupStorageSpec{
-						"minio": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "minio-ca",
-									},
-									Key: "ca.crt",
+			expected: nil,
+		},
+		{
+			name: "storage without CA bundle",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup: api.BackupSpec{
+						Storages: map[string]api.BackupStorageSpec{
+							"minio": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									Bucket: "backups",
 								},
 							},
 						},
 					},
 				},
 			},
-		}
-
-		cas := collectStorageCABundles(cr)
-		require.Len(t, cas, 1)
-		assert.Equal(t, "minio-ca", cas[0].Name)
-		assert.Equal(t, "ca.crt", cas[0].Key)
-	})
-
-	t.Run("default key to ca.crt", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup: api.BackupSpec{
-					Storages: map[string]api.BackupStorageSpec{
-						"minio": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "minio-ca",
+			expected: nil,
+		},
+		{
+			name: "single CA bundle",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup: api.BackupSpec{
+						Storages: map[string]api.BackupStorageSpec{
+							"minio": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "minio-ca",
+										},
+										Key: "ca.crt",
 									},
-									// Key not specified
 								},
 							},
 						},
 					},
 				},
 			},
-		}
-
-		cas := collectStorageCABundles(cr)
-		require.Len(t, cas, 1)
-		assert.Equal(t, "minio-ca", cas[0].Name)
-		assert.Equal(t, "ca.crt", cas[0].Key, "should default to ca.crt")
-	})
-
-	t.Run("deduplicate same CA", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup: api.BackupSpec{
-					Storages: map[string]api.BackupStorageSpec{
-						"minio1": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "shared-ca",
+			expected: []api.SecretKeySelector{
+				{
+					Name: "minio-ca",
+					Key:  "ca.crt",
+				},
+			},
+		},
+		{
+			name: "default key to ca.crt",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup: api.BackupSpec{
+						Storages: map[string]api.BackupStorageSpec{
+							"minio": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "minio-ca",
+										},
+										// Key not specified
 									},
-									Key: "ca.crt",
-								},
-							},
-						},
-						"minio2": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "shared-ca",
-									},
-									Key: "ca.crt",
 								},
 							},
 						},
 					},
 				},
 			},
-		}
-
-		cas := collectStorageCABundles(cr)
-		assert.Len(t, cas, 1, "should deduplicate same CA")
-		assert.Equal(t, "shared-ca", cas[0].Name)
-		assert.Equal(t, "ca.crt", cas[0].Key)
-
-	})
-
-	t.Run("different keys from same secret", func(t *testing.T) {
-		cr := &api.PerconaServerMongoDB{
-			Spec: api.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
-				Backup: api.BackupSpec{
-					Storages: map[string]api.BackupStorageSpec{
-						"minio1": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "multi-ca",
+			expected: []api.SecretKeySelector{
+				{
+					Name: "minio-ca",
+					Key:  "ca.crt", // defaulted
+				},
+			},
+		},
+		{
+			name: "deduplicate same CA",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup: api.BackupSpec{
+						Storages: map[string]api.BackupStorageSpec{
+							"minio1": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "shared-ca",
+										},
+										Key: "ca.crt",
 									},
-									Key: "ca1.crt",
 								},
 							},
-						},
-						"minio2": {
-							Type: api.BackupStorageMinio,
-							Minio: api.BackupStorageMinioSpec{
-								CABundle: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "multi-ca",
+							"minio2": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "shared-ca",
+										},
+										Key: "ca.crt",
 									},
-									Key: "ca2.crt",
 								},
 							},
 						},
 					},
 				},
 			},
-		}
+			expected: []api.SecretKeySelector{
+				{
+					Name: "shared-ca",
+					Key:  "ca.crt",
+				},
+			},
+		},
+		{
+			name: "different keys from same secret",
+			cr: &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup: api.BackupSpec{
+						Storages: map[string]api.BackupStorageSpec{
+							"minio1": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "multi-ca",
+										},
+										Key: "ca1.crt",
+									},
+								},
+							},
+							"minio2": {
+								Type: api.BackupStorageMinio,
+								Minio: api.BackupStorageMinioSpec{
+									CABundle: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "multi-ca",
+										},
+										Key: "ca2.crt",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []api.SecretKeySelector{
+				{
+					Name: "multi-ca",
+					Key:  "ca1.crt",
+				},
+				{
+					Name: "multi-ca",
+					Key:  "ca2.crt",
+				},
+			},
+		},
+	}
 
-		cas := collectStorageCABundles(cr)
-		assert.Len(t, cas, 2, "different keys should not be deduplicated")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := collectStorageCABundles(tt.cr)
+
+			if tt.expected == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			require.Len(t, result, len(tt.expected))
+
+			for i, expected := range tt.expected {
+				assert.Equal(t, expected.Name, result[i].Name)
+				assert.Equal(t, expected.Key, result[i].Key)
+			}
+		})
+	}
 }
 
 func TestGetCAVolumeMounts(t *testing.T) {
 	mounts := getCAVolumeMounts()
 
-	require.Len(t, mounts, 2)
+	tests := []struct {
+		name     string
+		index    int
+		wantName string
+		wantPath string
+		wantRO   bool
+	}{
+		{
+			name:     "input mount",
+			index:    0,
+			wantName: naming.BackupStorageCAInputVolumeName,
+			wantPath: "/etc/s3/certs-in",
+			wantRO:   true,
+		},
+		{
+			name:     "output mount",
+			index:    1,
+			wantName: naming.BackupStorageCAFileVolumeName,
+			wantPath: "/etc/s3/certs",
+			wantRO:   false,
+		},
+	}
 
-	t.Run("input mount", func(t *testing.T) {
-		mount := mounts[0]
-		assert.Equal(t, naming.BackupStorageCAInputVolumeName, mount.Name)
-		assert.Equal(t, "/etc/s3/certs-in", mount.MountPath)
-		assert.True(t, mount.ReadOnly, "input mount should be read-only")
-	})
+	require.Len(t, mounts, len(tests))
 
-	t.Run("output mount", func(t *testing.T) {
-		mount := mounts[1]
-		assert.Equal(t, naming.BackupStorageCAFileVolumeName, mount.Name)
-		assert.Equal(t, "/etc/s3/certs", mount.MountPath)
-		assert.False(t, mount.ReadOnly, "output mount should be read-write")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mount := mounts[tt.index]
+			assert.Equal(t, tt.wantName, mount.Name)
+			assert.Equal(t, tt.wantPath, mount.MountPath)
+			assert.Equal(t, tt.wantRO, mount.ReadOnly)
+		})
+	}
 }
 
 func TestGetCAVolumes(t *testing.T) {
-	t.Run("single CA", func(t *testing.T) {
-		cas := []api.SecretKeySelector{
-			{
-				Name: "minio-ca",
-				Key:  "ca.crt",
+	tests := []struct {
+		name string
+		cas  []api.SecretKeySelector
+	}{
+		{
+			name: "single CA",
+			cas: []api.SecretKeySelector{
+				{
+					Name: "minio-ca",
+					Key:  "ca.crt",
+				},
 			},
-		}
-
-		volumes := getCAVolumes(cas)
-
-		require.Len(t, volumes, 2)
-
-		inputVol := volumes[0]
-		assert.Equal(t, naming.BackupStorageCAInputVolumeName, inputVol.Name)
-		require.NotNil(t, inputVol.Projected)
-		require.Len(t, inputVol.Projected.Sources, 1)
-
-		secretProj := inputVol.Projected.Sources[0].Secret
-		require.NotNil(t, secretProj)
-		assert.Equal(t, "minio-ca", secretProj.Name)
-		require.Len(t, secretProj.Items, 1)
-		assert.Equal(t, "ca.crt", secretProj.Items[0].Key)
-		assert.Equal(t, "ca-0.crt", secretProj.Items[0].Path)
-
-		outputVol := volumes[1]
-		assert.Equal(t, naming.BackupStorageCAFileVolumeName, outputVol.Name)
-		assert.NotNil(t, outputVol.EmptyDir)
-	})
-
-	t.Run("multiple CAs", func(t *testing.T) {
-		cas := []api.SecretKeySelector{
-			{
-				Name: "minio-ca",
-				Key:  "ca.crt",
+		},
+		{
+			name: "multiple CAs",
+			cas: []api.SecretKeySelector{
+				{Name: "minio-ca", Key: "ca.crt"},
+				{Name: "s3-ca", Key: "root.crt"},
+				{Name: "custom-ca", Key: "my-ca.crt"},
 			},
-			{
-				Name: "custom-ca",
-				Key:  "my-ca.crt",
-			},
-		}
+		},
+	}
 
-		volumes := getCAVolumes(cas)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			volumes := getCAVolumes(tt.cas)
 
-		require.Len(t, volumes, 2)
+			require.Len(t, volumes, 2)
 
-		inputVol := volumes[0]
-		require.NotNil(t, inputVol.Projected)
-		require.Len(t, inputVol.Projected.Sources, 2)
+			inputVol := volumes[0]
+			assert.Equal(t, naming.BackupStorageCAInputVolumeName, inputVol.Name)
+			require.NotNil(t, inputVol.Projected)
+			require.Len(t, inputVol.Projected.Sources, len(tt.cas))
 
-		expectedMappings := []struct {
-			name string
-			key  string
-			path string
-		}{
-			{"minio-ca", "ca.crt", "ca-0.crt"},
-			{"custom-ca", "my-ca.crt", "ca-1.crt"},
-		}
+			for i, ca := range tt.cas {
+				secretProj := inputVol.Projected.Sources[i].Secret
+				require.NotNil(t, secretProj, "source %d", i)
+				assert.Equal(t, ca.Name, secretProj.Name, "source %d name", i)
+				require.Len(t, secretProj.Items, 1, "source %d items", i)
+				assert.Equal(t, ca.Key, secretProj.Items[0].Key, "source %d key", i)
+				assert.Equal(t, fmt.Sprintf("ca-%d.crt", i), secretProj.Items[0].Path, "source %d path", i)
+			}
 
-		for i, expected := range expectedMappings {
-			secretProj := inputVol.Projected.Sources[i].Secret
-			require.NotNil(t, secretProj, "source %d", i)
-			assert.Equal(t, expected.name, secretProj.Name, "source %d name", i)
-			require.Len(t, secretProj.Items, 1, "source %d items", i)
-			assert.Equal(t, expected.key, secretProj.Items[0].Key, "source %d key", i)
-			assert.Equal(t, expected.path, secretProj.Items[0].Path, "source %d path", i)
-		}
-	})
+			outputVol := volumes[1]
+			assert.Equal(t, naming.BackupStorageCAFileVolumeName, outputVol.Name)
+			assert.NotNil(t, outputVol.EmptyDir)
+		})
+	}
 }
