@@ -149,9 +149,6 @@ echo
 
 wait_all_pvc_resize "3Gi"
 
-echo "delete resourcequota"
-kubectl_bin delete resourcequota default-storage-quota || true
-
 desc "test downscale"
 
 # operator shouldn't try to downscale the PVCs and set status to error
@@ -164,6 +161,9 @@ wait_cluster_status ${cluster} "ready"
 
 desc "test restartedAt annotation preservation during PVC resize"
 
+echo "delete resourcequota"
+kubectl_bin delete resourcequota default-storage-quota || true
+
 sts_name="${cluster}-rs0"
 kubectl_bin rollout restart statefulset/${sts_name}
 wait_for_running ${sts_name} 3
@@ -174,14 +174,20 @@ restarted_at_before=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spe
 patch_pvc_request "${cluster}" "4G"
 wait_all_pvc_resize "4Gi"
 
-# Wait for StatefulSet recreation after orphan delete during PVC resize
-sleep 30
+sleep_with_log 30 "wait for StatefulSet recreation after orphan delete during PVC resize"
 
 cluster_status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')
 restarted_at_after=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}')
 
-[ "$restarted_at_before" != "$restarted_at_after" ] && { echo "ERROR: restartedAt lost"; exit 1; }
-[ "$cluster_status" == "initializing" ] && { echo "ERROR: SmartUpdate occurred (restartedAt not preserved)"; exit 1; }
+if [[ "$restarted_at_before" != "$restarted_at_after" ]]; then
+	echo "ERROR: restartedAt lost"
+	exit 1
+fi
+
+if [[ "$cluster_status" == "initializing" ]]; then
+	echo "ERROR: SmartUpdate occurred (restartedAt not preserved)"
+	exit 1
+fi
 
 wait_cluster_status ${cluster} "ready"
 wait_for_running ${sts_name} 3
