@@ -70,20 +70,41 @@ function wait_for_auto_resize() {
 
 function check_autoscaling_status() {
 	local cluster=$1
-	local pvc_name=$2
+	local expected_resize_count=$2
+	shift 2
+	local pvc_names=("$@")
 
-	echo "Checking autoscaling status for ${pvc_name}"
+	echo "Checking autoscaling status for PVCs: ${pvc_names[*]}"
+	echo "Expected resize count per PVC: ${expected_resize_count}"
 
-	local has_status
-	has_status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' || echo "")
+	local status
+	status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' || echo "")
 
-	if [[ -z ${has_status} ]]; then
-		echo "WARNING: No autoscaling status found"
-		return
+	if [[ -z ${status} ]]; then
+		echo "ERROR: No autoscaling status found"
+		exit 1
 	fi
 
 	echo "Autoscaling status:"
-	kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' | jq .
+	echo "${status}" | jq .
+
+	for pvc_name in "${pvc_names[@]}"; do
+		local size
+		size=$(echo "${status}" | jq -r --arg pvc "${pvc_name}" '.[$pvc].currentSize // empty')
+
+		if [[ -z ${size} ]]; then
+			echo "ERROR: PVC ${pvc_name} has no size in autoscaling status"
+			exit 1
+		fi
+
+		local resize_count
+		resize_count=$(echo "${status}" | jq -r --arg pvc "${pvc_name}" '.[$pvc].resizeCount // 0')
+
+		if [[ ${resize_count} -ne ${expected_resize_count} ]]; then
+			echo "ERROR: PVC ${pvc_name} has resize count ${resize_count}, expected ${expected_resize_count}"
+			exit 1
+		fi
+	done
 }
 
 function apply_resourcequota() {
@@ -130,9 +151,11 @@ fill_disk_to_threshold "${cluster}-rs0-0" 80 850
 
 desc 'wait for auto-resize to trigger'
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "3Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "3Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "3Gi" 60 10
 
 desc 'verify autoscaling status is updated'
-check_autoscaling_status "${cluster}" "mongod-data-${cluster}-rs0-0"
+check_autoscaling_status "${cluster}" 1 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
 
 desc 'wait for cluster consistency after resize'
 wait_cluster_consistency "$cluster"
@@ -158,6 +181,8 @@ desc 'increase quota to allow further autoscaling'
 # Now increase quota to allow next resize step (3 replicas * 5Gi = 15Gi)
 apply_resourcequota 15Gi
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "5Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "5Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "5Gi" 60 10
 
 desc 'verify cluster consistency after quota test'
 wait_cluster_consistency "$cluster"
@@ -185,7 +210,7 @@ else
 fi
 
 desc 'verify final autoscaling status'
-check_autoscaling_status "${cluster}" "mongod-data-${cluster}-rs0-0"
+check_autoscaling_status "${cluster}" 2 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
 
 wait_cluster_consistency "$cluster"
 
