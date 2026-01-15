@@ -206,15 +206,6 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 		return errors.Wrap(err, "patch CR with new storage size")
 	}
 
-	if cr.Status.StorageAutoscaling == nil {
-		cr.Status.StorageAutoscaling = make(map[string]api.StorageAutoscalingStatus)
-	}
-
-	status := cr.Status.StorageAutoscaling[pvc.Name]
-	status.LastResizeTime = metav1.Time{Time: time.Now()}
-	status.ResizeCount++
-	cr.Status.StorageAutoscaling[pvc.Name] = status
-
 	log.Info("storage autoscaling initiated",
 		"oldSize", pvc.Status.Capacity.Storage().String(),
 		"newSize", newSize.String())
@@ -236,7 +227,16 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 	status := cr.Status.StorageAutoscaling[pvcName]
 
 	if usage != nil {
-		status.CurrentSize = resource.NewQuantity(usage.TotalBytes, resource.BinarySI).String()
+		newSize := resource.NewQuantity(usage.TotalBytes, resource.BinarySI)
+		if status.CurrentSize != "" {
+			oldSize, parseErr := resource.ParseQuantity(status.CurrentSize)
+			if parseErr == nil && newSize.Cmp(oldSize) > 0 {
+				status.LastResizeTime = metav1.Time{Time: time.Now()}
+				status.ResizeCount++
+			}
+		}
+
+		status.CurrentSize = newSize.String()
 		status.LastError = ""
 	}
 

@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -293,6 +294,179 @@ func TestFindPodByName(t *testing.T) {
 	}
 }
 
+func TestUpdateAutoscalingStatus(t *testing.T) {
+	r := &ReconcilePerconaServerMongoDB{}
+
+	tests := map[string]struct {
+		cr             *api.PerconaServerMongoDB
+		pvcName        string
+		usage          *PVCUsage
+		err            error
+		expectedStatus api.StorageAutoscalingStatus
+		checkResizeInc bool
+	}{
+		"initialize nil map and set usage": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: nil,
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			usage: &PVCUsage{
+				TotalBytes:   10 * 1024 * 1024 * 1024, // 10Gi
+				UsagePercent: 50,
+			},
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "10Gi",
+				LastError:   "",
+				ResizeCount: 0,
+			},
+		},
+		"set error only": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: nil,
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			err:     errors.New("failed to get metrics"),
+			expectedStatus: api.StorageAutoscalingStatus{
+				LastError: "failed to get metrics",
+			},
+		},
+		"size increased - should increment resize count": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: map[string]api.StorageAutoscalingStatus{
+						"mongod-data-test-rs0-0": {
+							CurrentSize: "10Gi",
+							ResizeCount: 1,
+						},
+					},
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			usage: &PVCUsage{
+				TotalBytes:   15 * 1024 * 1024 * 1024, // 15Gi
+				UsagePercent: 60,
+			},
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "15Gi",
+				LastError:   "",
+				ResizeCount: 2,
+			},
+			checkResizeInc: true,
+		},
+		"size unchanged - should not increment resize count": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: map[string]api.StorageAutoscalingStatus{
+						"mongod-data-test-rs0-0": {
+							CurrentSize: "10Gi",
+							ResizeCount: 1,
+						},
+					},
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			usage: &PVCUsage{
+				TotalBytes:   10 * 1024 * 1024 * 1024, // 10Gi (same)
+				UsagePercent: 75,
+			},
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "10Gi",
+				LastError:   "",
+				ResizeCount: 1,
+			},
+		},
+		"usage clears previous error": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: map[string]api.StorageAutoscalingStatus{
+						"mongod-data-test-rs0-0": {
+							CurrentSize: "10Gi",
+							LastError:   "previous error",
+							ResizeCount: 1,
+						},
+					},
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			usage: &PVCUsage{
+				TotalBytes:   10 * 1024 * 1024 * 1024,
+				UsagePercent: 50,
+			},
+			err: nil,
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "10Gi",
+				LastError:   "",
+				ResizeCount: 1,
+			},
+		},
+		"error preserves existing usage info": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: map[string]api.StorageAutoscalingStatus{
+						"mongod-data-test-rs0-0": {
+							CurrentSize: "10Gi",
+							ResizeCount: 2,
+						},
+					},
+				},
+			},
+			pvcName: "mongod-data-test-rs0-0",
+			usage:   nil,
+			err:     errors.New("connection refused"),
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "10Gi",
+				LastError:   "connection refused",
+				ResizeCount: 2,
+			},
+		},
+		"new PVC status added to existing map": {
+			cr: &api.PerconaServerMongoDB{
+				Status: api.PerconaServerMongoDBStatus{
+					StorageAutoscaling: map[string]api.StorageAutoscalingStatus{
+						"mongod-data-test-rs0-0": {
+							CurrentSize: "10Gi",
+							ResizeCount: 1,
+						},
+					},
+				},
+			},
+			pvcName: "mongod-data-test-rs0-1",
+			usage: &PVCUsage{
+				TotalBytes:   20 * 1024 * 1024 * 1024,
+				UsagePercent: 40,
+			},
+			err: nil,
+			expectedStatus: api.StorageAutoscalingStatus{
+				CurrentSize: "20Gi",
+				LastError:   "",
+				ResizeCount: 0,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r.updateAutoscalingStatus(tt.cr, tt.pvcName, tt.usage, tt.err)
+
+			require.NotNil(t, tt.cr.Status.StorageAutoscaling)
+			status, ok := tt.cr.Status.StorageAutoscaling[tt.pvcName]
+			require.True(t, ok)
+
+			assert.Equal(t, tt.expectedStatus.CurrentSize, status.CurrentSize)
+			assert.Equal(t, tt.expectedStatus.LastError, status.LastError)
+			assert.Equal(t, tt.expectedStatus.ResizeCount, status.ResizeCount)
+
+			if tt.checkResizeInc {
+				assert.False(t, status.LastResizeTime.IsZero())
+			}
+		})
+	}
+}
+
 func TestTriggerResize(t *testing.T) {
 	ctx := context.Background()
 
@@ -513,12 +687,6 @@ func TestTriggerResize(t *testing.T) {
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, tt.newSize.Value(), updatedSize.Value())
 			assert.NotEqual(t, originalSize.Value(), updatedSize.Value())
-			assert.NotNil(t, tt.cr.Status.StorageAutoscaling)
-
-			status, exists := tt.cr.Status.StorageAutoscaling[tt.pvc.Name]
-			assert.True(t, exists)
-			assert.Equal(t, tt.expectedResize, status.ResizeCount)
-			assert.False(t, status.LastResizeTime.IsZero())
 		})
 	}
 }
