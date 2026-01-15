@@ -71,6 +71,8 @@ desc 'Deploy first MinIO with TLS'
 deploy_minio minio-tls
 apply_s3_storage_secrets
 
+kubectl_bin apply -f "${test_dir}/conf/minio2-secret.yml"
+
 ###############################################################################
 # Phase 1: Single CA bundle test
 ###############################################################################

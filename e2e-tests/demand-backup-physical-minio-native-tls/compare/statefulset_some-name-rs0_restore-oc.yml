@@ -131,6 +131,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
@@ -255,12 +261,12 @@ spec:
               - secret:
                   items:
                     - key: ca.crt
-                      path: minio-ca-bundle_ca_crt.crt
+                      path: ca-0.crt
                   name: minio-ca-bundle
               - secret:
                   items:
                     - key: ca.crt
-                      path: minio2-ca-bundle_ca_crt.crt
+                      path: ca-1.crt
                   name: minio2-ca-bundle
         - emptyDir: {}
           name: ca-bundle
