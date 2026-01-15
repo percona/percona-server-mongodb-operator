@@ -242,7 +242,7 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 			return true
 		}
 
-		if currentCfg.Storage.S3.ForcePathStyle != newCfg.Storage.S3.ForcePathStyle {
+		if !ptr.Equal(currentCfg.Storage.S3.ForcePathStyle, newCfg.Storage.S3.ForcePathStyle) {
 			return true
 		}
 	}
