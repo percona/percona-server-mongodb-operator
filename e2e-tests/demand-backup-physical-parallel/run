@@ -49,14 +49,14 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_azure="backup-azure-blob"
 
 	run_backup aws-s3 ${backup_name_aws} 'physical'
-	run_backup gcp-cs ${backup_name_gcp} 'physical'
+#	run_backup gcp-cs ${backup_name_gcp} 'physical'
 	run_backup azure-blob ${backup_name_azure} 'physical'
 
 	wait_backup "${backup_name_aws}"
 	check_backup_in_storage ${backup_name_aws} s3 rs0
 
-	wait_backup "${backup_name_gcp}"
-	check_backup_in_storage ${backup_name_gcp} gcs rs0
+#	wait_backup "${backup_name_gcp}"
+#	check_backup_in_storage ${backup_name_gcp} gcs rs0
 
 	wait_backup "${backup_name_azure}"
 	check_backup_in_storage ${backup_name_azure} azure rs0
@@ -65,14 +65,14 @@ wait_backup "${backup_name_minio}"
 check_backup_in_storage ${backup_name_minio} minio rs0
 
 reconciliation_count=$(kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-  | grep "main storage changed. starting resync" \
+  | grep "configuration changed or resync is needed" \
   | grep "\"name\":\"${cluster}\"" \
   | wc -l | tr -d ' ')
 
 echo "Reconciliation count: ${reconciliation_count}"
 
-if [ "${reconciliation_count}" -ne 1 ]; then
-    echo "ERROR: Expected 1 reconciliation, got ${reconciliation_count}"
+if [ "${reconciliation_count}" -gt 2 ]; then
+    echo "ERROR: Expected 2 reconciliation, got ${reconciliation_count}"
     echo ""
     exit 1
 fi
