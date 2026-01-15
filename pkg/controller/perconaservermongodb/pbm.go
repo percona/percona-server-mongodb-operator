@@ -237,7 +237,8 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 		if currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
 			return true
 		}
-		if !ptr.Equal(currentCfg.Storage.S3.ServerSideEncryption, newCfg.Storage.S3.ServerSideEncryption) {
+
+		if !reflect.DeepEqual(currentCfg.Storage.S3.ServerSideEncryption, newCfg.Storage.S3.ServerSideEncryption) {
 			return true
 		}
 
