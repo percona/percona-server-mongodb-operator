@@ -405,6 +405,7 @@ func GetPBMStorageS3Config(
 			MaxUploadParts:        stg.S3.MaxUploadParts,
 			StorageClass:          stg.S3.StorageClass,
 			InsecureSkipTLSVerify: stg.S3.InsecureSkipTLSVerify,
+			ForcePathStyle:        stg.S3.ForcePathStyle,
 		},
 	}
 

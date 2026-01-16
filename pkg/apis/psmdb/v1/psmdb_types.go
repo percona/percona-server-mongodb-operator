@@ -1624,10 +1624,15 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 }
 
 const (
-	AnnotationResyncPBM           = "percona.com/resync-pbm"
-	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
-	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
+	AnnotationResyncPBM                = "percona.com/resync-pbm"
+	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
+	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
+
+func AnnotationPreservedRestartedAt(stsName string) string {
+	return annotationPreservedRestartedAtBase + "." + stsName
+}
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 	v, ok := cr.Annotations[AnnotationResyncPBM]
