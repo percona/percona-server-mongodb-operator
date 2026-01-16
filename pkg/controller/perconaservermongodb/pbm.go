@@ -16,12 +16,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
-
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -235,6 +236,48 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 			return true
 		}
 
+		if !reflect.DeepEqual(currentCfg.Storage.S3.ServerSideEncryption, newCfg.Storage.S3.ServerSideEncryption) {
+			return true
+		}
+
+		if ptr.Deref(currentCfg.Storage.S3.ForcePathStyle, true) != ptr.Deref(newCfg.Storage.S3.ForcePathStyle, true) {
+			return true
+		}
+	}
+	if currentCfg.Storage.Minio != nil && newCfg.Storage.Minio != nil {
+		if currentCfg.Storage.Minio.Bucket != newCfg.Storage.Minio.Bucket {
+			return true
+		}
+		if currentCfg.Storage.Minio.Region != newCfg.Storage.Minio.Region {
+			return true
+		}
+		if currentCfg.Storage.Minio.Endpoint != newCfg.Storage.Minio.Endpoint {
+			return true
+		}
+		if currentCfg.Storage.Minio.Prefix != newCfg.Storage.Minio.Prefix {
+			return true
+		}
+		if currentCfg.Storage.Minio.Credentials.AccessKeyID != newCfg.Storage.Minio.Credentials.AccessKeyID {
+			return true
+		}
+		if currentCfg.Storage.Minio.Credentials.SecretAccessKey != newCfg.Storage.Minio.Credentials.SecretAccessKey {
+			return true
+		}
+		if currentCfg.Storage.Minio.Secure != newCfg.Storage.Minio.Secure {
+			return true
+		}
+		if currentCfg.Storage.Minio.InsecureSkipTLSVerify != newCfg.Storage.Minio.InsecureSkipTLSVerify {
+			return true
+		}
+		if currentCfg.Storage.Minio.PartSize != newCfg.Storage.Minio.PartSize {
+			return true
+		}
+		if !reflect.DeepEqual(currentCfg.Storage.Minio.Retryer, newCfg.Storage.Minio.Retryer) {
+			return true
+		}
+		if !ptr.Equal(currentCfg.Storage.Minio.ForcePathStyle, newCfg.Storage.Minio.ForcePathStyle) {
+			return true
+		}
 	}
 
 	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
