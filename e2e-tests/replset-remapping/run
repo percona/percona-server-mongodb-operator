@@ -52,7 +52,11 @@ function setup_source_cluster() {
 	run_mongo \
 		'use myApp\n db.test.insert({ x: 100501 })' \
 		"databaseAdmin:databaseAdmin123456@${source_cluster}-rs0.${namespace}"
-	sleep_with_log 70 "wait for oplog chunk upload"
+	sleep_with_log 130 "wait for oplog chunk upload"
+
+	log "PBM status:"
+	kubectl_bin exec ${source_cluster}-rs0-0 -c backup-agent -- pbm status
+	kubectl_bin exec ${source_cluster}-rs0-0 -c backup-agent -- pbm logs -sD --tail=10
 
 	log "deleting PSMDB cluster: ${source_cluster}"
 	kubectl_bin delete psmdb ${source_cluster}
@@ -92,7 +96,7 @@ function test_restores() {
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-replset0.${namespace}" \
 		"mongodb" ".svc.cluster.local" "" "replset0"
 
-	desc "CASE 2: Logical restore with replset remapping"
+	desc "CASE 2: Logical restore + PiTR with replset remapping"
 	run_restore backup-minio-logical ${test_dir}/conf/restore-pitr.yml
 	wait_restore backup-minio-logical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
