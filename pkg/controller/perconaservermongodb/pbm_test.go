@@ -8,6 +8,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 )
 
@@ -290,6 +291,129 @@ func TestIsResyncNeeded(t *testing.T) {
 				},
 			},
 			true,
+		},
+		{
+			"minio: bucket changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Endpoint: "operator-testing.com",
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Endpoint: "operator-testing.com",
+						Bucket:   "operator-testing-1",
+						Region:   "us-east-1",
+					},
+				},
+			},
+			true,
+		},
+		{
+			"minio: region changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-2",
+					},
+				},
+			},
+			true,
+		},
+		{
+			"minio: endpoint changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing-1.com",
+					},
+				},
+			},
+			true,
+		},
+		{
+			"minio: prefix changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+						Prefix:   "prefix",
+					},
+				},
+			},
+			true,
+		},
+		{
+			"minio: nothing changed",
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:                "operator-testing",
+						Region:                "us-east-1",
+						Endpoint:              "operator-testing.com",
+						Secure:                true,
+						InsecureSkipTLSVerify: false,
+					},
+				},
+			},
+			&config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:                "operator-testing",
+						Region:                "us-east-1",
+						Endpoint:              "operator-testing.com",
+						Secure:                true,
+						InsecureSkipTLSVerify: false,
+					},
+				},
+			},
+			false,
 		},
 	}
 
