@@ -122,7 +122,12 @@ function apply_resourcequota() {
 
 set_debug
 
-ensure_default_sc_allows_expansion
+if [ "$EKS" == 1 ]; then
+	echo "EKS environment detected, creating storageclass for EBS volumes"
+	kubectl_bin apply -f "${test_dir}/conf/eks-storageclass.yml"
+else
+	ensure_default_sc_allows_expansion
+fi
 
 create_infra "${namespace}"
 
