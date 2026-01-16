@@ -1,25 +1,41 @@
-region="us-central1-a"
-testUrlPrefix="https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator"
-tests=[]
+region = 'us-central1-a'
+testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
+tests = []
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            NODES_NUM=3
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
+            gcloud config set project $GCP_PROJECT
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-                gcloud config set project $GCP_PROJECT
-                gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
-                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.31 --machine-type=n1-standard-4 --preemptible --disk-size 30 --num-nodes=\$NODES_NUM --network=jenkins-vpc --subnetwork=jenkins-${CLUSTER_SUFFIX} --no-enable-autoupgrade --cluster-ipv4-cidr=/21 --labels delete-cluster-after-hours=6 --enable-ip-alias --workload-pool=cloud-dev-112233.svc.id.goog && \
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
+                    --preemptible \
+                    --zone=${region} \
+                    --machine-type='n1-standard-4' \
+                    --cluster-version='1.31' \
+                    --num-nodes=3 \
+                    --labels='delete-cluster-after-hours=6' \
+                    --disk-size=30 \
+                    --network=jenkins-vpc \
+                    --subnetwork=jenkins-${CLUSTER_SUFFIX} \
+                    --cluster-ipv4-cidr=/21 \
+                    --enable-ip-alias \
+                    --no-enable-autoupgrade \
+                    --monitoring=NONE \
+                    --logging=NONE \
+                    --no-enable-managed-prometheus \
+                    --workload-pool=cloud-dev-112233.svc.id.goog \
+                    --quiet && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
                 exit 1
             fi
         """
@@ -29,7 +45,7 @@ void createCluster(String CLUSTER_SUFFIX) {
 void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
@@ -41,7 +57,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         """
    }
 }
@@ -65,7 +81,7 @@ void deleteOldClusters(String FILTER) {
                             break
                         fi
                     done
-                    gcloud container clusters delete --async --zone $region --quiet \$GKE_CLUSTER || true
+                    gcloud container clusters delete --async --zone ${region} --quiet \$GKE_CLUSTER || true
                 done
             fi
         """
@@ -76,7 +92,7 @@ void pushLogFile(String FILE_NAME) {
     def LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
     def LOG_FILE_NAME="${FILE_NAME}.log"
     echo "Push logfile $LOG_FILE_NAME file to S3!"
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
             aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
@@ -88,7 +104,7 @@ void pushLogFile(String FILE_NAME) {
 void pushArtifactFile(String FILE_NAME) {
     echo "Push $FILE_NAME file to S3!"
 
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             touch ${FILE_NAME}
             S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
@@ -113,7 +129,7 @@ void initTests() {
 void markPassedTests() {
     echo "Marking passed tests in the tests map!"
 
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             aws s3 ls "s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/" || :
         """
@@ -132,9 +148,9 @@ void markPassedTests() {
 
 void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
     sh """
-        export KUBECONFIG=/tmp/$CLUSTER_NAME-$CLUSTER_SUFFIX
+        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|$CLUSTER_NAME-$CLUSTER_SUFFIX "
+        gcloud container clusters list|grep -E "NAME|${CLUSTER_NAME}-${CLUSTER_SUFFIX} "
         echo
         kubectl get nodes
         echo
@@ -149,12 +165,30 @@ void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
     """
 }
 
-TestsReport = '| Test name | Status |\r\n| ------------- | ------------- |'
+String formatTime(def time) {
+    if (!time || time == "N/A") return "N/A"
+
+    try {
+        def totalSeconds = time as Double
+        def hours = (totalSeconds / 3600) as Integer
+        def minutes = ((totalSeconds % 3600) / 60) as Integer
+        def seconds = (totalSeconds % 60) as Integer
+
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+
+    } catch (Exception e) {
+        println("Error converting time: ${e.message}")
+        return time.toString()
+    }
+}
+
+TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
 TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
-    def wholeTestAmount=tests.size()
+    def wholeTestAmount = tests.size()
     def startedTestAmount = 0
+    def totalTestTime = 0
 
     for (int i=0; i<tests.size(); i++) {
         def testName = tests[i]["name"]
@@ -162,13 +196,20 @@ void makeReport() {
         def testTime = tests[i]["time"]
         def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
 
+        if (testTime instanceof Number) {
+            totalTestTime += testTime
+        }
+
         if (tests[i]["result"] != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| "+ testName +" | ["+ testResult +"]("+ testUrl +") |"
+        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
         TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
-    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
+    TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
+    TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
+    TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 
     sh """
@@ -206,7 +247,7 @@ void runTest(Integer TEST_ID) {
     waitUntil {
         def timeStart = new Date().getTime()
         try {
-            echo "The $testName test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
+            echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
             tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -216,7 +257,7 @@ void runTest(Integer TEST_ID) {
                     else
                         export DEBUG_TESTS=1
                     fi
-                    export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
+                    export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
                     time ./e2e-tests/$testName/run
                 """
             }
@@ -246,12 +287,12 @@ void runTest(Integer TEST_ID) {
 
 void prepareNode() {
     sh """
-        sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
+        sudo curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
         kubectl version --client --output=yaml
 
-        curl -fsSL https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
+        curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
 
-        sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
+        sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.48.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
         sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
 
         sudo tee /etc/yum.repos.d/google-cloud-sdk.repo << EOF
@@ -449,7 +490,7 @@ pipeline {
                         mkdir -p $(dirname ${docker_tag_file})
                         echo ${DOCKER_TAG} > "${docker_tag_file}"
                             sg docker -c "
-                                docker login -u '${USER}' -p '${PASS}'
+                                echo '\$PASS' | docker login -u '\$USER' --password-stdin
                                 export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
                                 ./e2e-tests/build
@@ -530,7 +571,7 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 3, unit: 'HOURS')
+                timeout(time: 4, unit: 'HOURS')
             }
             parallel {
                 stage('cluster1') {
@@ -583,6 +624,31 @@ pipeline {
                         clusterRunner('cluster10')
                     }
                 }
+                stage('cluster11') {
+                    steps {
+                        clusterRunner('cluster11')
+                    }
+                }
+                stage('cluster12') {
+                    steps {
+                        clusterRunner('cluster12')
+                    }
+                }
+                stage('cluster13') {
+                    steps {
+                        clusterRunner('cluster13')
+                    }
+                }
+                stage('cluster14') {
+                    steps {
+                        clusterRunner('cluster14')
+                    }
+                }
+                stage('cluster15') {
+                    steps {
+                        clusterRunner('cluster15')
+                    }
+                }
             }
         }
     }
@@ -609,7 +675,7 @@ pipeline {
                             }
                         }
                         makeReport()
-                        step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                        junit testResults: '*.xml', healthScaleFactor: 1.0
                         archiveArtifacts '*.xml'
 
                         unstash 'IMAGE'

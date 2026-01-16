@@ -19,12 +19,15 @@ demand-backup-physical-azure
 demand-backup-physical-gcp-s3
 demand-backup-physical-gcp-native
 demand-backup-physical-minio
+demand-backup-physical-minio-native
 demand-backup-physical-sharded-parallel
 demand-backup-physical-sharded-aws
 demand-backup-physical-sharded-azure
 demand-backup-physical-sharded-gcp-native
 demand-backup-physical-sharded-minio
+demand-backup-physical-sharded-minio-native
 demand-backup-sharded
+disabled-auth
 expose-sharded
 finalizer
 ignore-labels-annotations
@@ -51,6 +54,8 @@ preinit-updates
 pvc-resize
 recover-no-primary
 replset-overrides
+replset-remapping
+replset-remapping-sharded
 rs-shard-migration
 scaling
 scheduled-backup
@@ -63,10 +68,12 @@ split-horizon
 stable-resource-version
 storage
 tls-issue-cert-manager
+unsafe-psa
 upgrade
 upgrade-consistency
 upgrade-consistency-sharded-tls
 upgrade-sharded
 upgrade-partial-backup
 users
+users-vault
 version-service

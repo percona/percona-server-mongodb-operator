@@ -13,12 +13,34 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, name string, resources corev1.ResourceRequirements,
-	ikeyName string, useConfigFile bool, livenessProbe *api.LivenessProbeExtended, readinessProbe *corev1.Probe,
-	containerSecurityContext *corev1.SecurityContext,
-) (corev1.Container, error) {
-	fvar := false
+type containerFnParams struct {
+	replset                  *api.ReplsetSpec
+	name                     string
+	resources                corev1.ResourceRequirements
+	ikeyName                 string
+	useConfigFile            bool
+	livenessProbe            *api.LivenessProbeExtended
+	readinessProbe           *corev1.Probe
+	containerSecurityContext *corev1.SecurityContext
+	containerEnv             []corev1.EnvVar
+	containerEnvFrom         []corev1.EnvFromSource
+}
 
+func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
+	var (
+		replset                  = params.replset
+		name                     = params.name
+		resources                = params.resources
+		ikeyName                 = params.ikeyName
+		useConfigFile            = params.useConfigFile
+		livenessProbe            = params.livenessProbe
+		readinessProbe           = params.readinessProbe
+		containerSecurityContext = params.containerSecurityContext
+		containerEnv             = params.containerEnv
+		containerEnvFrom         = params.containerEnvFrom
+	)
+
+	fvar := false
 	volumes := []corev1.VolumeMount{
 		{
 			Name:      config.MongodDataVolClaimName,
@@ -41,19 +63,17 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		},
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && useConfigFile {
+	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      "config",
 			MountPath: config.MongodConfigDir,
 		})
 	}
 
-	if cr.CompareVersion("1.14.0") >= 0 {
-		volumes = append(volumes, corev1.VolumeMount{
-			Name:      config.BinVolumeName,
-			MountPath: config.BinMountPath,
-		})
-	}
+	volumes = append(volumes, corev1.VolumeMount{
+		Name:      config.BinVolumeName,
+		MountPath: config.BinMountPath,
+	})
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.VolumeMount{
@@ -62,7 +82,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		})
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Secrets.LDAPSecret != "" {
+	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.VolumeMount{
 			{
 				Name:      config.LDAPTLSVolClaimName,
@@ -100,10 +120,15 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}
 	}
 
-	if cr.CompareVersion("1.8.0") >= 0 {
+	volumes = append(volumes, corev1.VolumeMount{
+		Name:      "users-secret-file",
+		MountPath: "/etc/users-secret",
+	})
+
+	if cr.CompareVersion("1.22.0") >= 0 && replset.HookScript.Specified() {
 		volumes = append(volumes, corev1.VolumeMount{
-			Name:      "users-secret-file",
-			MountPath: "/etc/users-secret",
+			Name:      config.HookscriptVolClaimName,
+			MountPath: config.HookscriptMountPath,
 		})
 	}
 
@@ -160,23 +185,17 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		VolumeMounts:    volumes,
 	}
 
-	if cr.CompareVersion("1.5.0") >= 0 {
-		container.EnvFrom = []corev1.EnvFromSource{
-			{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.InternalUserSecretName(cr),
-					},
-					Optional: &fvar,
+	container.EnvFrom = []corev1.EnvFromSource{
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: api.InternalUserSecretName(cr),
 				},
+				Optional: &fvar,
 			},
-		}
-		container.Command = []string{"/data/db/ps-entry.sh"}
+		},
 	}
-
-	if cr.CompareVersion("1.14.0") >= 0 {
-		container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
-	}
+	container.Command = []string{config.BinMountPath + "/ps-entry.sh"}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		if cr.IsLogCollectorEnabled() {
@@ -187,6 +206,10 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.R
 		}
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		container.Env = append(container.Env, containerEnv...)
+		container.EnvFrom = append(container.EnvFrom, containerEnvFrom...)
+	}
 	return container, nil
 }
 
@@ -195,30 +218,40 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	// TODO(andrew): in the safe mode `sslAllowInvalidCertificates` should be set only with the external services
 	args := []string{
 		"--bind_ip_all",
-		"--auth",
-		"--dbpath=" + config.MongodContainerDataDir,
-		"--port=" + strconv.Itoa(int(replset.GetPort())),
-		"--replSet=" + replset.Name,
-		"--storageEngine=" + string(replset.Storage.Engine),
-		"--relaxPermChecks",
 	}
 
-	name, err := replset.CustomReplsetName()
-	if err == nil {
-		args[4] = "--replSet=" + name
+	if cr.CompareVersion("1.22.0") < 0 || replset.Configuration.IsAuthorizationEnabled() {
+		args = append(args, "--auth")
 	}
+
+	replSetName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		replSetName = name
+	}
+
+	args = append(args,
+		"--dbpath="+config.MongodContainerDataDir,
+		"--port="+strconv.Itoa(int(replset.GetPort())),
+		"--replSet="+replSetName,
+		"--storageEngine="+string(replset.Storage.Engine),
+		"--relaxPermChecks",
+	)
 
 	if *cr.Spec.TLS.AllowInvalidCertificates || cr.CompareVersion("1.16.0") < 0 {
 		args = append(args, "--sslAllowInvalidCertificates")
 	}
 
-	if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-		args = append(args,
-			"--clusterAuthMode=keyFile",
-			"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
-		)
-	} else if cr.TLSEnabled() {
-		args = append(args, "--clusterAuthMode=x509")
+	// If auth is disabled, we consider that TLS should be also disabled
+	// and for that reason clusterAuthMode should not be even configured.
+	if replset.Configuration.IsAuthorizationEnabled() {
+		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
+			args = append(args,
+				"--clusterAuthMode=keyFile",
+				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
+			)
+		} else if cr.TLSEnabled() {
+			args = append(args, "--clusterAuthMode=x509")
+		}
 	}
 
 	if cr.CompareVersion("1.16.0") >= 0 {

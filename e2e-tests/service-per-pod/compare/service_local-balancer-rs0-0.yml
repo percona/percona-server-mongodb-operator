@@ -17,7 +17,8 @@ metadata:
 spec:
   externalTrafficPolicy: Local
   ports:
-    - name: mongodb
+    - appProtocol: mongo
+      name: mongodb
       port: 27017
       protocol: TCP
       targetPort: 27017

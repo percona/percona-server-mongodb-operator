@@ -76,7 +76,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			case psmdbv1.PITRestoreTypeDate:
 				ts = cr.Spec.PITR.Date.Format("2006-01-02T15:04:05")
 			case psmdbv1.PITRestoreTypeLatest:
-				ts, err = r.getLatestChunkTS(ctx, &pod)
+				ts, err = r.getLatestChunkTS(ctx, cr, cluster)
 				if err != nil {
 					return status, errors.Wrap(err, "get latest chunk timestamp")
 				}
@@ -145,9 +145,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 		var restoreCommand []string
 		if cr.Spec.PITR != nil {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", "--base-snapshot", bcp.Status.PBMname, "--time", cr.Status.PITRTarget, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				"--base-snapshot", bcp.Status.PBMname,
+				"--time", cr.Status.PITRTarget,
+				"--out", "json",
+			}
 		} else {
-			restoreCommand = []string{"/opt/percona/pbm", "restore", bcp.Status.PBMname, "--out", "json"}
+			restoreCommand = []string{
+				"/opt/percona/pbm", "restore",
+				bcp.Status.PBMname,
+				"--out", "json",
+			}
+		}
+
+		if cr.Spec.RSMap != nil {
+			var rsMap []string
+			for k, v := range cr.Spec.RSMap {
+				rsMap = append(rsMap, fmt.Sprintf("%s=%s", v, k))
+			}
+			restoreCommand = append(restoreCommand, "--replset-remapping", strings.Join(rsMap, ","))
 		}
 
 		err = retry.OnError(anotherOpBackoff, func(err error) bool {
@@ -979,41 +996,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 	return true, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(ctx context.Context, pod *corev1.Pod) (string, error) {
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
+func (r *ReconcilePerconaServerMongoDBRestore) getLatestChunkTS(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDBRestore,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) (string, error) {
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
+	if err != nil {
+		return "", errors.Wrap(err, "new PBM connection")
+	}
+	defer pbmc.Close(ctx) //nolint:errcheck
 
-	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
-
-	command := []string{pbmBinary, "status", "--out", "json"}
-	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
-		return "", errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+	timeline, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
+	if err != nil {
+		return "", errors.Wrap(err, "get latest timeline")
 	}
 
-	var pbmStatus struct {
-		Backups struct {
-			Chunks struct {
-				Timelines []struct {
-					Range struct {
-						Start uint32 `json:"start"`
-						End   uint32 `json:"end"`
-					} `json:"range"`
-				} `json:"pitrChunks"`
-			} `json:"pitrChunks"`
-		} `json:"backups"`
-	}
-
-	if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-		return "", errors.Wrap(err, "unmarshal PBM status output")
-	}
-
-	if len(pbmStatus.Backups.Chunks.Timelines) < 1 {
-		return "", errors.New("no oplog chunks")
-	}
-
-	latest := pbmStatus.Backups.Chunks.Timelines[len(pbmStatus.Backups.Chunks.Timelines)-1].Range.End
-	ts := time.Unix(int64(latest), 0).UTC()
-
+	ts := time.Unix(int64(timeline.End), 0).UTC()
 	return ts.Format("2006-01-02T15:04:05"), nil
 }
 

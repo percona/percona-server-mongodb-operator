@@ -49,6 +49,14 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  vault:
+#    endpointURL: https://vault-service:8200
+#    tlsSecret: my-tls-vault-secret
+#    syncUsers:
+#      role: operator
+#      mountPath: secrets
+#      keyPath: psmdb/operator/namespace/my-cluster-name/users
+#      tokenSecret: my-vault-sync-token-secret
   secrets:
     users: my-cluster-name-secrets
     encryptionKey: my-cluster-name-mongodb-encryption-key
@@ -183,6 +191,12 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    sidecars:
 #    - image: busybox
 #      command: ["/bin/sh"]
@@ -295,6 +309,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -356,6 +376,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -408,6 +434,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -427,7 +459,12 @@ spec:
 #      hostnames:
 #      - "host1"
 #      - "host2"
-
+#    env:
+#    - name: KEY
+#      value: VALUE
+#    envFrom:
+#    - configMapRef:
+#       name: configmap-name
   sharding:
     enabled: true
 #    balancer:
@@ -499,6 +536,18 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -604,6 +653,18 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
+#      env:
+#      - name: KEY
+#        value: VALUE
+#      envFrom:
+#      - configMapRef:
+#         name: configmap-name
 #      sidecars:
 #      - image: busybox
 #        command: ["/bin/sh"]
@@ -694,6 +755,12 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
@@ -738,7 +805,7 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
-#      minio:
+#      minio-s3:
 #        type: s3
 #        s3:
 #          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
@@ -747,6 +814,16 @@ spec:
 #          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
 #          prefix: ""
+#      minio:
+#        type: minio
+#        minio:
+#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
+#          region: us-east-1
+#          credentialsSecret: my-cluster-name-backup-minio
+#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
+#          insecureSkipTLSVerify: false
+#          prefix: ""
+#          secure: false
 #      azure-blob:
 #        type: azure
 #        azure:
@@ -849,3 +926,8 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    logrotate:
+#      configuration: ""
+#      extraConfig:
+#        name: logrotate-config
+#      schedule: "0 0 * * *"

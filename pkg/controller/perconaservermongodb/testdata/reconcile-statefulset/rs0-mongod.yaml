@@ -83,10 +83,17 @@ spec:
           value: rs0
         - name: LOGCOLLECTOR_ENABLED
           value: "true"
+        - name: TEST_ENV1
+          value: test-value1
+        - name: TEST_ENV2
+          value: test-value2
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
+        - configMapRef:
+            name: test-configmap
+            optional: true
         image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
@@ -119,6 +126,12 @@ spec:
             - readiness
             - --component
             - mongod
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
           failureThreshold: 8
           initialDelaySeconds: 10
           periodSeconds: 3

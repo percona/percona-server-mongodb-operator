@@ -44,13 +44,11 @@ func TestMongoConfiguration_GetPort(t *testing.T) {
 				assert.Equal(t, tt.expectPort, port)
 				assert.NoError(t, err)
 			}
-
 		})
 	}
 }
 
 func TestMongoConfiguration_SetPort(t *testing.T) {
-
 	tests := map[string]struct {
 		expectedConf MongoConfiguration
 		actualConf   MongoConfiguration
@@ -142,6 +140,159 @@ func TestReplsetSpec_GetPort(t *testing.T) {
 			ms := ReplsetSpec{Configuration: tt.config}
 			got := ms.GetPort()
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestReplsetSpec_GetHorizons(t *testing.T) {
+	r := &ReplsetSpec{
+		Horizons: map[string]map[string]string{
+			"pod-0": {
+				"ext": "a.example.com",
+				"int": "a.internal:27018",
+			},
+			"pod-1": {
+				"ext": "b.example.com:27019",
+			},
+		},
+		ReplsetOverrides: map[string]ReplsetOverride{
+			"pod-0": {
+				Horizons: map[string]string{
+					"ext":      "override.example.com",
+					"external": "override.example.com:10000",
+				},
+			},
+		},
+		Configuration: `net:
+  port: 27017`,
+	}
+
+	t.Run("withPorts=true", func(t *testing.T) {
+		actual := r.GetHorizons(true)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+				"int":      "a.internal:27018",
+			},
+			"pod-1": {
+				"ext": "b.example.com:27019",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
+	})
+
+	t.Run("withPorts=false", func(t *testing.T) {
+		actual := r.GetHorizons(false)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com",
+				"external": "override.example.com",
+				"int":      "a.internal",
+			},
+			"pod-1": {
+				"ext": "b.example.com",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
+	})
+
+	t.Run("withPorts=true only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(true)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
+	})
+
+	t.Run("withPorts=false only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(false)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com",
+				"external": "override.example.com",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
+	})
+}
+
+func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
+	tests := map[string]struct {
+		conf     MongoConfiguration
+		expected bool
+	}{
+		"no security section": {
+			conf: `systemLog:
+  verbosity: 1`,
+			expected: true,
+		},
+		"empty config": {
+			conf:     MongoConfiguration(""),
+			expected: true,
+		},
+		"security section without authorization": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile`,
+			expected: true,
+		},
+		"authorization explicitly enabled": {
+			conf: `security:
+  authorization: enabled`,
+			expected: true,
+		},
+		"authorization explicitly disabled": {
+			conf: `security:
+  authorization: disabled`,
+			expected: false,
+		},
+		"authorization with other string value": {
+			conf: `security:
+  authorization: someOtherValue`,
+			expected: true,
+		},
+		"authorization with empty string": {
+			conf: `security:
+  authorization: ""`,
+			expected: true,
+		},
+		"complete security config with authorization enabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: enabled
+  clusterAuthMode: keyFile`,
+			expected: true,
+		},
+		"complete security config with authorization disabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: disabled
+  clusterAuthMode: keyFile`,
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.conf.IsAuthorizationEnabled()
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

@@ -68,7 +68,9 @@ spec:
               compressionType:
                 type: string
               startingDeadlineSeconds:
+                default: 120
                 format: int64
+                minimum: 1
                 type: integer
               storageName:
                 type: string
@@ -147,6 +149,37 @@ spec:
               latestRestorableTime:
                 format: date-time
                 type: string
+              minio:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  debugTrace:
+                    type: boolean
+                  endpointUrl:
+                    type: string
+                  forcePathStyle:
+                    type: boolean
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  partSize:
+                    format: int64
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      numMaxRetries:
+                        type: integer
+                    required:
+                    - numMaxRetries
+                    type: object
+                  secure:
+                    type: boolean
+                type: object
               pbmName:
                 type: string
               pbmPod:
