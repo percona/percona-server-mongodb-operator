@@ -930,4 +930,4 @@ spec:
 #      configuration: ""
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 * * *"
+#      schedule: "0 0 0 * * *"
