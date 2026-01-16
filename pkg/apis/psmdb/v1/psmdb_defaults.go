@@ -40,6 +40,8 @@ const (
 	WorkloadSA        = "default"
 )
 
+const DefaultS3Region = "us-east-1"
+
 var (
 	defaultUsersSecretName                = "percona-server-mongodb-users"
 	defaultMongodSize               int32 = 3
@@ -618,7 +620,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 
 			if cr.CompareVersion("1.22.0") >= 0 && stg.S3.Region == "" {
-				stg.S3.Region = "us-east-1"
+				stg.S3.Region = DefaultS3Region
 				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
