@@ -496,6 +496,14 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		},
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		pmm.VolumeMounts = append(pmm.VolumeMounts, corev1.VolumeMount{
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
+			ReadOnly:  true,
+		})
+	}
+
 	pmmAgentScriptEnv := PMMAgentScript(cr)
 	pmm.Env = append(pmm.Env, pmmAgentScriptEnv...)
 
