@@ -242,7 +242,7 @@ func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
 			return true
 		}
 
-		if !ptr.Equal(currentCfg.Storage.S3.ForcePathStyle, newCfg.Storage.S3.ForcePathStyle) {
+		if ptr.Deref(currentCfg.Storage.S3.ForcePathStyle, true) != ptr.Deref(newCfg.Storage.S3.ForcePathStyle, true) {
 			return true
 		}
 	}
