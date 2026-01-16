@@ -206,6 +206,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if updatedPVCs == len(pvcsToUpdate) {
 			log.Info("Deleting statefulset")
 
+			if restartedAtValue, exists := sts.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]; exists {
+				if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
+					log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err, "sts", sts.Name)
+				}
+			}
+
 			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil

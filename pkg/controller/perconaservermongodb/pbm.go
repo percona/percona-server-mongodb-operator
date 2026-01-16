@@ -178,8 +178,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	}
 
 	if isResyncNeeded(currentCfg, &main) {
-		log.Info("main storage changed. starting resync", "old", currentCfg.Storage, "new", main.Storage)
-
 		if err := pbm.ResyncMainStorageAndWait(ctx); err != nil {
 			return errors.Wrap(err, "resync")
 		}
