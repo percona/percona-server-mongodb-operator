@@ -210,7 +210,7 @@ else
 fi
 
 desc 'verify final autoscaling status'
-check_autoscaling_status "${cluster}" 2 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+check_autoscaling_status "${cluster}" 4 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
 
 wait_cluster_consistency "$cluster"
 
