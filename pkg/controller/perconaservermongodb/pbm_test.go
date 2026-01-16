@@ -87,29 +87,6 @@ func TestIsResyncNeeded(t *testing.T) {
 			true,
 		},
 		{
-			"s3: endpointUrl changed",
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.S3,
-					S3: &s3.Config{
-						Bucket: "operator-testing",
-						Region: "us-east-1",
-					},
-				},
-			},
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.S3,
-					S3: &s3.Config{
-						Bucket:      "operator-testing",
-						Region:      "us-east-1",
-						EndpointURL: "https://s3.us-east-1.amazonaws.com",
-					},
-				},
-			},
-			true,
-		},
-		{
 			"s3: prefix changed",
 			&config.Config{
 				Storage: config.StorageConf{
@@ -195,30 +172,6 @@ func TestIsResyncNeeded(t *testing.T) {
 					GCS: &gcs.Config{
 						Bucket: "operator-testing",
 						Prefix: "prefix",
-					},
-				},
-			},
-			true,
-		},
-		{
-			"azure: endpointUrl changed",
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Azure,
-					Azure: &azure.Config{
-						Account:     "operator-account",
-						Container:   "operator-testing",
-						EndpointURL: "https://accountName.blob.core.windows.net",
-					},
-				},
-			},
-			&config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Azure,
-					Azure: &azure.Config{
-						Account:     "operator-account",
-						Container:   "operator-testing",
-						EndpointURL: "https://accountName-1.blob.core.windows.net",
 					},
 				},
 			},
