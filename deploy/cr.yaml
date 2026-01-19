@@ -788,7 +788,7 @@ spec:
 #            numMaxRetries: 3
 #            minRetryDelay: 30ms
 #            maxRetryDelay: 5m
-#          region: us-west-2
+#          region: us-east-1
 #          prefix: ""
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
@@ -930,7 +930,22 @@ spec:
         memory: 100M
         cpu: 200m
 #    logrotate:
-#      configuration: ""
+#      configuration: |
+#        /data/db/logs/mongod.full.log {
+#           daily
+#           maxsize 100M
+#           rotate 7
+#           missingok
+#           nocompress
+#           notifempty
+#           copytruncate
+#           prerotate
+#               # rotate mongod.log using 'db.adminCommand({ logRotate: 1 })'
+#               mongosh "mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOST}:${MONGODB_PORT}/admin" \
+#                 --eval 'db.adminCommand({ logRotate: 1 })'
+#               find /data/db/logs/ -type f -name 'mongod.log.*' -mtime +7 -delete
+#           endscript
+#        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 * * *"
+#      schedule: "0 0 0 * * *"
