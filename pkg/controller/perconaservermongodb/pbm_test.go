@@ -10,6 +10,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/stretchr/testify/require"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
