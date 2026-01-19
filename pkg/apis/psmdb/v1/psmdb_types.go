@@ -1179,17 +1179,18 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageMinioSpec struct {
-	Bucket                string        `json:"bucket,omitempty"`
-	Prefix                string        `json:"prefix,omitempty"`
-	Region                string        `json:"region,omitempty"`
-	EndpointURL           string        `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
-	PartSize              int64         `json:"partSize,omitempty"`
-	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
-	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
-	DebugTrace            bool          `json:"debugTrace,omitempty"`
-	Retryer               *MinioRetryer `json:"retryer,omitempty"`
-	Secure                bool          `json:"secure,omitempty"`
+	Bucket                string                    `json:"bucket,omitempty"`
+	Prefix                string                    `json:"prefix,omitempty"`
+	Region                string                    `json:"region,omitempty"`
+	EndpointURL           string                    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                    `json:"credentialsSecret,omitempty"`
+	PartSize              int64                     `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool                      `json:"insecureSkipTLSVerify,omitempty"`
+	CABundle              *corev1.SecretKeySelector `json:"caBundle,omitempty"`
+	ForcePathStyle        *bool                     `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool                      `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer             `json:"retryer,omitempty"`
+	Secure                bool                      `json:"secure,omitempty"`
 }
 
 func (spec BackupStorageMinioSpec) Validate() error {

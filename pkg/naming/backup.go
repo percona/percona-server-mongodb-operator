@@ -6,6 +6,13 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
+const (
+	BackupStorageCAFileDirectory   = "/etc/s3/certs"
+	BackupStorageCAFileName        = "ca-bundle.crt"
+	BackupStorageCAFileVolumeName  = "ca-bundle"
+	BackupStorageCAInputVolumeName = "ca-bundle-in"
+)
+
 func BackupLeaseName(clusterName string) string {
 	return "psmdb-" + clusterName + "-backup-lock"
 }
