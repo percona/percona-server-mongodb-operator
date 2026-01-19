@@ -206,7 +206,7 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 		}
 		return sha256Hash(v), nil
 	}
-	// Older implementations use JSON
+	// Use JSON for versions prior to 1.22.0
 	v, err := json.Marshal(c)
 	if err != nil {
 		return "", err
