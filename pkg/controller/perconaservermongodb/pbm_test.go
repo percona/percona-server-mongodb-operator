@@ -10,6 +10,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsResyncNeeded(t *testing.T) {
@@ -430,4 +432,33 @@ func TestIsResyncNeeded(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHashPBMConfiguration(t *testing.T) {
+	t.Run("updating credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket:      "operator-testing",
+						Region:      "us-east-1",
+						EndpointURL: "https://s3.amazonaws.com",
+						Prefix:      "prefix",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "some-access-key",
+			SecretAccessKey: "some-secret-key",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
 }
