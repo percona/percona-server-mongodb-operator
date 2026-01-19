@@ -822,6 +822,9 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
+#          caBundle:
+#           name: minio-ca-bundle
+#           key: ca.crt
 #          prefix: ""
 #          secure: false
 #      azure-blob:
