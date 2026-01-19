@@ -12,7 +12,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/stretchr/testify/require"
 )
 
 func TestIsResyncNeeded(t *testing.T) {
