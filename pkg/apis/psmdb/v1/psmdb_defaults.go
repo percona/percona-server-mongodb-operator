@@ -1211,13 +1211,9 @@ func (cr *PerconaServerMongoDB) validateStorageAutoscaling() error {
 		return nil
 	}
 
-	if spec.MaxSize != "" {
-		maxSize, err := resource.ParseQuantity(spec.MaxSize)
-		if err != nil {
-			return errors.Wrapf(err, "invalid maxSize: %s", spec.MaxSize)
-		}
+	if !spec.MaxSize.IsZero() {
 		minSize := resource.MustParse("1Gi")
-		if maxSize.Cmp(minSize) < 0 {
+		if spec.MaxSize.Cmp(minSize) < 0 {
 			return errors.Errorf("maxSize must be at least 1Gi")
 		}
 	}
@@ -1235,7 +1231,7 @@ func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
 		cr.Spec.StorageAutoscaling.TriggerThresholdPercent = 80
 	}
 
-	if cr.Spec.StorageAutoscaling.GrowthStepGi == 0 {
-		cr.Spec.StorageAutoscaling.GrowthStepGi = 2
+	if cr.Spec.StorageAutoscaling.GrowthStep.IsZero() {
+		cr.Spec.StorageAutoscaling.GrowthStep = resource.MustParse("2Gi")
 	}
 }

@@ -35,7 +35,7 @@ func TestShouldTriggerResize(t *testing.T) {
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
 						Enabled:                 true,
 						TriggerThresholdPercent: 80,
-						GrowthStepGi:            2,
+						GrowthStep:              resource.MustParse("2Gi"),
 					},
 				},
 			},
@@ -58,7 +58,7 @@ func TestShouldTriggerResize(t *testing.T) {
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
 						Enabled:                 true,
 						TriggerThresholdPercent: 80,
-						GrowthStepGi:            2,
+						GrowthStep:              resource.MustParse("2Gi"),
 					},
 				},
 			},
@@ -81,8 +81,8 @@ func TestShouldTriggerResize(t *testing.T) {
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
 						Enabled:                 true,
 						TriggerThresholdPercent: 80,
-						GrowthStepGi:            2,
-						MaxSize:                 "10Gi",
+						GrowthStep:              resource.MustParse("2Gi"),
+						MaxSize:                 resource.MustParse("10Gi"),
 					},
 				},
 			},
@@ -105,7 +105,7 @@ func TestShouldTriggerResize(t *testing.T) {
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
 						Enabled:                 true,
 						TriggerThresholdPercent: 80,
-						GrowthStepGi:            2,
+						GrowthStep:              resource.MustParse("2Gi"),
 					},
 				},
 			},
@@ -151,7 +151,7 @@ func TestCalculateNewSize(t *testing.T) {
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStepGi: 2,
+						GrowthStep: resource.MustParse("2Gi"),
 					},
 				},
 			},
@@ -169,7 +169,7 @@ func TestCalculateNewSize(t *testing.T) {
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStepGi: 5,
+						GrowthStep: resource.MustParse("5Gi"),
 					},
 				},
 			},
@@ -187,8 +187,8 @@ func TestCalculateNewSize(t *testing.T) {
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStepGi: 10,
-						MaxSize:      "15Gi",
+						GrowthStep: resource.MustParse("10Gi"),
+						MaxSize:    resource.MustParse("15Gi"),
 					},
 				},
 			},

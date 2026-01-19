@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -968,14 +969,13 @@ type StorageAutoscalingSpec struct {
 	// +kubebuilder:default=80
 	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
 
-	// GrowthStepGi is the amount in GiB to add to the storage when the threshold is exceeded
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=2
-	GrowthStepGi int64 `json:"growthStepGi,omitempty"`
+	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:default="2Gi"
+	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
 
 	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
 	// If set, autoscaling will not increase storage beyond this limit
-	MaxSize string `json:"maxSize,omitempty"`
+	MaxSize resource.Quantity `json:"maxSize,omitempty"`
 }
 
 // StorageAutoscalingStatus tracks the autoscaling state for a specific PVC

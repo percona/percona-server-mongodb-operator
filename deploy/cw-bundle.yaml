@@ -26221,13 +26221,19 @@ spec:
                 properties:
                   enabled:
                     type: boolean
-                  growthStepGi:
-                    default: 2
-                    format: int64
-                    minimum: 1
-                    type: integer
+                  growthStep:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    default: 2Gi
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   maxSize:
-                    type: string
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
                   triggerThresholdPercent:
                     default: 80
                     maximum: 95

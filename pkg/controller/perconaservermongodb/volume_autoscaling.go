@@ -135,16 +135,13 @@ func (r *ReconcilePerconaServerMongoDB) shouldTriggerResize(
 		return false
 	}
 
-	if config.MaxSize != "" {
-		maxSize, err := resource.ParseQuantity(config.MaxSize)
-		if err == nil {
-			currentSize := pvc.Status.Capacity.Storage()
-			if currentSize.Cmp(maxSize) >= 0 {
-				log.Info("PVC already at maxSize",
-					"currentSize", currentSize.String(),
-					"maxSize", maxSize.String())
-				return false
-			}
+	if !config.MaxSize.IsZero() {
+		currentSize := pvc.Status.Capacity.Storage()
+		if currentSize.Cmp(config.MaxSize) >= 0 {
+			log.Info("PVC already at maxSize",
+				"currentSize", currentSize.String(),
+				"maxSize", config.MaxSize.String())
+			return false
 		}
 	}
 
@@ -168,8 +165,7 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	config := cr.Spec.StorageAutoscaling
 	currentSize := pvc.Status.Capacity.Storage()
 
-	incrementBytes := config.GrowthStepGi * 1024 * 1024 * 1024 // GiB to bytes
-	newSizeBytes := currentSize.Value() + incrementBytes
+	newSizeBytes := currentSize.Value() + config.GrowthStep.Value()
 	newSize := *resource.NewQuantity(newSizeBytes, resource.BinarySI)
 
 	gib, err := RoundUpGiB(newSize.Value())
@@ -177,11 +173,8 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 		newSize = *resource.NewQuantity(gib*GiB, resource.BinarySI)
 	}
 
-	if config.MaxSize != "" {
-		maxSize, err := resource.ParseQuantity(config.MaxSize)
-		if err == nil && newSize.Cmp(maxSize) > 0 {
-			newSize = maxSize
-		}
+	if !config.MaxSize.IsZero() && newSize.Cmp(config.MaxSize) > 0 {
+		newSize = config.MaxSize
 	}
 
 	return newSize

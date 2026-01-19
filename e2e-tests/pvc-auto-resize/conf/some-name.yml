@@ -13,7 +13,7 @@ spec:
   storageAutoscaling:
     enabled: true
     triggerThresholdPercent: 80
-    growthStepGi: 2
+    growthStep: "2Gi"
     maxSize: "10Gi"
   backup:
     enabled: false
