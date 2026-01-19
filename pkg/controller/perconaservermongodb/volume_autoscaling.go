@@ -37,8 +37,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
+	if !cr.Spec.VolumeExpansionEnabled {
+		log.V(1).Info("skipping storage autoscaling: volume expansion is disabled")
+		return nil
+	}
+
 	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
 		log.V(1).Info("skipping storage autoscaling: not using PVC")
+		return nil
+	}
+
+	if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
+		log.V(1).Info("PVC resize already in progress")
 		return nil
 	}
 
