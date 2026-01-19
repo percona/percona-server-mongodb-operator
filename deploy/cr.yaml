@@ -788,7 +788,7 @@ spec:
 #            numMaxRetries: 3
 #            minRetryDelay: 30ms
 #            maxRetryDelay: 5m
-#          region: us-west-2
+#          region: us-east-1
 #          prefix: ""
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
