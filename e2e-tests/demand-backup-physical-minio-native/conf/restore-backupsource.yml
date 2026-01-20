@@ -8,9 +8,10 @@ spec:
   backupSource:
     type: physical
     destination: s3://BACKUP-NAME
-    s3:
+    minio:
       credentialsSecret: minio-secret
       region: us-east-1
       bucket: operator-testing
-      endpointUrl: http://minio-service:9000/
+      endpointUrl: minio-service:9000
       insecureSkipTLSVerify: false
+      secure: false
