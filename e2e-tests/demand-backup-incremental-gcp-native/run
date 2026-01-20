@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -o errexit
+
+if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	log "Skipping cloud backups"
+	exit 0
+fi
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+create_infra "${namespace}"
+apply_s3_storage_secrets
+
+desc 'Testing on not sharded cluster'
+
+log "Creating PSMDB cluster"
+cluster="some-name"
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+log "check if all pods started"
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency ${cluster}
+
+log 'writing test data'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+
+log 'running backup'
+backup_name_gcp_cs_native="backup-gcp-cs-native"
+run_backup gcp-cs-native ${backup_name_gcp_cs_native} incremental-base
+wait_backup "${backup_name_gcp_cs_native}"
+check_backup_in_storage ${backup_name_gcp_cs_native} gcs rs0
+
+log "drop collection"
+run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+log "check backup and restore -- $backup_name"
+
+log 'running restore'
+run_restore "${backup_name_gcp_cs_native}"
+run_recovery_check "${backup_name_gcp_cs_native}"
+
+desc 'test passed'
+
+destroy "$namespace"
