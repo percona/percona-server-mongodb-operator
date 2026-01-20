@@ -64,6 +64,19 @@ fi
 wait_backup "${backup_name_minio}"
 check_backup_in_storage ${backup_name_minio} minio rs0
 
+reconciliation_count=$(kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
+	| grep "configuration changed or resync is needed" \
+	| grep "\"name\":\"${cluster}\"" \
+	| wc -l | tr -d ' ')
+
+echo "Reconciliation count: ${reconciliation_count}"
+
+if [ "${reconciliation_count}" -gt 2 ]; then
+	echo "ERROR: Expected 2 reconciliation, got ${reconciliation_count}"
+	echo ""
+	exit 1
+fi
+
 destroy "$namespace"
 
 desc 'test passed'
