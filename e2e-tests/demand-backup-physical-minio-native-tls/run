@@ -1,0 +1,219 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+create_infra "${namespace}"
+
+desc 'Deploy cert-manager for proper certificate generation'
+deploy_cert_manager
+
+desc 'Create self-signed issuer'
+kubectl_bin apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: ${namespace}
+spec:
+  selfSigned: {}
+EOF
+
+###############################################################################
+# Phase 1: First MinIO
+###############################################################################
+
+desc 'Generate certificate for first MinIO via cert-manager'
+
+kubectl_bin apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio-cert
+  namespace: ${namespace}
+spec:
+  secretName: minio-tls-temp
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+  commonName: minio-service
+  dnsNames:
+  - minio-service
+  - minio-service.${namespace}
+  - minio-service.${namespace}.svc
+  - minio-service.${namespace}.svc.cluster.local
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+EOF
+
+kubectl_bin wait --for=condition=Ready certificate/minio-cert \
+  -n ${namespace} --timeout=120s
+
+kubectl_bin get secret minio-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/minio-cert.pem
+
+kubectl_bin get secret minio-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/minio-key.pem
+
+kubectl_bin create secret generic minio-tls -n ${namespace} \
+  --from-file=public.crt=/tmp/minio-cert.pem \
+  --from-file=private.key=/tmp/minio-key.pem
+
+kubectl_bin create secret generic minio-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/minio-cert.pem
+
+desc 'Deploy first MinIO with TLS'
+deploy_minio minio-tls
+apply_s3_storage_secrets
+
+kubectl_bin apply -f "${test_dir}/conf/minio2-secret.yml"
+
+###############################################################################
+# Phase 1: Single CA bundle test
+###############################################################################
+
+cluster="some-name"
+
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+apply_cluster "${test_dir}/conf/${cluster}-single-ca.yml"
+
+wait_for_running ${cluster}-rs0 3
+wait_cluster_consistency ${cluster}
+
+###############################################################################
+# Verify CA bundle
+###############################################################################
+
+desc 'Verify CA bundle infrastructure'
+
+kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
+  test -f /etc/s3/certs/ca-bundle.crt
+
+kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
+  env | grep SSL_CERT_FILE
+
+cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
+  grep -c "BEGIN CERTIFICATE" /etc/s3/certs/ca-bundle.crt)
+
+[ "$cert_count" = "1" ]
+
+###############################################################################
+# Phase 2: Second MinIO
+###############################################################################
+
+desc 'Generate certificate for second MinIO'
+
+kubectl_bin apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minio2-cert
+  namespace: ${namespace}
+spec:
+  secretName: minio2-tls-temp
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+  commonName: minio2-service
+  dnsNames:
+  - minio2-service
+  - minio2-service.${namespace}
+  - minio2-service.${namespace}.svc
+  - minio2-service.${namespace}.svc.cluster.local
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+EOF
+
+kubectl_bin wait --for=condition=Ready certificate/minio2-cert \
+  -n ${namespace} --timeout=120s
+
+kubectl_bin get secret minio2-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/minio2-cert.pem
+
+kubectl_bin get secret minio2-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/minio2-key.pem
+
+kubectl_bin create secret generic minio2-tls -n ${namespace} \
+  --from-file=public.crt=/tmp/minio2-cert.pem \
+  --from-file=private.key=/tmp/minio2-key.pem
+
+kubectl_bin create secret generic minio2-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/minio2-cert.pem
+
+deploy_minio "minio2-tls" "minio2-service"
+
+desc "Add second storage"
+
+kubectl_bin patch psmdb ${cluster} -n ${namespace} --type=merge -p '
+{
+  "spec": {
+    "backup": {
+      "storages": {
+        "minio2": {
+          "type": "minio",
+          "minio": {
+            "credentialsSecret": "minio2-secret",
+            "region": "us-east-1",
+            "bucket": "operator-testing",
+            "endpointUrl": "https://minio2-service:9000",
+            "secure": true,
+            "insecureSkipTLSVerify": false,
+            "caBundle": {
+              "name": "minio2-ca-bundle",
+              "key": "ca.crt"
+            }
+          }
+        }
+      }
+    }
+  }
+}'
+
+sleep 300
+wait_cluster_consistency ${cluster}
+
+desc "Verify merged CA bundle"
+cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
+  grep -c "BEGIN CERTIFICATE" /etc/s3/certs/ca-bundle.crt)
+
+[ "$cert_count" = "2" ]
+
+desc 'Backup & restore with merged CA'
+
+wait_for_pbm_operations ${cluster}
+
+run_mongo_tls \
+  'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+  "userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+
+run_mongo_tls \
+  'db.getSiblingDB("myApp").test.insert({ x: 100500 })' \
+  "myApp:myPass@${cluster}-rs0.${namespace}"
+
+backup_name_single="backup-minio"
+run_backup minio ${backup_name_single} 'physical'
+wait_backup "${backup_name_single}"
+
+check_backup_in_storage ${backup_name_single} minio rs0 filelist.pbm https
+
+run_mongo_tls \
+  'db.getSiblingDB("myApp").test.drop()' \
+  "myApp:myPass@${cluster}-rs0.${namespace}"
+
+run_restore ${backup_name_single}
+run_recovery_check ${backup_name_single} "" "" "true"
+
+rm -f /tmp/minio-cert.pem /tmp/minio-key.pem
+rm -f /tmp/minio2-cert.pem /tmp/minio2-key.pem
+
+destroy "${namespace}"
+
+desc 'test passed'

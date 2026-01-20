@@ -182,5 +182,9 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		sfsSpec.Template.Annotations[k] = v
 	}
 
+	if preservedValue, exists := cr.Annotations[api.AnnotationPreservedRestartedAt(sfs.Name)]; exists {
+		sfsSpec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = preservedValue
+	}
+
 	return sfs, nil
 }

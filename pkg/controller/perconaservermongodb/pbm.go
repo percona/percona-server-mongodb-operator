@@ -20,8 +20,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
-
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -177,8 +177,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	}
 
 	if isResyncNeeded(currentCfg, &main) {
-		log.Info("main storage changed. starting resync", "old", currentCfg.Storage, "new", main.Storage)
-
 		if err := pbm.ResyncMainStorageAndWait(ctx); err != nil {
 			return errors.Wrap(err, "resync")
 		}
@@ -208,88 +206,7 @@ func hashPBMConfiguration(c []config.Config) (string, error) {
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	if currentCfg.Storage.Type != newCfg.Storage.Type {
-		return true
-	}
-
-	if currentCfg.Storage.S3 != nil && newCfg.Storage.S3 != nil {
-		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region {
-			return true
-		}
-
-		if currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Credentials.AccessKeyID != newCfg.Storage.S3.Credentials.AccessKeyID {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Credentials.SecretAccessKey != newCfg.Storage.S3.Credentials.SecretAccessKey {
-			return true
-		}
-
-	}
-
-	if currentCfg.Storage.GCS != nil && newCfg.Storage.GCS != nil {
-		if currentCfg.Storage.GCS.Bucket != newCfg.Storage.GCS.Bucket {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Prefix != newCfg.Storage.GCS.Prefix {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.ClientEmail != newCfg.Storage.GCS.Credentials.ClientEmail {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.PrivateKey != newCfg.Storage.GCS.Credentials.PrivateKey {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.HMACAccessKey != newCfg.Storage.GCS.Credentials.HMACAccessKey {
-			return true
-		}
-
-		if currentCfg.Storage.GCS.Credentials.HMACSecret != newCfg.Storage.GCS.Credentials.HMACSecret {
-			return true
-		}
-	}
-
-	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
-		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Credentials.Key != newCfg.Storage.Azure.Credentials.Key {
-			return true
-		}
-	}
-
-	if currentCfg.Storage.Filesystem != nil && newCfg.Storage.Filesystem != nil {
-		if currentCfg.Storage.Filesystem.Path != newCfg.Storage.Filesystem.Path {
-			return true
-		}
-	}
-
-	return false
+	return !currentCfg.Storage.IsSameStorage(&newCfg.Storage)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
