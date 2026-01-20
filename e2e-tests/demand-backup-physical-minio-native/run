@@ -52,6 +52,13 @@ backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
 run_restore ${backup_name_minio}
 run_recovery_check ${backup_name_minio} "" "" "true"
 
+echo 'Drop collection'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+echo 'check backup and restore using backupSource -- minio'
+backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
+run_restore_backupsource "${backup_name_minio}-source" "${backup_dest_minio}" "minio"
+run_recovery_check "${backup_name_minio}-source" "" "" "true"
+
 desc 'Testing with arbiter and non-voting nodes'
 
 apply_cluster "${test_dir}/conf/${cluster}-arbiter-nv.yml"
