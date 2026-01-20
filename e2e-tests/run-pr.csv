@@ -11,7 +11,11 @@ demand-backup
 demand-backup-eks-credentials-irsa
 demand-backup-fs
 demand-backup-if-unhealthy
-demand-backup-incremental
+demand-backup-incremental-aws
+demand-backup-incremental-azure
+demand-backup-incremental-gcp-native
+demand-backup-incremental-gcp-s3
+demand-backup-incremental-minio
 demand-backup-incremental-sharded
 demand-backup-physical-parallel
 demand-backup-physical-aws

@@ -1,7 +1,7 @@
 arbiter
 default-cr
 demand-backup
-demand-backup-incremental
+demand-backup-incremental-minio
 demand-backup-physical-parallel
 demand-backup-physical-aws
 demand-backup-physical-azure

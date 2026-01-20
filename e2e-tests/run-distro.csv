@@ -8,7 +8,11 @@ data-at-rest-encryption
 data-sharded
 default-cr
 demand-backup
-demand-backup-incremental
+demand-backup-incremental-aws
+demand-backup-incremental-azure
+demand-backup-incremental-gcp-native
+demand-backup-incremental-gcp-s3
+demand-backup-incremental-minio
 demand-backup-incremental-sharded
 demand-backup-physical-parallel
 demand-backup-physical-aws
