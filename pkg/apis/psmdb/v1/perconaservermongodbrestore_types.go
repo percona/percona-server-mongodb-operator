@@ -123,8 +123,9 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 			r.Spec.BackupSource.S3 == nil &&
 			r.Spec.BackupSource.GCS == nil &&
 			r.Spec.BackupSource.Azure == nil &&
+			r.Spec.BackupSource.Minio == nil &&
 			r.Spec.BackupSource.Filesystem == nil {
-			return errors.New("one of storageName, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
+			return errors.New("one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
 		}
 	}
 
