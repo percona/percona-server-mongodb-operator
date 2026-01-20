@@ -3,7 +3,7 @@
 set -o errexit
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-  log "Skipping cloud backups"
+	log "Skipping cloud backups"
 	exit 0
 fi
 
