@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -130,7 +131,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		return strings.Compare(a.Name, b.Name)
 	})
 
-	hash, err := hashPBMConfiguration(c)
+	hash, err := hashPBMConfiguration(c, cr)
 	if err != nil {
 		return errors.Wrap(err, "hash config")
 	}
@@ -196,12 +197,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	return nil
 }
 
-func hashPBMConfiguration(c []config.Config) (string, error) {
+func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (string, error) {
+	// Use YAML marshaller so that even credentials are included
+	if cr.CompareVersion("1.22.0") >= 0 {
+		v, err := yaml.Marshal(c)
+		if err != nil {
+			return "", err
+		}
+		return sha256Hash(v), nil
+	}
+	// Use JSON for versions prior to 1.22.0
 	v, err := json.Marshal(c)
 	if err != nil {
 		return "", err
 	}
-
 	return sha256Hash(v), nil
 }
 
