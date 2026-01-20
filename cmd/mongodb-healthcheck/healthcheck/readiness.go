@@ -64,6 +64,11 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		var rs mongo.Status
 		rs, err = client.RSStatus(ctx)
 		if err != nil {
+			// We should ignore this error to allow operator to fix the config. This pod should be ready
+			if errors.Is(err, mongo.ErrInvalidReplsetConfig) {
+				log.Info("Couldn't connect to mongo due to invalid replset config. Ignoring", "error", err)
+				return nil, nil
+			}
 			return nil, err
 		}
 		return &rs, nil
