@@ -13,7 +13,11 @@ demand-backup-incremental-azure
 demand-backup-incremental-gcp-native
 demand-backup-incremental-gcp-s3
 demand-backup-incremental-minio
-demand-backup-incremental-sharded
+demand-backup-incremental-sharded-aws
+demand-backup-incremental-sharded-azure
+demand-backup-incremental-sharded-gcp-native
+demand-backup-incremental-sharded-gcp-s3
+demand-backup-incremental-sharded-minio
 demand-backup-physical-parallel
 demand-backup-physical-aws
 demand-backup-physical-azure
