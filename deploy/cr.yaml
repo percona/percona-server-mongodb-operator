@@ -773,7 +773,7 @@ spec:
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
-#      s3-us-west:
+#      s3-us-east:
 #        main: true
 #        type: s3
 #        s3:
