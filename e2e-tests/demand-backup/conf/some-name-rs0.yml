@@ -21,7 +21,7 @@ spec:
           insecureSkipTLSVerify: false
       minio:
         type: minio
-        s3:
+        minio:
           credentialsSecret: minio-secret
           region: us-east-1
           bucket: operator-testing
