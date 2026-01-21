@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -99,6 +100,7 @@ type PerconaServerMongoDBSpec struct {
 	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
 	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
+	StorageAutoscaling              *StorageAutoscalingSpec              `json:"storageAutoscaling,omitempty"`
 	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
 }
 
@@ -314,22 +316,23 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                 `json:"state,omitempty"`
-	MongoVersion       string                   `json:"mongoVersion,omitempty"`
-	MongoImage         string                   `json:"mongoImage,omitempty"`
-	Message            string                   `json:"message,omitempty"`
-	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
-	Mongos             *MongosStatus            `json:"mongos,omitempty"`
-	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
-	BackupVersion      string                   `json:"backupVersion,omitempty"`
-	BackupImage        string                   `json:"backupImage,omitempty"`
-	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
-	PMMVersion         string                   `json:"pmmVersion,omitempty"`
-	Host               string                   `json:"host,omitempty"`
-	Size               int32                    `json:"size"`
-	Ready              int32                    `json:"ready"`
+	State              AppState                            `json:"state,omitempty"`
+	MongoVersion       string                              `json:"mongoVersion,omitempty"`
+	MongoImage         string                              `json:"mongoImage,omitempty"`
+	Message            string                              `json:"message,omitempty"`
+	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion      string                              `json:"backupVersion,omitempty"`
+	BackupImage        string                              `json:"backupImage,omitempty"`
+	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion         string                              `json:"pmmVersion,omitempty"`
+	Host               string                              `json:"host,omitempty"`
+	Size               int32                               `json:"size"`
+	Ready              int32                               `json:"ready"`
+	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
 type ConditionStatus string
@@ -953,6 +956,34 @@ type PVCSpec struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 
 	*corev1.PersistentVolumeClaimSpec `json:",inline"`
+}
+
+// StorageAutoscalingSpec defines the configuration for automatic storage expansion
+type StorageAutoscalingSpec struct {
+	// Enabled enables storage autoscaling for all replica sets
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TriggerThresholdPercent is the percentage of disk usage that triggers automatic storage expansion
+	// +kubebuilder:validation:Minimum=50
+	// +kubebuilder:validation:Maximum=95
+	// +kubebuilder:default=80
+	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
+
+	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:default="2Gi"
+	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
+
+	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
+	// If set, autoscaling will not increase storage beyond this limit
+	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+}
+
+// StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
+type StorageAutoscalingStatus struct {
+	CurrentSize    string      `json:"currentSize,omitempty"`
+	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
+	ResizeCount    int32       `json:"resizeCount,omitempty"`
+	LastError      string      `json:"lastError,omitempty"`
 }
 
 type SecretsSpec struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -105,6 +106,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 	}
+	if err := cr.validateStorageAutoscaling(); err != nil {
+		return errors.Wrap(err, "validate storage autoscaling")
+	}
+	cr.setStorageAutoscalingDefaults()
 
 	t := true
 	if cr.Spec.TLS == nil {
@@ -1204,4 +1209,36 @@ func (v *VolumeSpec) reconcileOpts() error {
 	}
 
 	return nil
+}
+
+// validateStorageAutoscaling validates the storage autoscaling configuration
+func (cr *PerconaServerMongoDB) validateStorageAutoscaling() error {
+	spec := cr.Spec.StorageAutoscaling
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+
+	if !spec.MaxSize.IsZero() {
+		minSize := resource.MustParse("1Gi")
+		if spec.MaxSize.Cmp(minSize) < 0 {
+			return errors.Errorf("maxSize must be at least 1Gi")
+		}
+	}
+
+	return nil
+}
+
+// setStorageAutoscalingDefaults sets default values for storage autoscaling configuration
+func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
+	if cr.Spec.StorageAutoscaling == nil {
+		return
+	}
+
+	if cr.Spec.StorageAutoscaling.TriggerThresholdPercent == 0 {
+		cr.Spec.StorageAutoscaling.TriggerThresholdPercent = 80
+	}
+
+	if cr.Spec.StorageAutoscaling.GrowthStep.IsZero() {
+		cr.Spec.StorageAutoscaling.GrowthStep = resource.MustParse("2Gi")
+	}
 }

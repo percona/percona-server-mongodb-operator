@@ -26256,6 +26256,29 @@ spec:
                 required:
                 - enabled
                 type: object
+              storageAutoscaling:
+                properties:
+                  enabled:
+                    type: boolean
+                  growthStep:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    default: 2Gi
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  maxSize:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  triggerThresholdPercent:
+                    default: 80
+                    maximum: 95
+                    minimum: 50
+                    type: integer
+                type: object
               tls:
                 properties:
                   allowInvalidCertificates:
@@ -26462,6 +26485,21 @@ spec:
                 type: integer
               state:
                 type: string
+              storageAutoscaling:
+                additionalProperties:
+                  properties:
+                    currentSize:
+                      type: string
+                    lastError:
+                      type: string
+                    lastResizeTime:
+                      format: date-time
+                      type: string
+                    resizeCount:
+                      format: int32
+                      type: integer
+                  type: object
+                type: object
             required:
             - ready
             - size
@@ -26595,6 +26633,13 @@ rules:
   - watch
   - create
   - patch
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
 - apiGroups:
   - certmanager.k8s.io
   - cert-manager.io
