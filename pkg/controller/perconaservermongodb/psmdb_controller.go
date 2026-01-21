@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -89,6 +90,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create client")
 	}
+
 	secretProviders := []pkgSecret.Provider{
 		new(vault.Provider),
 	}
@@ -177,6 +179,11 @@ func NewCronRegistry() CronRegistry {
 	return c
 }
 
+// ClientCmd is an interface for executing commands in pods
+type ClientCmd interface {
+	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+}
+
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
@@ -186,7 +193,7 @@ type ReconcilePerconaServerMongoDB struct {
 	restConfig *rest.Config
 
 	crons                 CronRegistry
-	clientcmd             *clientcmd.Client
+	clientcmd             ClientCmd
 	serverVersion         *version.ServerVersion
 	reconcileIn           time.Duration
 	mongoClientProvider   MongoClientProvider
