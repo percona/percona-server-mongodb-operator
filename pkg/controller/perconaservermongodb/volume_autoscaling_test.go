@@ -32,10 +32,12 @@ func TestShouldTriggerResize(t *testing.T) {
 			name: "usage above threshold",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						Enabled:                 true,
-						TriggerThresholdPercent: 80,
-						GrowthStep:              resource.MustParse("2Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							Enabled:                 true,
+							TriggerThresholdPercent: 80,
+							GrowthStep:              resource.MustParse("2Gi"),
+						},
 					},
 				},
 			},
@@ -55,10 +57,12 @@ func TestShouldTriggerResize(t *testing.T) {
 			name: "usage below threshold",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						Enabled:                 true,
-						TriggerThresholdPercent: 80,
-						GrowthStep:              resource.MustParse("2Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							Enabled:                 true,
+							TriggerThresholdPercent: 80,
+							GrowthStep:              resource.MustParse("2Gi"),
+						},
 					},
 				},
 			},
@@ -78,11 +82,13 @@ func TestShouldTriggerResize(t *testing.T) {
 			name: "at maxSize",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						Enabled:                 true,
-						TriggerThresholdPercent: 80,
-						GrowthStep:              resource.MustParse("2Gi"),
-						MaxSize:                 resource.MustParse("10Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							Enabled:                 true,
+							TriggerThresholdPercent: 80,
+							GrowthStep:              resource.MustParse("2Gi"),
+							MaxSize:                 resource.MustParse("10Gi"),
+						},
 					},
 				},
 			},
@@ -102,10 +108,12 @@ func TestShouldTriggerResize(t *testing.T) {
 			name: "resize in progress",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						Enabled:                 true,
-						TriggerThresholdPercent: 80,
-						GrowthStep:              resource.MustParse("2Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							Enabled:                 true,
+							TriggerThresholdPercent: 80,
+							GrowthStep:              resource.MustParse("2Gi"),
+						},
 					},
 				},
 			},
@@ -150,8 +158,10 @@ func TestCalculateNewSize(t *testing.T) {
 			name: "add 2Gi",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStep: resource.MustParse("2Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							GrowthStep: resource.MustParse("2Gi"),
+						},
 					},
 				},
 			},
@@ -168,8 +178,10 @@ func TestCalculateNewSize(t *testing.T) {
 			name: "add 5Gi",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStep: resource.MustParse("5Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							GrowthStep: resource.MustParse("5Gi"),
+						},
 					},
 				},
 			},
@@ -186,9 +198,11 @@ func TestCalculateNewSize(t *testing.T) {
 			name: "enforce maxSize",
 			cr: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
-					StorageAutoscaling: &api.StorageAutoscalingSpec{
-						GrowthStep: resource.MustParse("10Gi"),
-						MaxSize:    resource.MustParse("15Gi"),
+					StorageScaling: &api.StorageScalingSpec{
+						Autoscaling: &api.AutoscalingSpec{
+							GrowthStep: resource.MustParse("10Gi"),
+							MaxSize:    resource.MustParse("15Gi"),
+						},
 					},
 				},
 			},

@@ -6,7 +6,6 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  enableVolumeExpansion: true
   unsafeFlags:
     replsetSize: true
   secrets:

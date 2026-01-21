@@ -28,16 +28,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("statefulset", sts.Name)
 
-	if cr.Spec.StorageAutoscaling == nil || !cr.Spec.StorageAutoscaling.Enabled {
+	autoscalingSpec := cr.Spec.StorageAutoscaling()
+	if autoscalingSpec == nil || !autoscalingSpec.Enabled {
 		return nil
 	}
 
-	if cr.Spec.EnableExternalVolumeAutoscaling {
+	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		log.V(1).Info("skipping storage autoscaling: external autoscaling is enabled")
 		return nil
 	}
 
-	if !cr.Spec.VolumeExpansionEnabled {
+	if !cr.Spec.IsVolumeExpansionEnabled() {
 		log.V(1).Info("skipping storage autoscaling: volume expansion is disabled")
 		return nil
 	}
@@ -123,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		"currentSize", pvc.Status.Capacity.Storage().String(),
 		"newSize", newSize.String(),
 		"usagePercent", usage.UsagePercent,
-		"threshold", cr.Spec.StorageAutoscaling.TriggerThresholdPercent)
+		"threshold", cr.Spec.StorageAutoscaling().TriggerThresholdPercent)
 
 	return r.triggerResize(ctx, cr, pvc, newSize, volumeSpec)
 }
@@ -136,7 +137,7 @@ func (r *ReconcilePerconaServerMongoDB) shouldTriggerResize(
 	usage *PVCUsage,
 ) bool {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
-	config := cr.Spec.StorageAutoscaling
+	config := cr.Spec.StorageAutoscaling()
 
 	if usage.UsagePercent < config.TriggerThresholdPercent {
 		log.V(1).Info("usage below threshold",
@@ -172,7 +173,7 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	cr *api.PerconaServerMongoDB,
 	pvc *corev1.PersistentVolumeClaim,
 ) resource.Quantity {
-	config := cr.Spec.StorageAutoscaling
+	config := cr.Spec.StorageAutoscaling()
 	currentSize := pvc.Status.Capacity.Storage()
 
 	newSizeBytes := currentSize.Value() + config.GrowthStep.Value()

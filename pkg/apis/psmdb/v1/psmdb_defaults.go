@@ -1213,7 +1213,7 @@ func (v *VolumeSpec) reconcileOpts() error {
 
 // validateStorageAutoscaling validates the storage autoscaling configuration
 func (cr *PerconaServerMongoDB) validateStorageAutoscaling() error {
-	spec := cr.Spec.StorageAutoscaling
+	spec := cr.Spec.StorageAutoscaling()
 	if spec == nil || !spec.Enabled {
 		return nil
 	}
@@ -1230,15 +1230,26 @@ func (cr *PerconaServerMongoDB) validateStorageAutoscaling() error {
 
 // setStorageAutoscalingDefaults sets default values for storage autoscaling configuration
 func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
-	if cr.Spec.StorageAutoscaling == nil {
+	if cr.Spec.StorageScaling != nil && cr.Spec.StorageAutoscaling() != nil {
+		spec := cr.Spec.StorageAutoscaling()
+		if spec.TriggerThresholdPercent == 0 {
+			spec.TriggerThresholdPercent = 80
+		}
+		if spec.GrowthStep.IsZero() {
+			spec.GrowthStep = resource.MustParse("2Gi")
+		}
+		return
+	}
+	
+	if cr.Spec.StorageAutoscaling() == nil {
 		return
 	}
 
-	if cr.Spec.StorageAutoscaling.TriggerThresholdPercent == 0 {
-		cr.Spec.StorageAutoscaling.TriggerThresholdPercent = 80
+	if cr.Spec.StorageAutoscaling().TriggerThresholdPercent == 0 {
+		cr.Spec.StorageAutoscaling().TriggerThresholdPercent = 80
 	}
 
-	if cr.Spec.StorageAutoscaling.GrowthStep.IsZero() {
-		cr.Spec.StorageAutoscaling.GrowthStep = resource.MustParse("2Gi")
+	if cr.Spec.StorageAutoscaling().GrowthStep.IsZero() {
+		cr.Spec.StorageAutoscaling().GrowthStep = resource.MustParse("2Gi")
 	}
 }
