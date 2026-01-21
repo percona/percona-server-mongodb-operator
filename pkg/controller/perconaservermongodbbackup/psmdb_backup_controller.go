@@ -451,9 +451,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			PartSize:              cr.Status.Minio.PartSize,
 			Secure:                cr.Status.Minio.Secure,
 			ForcePathStyle:        cr.Status.Minio.ForcePathStyle,
-			Retryer: &mio.Retryer{
+		}
+		if cr.Status.Minio.Retryer != nil {
+			minioConf.Retryer = &mio.Retryer{
 				NumMaxRetries: cr.Status.Minio.Retryer.NumMaxRetries,
-			},
+			}
 		}
 		if cr.Status.Minio.CredentialsSecret != "" {
 			minioSecret, err := secret(ctx, r.client, cr.GetNamespace(), cr.Status.Minio.CredentialsSecret)
