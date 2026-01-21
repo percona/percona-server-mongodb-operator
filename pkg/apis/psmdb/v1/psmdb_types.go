@@ -364,9 +364,8 @@ type PerconaServerMongoDBStatus struct {
 type ConditionStatus string
 
 const (
-	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse   ConditionStatus = "False"
-	ConditionUnknown ConditionStatus = "Unknown"
+	ConditionTrue  ConditionStatus = "True"
+	ConditionFalse ConditionStatus = "False"
 )
 
 const (
@@ -1128,12 +1127,6 @@ type MongodSpecMMAPv1 struct {
 }
 
 type WiredTigerCompressor string
-
-var (
-	WiredTigerCompressorNone   WiredTigerCompressor = "none"
-	WiredTigerCompressorSnappy WiredTigerCompressor = "snappy"
-	WiredTigerCompressorZlib   WiredTigerCompressor = "zlib"
-)
 
 type MongodSpecWiredTigerEngineConfig struct {
 	CacheSizeRatio      numstr.NumberString   `json:"cacheSizeRatio,omitempty"`
