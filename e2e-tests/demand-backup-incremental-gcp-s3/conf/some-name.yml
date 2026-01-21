@@ -18,7 +18,7 @@ spec:
           credentialsSecret: gcp-cs-secret
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb-demand-backup-incremental
+          prefix: psmdb-demand-backup-incremental-gcp-s3
           endpointUrl: https://storage.googleapis.com
           insecureSkipTLSVerify: false
   replsets:

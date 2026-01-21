@@ -16,7 +16,7 @@ spec:
         type: azure
         azure:
           container: operator-testing
-          prefix: psmdb-demand-backup-incremental
+          prefix: psmdb-demand-backup-incremental-azure
           credentialsSecret: azure-secret
   replsets:
   - name: rs0

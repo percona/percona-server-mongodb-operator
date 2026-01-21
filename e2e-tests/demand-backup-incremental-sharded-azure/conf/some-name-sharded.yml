@@ -14,7 +14,7 @@ spec:
         type: azure
         azure:
           container: operator-testing
-          prefix: psmdb-demand-backup-incremental
+          prefix: psmdb-demand-backup-incremental-sharded-azure
           credentialsSecret: azure-secret
   sharding:
     enabled: true

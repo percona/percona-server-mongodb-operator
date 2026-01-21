@@ -2,14 +2,14 @@
 
 set -o errexit
 
-if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
-	log "Skipping cloud backup tests"
-	exit 0
-fi
-
 test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
+
+if [ ! -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	log "Skipping cloud backup tests"
+	exit 0
+fi
 
 create_infra "${namespace}"
 
