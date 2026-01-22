@@ -356,6 +356,7 @@ func GetPBMStorageMinioConfig(
 			DebugTrace:            stg.Minio.DebugTrace,
 			PartSize:              stg.Minio.PartSize,
 			Secure:                stg.Minio.Secure,
+			ForcePathStyle:        stg.Minio.ForcePathStyle,
 		},
 	}
 

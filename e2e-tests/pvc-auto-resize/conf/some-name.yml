@@ -1,0 +1,38 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+    - percona.com/delete-psmdb-pvc
+spec:
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  enableVolumeExpansion: true
+  storageAutoscaling:
+    enabled: true
+    triggerThresholdPercent: 80
+    growthStep: "2Gi"
+    maxSize: "10Gi"
+  backup:
+    enabled: false
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 0.5G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1G
+    size: 3
+  secrets:
+    users: some-users
