@@ -26286,6 +26286,11 @@ spec:
                   enableVolumeScaling:
                     type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: autoscaling cannot be enabled when enableVolumeScaling
+                    is disabled
+                  rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
+                    || !self.autoscaling.enabled || self.enableVolumeScaling'
               tls:
                 properties:
                   allowInvalidCertificates:

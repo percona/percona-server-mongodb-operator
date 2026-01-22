@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 var _ = Describe("PerconaServerMongoDB", Ordered, func() {
@@ -50,5 +52,60 @@ var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 			NamespacedName: crNamespacedName,
 		})
 		Expect(err).To(Succeed())
+	})
+})
+
+var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
+	ctx := context.Background()
+	const ns = "psmdb-validation"
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("StorageScaling validation", func() {
+		It("should reject autoscaling enabled when enableVolumeScaling is disabled", func() {
+			cr, err := readDefaultCR("psmdb-invalid-autoscaling", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psmdbv1.StorageScalingSpec{
+				EnableVolumeScaling: false,
+				Autoscaling: &psmdbv1.AutoscalingSpec{
+					Enabled: true,
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("autoscaling cannot be enabled when enableVolumeScaling is disabled"))
+		})
+
+		It("should allow autoscaling enabled when enableVolumeScaling is enabled", func() {
+			cr, err := readDefaultCR("psmdb-valid-autoscaling", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psmdbv1.StorageScalingSpec{
+				EnableVolumeScaling: true,
+				Autoscaling: &psmdbv1.AutoscalingSpec{
+					Enabled: true,
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })

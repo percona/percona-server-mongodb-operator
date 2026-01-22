@@ -1012,6 +1012,7 @@ type StorageAutoscalingStatus struct {
 }
 
 // StorageScalingSpec defines the configuration for storage scaling behavior
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || self.enableVolumeScaling",message="autoscaling cannot be enabled when enableVolumeScaling is disabled"
 type StorageScalingSpec struct {
 	// EnableExternalAutoscaling delegates volume autoscaling to an external system (e.g., Kubernetes VPA)
 	// When enabled, the operator skips internal autoscaling and resize operations
