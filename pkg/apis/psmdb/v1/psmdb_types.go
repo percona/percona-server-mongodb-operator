@@ -70,38 +70,40 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause                           bool                                 `json:"pause,omitempty"`
-	Unmanaged                       bool                                 `json:"unmanaged,omitempty"`
-	CRVersion                       string                               `json:"crVersion,omitempty"`
-	Platform                        *version.Platform                    `json:"platform,omitempty"`
-	Image                           string                               `json:"image"`
-	ImagePullSecrets                []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf                      bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	Unsafe                          UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreLabels                    []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations               []string                             `json:"ignoreAnnotations,omitempty"`
-	Replsets                        []*ReplsetSpec                       `json:"replsets,omitempty"`
-	Secrets                         *SecretsSpec                         `json:"secrets,omitempty"`
-	Backup                          BackupSpec                           `json:"backup,omitempty"`
-	ImagePullPolicy                 corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
-	PMM                             PMMSpec                              `json:"pmm,omitempty"`
-	UpdateStrategy                  appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
-	UpgradeOptions                  UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	SchedulerName                   string                               `json:"schedulerName,omitempty"`
-	ClusterServiceDNSSuffix         string                               `json:"clusterServiceDNSSuffix,omitempty"`
-	ClusterServiceDNSMode           DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
-	Sharding                        Sharding                             `json:"sharding,omitempty"`
-	InitImage                       string                               `json:"initImage,omitempty"`
-	InitContainerSecurityContext    *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
-	MultiCluster                    MultiCluster                         `json:"multiCluster,omitempty"`
-	TLS                             *TLSSpec                             `json:"tls,omitempty"`
-	Users                           []User                               `json:"users,omitempty"`
-	Roles                           []Role                               `json:"roles,omitempty"`
-	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
-	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
-	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
-	StorageAutoscaling              *StorageAutoscalingSpec              `json:"storageAutoscaling,omitempty"`
-	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
+	Pause                        bool                                 `json:"pause,omitempty"`
+	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
+	CRVersion                    string                               `json:"crVersion,omitempty"`
+	Platform                     *version.Platform                    `json:"platform,omitempty"`
+	Image                        string                               `json:"image"`
+	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
+	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
+	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
+	Backup                       BackupSpec                           `json:"backup,omitempty"`
+	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
+	PMM                          PMMSpec                              `json:"pmm,omitempty"`
+	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	SchedulerName                string                               `json:"schedulerName,omitempty"`
+	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode        DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
+	Sharding                     Sharding                             `json:"sharding,omitempty"`
+	InitImage                    string                               `json:"initImage,omitempty"`
+	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
+	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
+	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+	Users                        []User                               `json:"users,omitempty"`
+	Roles                        []Role                               `json:"roles,omitempty"`
+	// Deprecated: Use StorageScaling.EnableVolumeScaling instead
+	VolumeExpansionEnabled bool              `json:"enableVolumeExpansion,omitempty"`
+	LogCollector           *LogCollectorSpec `json:"logcollector,omitempty"`
+	// Deprecated: Use StorageScaling.EnableExternalAutoscaling instead
+	EnableExternalVolumeAutoscaling bool                `json:"enableExternalVolumeAutoscaling,omitempty"`
+	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
+	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -195,6 +197,30 @@ func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
 		}
 	}
 	return nil
+}
+
+// IsExternalVolumeAutoscalingEnabled returns whether external volume autoscaling is enabled.
+func (spec *PerconaServerMongoDBSpec) IsExternalVolumeAutoscalingEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableExternalAutoscaling
+	}
+	return spec.EnableExternalVolumeAutoscaling
+}
+
+// IsVolumeExpansionEnabled returns whether volume expansion is enabled.
+func (spec *PerconaServerMongoDBSpec) IsVolumeExpansionEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeScaling
+	}
+	return spec.VolumeExpansionEnabled
+}
+
+// StorageAutoscaling returns the storage autoscaling configuration.
+func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
+	if spec.StorageScaling == nil {
+		return nil
+	}
+	return spec.StorageScaling.Autoscaling
 }
 
 const (
@@ -338,9 +364,8 @@ type PerconaServerMongoDBStatus struct {
 type ConditionStatus string
 
 const (
-	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse   ConditionStatus = "False"
-	ConditionUnknown ConditionStatus = "Unknown"
+	ConditionTrue  ConditionStatus = "True"
+	ConditionFalse ConditionStatus = "False"
 )
 
 const (
@@ -958,8 +983,8 @@ type PVCSpec struct {
 	*corev1.PersistentVolumeClaimSpec `json:",inline"`
 }
 
-// StorageAutoscalingSpec defines the configuration for automatic storage expansion
-type StorageAutoscalingSpec struct {
+// AutoscalingSpec defines the configuration for automatic storage expansion
+type AutoscalingSpec struct {
 	// Enabled enables storage autoscaling for all replica sets
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -984,6 +1009,22 @@ type StorageAutoscalingStatus struct {
 	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
 	ResizeCount    int32       `json:"resizeCount,omitempty"`
 	LastError      string      `json:"lastError,omitempty"`
+}
+
+// StorageScalingSpec defines the configuration for storage scaling behavior
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || self.enableVolumeScaling",message="autoscaling cannot be enabled when enableVolumeScaling is disabled"
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || !has(self.enableExternalAutoscaling) || !self.enableExternalAutoscaling",message="autoscaling cannot be enabled when enableExternalAutoscaling is enabled"
+type StorageScalingSpec struct {
+	// EnableExternalAutoscaling delegates volume autoscaling to an external system (e.g., Kubernetes VPA)
+	// When enabled, the operator skips internal autoscaling and resize operations
+	EnableExternalAutoscaling bool `json:"enableExternalAutoscaling,omitempty"`
+
+	// EnableVolumeScaling allows volume expansion/resizing operations
+	// When disabled, PVC sizes will not be modified even if storage changes in the spec
+	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
+
+	// Autoscaling configures automatic storage expansion based on disk usage
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -1088,12 +1129,6 @@ type MongodSpecMMAPv1 struct {
 }
 
 type WiredTigerCompressor string
-
-var (
-	WiredTigerCompressorNone   WiredTigerCompressor = "none"
-	WiredTigerCompressorSnappy WiredTigerCompressor = "snappy"
-	WiredTigerCompressorZlib   WiredTigerCompressor = "zlib"
-)
 
 type MongodSpecWiredTigerEngineConfig struct {
 	CacheSizeRatio      numstr.NumberString   `json:"cacheSizeRatio,omitempty"`

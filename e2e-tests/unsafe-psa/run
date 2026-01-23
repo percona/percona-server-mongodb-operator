@@ -48,6 +48,7 @@ function main() {
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "3"
 	wait_cluster_consistency "$psmdb"
 
+	# PVC resize did not work for PSA deployment and it was fixed in 1.22
 	desc 'resizing PVCs'
 	patch_pvc_request "$psmdb" "2G"
 	wait_cluster_consistency "$psmdb"

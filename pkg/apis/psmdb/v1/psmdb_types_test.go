@@ -297,6 +297,106 @@ func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
 	}
 }
 
+func TestIsExternalVolumeAutoscalingEnabled(t *testing.T) {
+	tests := map[string]struct {
+		spec     PerconaServerMongoDBSpec
+		expected bool
+	}{
+		"StorageScaling nil, deprecated field false": {
+			spec:     PerconaServerMongoDBSpec{},
+			expected: false,
+		},
+		"StorageScaling nil, deprecated field true": {
+			spec: PerconaServerMongoDBSpec{
+				EnableExternalVolumeAutoscaling: true,
+			},
+			expected: true,
+		},
+		"StorageScaling set with EnableExternalAutoscaling false": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: false,
+				},
+			},
+			expected: false,
+		},
+		"StorageScaling set with EnableExternalAutoscaling true": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: true,
+				},
+			},
+			expected: true,
+		},
+		"StorageScaling takes precedence over deprecated field": {
+			spec: PerconaServerMongoDBSpec{
+				EnableExternalVolumeAutoscaling: true,
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.spec.IsExternalVolumeAutoscalingEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsVolumeExpansionEnabled(t *testing.T) {
+	tests := map[string]struct {
+		spec     PerconaServerMongoDBSpec
+		expected bool
+	}{
+		"StorageScaling nil, deprecated field false": {
+			spec:     PerconaServerMongoDBSpec{},
+			expected: false,
+		},
+		"StorageScaling nil, deprecated field true": {
+			spec: PerconaServerMongoDBSpec{
+				VolumeExpansionEnabled: true,
+			},
+			expected: true,
+		},
+		"StorageScaling set with EnableVolumeScaling false": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: false,
+				},
+			},
+			expected: false,
+		},
+		"StorageScaling set with EnableVolumeScaling true": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: true,
+				},
+			},
+			expected: true,
+		},
+		"StorageScaling takes precedence over deprecated field": {
+			spec: PerconaServerMongoDBSpec{
+				VolumeExpansionEnabled: true,
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.spec.IsVolumeExpansionEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestBackupSpec_MainStorage(t *testing.T) {
 	tests := map[string]struct {
 		spec        BackupSpec

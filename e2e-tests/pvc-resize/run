@@ -101,7 +101,7 @@ if wait_all_pvc_resize "2Gi" 120 1; then
 fi
 
 echo "Enabling PVC resize"
-kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/enableVolumeExpansion", "value":true }]'
+kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/storageScaling", "value":{"enableVolumeScaling":true} }]'
 sleep 10
 
 wait_cluster_consistency "$cluster"
@@ -121,7 +121,7 @@ if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
 		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 	fi
 	echo "Enabling PVC resize after recreating PSMDB cluster ${cluster} "
-	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/enableVolumeExpansion", "value":true }]'
+	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/storageScaling", "value":{"enableVolumeScaling":true} }]'
 	sleep 10
 
 	wait_cluster_consistency "$cluster"
