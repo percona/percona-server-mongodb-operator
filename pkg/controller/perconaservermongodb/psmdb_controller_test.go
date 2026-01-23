@@ -107,5 +107,38 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			err = k8sClient.Create(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should reject autoscaling enabled when enableExternalAutoscaling is enabled", func() {
+			cr, err := readDefaultCR("psmdb-invalid-external-autoscaling", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psmdbv1.StorageScalingSpec{
+				EnableVolumeScaling:       true,
+				EnableExternalAutoscaling: true,
+				Autoscaling: &psmdbv1.AutoscalingSpec{
+					Enabled: true,
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("autoscaling cannot be enabled when enableExternalAutoscaling is enabled"))
+		})
+
+		It("should allow autoscaling enabled when enableExternalAutoscaling is disabled", func() {
+			cr, err := readDefaultCR("psmdb-valid-external-autoscaling", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psmdbv1.StorageScalingSpec{
+				EnableVolumeScaling:       true,
+				EnableExternalAutoscaling: false,
+				Autoscaling: &psmdbv1.AutoscalingSpec{
+					Enabled: true,
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })

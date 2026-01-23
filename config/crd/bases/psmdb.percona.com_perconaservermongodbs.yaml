@@ -25404,6 +25404,11 @@ spec:
                     is disabled
                   rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
                     || !self.autoscaling.enabled || self.enableVolumeScaling'
+                - message: autoscaling cannot be enabled when enableExternalAutoscaling
+                    is enabled
+                  rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
+                    || !self.autoscaling.enabled || !has(self.enableExternalAutoscaling)
+                    || !self.enableExternalAutoscaling'
               tls:
                 properties:
                   allowInvalidCertificates:
