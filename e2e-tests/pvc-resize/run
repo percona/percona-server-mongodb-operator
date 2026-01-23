@@ -67,43 +67,6 @@ function wait_cluster_status() {
 	echo "psmdb/${cluster} status is ${expected}"
 }
 
-function wait_all_pvc_resize() {
-	local expected_size=$1
-	local max_retry=${2:-120}
-	local sleep_time=${3:-5}
-
-	for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
-		if ! wait_pvc_resize "$pvc" "$expected_size" "$max_retry" "$sleep_time"; then
-			return 1
-		fi
-	done
-	return 0
-}
-
-function wait_pvc_resize() {
-	local pvc=$1
-	local expected_size=$2
-	local max_retry=${3:-120}
-	local sleep_time=${4:-5}
-
-	local retry=0
-	echo "Waiting for $pvc to be resized"
-	until [[ $(kubectl_bin get "$pvc" -o jsonpath='{.status.capacity.storage}') == "$expected_size" ]]; do
-		if [[ $retry -ge $max_retry ]]; then
-			echo
-			echo "$pvc was not resized, max retries exceeded"
-			return 1
-		fi
-		echo -n "."
-		sleep "$sleep_time"
-
-		retry=$((retry + 1))
-	done
-	echo
-	echo "${pvc} was resized"
-	return 0
-}
-
 set_debug
 
 if [ "$EKS" == 1 ]; then
@@ -195,6 +158,39 @@ wait_cluster_status ${cluster} "error"
 # user should be able to restore to the previous size and make the cluster ready
 patch_pvc_request "${cluster}" "3G"
 wait_cluster_status ${cluster} "ready"
+
+desc "test restartedAt annotation preservation during PVC resize"
+
+echo "delete resourcequota"
+kubectl_bin delete resourcequota default-storage-quota || true
+
+sts_name="${cluster}-rs0"
+kubectl_bin rollout restart statefulset/${sts_name}
+wait_for_running ${sts_name} 3
+
+restarted_at_before=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}')
+[ -z "$restarted_at_before" ] && { echo "ERROR: restartedAt not found"; exit 1; }
+
+patch_pvc_request "${cluster}" "4G"
+wait_all_pvc_resize "4Gi"
+
+sleep_with_log 30 "wait for StatefulSet recreation after orphan delete during PVC resize"
+
+cluster_status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')
+restarted_at_after=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}')
+
+if [[ "$restarted_at_before" != "$restarted_at_after" ]]; then
+	echo "ERROR: restartedAt lost"
+	exit 1
+fi
+
+if [[ "$cluster_status" == "initializing" ]]; then
+	echo "ERROR: SmartUpdate occurred (restartedAt not preserved)"
+	exit 1
+fi
+
+wait_cluster_status ${cluster} "ready"
+wait_for_running ${sts_name} 3
 
 destroy "${namespace}"
 desc "test passed"

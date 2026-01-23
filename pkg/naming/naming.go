@@ -2,6 +2,7 @@ package naming
 
 import (
 	"fmt"
+	"strings"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -67,4 +68,19 @@ func HiddenConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSp
 
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentArbiter)
+}
+
+func HookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, component string) string {
+	if rs == nil {
+		return strings.ToLower(fmt.Sprintf("%s-%s-hookscript", cr.Name, component))
+	}
+	return strings.ToLower(fmt.Sprintf("%s-%s-%s-hookscript", cr.Name, rs.Name, component))
+}
+
+func MongosHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-%s-hookscript", cr.Name, ComponentMongos)
+}
+
+func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-pbm-hookscript", cr.Name)
 }

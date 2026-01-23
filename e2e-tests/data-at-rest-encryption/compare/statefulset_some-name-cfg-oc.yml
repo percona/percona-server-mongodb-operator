@@ -101,6 +101,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 3
             initialDelaySeconds: 10
             periodSeconds: 3
@@ -127,6 +133,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-vault
               name: vault-secret
               readOnly: true
@@ -213,6 +221,8 @@ spec:
             secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: some-name-cfg-mongod

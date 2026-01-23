@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
@@ -49,6 +50,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+	cluster.Status.BackupVersion = pbmVersion.Current().Version
 	bcp := readDefaultBackup(t, backupName, ns)
 	bcp.Status.State = psmdbv1.BackupStateReady
 	bcp.Spec.ClusterName = clusterName
@@ -187,6 +189,7 @@ func TestValidatePiTR(t *testing.T) {
 			},
 		},
 	}
+	cluster.Status.BackupVersion = pbmVersion.Current().Version
 
 	tests := []struct {
 		name        string

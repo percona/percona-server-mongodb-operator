@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -38,6 +40,8 @@ const (
 	ConfigReplSetName = "cfg"
 	WorkloadSA        = "default"
 )
+
+const DefaultS3Region = "us-east-1"
 
 var (
 	defaultUsersSecretName                = "percona-server-mongodb-users"
@@ -90,6 +94,22 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	if cr.Spec.Secrets.SSLInternal == "" {
 		cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
 	}
+
+	if cr.Spec.VaultSpec != nil && cr.Spec.VaultSpec.EndpointURL != "" {
+		if cr.Spec.VaultSpec.SyncUsersSpec.Role == "" {
+			cr.Spec.VaultSpec.SyncUsersSpec.Role = "operator"
+		}
+
+		if strings.HasPrefix(cr.Spec.VaultSpec.EndpointURL, "https://") {
+			if cr.Spec.VaultSpec.TLSSecret == "" {
+				return errors.New("spec.vault.tlsSecret must be set when spec.vault.endpointURL uses https")
+			}
+		}
+	}
+	if err := cr.validateStorageAutoscaling(); err != nil {
+		return errors.Wrap(err, "validate storage autoscaling")
+	}
+	cr.setStorageAutoscalingDefaults()
 
 	t := true
 	if cr.Spec.TLS == nil {
@@ -466,6 +486,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					"--component", "mongod",
 				},
 			}
+			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem")
+			}
 
 			if cr.CompareVersion("1.15.0") < 0 {
 				replset.ReadinessProbe.Exec = nil
@@ -588,7 +614,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
-		for _, stg := range cr.Spec.Backup.Storages {
+		for name, stg := range cr.Spec.Backup.Storages {
 			if stg.Type != BackupStorageS3 {
 				continue
 			}
@@ -596,6 +622,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if len(stg.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 &&
 				len(stg.S3.ServerSideEncryption.SSEAlgorithm) != 0 {
 				return errors.New("For S3 storage only one encryption method can be used. Set either (sseAlgorithm and kmsKeyID) or (sseCustomerAlgorithm and sseCustomerKey)")
+			}
+
+			if cr.CompareVersion("1.22.0") >= 0 && stg.S3.Region == "" {
+				stg.S3.Region = DefaultS3Region
+				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
 	}
@@ -843,6 +874,12 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--component", "mongod",
 			},
 		}
+		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
+		}
 
 		if cr.CompareVersion("1.15.0") < 0 {
 			nv.ReadinessProbe.Exec = nil
@@ -927,7 +964,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	}
 }
 
-func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
+func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec) {
 	if h.ReadinessProbe == nil {
 		h.ReadinessProbe = &corev1.Probe{}
 	}
@@ -939,6 +976,12 @@ func (h *HiddenSpec) setReadinessProbe(rs *ReplsetSpec) {
 				"k8s", "readiness",
 				"--component", "mongod",
 			},
+		}
+		if cr.CompareVersion("1.22.0") >= 0 && cr.TLSEnabled() {
+			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
 		}
 	}
 	if h.ReadinessProbe.InitialDelaySeconds < 1 {
@@ -969,7 +1012,7 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 	}
 
 	h.setLivenessProbe(cr, rs)
-	h.setReadinessProbe(rs)
+	h.setReadinessProbe(cr, rs)
 
 	if len(h.ServiceAccountName) == 0 {
 		h.ServiceAccountName = WorkloadSA
@@ -1166,4 +1209,36 @@ func (v *VolumeSpec) reconcileOpts() error {
 	}
 
 	return nil
+}
+
+// validateStorageAutoscaling validates the storage autoscaling configuration
+func (cr *PerconaServerMongoDB) validateStorageAutoscaling() error {
+	spec := cr.Spec.StorageAutoscaling
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+
+	if !spec.MaxSize.IsZero() {
+		minSize := resource.MustParse("1Gi")
+		if spec.MaxSize.Cmp(minSize) < 0 {
+			return errors.Errorf("maxSize must be at least 1Gi")
+		}
+	}
+
+	return nil
+}
+
+// setStorageAutoscalingDefaults sets default values for storage autoscaling configuration
+func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
+	if cr.Spec.StorageAutoscaling == nil {
+		return
+	}
+
+	if cr.Spec.StorageAutoscaling.TriggerThresholdPercent == 0 {
+		cr.Spec.StorageAutoscaling.TriggerThresholdPercent = 80
+	}
+
+	if cr.Spec.StorageAutoscaling.GrowthStep.IsZero() {
+		cr.Spec.StorageAutoscaling.GrowthStep = resource.MustParse("2Gi")
+	}
 }

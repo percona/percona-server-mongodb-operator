@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -99,6 +100,8 @@ type PerconaServerMongoDBSpec struct {
 	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
 	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
+	StorageAutoscaling              *StorageAutoscalingSpec              `json:"storageAutoscaling,omitempty"`
+	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -313,22 +316,23 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                 `json:"state,omitempty"`
-	MongoVersion       string                   `json:"mongoVersion,omitempty"`
-	MongoImage         string                   `json:"mongoImage,omitempty"`
-	Message            string                   `json:"message,omitempty"`
-	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
-	Mongos             *MongosStatus            `json:"mongos,omitempty"`
-	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
-	BackupStatus       AppState                 `json:"backup,omitempty"`
-	BackupVersion      string                   `json:"backupVersion,omitempty"`
-	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
-	PMMVersion         string                   `json:"pmmVersion,omitempty"`
-	Host               string                   `json:"host,omitempty"`
-	Size               int32                    `json:"size"`
-	Ready              int32                    `json:"ready"`
+	State              AppState                            `json:"state,omitempty"`
+	MongoVersion       string                              `json:"mongoVersion,omitempty"`
+	MongoImage         string                              `json:"mongoImage,omitempty"`
+	Message            string                              `json:"message,omitempty"`
+	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion      string                              `json:"backupVersion,omitempty"`
+	BackupImage        string                              `json:"backupImage,omitempty"`
+	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion         string                              `json:"pmmVersion,omitempty"`
+	Host               string                              `json:"host,omitempty"`
+	Size               int32                               `json:"size"`
+	Ready              int32                               `json:"ready"`
+	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
 type ConditionStatus string
@@ -337,6 +341,14 @@ const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
 	ConditionUnknown ConditionStatus = "Unknown"
+)
+
+const (
+	// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
+	// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
+	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+
+	ConditionTypePBMReady AppState = "PBMReady"
 )
 
 type ClusterCondition struct {
@@ -355,6 +367,41 @@ func (s *PerconaServerMongoDBStatus) FindCondition(conditionType AppState) *Clus
 		}
 	}
 	return nil
+}
+
+func (s *PerconaServerMongoDBStatus) IsStatusConditionTrue(conditionType AppState) bool {
+	cond := s.FindCondition(conditionType)
+	if cond == nil {
+		return false
+	}
+	return cond.Status == ConditionTrue
+}
+
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+	}
+
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
+	}
 }
 
 type PMMSpec struct {
@@ -407,6 +454,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -470,6 +518,23 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 	}
 
 	return rv
+}
+
+type HookScriptSpec struct {
+	Script       string             `json:"script,omitempty"`
+	ConfigMapRef ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+func (s HookScriptSpec) Specified() bool {
+	return s.Script != "" || s.ConfigMapRef.Name != ""
+}
+
+// ConfigMapReference references a ConfigMap.
+// Usage of corev1.LocalObjectReference is discouraged; prefer this type instead.
+type ConfigMapReference struct {
+	// Name is the name of the referenced ConfigMap.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -628,6 +693,25 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	return b
 }
 
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
+}
+
 // GetPort returns the net.port of the mongo configuration.
 // https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-net.port
 func (conf MongoConfiguration) GetPort() (int32, error) {
@@ -749,6 +833,55 @@ type ReplsetSpec struct {
 	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
+	Env                      []corev1.EnvVar              `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+}
+
+func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	fixDomain := func(domain string) string {
+		idx := strings.IndexRune(domain, ':')
+		if withPorts && idx == -1 {
+			domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+		} else if !withPorts && idx != -1 {
+			domain = domain[:idx]
+		}
+		return domain
+	}
+
+	horizons := make(map[string]map[string]string)
+	for podName, m := range r.Horizons {
+		overrides, ok := r.ReplsetOverrides[podName]
+		hasOverrides := ok && len(overrides.Horizons) > 0
+
+		for h, domain := range m {
+			if hasOverrides {
+				if d, ok := overrides.Horizons[h]; ok {
+					domain = d
+				}
+			}
+
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			horizons[podName][h] = fixDomain(domain)
+		}
+
+	}
+
+	for podName, m := range r.ReplsetOverrides {
+		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			if _, ok := horizons[podName][h]; ok {
+				continue
+			}
+
+			horizons[podName][h] = fixDomain(domain)
+		}
+	}
+
+	return horizons
 }
 
 func (r *ReplsetSpec) PodName(cr *PerconaServerMongoDB, idx int) string {
@@ -825,6 +958,34 @@ type PVCSpec struct {
 	*corev1.PersistentVolumeClaimSpec `json:",inline"`
 }
 
+// StorageAutoscalingSpec defines the configuration for automatic storage expansion
+type StorageAutoscalingSpec struct {
+	// Enabled enables storage autoscaling for all replica sets
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TriggerThresholdPercent is the percentage of disk usage that triggers automatic storage expansion
+	// +kubebuilder:validation:Minimum=50
+	// +kubebuilder:validation:Maximum=95
+	// +kubebuilder:default=80
+	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
+
+	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:default="2Gi"
+	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
+
+	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
+	// If set, autoscaling will not increase storage beyond this limit
+	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+}
+
+// StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
+type StorageAutoscalingStatus struct {
+	CurrentSize    string      `json:"currentSize,omitempty"`
+	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
+	ResizeCount    int32       `json:"resizeCount,omitempty"`
+	LastError      string      `json:"lastError,omitempty"`
+}
+
 type SecretsSpec struct {
 	Users       string `json:"users,omitempty"`
 	SSL         string `json:"ssl,omitempty"`
@@ -837,6 +998,22 @@ type SecretsSpec struct {
 	Vault         string `json:"vault,omitempty"`
 	SSE           string `json:"sse,omitempty"`
 	LDAPSecret    string `json:"ldapSecret,omitempty"`
+}
+
+type VaultSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="isURL(self)",message="endpointURL must be a valid URL"
+	EndpointURL string `json:"endpointURL,omitempty"`
+	TLSSecret   string `json:"tlsSecret,omitempty"`
+	//+optional
+	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+}
+
+type SyncUsersSpec struct {
+	Role        string `json:"role,omitempty"`
+	TokenSecret string `json:"tokenSecret,omitempty"`
+	MountPath   string `json:"mountPath,omitempty"`
+	KeyPath     string `json:"keyPath,omitempty"`
 }
 
 func (s *SecretsSpec) GetInternalKey(cr *PerconaServerMongoDB) string {
@@ -867,6 +1044,8 @@ type MongosSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	Env                      []corev1.EnvVar            `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 }
 
@@ -1030,6 +1209,39 @@ type BackupStorageS3Spec struct {
 	ServerSideEncryption  S3ServiceSideEncryption `json:"serverSideEncryption,omitempty"`
 }
 
+type BackupStorageMinioSpec struct {
+	Bucket                string                    `json:"bucket,omitempty"`
+	Prefix                string                    `json:"prefix,omitempty"`
+	Region                string                    `json:"region,omitempty"`
+	EndpointURL           string                    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                    `json:"credentialsSecret,omitempty"`
+	PartSize              int64                     `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool                      `json:"insecureSkipTLSVerify,omitempty"`
+	CABundle              *corev1.SecretKeySelector `json:"caBundle,omitempty"`
+	ForcePathStyle        *bool                     `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool                      `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer             `json:"retryer,omitempty"`
+	Secure                bool                      `json:"secure,omitempty"`
+}
+
+func (spec BackupStorageMinioSpec) Validate() error {
+	if spec.EndpointURL == "" {
+		return errors.New("endpointURL is required")
+	}
+	if spec.Bucket == "" {
+		return errors.New("bucket is required")
+	}
+	if spec.CredentialsSecret == "" {
+		return errors.New("credentialsSecret is required")
+	}
+	return nil
+}
+
+type MinioRetryer struct {
+	// NumMaxRetries is the number of max retries that will be performed.
+	NumMaxRetries int `json:"numMaxRetries"`
+}
+
 type GCSRetryer struct {
 	BackoffInitial    time.Duration `json:"backoffInitial"`
 	BackoffMax        time.Duration `json:"backoffMax"`
@@ -1062,12 +1274,17 @@ const (
 	BackupStorageS3         BackupStorageType = "s3"
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageMinio      BackupStorageType = "minio"
 )
 
 type BackupStorageSpec struct {
-	Type       BackupStorageType           `json:"type"`
-	Main       bool                        `json:"main,omitempty"`
-	S3         BackupStorageS3Spec         `json:"s3,omitempty"`
+	Type BackupStorageType   `json:"type"`
+	Main bool                `json:"main,omitempty"`
+	S3   BackupStorageS3Spec `json:"s3,omitempty"`
+	// Not all S3-compatible storage services support Signature Version 4 (SigV4) used in AWS SDK v2,
+	// which may result in compatibility and connectivity issues.
+	// PBM (v2.12.0+) allows setting a `minio` backup storage type which uses the MinIo Go client.
+	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
@@ -1123,7 +1340,10 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
+	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1256,6 +1476,20 @@ func (cr *PerconaServerMongoDB) CompareMongoDBVersion(version string) (int, erro
 	return mongoVer.Compare(compare), nil
 }
 
+func (cr *PerconaServerMongoDB) ComparePBMAgentVersion(version string) (int, error) {
+	existing, err := v.NewVersion(cr.Status.BackupVersion)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse status.backupVersion")
+	}
+
+	expected, err := v.NewVersion(version)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse version")
+	}
+
+	return existing.Compare(expected), nil
+}
+
 const (
 	internalPrefix = "internal-"
 	userPostfix    = "-users"
@@ -1282,16 +1516,24 @@ const (
 	EnvPMMServerUser                 = PMMUserKey
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey
+	EnvPMMServerToken                = PMMServerToken
 )
 
 type SystemUserRole string
 
 const (
-	RoleDatabaseAdmin  SystemUserRole = "databaseAdmin"
-	RoleClusterAdmin   SystemUserRole = "clusterAdmin"
-	RoleUserAdmin      SystemUserRole = "userAdmin"
+	// RoleDatabaseAdmin is general-purpose superuser account for cluster administration.
+	// This user is not used by the operator; it is intended for end-user access and management tasks.
+	RoleDatabaseAdmin SystemUserRole = "databaseAdmin"
+	// RoleClusterAdmin is used by the operator to perform cluster management operations
+	// such as adding/removing replica set members and managing sharded cluster topology.
+	RoleClusterAdmin SystemUserRole = "clusterAdmin"
+	// RoleUserAdmin is used by the operator to manage MongoDB users and their permissions.
+	RoleUserAdmin SystemUserRole = "userAdmin"
+	// RoleClusterMonitor is used for monitoring purposes, including PMM (Percona Monitoring and Management).
 	RoleClusterMonitor SystemUserRole = "clusterMonitor"
-	RoleBackup         SystemUserRole = "backup"
+	// RoleBackup is used by the operator for backup and restore operations via PBM (Percona Backup for MongoDB).
+	RoleBackup SystemUserRole = "backup"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
@@ -1319,11 +1561,24 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
+func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, 0)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}
+
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if backup is allowed")
 
 	if cr.Status.State == AppStateReady {
+		return nil
+	}
+
+	if cr.Status.State == AppStateInit && cr.Status.IsStatusConditionTrue(ConditionTypePendingSmartUpdate) {
 		return nil
 	}
 
@@ -1355,30 +1610,12 @@ func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
 	return nil
 }
 
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	existingCondition := s.FindCondition(c.Type)
-	if existingCondition == nil {
-		if c.LastTransitionTime.IsZero() {
-			c.LastTransitionTime = metav1.NewTime(time.Now())
+func (s *PerconaServerMongoDBStatus) RemoveCondition(conditionType AppState) {
+	for i, c := range s.Conditions {
+		if c.Type == conditionType {
+			s.Conditions = append(s.Conditions[:i], s.Conditions[i+1:]...)
+			return
 		}
-		s.Conditions = append(s.Conditions, c)
-		return
-	}
-
-	if existingCondition.Status != c.Status {
-		existingCondition.Status = c.Status
-		if !c.LastTransitionTime.IsZero() {
-			existingCondition.LastTransitionTime = c.LastTransitionTime
-		} else {
-			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-	}
-
-	if existingCondition.Reason != c.Reason {
-		existingCondition.Reason = c.Reason
-	}
-	if existingCondition.Message != c.Message {
-		existingCondition.Message = c.Message
 	}
 }
 
@@ -1419,10 +1656,15 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 }
 
 const (
-	AnnotationResyncPBM           = "percona.com/resync-pbm"
-	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
-	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
+	AnnotationResyncPBM                = "percona.com/resync-pbm"
+	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
+	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
+
+func AnnotationPreservedRestartedAt(stsName string) string {
+	return annotationPreservedRestartedAtBase + "." + stsName
+}
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 	v, ok := cr.Annotations[AnnotationResyncPBM]
@@ -1443,6 +1685,25 @@ type LogCollectorSpec struct {
 	Configuration            string                      `json:"configuration,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	Env                      []corev1.EnvVar             `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Key must contain the .conf extension to be processed correctly.
+	//
+	// NOTE: mongodb.conf is reserved for the default configuration specified by .configuration field.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

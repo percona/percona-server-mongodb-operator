@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.3
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -68,7 +68,9 @@ spec:
               compressionType:
                 type: string
               startingDeadlineSeconds:
+                default: 120
                 format: int64
+                minimum: 1
                 type: integer
               storageName:
                 type: string
@@ -147,6 +149,50 @@ spec:
               latestRestorableTime:
                 format: date-time
                 type: string
+              minio:
+                properties:
+                  bucket:
+                    type: string
+                  caBundle:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  credentialsSecret:
+                    type: string
+                  debugTrace:
+                    type: boolean
+                  endpointUrl:
+                    type: string
+                  forcePathStyle:
+                    type: boolean
+                  insecureSkipTLSVerify:
+                    type: boolean
+                  partSize:
+                    format: int64
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      numMaxRetries:
+                        type: integer
+                    required:
+                    - numMaxRetries
+                    type: object
+                  secure:
+                    type: boolean
+                type: object
               pbmName:
                 type: string
               pbmPod:

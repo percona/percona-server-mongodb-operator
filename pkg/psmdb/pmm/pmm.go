@@ -496,6 +496,14 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		},
 	}
 
+	if cr.CompareVersion("1.22.0") >= 0 {
+		pmm.VolumeMounts = append(pmm.VolumeMounts, corev1.VolumeMount{
+			Name:      config.MongodDataVolClaimName,
+			MountPath: config.MongodContainerDataDir,
+			ReadOnly:  true,
+		})
+	}
+
 	pmmAgentScriptEnv := PMMAgentScript(cr)
 	pmm.Env = append(pmm.Env, pmmAgentScriptEnv...)
 
@@ -514,7 +522,7 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 		return nil
 	}
 
-	if v, exists := secret.Data[api.PMMServerToken]; exists && len(v) != 0 {
+	if SecretHasToken(secret) {
 		return containerForPMM3(cr, secret, dbPort, customAdminParams)
 	}
 
@@ -591,4 +599,15 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 
 	return &pmmC
+}
+
+// SecretHasToken checks if the PMM3 token is configured as part of the given secret.
+func SecretHasToken(secret *corev1.Secret) bool {
+	if len(secret.Data) == 0 {
+		return false
+	}
+	if v, exists := secret.Data[api.PMMServerToken]; exists && len(v) != 0 {
+		return true
+	}
+	return false
 }
