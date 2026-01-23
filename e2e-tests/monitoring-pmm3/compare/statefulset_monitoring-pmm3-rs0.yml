@@ -103,6 +103,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
@@ -130,6 +136,8 @@ spec:
               name: config
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /.mongodb
+              name: mongosh
             - mountPath: /etc/mongodb-encryption
               name: monitoring-pmm3-mongodb-encryption-key
               readOnly: true
@@ -253,6 +261,9 @@ spec:
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
+            - mountPath: /data/db
+              name: mongod-data
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -282,6 +293,8 @@ spec:
             secretName: monitoring-pmm3-mongodb-keyfile
         - emptyDir: {}
           name: bin
+        - emptyDir: {}
+          name: mongosh
         - configMap:
             defaultMode: 420
             name: monitoring-pmm3-rs0-mongod

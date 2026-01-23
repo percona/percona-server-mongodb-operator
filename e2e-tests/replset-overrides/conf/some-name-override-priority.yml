@@ -24,7 +24,7 @@ spec:
     size: 3
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     replsetOverrides:
       some-name-rs0-0:
         priority: 1

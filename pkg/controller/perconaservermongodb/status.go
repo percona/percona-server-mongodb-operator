@@ -199,17 +199,30 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	}
 	cr.Status.Host = host
 
+	pbmStatus, err := r.pbmStatus(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get pbm status")
+	}
+
 	state := api.AppStateInit
 
 	switch {
-	case replsetsStopping > 0 || (cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStateStopping) || cr.ObjectMeta.DeletionTimestamp != nil:
+	case replsetsStopping > 0 ||
+		(cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status == api.AppStateStopping) ||
+		cr.DeletionTimestamp != nil:
+
 		state = api.AppStateStopping
 	case replsetsPaused == len(repls):
 		state = api.AppStatePaused
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStatePaused {
 			state = api.AppStateStopping
 		}
-	case !inProgress && replsetsReady == len(repls) && clusterState == api.AppStateReady && cr.Status.Host != "":
+	case clusterState == api.AppStateReady &&
+		replsetsReady == len(repls) &&
+		pbmStatus == api.AppStateReady &&
+		!inProgress &&
+		cr.Status.Host != "":
+
 		state = api.AppStateReady
 
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
@@ -219,6 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	if state != api.AppStateReady {
 		log.V(1).Info("Cluster is not ready",
+			"pbmStatus", pbmStatus,
 			"upgradeInProgress", inProgress,
 			"replsetsReady", replsetsReady,
 			"clusterState", clusterState,
@@ -233,9 +247,59 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	clusterCondition.Type = cr.Status.State
 	cr.Status.AddCondition(clusterCondition)
 
+	cr.Status.RemoveCondition(api.ConditionTypePendingSmartUpdate)
+	if awaiting, err := r.isAwaitingSmartUpdate(ctx, cr); err != nil {
+		return errors.Wrap(err, "cannot check if awaiting smart update")
+	} else if cr.Status.Ready == cr.Status.Size && awaiting {
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypePendingSmartUpdate,
+			Status:  api.ConditionTrue,
+			Message: "Smart update is pending but has not yet started",
+		})
+	}
+
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	return r.writeStatus(ctx, cr)
+}
+
+// isAwaitingSmartUpdate returns true if the cluster smart update is pending but has not yet started.
+func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+		return false, nil
+	}
+
+	statefulSets := make([]string, 0, len(cr.Spec.Replsets)+2)
+	for _, rs := range cr.Spec.Replsets {
+		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(rs.Name).Name)
+	}
+	if cr.Spec.Sharding.Enabled {
+		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(api.ConfigReplSetName).Name)
+		statefulSets = append(statefulSets, cr.MongosNamespacedName().Name)
+	}
+
+	// count the number of updated pods from statefulsets that have changed
+	var updated int32
+	stsChanged := false // true if any statefulset has changed
+	for _, name := range statefulSets {
+		sts := &appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, sts); err != nil {
+			return false, client.IgnoreNotFound(err)
+		}
+
+		pods := corev1.PodList{}
+		if err := r.client.List(ctx, &pods, &client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(sts.Spec.Selector.MatchLabels),
+		}); err != nil {
+			return false, errors.Wrap(err, "get pod list")
+		}
+		if isSfsChanged(sts, &pods) {
+			updated += sts.Status.UpdatedReplicas
+			stsChanged = true
+		}
+	}
+	return stsChanged && updated == 0, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) (bool, error) {
@@ -394,6 +458,107 @@ func (r *ReconcilePerconaServerMongoDB) mongosStatus(ctx context.Context, cr *ap
 	}
 
 	return status, nil
+}
+
+func replsetOverridesUsed(cr *api.PerconaServerMongoDB) bool {
+	replsets := cr.GetReplsets()
+	for _, rs := range replsets {
+		if len(rs.ReplsetOverrides) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func pbmAgentHosts(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
+	replsets := cr.GetReplsets()
+
+	pods := make(map[string][]corev1.Pod)
+	for _, rs := range replsets {
+		podList, err := psmdb.GetRSPods(ctx, cl, cr, rs.Name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get replset/%s pods", rs.Name)
+		}
+		pods[rs.Name] = podList.Items
+	}
+
+	hosts := make([]string, 0)
+	for _, rs := range replsets {
+		for _, pod := range pods[rs.Name] {
+			host, err := psmdb.MongoHost(ctx, cl, cr,
+				cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
+			if err != nil {
+				return hosts, errors.Wrapf(err, "get host for %s", pod.Name)
+			}
+			hosts = append(hosts, host)
+		}
+	}
+
+	return hosts, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.PerconaServerMongoDB) (api.AppState, error) {
+	if !cr.Spec.Backup.Enabled {
+		return api.AppStateReady, nil
+	}
+
+	if cr.Spec.Pause {
+		return api.AppStatePaused, nil
+	}
+
+	if cr.Status.BackupVersion == "" {
+		return api.AppStateInit, nil
+	}
+
+	if len(cr.Spec.Backup.Storages) < 1 {
+		return api.AppStateReady, nil
+	}
+
+	if cr.Status.BackupConfigHash == "" {
+		return api.AppStateInit, nil
+	}
+
+	log := logf.FromContext(ctx).WithName("PBM")
+
+	pbm, err := r.newPBM(ctx, r.client, cr)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "new pbm connection")
+	}
+	defer pbm.Close(ctx) // nolint:errcheck
+
+	var hosts []string
+	if replsetOverridesUsed(cr) {
+		hosts, err = pbmAgentHosts(ctx, r.client, cr)
+		if err != nil {
+			return api.AppStateError, errors.Wrap(err, "get pbm agent hosts")
+		}
+	}
+
+	agents, err := pbm.AgentStatuses(ctx, hosts)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "get agent statuses")
+	}
+
+	for _, agent := range agents {
+		var agentErr string
+		switch {
+		case !agent.PBMStatus.OK:
+			agentErr = agent.PBMStatus.Err
+		case !agent.StorageStatus.OK:
+			agentErr = agent.StorageStatus.Err
+		case !agent.NodeStatus.OK:
+			agentErr = agent.NodeStatus.Err
+		case agent.Err != "":
+			agentErr = agent.Err
+		}
+
+		if agentErr != "" {
+			log.Info("Agent is not OK", "node", agent.Node, "rs", agent.RS, "err", agentErr)
+			return api.AppStateInit, nil
+		}
+	}
+
+	return api.AppStateReady, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {

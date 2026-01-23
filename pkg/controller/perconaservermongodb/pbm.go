@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,18 +13,30 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
+	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("PBM")
 	ctx = logf.IntoContext(ctx, log)
+
+	if err := r.reconcileBackupVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup version")
+	}
 
 	if cr.CompareVersion("1.20.0") >= 0 {
 		if err := r.reconcilePBMConfig(ctx, cr); err != nil {
@@ -45,7 +58,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	if cr.Status.State != psmdbv1.AppStateReady {
+	if !cr.Spec.Backup.Enabled ||
+		cr.Status.BackupVersion == "" ||
+		cr.Spec.Pause {
+		return nil
+	}
+
+	// Restore will resync the storage. We shouldn't change config during the restore
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "checking if restore running on pbm update")
+	}
+
+	if isRestoring {
 		return nil
 	}
 
@@ -53,6 +78,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	if err != nil {
 		// no storage found
 		return nil
+	}
+
+	for rs, status := range cr.Status.Replsets {
+		if !status.Initialized {
+			log.V(1).Info("waiting for replset to be initialized", "replset", rs)
+			return nil
+		}
+
+		if rs == psmdbv1.ConfigReplSetName {
+			continue
+		}
+
+		if cr.Spec.Sharding.Enabled && (status.AddedAsShard == nil || !*status.AddedAsShard) {
+			log.V(1).Info("waiting for replset to be added as shard", "replset", rs)
+			return nil
+		}
 	}
 
 	main, err := backup.GetPBMConfig(ctx, r.client, cr, mainStg)
@@ -88,105 +129,93 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 		}
 
 		return strings.Compare(a.Name, b.Name)
-
 	})
 
-	hash, err := hashPBMConfiguration(c)
+	hash, err := hashPBMConfiguration(c, cr)
 	if err != nil {
 		return errors.Wrap(err, "hash config")
 	}
-
-	if cr.Status.BackupConfigHash == hash {
-		return nil
-	}
-
-	log.Info("configuration changed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
 
 	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	currentCfg, err := pbm.GetConfig(ctx)
 	if err != nil && !backup.IsErrNoDocuments(err) {
 		return errors.Wrap(err, "get current config")
 	}
-
 	if currentCfg == nil {
 		currentCfg = new(config.Config)
 	}
+
+	// Hashes can be equal even if the actual PBM configuration differs from the one that was hashed
+	// For example, a restore can modify the PBM config
+	// We should use `isResyncNeeded` to compare the current configuration with the one we need
+	// Also, storage credentials are not hashed since they are excluded from JSON representation. `isResyncNeeded` will handle it.
+	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
+		return nil
+	}
+
+	err = r.updateCondition(ctx, cr, psmdbv1.ClusterCondition{
+		Type:   psmdbv1.ConditionTypePBMReady,
+		Reason: "PBMConfigurationIsChanged",
+		Status: psmdbv1.ConditionFalse,
+	})
+	if err != nil {
+		return errors.Wrapf(err, "update %s condition", psmdbv1.ConditionTypePBMReady)
+	}
+
+	log.Info("configuration changed or resync is needed", "oldHash", cr.Status.BackupConfigHash, "newHash", hash)
 
 	if err := pbm.GetNSetConfig(ctx, r.client, cr); err != nil {
 		return errors.Wrap(err, "set config")
 	}
 
 	if isResyncNeeded(currentCfg, &main) {
-		log.Info("resync storage", "storage", mainStgName)
-		log.V(1).Info("main storage changed", "old", currentCfg.Storage, "new", main.Storage)
-
-		if err := pbm.ResyncMainStorage(ctx); err != nil {
+		if err := pbm.ResyncMainStorageAndWait(ctx); err != nil {
 			return errors.Wrap(err, "resync")
 		}
 	}
 
 	cr.Status.BackupConfigHash = hash
 
+	err = r.updateCondition(ctx, cr, psmdbv1.ClusterCondition{
+		Type:   psmdbv1.ConditionTypePBMReady,
+		Reason: "PBMConfigurationIsUpToDate",
+		Status: psmdbv1.ConditionTrue,
+	})
+	if err != nil {
+		return errors.Wrapf(err, "update %s condition", psmdbv1.ConditionTypePBMReady)
+	}
+
 	return nil
 }
 
-func hashPBMConfiguration(c []config.Config) (string, error) {
+func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (string, error) {
+	// Use YAML marshaller so that even credentials are included
+	if cr.CompareVersion("1.22.0") >= 0 {
+		v, err := yaml.Marshal(c)
+		if err != nil {
+			return "", err
+		}
+		return sha256Hash(v), nil
+	}
+	// Use JSON for versions prior to 1.22.0
 	v, err := json.Marshal(c)
 	if err != nil {
 		return "", err
 	}
-
 	return sha256Hash(v), nil
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	if currentCfg.Storage.Type != newCfg.Storage.Type {
-		return true
-	}
-
-	if currentCfg.Storage.S3 != nil && newCfg.Storage.S3 != nil {
-		if currentCfg.Storage.S3.Bucket != newCfg.Storage.S3.Bucket {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Region != newCfg.Storage.S3.Region {
-			return true
-		}
-
-		if currentCfg.Storage.S3.EndpointURL != newCfg.Storage.S3.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.S3.Prefix != newCfg.Storage.S3.Prefix {
-			return true
-		}
-	}
-
-	if currentCfg.Storage.Azure != nil && newCfg.Storage.Azure != nil {
-		if currentCfg.Storage.Azure.EndpointURL != newCfg.Storage.Azure.EndpointURL {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Container != newCfg.Storage.Azure.Container {
-			return true
-		}
-
-		if currentCfg.Storage.Azure.Account != newCfg.Storage.Azure.Account {
-			return true
-		}
-	}
-
-	if currentCfg.Storage.Filesystem != nil && newCfg.Storage.Filesystem != nil {
-		if currentCfg.Storage.Filesystem.Path != newCfg.Storage.Filesystem.Path {
-			return true
-		}
-	}
-
-	return false
+	return !currentCfg.Storage.IsSameStorage(&newCfg.Storage)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
@@ -291,7 +320,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "create pbm object")
 	}
-	defer pbm.Close(ctx)
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			log.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	if err := enablePiTRIfNeeded(ctx, pbm, cr); err != nil {
 		if backup.IsErrNoDocuments(err) {
@@ -561,6 +594,11 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			log.Error(err, "failed to open PBM connection")
 			return
 		}
+		defer func() {
+			if err := pbm.Close(ctx); err != nil {
+				log.Error(err, "failed to close PBM connection")
+			}
+		}()
 
 		log.Info("starting resync for main storage")
 
@@ -584,6 +622,124 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 			return
 		}
 	}()
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if cr.Status.BackupVersion != "" && cr.Status.BackupImage == cr.Spec.Backup.Image {
+		return nil
+	}
+
+	if cr.Status.Ready < 1 {
+		return nil
+	}
+
+	if len(cr.Spec.Replsets) < 1 {
+		return errors.New("no replsets found")
+	}
+
+	var rs *psmdbv1.ReplsetSpec
+	for _, r := range cr.Spec.Replsets {
+		rs = r
+		break
+	}
+
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := psmdb.NewStatefulSet(stsName, cr.Namespace)
+	err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), sts)
+	if err != nil {
+		return errors.Wrapf(err, "get statefulset/%s", stsName)
+	}
+
+	matchLabels := naming.RSLabels(cr, rs)
+	label, ok := sts.Labels[naming.LabelKubernetesComponent]
+	if ok {
+		matchLabels[naming.LabelKubernetesComponent] = label
+	}
+
+	podList := corev1.PodList{}
+	if err := r.client.List(ctx,
+		&podList,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(matchLabels),
+		},
+	); err != nil {
+		return errors.Wrap(err, "get pod list")
+	}
+
+	var pod *corev1.Pod
+	for _, p := range podList.Items {
+		if !k8s.IsPodReady(p) {
+			continue
+		}
+
+		if !isContainerAndPodRunning(p, naming.ContainerBackupAgent) {
+			continue
+		}
+
+		if !isPodUpToDate(&p, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
+			continue
+		}
+
+		pod = &p
+		break
+	}
+	if pod == nil {
+		log.V(1).Error(nil, "no ready pods to get pbm-agent version")
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cmd := []string{"pbm-agent", "version", "--short"}
+
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, stdout, stderr, false)
+	if err != nil {
+		return errors.Wrap(err, "get pbm-agent version")
+	}
+
+	// PBM v2.9.0 and above prints version to stderr, below prints it to stdout
+	stdoutStr := strings.TrimSpace(stdout.String())
+	stderrStr := strings.TrimSpace(stderr.String())
+	if stdoutStr != "" && stderrStr != "" {
+		log.V(1).Info("pbm-agent version found in both stdout and stderr; using stdout",
+			"stdout", stdoutStr, "stderr", stderrStr)
+		cr.Status.BackupVersion = stdoutStr
+	} else if stdoutStr != "" {
+		cr.Status.BackupVersion = stdoutStr
+	} else if stderrStr != "" {
+		cr.Status.BackupVersion = stderrStr
+	} else {
+		return errors.New("pbm-agent version not found in stdout or stderr")
+	}
+
+	cr.Status.BackupImage = cr.Spec.Backup.Image
+
+	log.Info("pbm-agent version",
+		"pod", pod.Name,
+		"image", cr.Status.BackupImage,
+		"version", cr.Status.BackupVersion)
+
+	pbmInfo := pbmVersion.Current()
+
+	compare, err := cr.ComparePBMAgentVersion(pbmInfo.Version)
+	if err != nil {
+		return errors.Wrap(err, "compare pbm-agent version with go module")
+	}
+
+	if compare != 0 {
+		log.Info("pbm-agent version is different than the go module, this might create problems",
+			"pbmAgentVersion", cr.Status.BackupVersion,
+			"goModuleVersion", pbmInfo.Version)
+	}
 
 	return nil
 }

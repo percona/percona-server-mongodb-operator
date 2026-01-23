@@ -93,6 +93,7 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*d
 	).Envar(EnvMongoDBNetSSLInsecure).BoolVar(&ssl.Insecure)
 
 	conf.SSL = ssl
+	conf.Direct = true
 
 	return conf, nil
 }

@@ -238,8 +238,9 @@ create_user() {
 create_infra ${namespace}
 deploy_minio
 
-create_minio_bucket operator-testing-2
-create_minio_bucket operator-testing-3
+endpoint='http://minio-service:9000'
+create_minio_bucket operator-testing-2 $endpoint
+create_minio_bucket operator-testing-3 $endpoint
 
 log 'create secrets and start client'
 kubectl_bin apply \

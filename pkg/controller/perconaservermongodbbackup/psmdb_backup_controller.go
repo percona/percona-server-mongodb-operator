@@ -27,6 +27,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -278,7 +279,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
-		updatedStatus, err := bcp.Status(ctx, cr)
+		updatedStatus, err := bcp.Status(ctx, cr, cluster)
 		if err == nil {
 			status = updatedStatus
 		}
@@ -349,6 +350,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 
 		return gcs.New(gcsConf, "", nil)
+
 	case cr.Status.S3 != nil:
 		s3Conf := &s3.Config{
 			Region:                cr.Status.S3.Region,
@@ -372,7 +374,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		if strings.Contains(s3Conf.EndpointURL, "storage.googleapis.com") {
+		if strings.Contains(s3Conf.EndpointURL, naming.GCSEndpointURL) {
 			gcsConf := &gcs.Config{
 				Bucket:    cr.Status.S3.Bucket,
 				Prefix:    cr.Status.S3.Prefix,
@@ -438,6 +440,34 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		}
 
 		return s3.New(s3Conf, "", nil)
+	case cr.Status.Minio != nil:
+		minioConf := &mio.Config{
+			Region:                cr.Status.Minio.Region,
+			Endpoint:              cr.Status.Minio.EndpointURL,
+			Bucket:                cr.Status.Minio.Bucket,
+			Prefix:                cr.Status.Minio.Prefix,
+			InsecureSkipTLSVerify: cr.Status.Minio.InsecureSkipTLSVerify,
+			DebugTrace:            cr.Status.Minio.DebugTrace,
+			PartSize:              cr.Status.Minio.PartSize,
+			Secure:                cr.Status.Minio.Secure,
+			ForcePathStyle:        cr.Status.Minio.ForcePathStyle,
+		}
+		if cr.Status.Minio.Retryer != nil {
+			minioConf.Retryer = &mio.Retryer{
+				NumMaxRetries: cr.Status.Minio.Retryer.NumMaxRetries,
+			}
+		}
+		if cr.Status.Minio.CredentialsSecret != "" {
+			minioSecret, err := secret(ctx, r.client, cr.GetNamespace(), cr.Status.Minio.CredentialsSecret)
+			if err != nil {
+				return nil, errors.Wrap(err, "get minio credentials secret")
+			}
+			minioConf.Credentials = mio.Credentials{
+				AccessKeyID:     string(minioSecret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+			}
+		}
+		return mio.New(minioConf, "", nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
 	}
@@ -569,6 +599,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.S3 != nil:
 		storage.Type = psmdbv1.BackupStorageS3
 		storage.S3 = *cr.Status.S3
+	case cr.Status.Minio != nil:
+		storage.Type = psmdbv1.BackupStorageMinio
+		storage.Minio = *cr.Status.Minio
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure

@@ -9,7 +9,6 @@ import (
 	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,7 +25,49 @@ import (
 
 type BackupScheduleJob struct {
 	api.BackupTaskSpec
-	JobID cron.EntryID
+	JobID       cron.EntryID
+	ClusterName string
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackups(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if err := r.reconcileBackupHookScript(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup hookscript")
+	}
+
+	if !cr.Spec.Backup.Enabled {
+		return nil
+	}
+
+	if err := r.reconcileBackupTasks(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile backup tasks")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	name := naming.PBMHookScriptConfigMapName(cr)
+	if b := cr.Spec.Backup; b.HookScript.ConfigMapRef.Name != "" || b.HookScript.Script == "" || !b.Enabled {
+		if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
+			return errors.Wrapf(err, "failed to delete backup config map %s", name)
+		}
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+		},
+		Data: map[string]string{
+			"hook.sh": cr.Spec.Backup.HookScript.Script,
+		},
+	}
+	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
+		return errors.Wrap(err, "create or update config map")
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -80,6 +121,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 	r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
 		BackupTaskSpec: task,
 		JobID:          jobID,
+		ClusterName:    cr.NamespacedName().String(),
 	})
 	return nil
 }
@@ -89,6 +131,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 
 	r.crons.backupJobs.Range(func(k, v interface{}) bool {
 		item := v.(BackupScheduleJob)
+
+		if item.ClusterName != "" && item.ClusterName != cr.NamespacedName().String() {
+			return true
+		}
+
 		if spec, ok := ctasks[item.Name]; ok {
 			// TODO: make .keep to work with incremental backups
 			if spec.Type == defs.IncrementalBackup {
@@ -322,7 +369,7 @@ func updateLatestRestorableTime(ctx context.Context, cl client.Client, pbm backu
 
 	log := logf.FromContext(ctx)
 
-	tl, err := pbm.GetLatestTimelinePITR(ctx)
+	tl, err := pbm.GetLatestTimelinePITR(ctx, nil)
 	if err != nil {
 		if err == backup.ErrNoOplogsForPITR {
 			return nil
@@ -364,11 +411,31 @@ func secretExists(ctx context.Context, cl client.Client, nn types.NamespacedName
 	var secret corev1.Secret
 	err := cl.Get(ctx, nn, &secret)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
 
 	return true, nil
+}
+
+func isPodUpToDate(pod *corev1.Pod, stsRevision, image string) bool {
+	if pod == nil {
+		return false
+	}
+
+	if pod.Labels["controller-revision-hash"] != stsRevision {
+		return false
+	}
+
+	for _, ct := range pod.Spec.Containers {
+		if ct.Name == naming.ContainerBackupAgent {
+			if ct.Image != image {
+				return false
+			}
+		}
+	}
+
+	return true
 }
