@@ -4,12 +4,13 @@ import pytest
 import logging
 
 import tools
+from typing import Dict, Union
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class", autouse=True)
-def config(create_infra):
+def config(create_infra) -> Dict[str, Union[int, str]]:
     """Configuration for tests"""
     return {
         "namespace": create_infra("init-deploy"),

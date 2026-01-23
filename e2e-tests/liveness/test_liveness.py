@@ -5,12 +5,13 @@ import logging
 import re
 
 import tools
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class", autouse=True)
-def config(create_infra):
+def config(create_infra) -> Dict[str, str]:
     """Configuration for tests"""
     return {
         "namespace": create_infra("liveness"),
