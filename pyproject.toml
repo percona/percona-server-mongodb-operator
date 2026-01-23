@@ -26,6 +26,7 @@ render_collapsed = "all"
 [[tool.mypy.overrides]]
 module = ["pytest_html.*"]
 follow_untyped_imports = true
+strict = true
 
 [tool.ruff]
 line-length = 99
