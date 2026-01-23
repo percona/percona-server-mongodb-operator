@@ -11,9 +11,27 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import tools
+import k8s_collector
 
 logging.getLogger("pytest_dependency").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+_current_namespace: str | None = None
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Collect K8s resources when a test fails."""
+    outcome = yield
+    report = outcome.get_result()
+
+    if report.when == "call" and report.failed and _current_namespace:
+        logger.info(f"Test failed, collecting K8s resources from {_current_namespace}")
+        try:
+            custom_resources = ["psmdb", "psmdb-backup", "psmdb-restore"]
+            k8s_collector.collect_resources(_current_namespace, custom_resources)
+        except Exception as e:
+            logger.warning(f"Failed to collect K8s resources: {e}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -142,10 +160,12 @@ def create_namespace():
 
 @pytest.fixture(scope="class")
 def create_infra(test_paths, create_namespace):
+    global _current_namespace
     created_namespaces = []
 
     def _create_infra(test_name):
         """Create the necessary infrastructure for the tests."""
+        global _current_namespace
         logger.info("Creating test environment")
         if os.environ.get("DELETE_CRD_ON_START") == "1":
             tools.delete_crd_rbac(test_paths["src_dir"])
@@ -159,13 +179,17 @@ def create_infra(test_paths, create_namespace):
             namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
             tools.deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
 
-        # Track created namespace for cleanup
+        # Track created namespace for cleanup and failure collection
         created_namespaces.append(namespace)
+        _current_namespace = namespace
         return namespace
 
     yield _create_infra
 
     # Teardown code
+    global _current_namespace
+    _current_namespace = None
+
     if os.environ.get("SKIP_DELETE") == "1":
         logger.info("SKIP_DELETE = 1. Skipping test environment cleanup")
         return
