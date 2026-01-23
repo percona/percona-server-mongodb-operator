@@ -10,7 +10,7 @@ import subprocess
 
 from deepdiff import DeepDiff
 from pathlib import Path
-from typing import Callable, Optional, Any
+from typing import Callable, Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ CYAN = "\033[36m"
 RESET = "\033[0m"
 
 
-def kubectl_bin(*args, check: bool = True, input_data: str = "") -> str:
+def kubectl_bin(*args: str, check: bool = True, input_data: str = "") -> str:
     """Execute kubectl command"""
     cmd = ["kubectl"] + list(args)
     logger.debug(" ".join(map(str, cmd)))
@@ -31,6 +31,8 @@ def kubectl_bin(*args, check: bool = True, input_data: str = "") -> str:
 
     if result.stderr:
         logger.warning(f"kubectl error: {result.stderr}")
+
+    if result.returncode != 0 and not result.stdout:
         return result.stderr
 
     return result.stdout
@@ -440,6 +442,18 @@ def get_k8s_versions() -> tuple[str, str]:
     return git_version, kube_version
 
 
+def is_openshift() -> bool:
+    """Detect if running on OpenShift"""
+    result = subprocess.run(["oc", "get", "projects"], capture_output=True)
+    return result.returncode == 0
+
+
+def is_minikube() -> bool:
+    """Detect if running on Minikube"""
+    result = kubectl_bin("get", "nodes", check=False)
+    return any(line.startswith("minikube") for line in result.splitlines())
+
+
 def get_git_commit() -> str:
     result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
     return result.stdout.strip()
@@ -561,7 +575,7 @@ def filter_yaml(
 
 
 # TODO: implement this function
-def check_passwords_leak(namespace=None):
+def check_passwords_leak(namespace: Optional[str] = None) -> None:
     """Check for password leaks in Kubernetes pod logs."""
     pass
 
@@ -621,10 +635,10 @@ class MongoManager:
         )
         return result
 
-    def compare_mongo_user(self, uri: str, expected_role: str, test_dir) -> None:
+    def compare_mongo_user(self, uri: str, expected_role: str, test_dir: str | Path) -> None:
         """Compare MongoDB user permissions"""
 
-        def get_expected_file(test_dir, user):
+        def get_expected_file(test_dir: str | Path, user: str) -> Dict[str, Any]:
             """Get the appropriate expected file based on MongoDB version"""
             base_path = Path(test_dir) / "compare"
             base_file = base_path / f"{user}.json"
@@ -649,7 +663,7 @@ class MongoManager:
             else:
                 raise FileNotFoundError(f"Expected file not found: {base_file}")
 
-        def clean_mongo_json(data):
+        def clean_mongo_json(data: Dict[str, Any]):
             """Remove timestamps and metadata from MongoDB response"""
 
             def remove_timestamps(obj):

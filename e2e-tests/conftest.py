@@ -17,46 +17,49 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_env_vars():
+def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
     git_branch = tools.get_git_branch()
     git_version, kube_version = tools.get_k8s_versions()
 
-    os.environ.setdefault("KUBE_VERSION", kube_version)
-    os.environ.setdefault("EKS", "1" if "eks" in git_version else "0")
-    os.environ.setdefault("GKE", "1" if "gke" in git_version else "0")
-    os.environ.setdefault("OPENSHIFT", "0")
+    defaults = {
+        "KUBE_VERSION": kube_version,
+        "EKS": "1" if "eks" in git_version else "0",
+        "GKE": "1" if "gke" in git_version else "0",
+        "OPENSHIFT": "1" if tools.is_openshift() else "0",
+        "MINIKUBE": "1" if tools.is_minikube() else "0",
+        "API": "psmdb.percona.com/v1",
+        "GIT_COMMIT": tools.get_git_commit(),
+        "GIT_BRANCH": git_branch,
+        "OPERATOR_VERSION": tools.get_cr_version(),
+        "IMAGE": f"perconalab/percona-server-mongodb-operator:{git_branch}",
+        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
+        "IMAGE_MONGOD_CHAIN": (
+            "perconalab/percona-server-mongodb-operator:main-mongod6.0\n"
+            "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.0"
+        ),
+        "IMAGE_BACKUP": "perconalab/percona-server-mongodb-operator:main-backup",
+        "IMAGE_PMM_CLIENT": "percona/pmm-client:2.44.1-1",
+        "IMAGE_PMM_SERVER": "perconalab/pmm-server:dev-latest",
+        "IMAGE_PMM3_CLIENT": "perconalab/pmm-client:3-dev-latest",
+        "IMAGE_PMM3_SERVER": "perconalab/pmm-server:3-dev-latest",
+        "CERT_MANAGER_VER": "1.19.1",
+        "CHAOS_MESH_VER": "2.7.1",
+        "MINIO_VER": "5.4.0",
+        "PMM_SERVER_VER": "9.9.9",
+        "CLEAN_NAMESPACE": "0",
+        "DELETE_CRD_ON_START": "0",
+        "SKIP_DELETE": "1",
+        "SKIP_BACKUPS_TO_AWS_GCP_AZURE": "1",
+        "UPDATE_COMPARE_FILES": "0",
+    }
 
-    os.environ.setdefault("API", "psmdb.percona.com/v1")
-    os.environ.setdefault("GIT_COMMIT", tools.get_git_commit())
-    os.environ.setdefault("GIT_BRANCH", git_branch)
-    os.environ.setdefault("OPERATOR_VERSION", tools.get_cr_version())
-    os.environ.setdefault("IMAGE", f"perconalab/percona-server-mongodb-operator:{git_branch}")
-    os.environ.setdefault(
-        "IMAGE_MONGOD", "perconalab/percona-server-mongodb-operator:main-mongod7.0"
-    )
-    os.environ.setdefault(
-        "IMAGE_MONGOD_CHAIN",
-        "perconalab/percona-server-mongodb-operator:main-mongod6.0\n"
-        "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
-        "perconalab/percona-server-mongodb-operator:main-mongod8.0",
-    )
-    os.environ.setdefault("IMAGE_BACKUP", "perconalab/percona-server-mongodb-operator:main-backup")
-    os.environ.setdefault("IMAGE_PMM_CLIENT", "percona/pmm-client:2.44.1-1")
-    os.environ.setdefault("IMAGE_PMM_SERVER", "percona/pmm-server:2.44.1-1")
-    os.environ.setdefault("IMAGE_PMM3_CLIENT", "perconalab/pmm-client:3.1.0")
-    os.environ.setdefault("IMAGE_PMM3_SERVER", "perconalab/pmm-server:3.1.0")
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
 
-    os.environ.setdefault("CERT_MANAGER_VER", "1.18.2")
-    os.environ.setdefault("CHAOS_MESH_VER", "2.7.1")
-    os.environ.setdefault("MINIO_VER", "5.4.0")
-    os.environ.setdefault("PMM_SERVER_VER", "9.9.9")
-
-    os.environ.setdefault("CLEAN_NAMESPACE", "0")
-    os.environ.setdefault("DELETE_CRD_ON_START", "1")
-    os.environ.setdefault("SKIP_DELETE", "0")
-    os.environ.setdefault("SKIP_BACKUPS_TO_AWS_GCP_AZURE", "1")
-    os.environ.setdefault("UPDATE_COMPARE_FILES", "0")
+    env_lines = [f"{key}={os.environ.get(key)}" for key in defaults]
+    logger.info("Environment variables:\n" + "\n".join(env_lines))
 
 
 @pytest.fixture(scope="class")
@@ -167,13 +170,13 @@ def create_infra(test_paths, create_namespace):
         logger.info("SKIP_DELETE = 1. Skipping test environment cleanup")
         return
 
-    def run_cmd(cmd):
+    def run_cmd(cmd: list[str]) -> None:
         try:
             tools.kubectl_bin(*cmd)
         except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
             logger.debug(f"Command failed (continuing cleanup): {' '.join(cmd)}, error: {e}")
 
-    def cleanup_crd():
+    def cleanup_crd() -> None:
         crd_file = f"{test_paths['src_dir']}/deploy/crd.yaml"
         run_cmd(["delete", "-f", crd_file, "--ignore-not-found", "--wait=false"])
 
@@ -348,7 +351,7 @@ def deploy_cert_manager():
 
 
 @pytest.fixture(scope="class")
-def psmdb_client(test_paths):
+def psmdb_client(test_paths) -> tools.MongoManager:
     """Deploy and get the client pod name."""
     tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
 
@@ -364,4 +367,5 @@ def psmdb_client(test_paths):
     )
 
     pod_name = result.strip()
+    tools.wait_pod(pod_name)
     return tools.MongoManager(pod_name)
