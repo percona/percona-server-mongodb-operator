@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   annotations:
     percona.com/restore-in-progress: "true"
-  generation: 9
+  generation: 3
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -269,7 +269,7 @@ spec:
                   items:
                     - key: ca.crt
                       path: ca-1.crt
-                  name: minio2-ca-bundle
+                  name: secondary-minio-ca-bundle
         - emptyDir: {}
           name: ca-bundle
         - name: pbm-config

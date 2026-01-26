@@ -71,7 +71,7 @@ desc 'Deploy first MinIO with TLS'
 deploy_minio minio-tls
 apply_s3_storage_secrets
 
-kubectl_bin apply -f "${test_dir}/conf/minio2-secret.yml"
+kubectl_bin apply -f "${test_dir}/conf/secondary-minio-secret.yml"
 
 ###############################################################################
 # Phase 1: Single CA bundle test
@@ -107,67 +107,67 @@ cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -
 # Phase 2: Second MinIO
 ###############################################################################
 
-desc 'Generate certificate for second MinIO'
+desc 'Generate certificate for secondary MinIO'
 
 kubectl_bin apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: minio2-cert
+  name: secondary-minio-cert
   namespace: ${namespace}
 spec:
-  secretName: minio2-tls-temp
+  secretName: secondary-minio-tls-temp
   issuerRef:
     name: selfsigned-issuer
     kind: Issuer
-  commonName: minio2-service
+  commonName: secondary-minio-service
   dnsNames:
-  - minio2-service
-  - minio2-service.${namespace}
-  - minio2-service.${namespace}.svc
-  - minio2-service.${namespace}.svc.cluster.local
+  - secondary-minio-service
+  - secondary-minio-service.${namespace}
+  - secondary-minio-service.${namespace}.svc
+  - secondary-minio-service.${namespace}.svc.cluster.local
   usages:
   - digital signature
   - key encipherment
   - server auth
 EOF
 
-kubectl_bin wait --for=condition=Ready certificate/minio2-cert \
+kubectl_bin wait --for=condition=Ready certificate/secondary-minio-cert \
   -n ${namespace} --timeout=120s
 
-kubectl_bin get secret minio2-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/minio2-cert.pem
+kubectl_bin get secret secondary-minio-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/secondary-minio-cert.pem
 
-kubectl_bin get secret minio2-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/minio2-key.pem
+kubectl_bin get secret secondary-minio-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/secondary-minio-key.pem
 
-kubectl_bin create secret generic minio2-tls -n ${namespace} \
-  --from-file=public.crt=/tmp/minio2-cert.pem \
-  --from-file=private.key=/tmp/minio2-key.pem
+kubectl_bin create secret generic secondary-minio-tls -n ${namespace} \
+  --from-file=public.crt=/tmp/secondary-minio-cert.pem \
+  --from-file=private.key=/tmp/secondary-minio-key.pem
 
-kubectl_bin create secret generic minio2-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/minio2-cert.pem
+kubectl_bin create secret generic secondary-minio-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/secondary-minio-cert.pem
 
-deploy_minio "minio2-tls" "minio2-service"
+deploy_minio "secondary-minio-tls" "secondary-minio-service"
 
-desc "Add second storage"
+desc "Add second storage (secondary)"
 
 kubectl_bin patch psmdb ${cluster} -n ${namespace} --type=merge -p '
 {
   "spec": {
     "backup": {
       "storages": {
-        "minio2": {
+        "secondary": {
           "type": "minio",
           "minio": {
-            "credentialsSecret": "minio2-secret",
+            "credentialsSecret": "secondary-minio-secret",
             "region": "us-east-1",
             "bucket": "operator-testing",
-            "endpointUrl": "https://minio2-service:9000",
+            "endpointUrl": "https://secondary-minio-service:9000",
             "secure": true,
             "insecureSkipTLSVerify": false,
             "caBundle": {
-              "name": "minio2-ca-bundle",
+              "name": "secondary-minio-ca-bundle",
               "key": "ca.crt"
             }
           }
@@ -212,7 +212,7 @@ run_restore ${backup_name_single}
 run_recovery_check ${backup_name_single} "" "" "true"
 
 rm -f /tmp/minio-cert.pem /tmp/minio-key.pem
-rm -f /tmp/minio2-cert.pem /tmp/minio2-key.pem
+rm -f /tmp/secondary-minio-cert.pem /tmp/secondary-minio-key.pem
 
 destroy "${namespace}"
 
