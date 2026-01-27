@@ -735,7 +735,6 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelect
 	}
 	sort.Strings(storageNames)
 
-	// Iterate storages in sorted order
 	for _, name := range storageNames {
 		storage := cr.Spec.Backup.Storages[name]
 
@@ -743,20 +742,21 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelect
 			continue
 		}
 
-		if storage.Minio.CABundle != nil && storage.Minio.CABundle.Name != "" {
-			key := storage.Minio.CABundle.Key
-			if key == "" {
-				key = "ca.crt"
-			}
+		if storage.Minio.CABundle == nil || storage.Minio.CABundle.Name == "" {
+			continue
+		}
+		key := storage.Minio.CABundle.Key
+		if key == "" {
+			key = "ca.crt"
+		}
 
-			k := storage.Minio.CABundle.Name + "/" + key
-			if _, ok := seen[k]; !ok {
-				out = append(out, api.SecretKeySelector{
-					Name: storage.Minio.CABundle.Name,
-					Key:  key,
-				})
-				seen[k] = struct{}{}
-			}
+		k := storage.Minio.CABundle.Name + "/" + key
+		if _, ok := seen[k]; !ok {
+			out = append(out, api.SecretKeySelector{
+				Name: storage.Minio.CABundle.Name,
+				Key:  key,
+			})
+			seen[k] = struct{}{}
 		}
 	}
 
