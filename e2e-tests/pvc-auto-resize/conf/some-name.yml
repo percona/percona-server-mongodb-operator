@@ -9,12 +9,13 @@ spec:
   image:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
-  enableVolumeExpansion: true
-  storageAutoscaling:
-    enabled: true
-    triggerThresholdPercent: 80
-    growthStep: "2Gi"
-    maxSize: "10Gi"
+  storageScaling:
+    enableVolumeScaling: true
+    autoscaling:
+      enabled: true
+      triggerThresholdPercent: 80
+      growthStep: "2Gi"
+      maxSize: "10Gi"
   backup:
     enabled: false
   replsets:
