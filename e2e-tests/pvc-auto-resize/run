@@ -108,6 +108,10 @@ function apply_resourcequota() {
 		| kubectl_bin apply -f -
 }
 
+function is_ebs_storage() {
+	[[ "${EKS}" == "1" ]] || [[ -n "${OPENSHIFT}" ]]
+}
+
 set_debug
 
 if [ "$EKS" == 1 ]; then
@@ -180,32 +184,38 @@ wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "5Gi" 60 10
 desc 'verify cluster consistency after quota test'
 wait_cluster_consistency "$cluster" 64
 
-desc 'test maxSize limit'
-# Increase quota to allow maxSize testing (3 replicas * 10Gi maxSize = 30Gi)
-apply_resourcequota 30Gi
-echo "Continuing to fill disk to test maxSize enforcement"
-fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
-
-fill_disk_to_threshold "${cluster}-rs0-0" 80 5600
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
-
-fill_disk_to_threshold "${cluster}-rs0-0" 80 7200
-
-final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
-if [[ ${final_size} == "10Gi" ]]; then
-	echo "PVC correctly stopped at maxSize 10Gi"
-elif [[ ${final_size} == "9Gi" ]]; then
-	echo "PVC is at 9Gi, will resize to 10Gi (maxSize)"
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "10Gi" 60 10
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "10Gi" 60 10
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "10Gi" 60 10
+if is_ebs_storage; then
+	echo "Skipping maxSize test on EBS storage due to volume modification rate limits"
+	desc 'verify final autoscaling status'
+	check_autoscaling_status "${cluster}" 2 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
 else
-	echo "WARNING: PVC size is ${final_size}, expected 9Gi or 10Gi"
-fi
+	desc 'test maxSize limit'
+	# Increase quota to allow maxSize testing (3 replicas * 10Gi maxSize = 30Gi)
+	apply_resourcequota 30Gi
+	echo "Continuing to fill disk to test maxSize enforcement"
+	fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
+	wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
 
-desc 'verify final autoscaling status'
-check_autoscaling_status "${cluster}" 4 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+	fill_disk_to_threshold "${cluster}-rs0-0" 80 5600
+	wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
+
+	fill_disk_to_threshold "${cluster}-rs0-0" 80 7200
+
+	final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
+	if [[ ${final_size} == "10Gi" ]]; then
+		echo "PVC correctly stopped at maxSize 10Gi"
+	elif [[ ${final_size} == "9Gi" ]]; then
+		echo "PVC is at 9Gi, will resize to 10Gi (maxSize)"
+		wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "10Gi" 60 10
+		wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "10Gi" 60 10
+		wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "10Gi" 60 10
+	else
+		echo "WARNING: PVC size is ${final_size}, expected 9Gi or 10Gi"
+	fi
+
+	desc 'verify final autoscaling status'
+	check_autoscaling_status "${cluster}" 4 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+fi
 
 wait_cluster_consistency "$cluster" 64
 
