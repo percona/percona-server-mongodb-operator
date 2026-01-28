@@ -70,6 +70,16 @@ undeploy: ## Undeploy operator
 test: envtest generate ## Run tests.
 	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+py-deps: uv ## Install e2e-tests Python dependencies
+	$(UV) sync --locked
+
+py-update-deps: uv ## Update e2e-tests Python dependencies
+	$(UV) lock --upgrade
+
+py-check: uv ## Run ruff and mypy checks on e2e-tests
+	$(UV) run ruff check e2e-tests/
+	$(UV) run mypy e2e-tests/
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
@@ -103,6 +113,13 @@ swagger: ## Download swagger locally if necessary.
 MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
+
+UV = $(shell pwd)/bin/uv
+uv: ## Download uv locally if necessary.
+	@[ -f $(UV) ] || { \
+	set -e ;\
+	curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=$(PROJECT_DIR)/bin sh ;\
+	}
 
 # Prepare release
 include e2e-tests/release_versions
