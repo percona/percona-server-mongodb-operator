@@ -114,6 +114,17 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
+void pushReportFile() {
+    echo "Push logfile final_report.html file to S3!"
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 ls \$S3_PATH/final_report.html || :
+            aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
+        """
+    }
+}
+
 void initTests() {
     echo "Populating tests into the tests array!"
 
@@ -146,25 +157,6 @@ void markPassedTests() {
     }
 }
 
-void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
-    sh """
-        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-        echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|${CLUSTER_NAME}-${CLUSTER_SUFFIX} "
-        echo
-        kubectl get nodes
-        echo
-        kubectl top nodes
-        echo
-        kubectl get pods --all-namespaces
-        echo
-        kubectl top pod --all-namespaces
-        echo
-        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
-        echo "======================================================"
-    """
-}
-
 String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
 
@@ -183,7 +175,6 @@ String formatTime(def time) {
 }
 
 TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
-TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount = tests.size()
@@ -204,38 +195,28 @@ void makeReport() {
             startedTestAmount++
         }
         TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
-    TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
-    TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
-    TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
-    TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
-    TestsReportXML = TestsReportXML + '</testsuite>\n'
-
-    sh """
-        echo "${TestsReportXML}" > TestsReport.xml
-    """
+    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount | | " + formatTime(totalTestTime) + " |"
 }
 
 void clusterRunner(String cluster) {
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]){
         def clusterCreated=0
 
-        for (int i=0; i<tests.size(); i++) {
-            if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
-                tests[i]["result"] = "failure"
-                tests[i]["cluster"] = cluster
-                if (clusterCreated == 0) {
-                    createCluster(cluster)
-                    clusterCreated++
-                }
-                runTest(i)
+    for (int i = 0; i < tests.size(); i++) {
+        if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
+            tests[i]["result"] = "failure"
+            tests[i]["cluster"] = cluster
+            if (clusterCreated == 0) {
+                createCluster(cluster)
+                clusterCreated++
             }
         }
 
-        if (clusterCreated >= 1) {
-            shutdownCluster(cluster)
-        }
+    if (clusterCreated >= 1) {
+        shutdownCluster(cluster)
+        // Re-check for passed tests after execution
+        markPassedTests()
     }
 }
 
@@ -257,8 +238,12 @@ void runTest(Integer TEST_ID) {
                     else
                         export DEBUG_TESTS=1
                     fi
-                    export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-                    time ./e2e-tests/$testName/run
+                    export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
+
+                    source \$HOME/.local/bin/env
+                    uv run pytest e2e-tests/test_pytest_wrapper.py -v -s --test-regex "^${testName}\$" \
+                        --html=e2e-tests/reports/$CLUSTER_NAME-$testName-report.html \
+                        --junitxml=e2e-tests/reports/$CLUSTER_NAME-$testName-report.xml
                 """
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -266,7 +251,6 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
-            printKubernetesStatus("AFTER","$clusterSuffix")
             echo "Test $testName has failed!"
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
@@ -277,7 +261,7 @@ void runTest(Integer TEST_ID) {
         }
         finally {
             def timeStop = new Date().getTime()
-            def durationSec = (timeStop - timeStart) / 1000
+            def durationSec = (timeStop - timeStart) / 1000.0
             tests[TEST_ID]["time"] = durationSec
             pushLogFile("$testName")
             echo "The $testName test was finished!"
@@ -307,6 +291,11 @@ EOF
         sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        source \$HOME/.local/bin/env
+        uv python install 3.13
+        uv sync --locked
     """
     installAzureCLI()
     azureAuth()
@@ -423,7 +412,7 @@ pipeline {
         CLOUDSDK_CORE_DISABLE_PROMPTS = 1
         CLEAN_NAMESPACE = 1
         OPERATOR_NS = 'psmdb-operator'
-        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
+        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
@@ -458,7 +447,7 @@ pipeline {
                 prepareNode()
                 script {
                     if (AUTHOR_NAME == 'null') {
-                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
@@ -675,12 +664,21 @@ pipeline {
                             }
                         }
                         makeReport()
-                        junit testResults: '*.xml', healthScaleFactor: 1.0
-                        archiveArtifacts '*.xml'
-
+                        if (fileExists('e2e-tests/reports')){
+                            sh """
+                            source \$HOME/.local/bin/env
+                            uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
+                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            """
+                            step([$class: 'JUnitResultArchiver', testResults: 'final_report.xml', healthScaleFactor: 1.0])
+                            archiveArtifacts 'final_report.xml, final_report.html'
+                            pushReportFile()
+                        } else {
+                            echo "No report files found in e2e-tests/reports, skipping report generation"
+                        }
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/final_report.html)\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")
