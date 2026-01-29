@@ -51,8 +51,9 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		Selector: &metav1.LabelSelector{
 			MatchLabels: naming.MongosLabels(cr),
 		},
-		Template:       template,
-		UpdateStrategy: updateStrategy,
+		Template:             template,
+		UpdateStrategy:       updateStrategy,
+		RevisionHistoryLimit: cr.Spec.RevisionHistoryLimit,
 	}
 }
 

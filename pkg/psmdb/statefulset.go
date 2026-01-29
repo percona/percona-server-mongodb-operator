@@ -453,6 +453,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			},
 		},
 		UpdateStrategy:       updateStrategy,
+		RevisionHistoryLimit: cr.Spec.RevisionHistoryLimit,
 		VolumeClaimTemplates: volumeClaimTemplates,
 	}, nil
 }
