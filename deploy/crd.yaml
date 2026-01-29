@@ -1,3 +1,4 @@
+# Warning: 'patchesStrategicMerge' is deprecated. Please use 'patches' instead. Run 'kustomize edit fix' to update your Kustomization automatically.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -12646,6 +12647,9 @@ spec:
                   - size
                   type: object
                 type: array
+              revisionHistoryLimit:
+                format: int32
+                type: integer
               roles:
                 items:
                   properties:
