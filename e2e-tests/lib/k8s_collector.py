@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
 
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
+REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
 
 
 class K8sCollector:

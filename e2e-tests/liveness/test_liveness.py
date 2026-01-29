@@ -4,7 +4,7 @@ import pytest
 import logging
 import re
 
-import tools
+from lib import tools
 from typing import Dict
 
 logger = logging.getLogger(__name__)

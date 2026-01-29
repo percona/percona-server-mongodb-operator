@@ -10,8 +10,8 @@ import random
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-import tools
-import k8s_collector
+from lib import tools
+from lib import k8s_collector
 
 logging.getLogger("pytest_dependency").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)

@@ -463,7 +463,7 @@ def get_cr_version() -> str:
     """Get CR version from cr.yaml"""
     try:
         with open(
-            os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "deploy", "cr.yaml"))
+            os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "deploy", "cr.yaml"))
         ) as f:
             return next(line.split()[1] for line in f if "crVersion" in line)
     except (StopIteration, Exception) as e:
