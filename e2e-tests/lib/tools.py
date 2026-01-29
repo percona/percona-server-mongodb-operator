@@ -463,7 +463,9 @@ def get_cr_version() -> str:
     """Get CR version from cr.yaml"""
     try:
         with open(
-            os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "deploy", "cr.yaml"))
+            os.path.realpath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "deploy", "cr.yaml")
+            )
         ) as f:
             return next(line.split()[1] for line in f if "crVersion" in line)
     except (StopIteration, Exception) as e:
@@ -663,10 +665,10 @@ class MongoManager:
             else:
                 raise FileNotFoundError(f"Expected file not found: {base_file}")
 
-        def clean_mongo_json(data: Dict[str, Any]):
+        def clean_mongo_json(data: Dict[str, Any]) -> Dict[str, Any]:
             """Remove timestamps and metadata from MongoDB response"""
 
-            def remove_timestamps(obj):
+            def remove_timestamps(obj: Dict[str, Any]) -> Dict[str, Any]:
                 if isinstance(obj, dict):
                     return {
                         k: remove_timestamps(v)

@@ -1,14 +1,15 @@
+from pathlib import Path
 import pytest
 import logging
 
 from lib import tools
-from typing import Dict, Union
+from typing import Callable, Dict, Union
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class", autouse=True)
-def config(create_infra) -> Dict[str, Union[int, str]]:
+def config(create_infra: Callable[[str], str]) -> Dict[str, Union[int, str]]:
     """Configuration for tests"""
     return {
         "namespace": create_infra("finalizer"),
@@ -17,7 +18,7 @@ def config(create_infra) -> Dict[str, Union[int, str]]:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths):
+def setup_tests(test_paths: Dict[str, Path]) -> None:
     """Setup test environment"""
     tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets_with_tls.yml")
 
@@ -26,13 +27,17 @@ class TestFinalizer:
     """Test MongoDB cluster finalizers"""
 
     @pytest.mark.dependency()
-    def test_create_cluster(self, config, test_paths):
+    def test_create_cluster(
+        self, config: Dict[str, Union[int, str]], test_paths: Dict[str, Path]
+    ) -> None:
         tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}.yml")
         tools.wait_for_running(f"{config['cluster']}-rs0", 3, False)
         tools.wait_for_running(f"{config['cluster']}-cfg", 3)
 
     @pytest.mark.dependency(depends=["TestFinalizer::test_create_cluster"])
-    def test_kill_primary_should_elect_new_one(self, config, psmdb_client):
+    def test_kill_primary_should_elect_new_one(
+        self, config: Dict[str, Union[int, str]], psmdb_client: tools.MongoManager
+    ) -> None:
         primary = psmdb_client.get_mongo_primary(
             f"clusterAdmin:clusterAdmin123456@{config['cluster']}-rs0.{config['namespace']}",
             config["cluster"],
@@ -47,7 +52,7 @@ class TestFinalizer:
         assert new_primary != primary, "Primary did not change after killing the pod"
 
     @pytest.mark.dependency(depends=["TestFinalizer::test_kill_primary_should_elect_new_one"])
-    def test_delete_cluster(self, config):
+    def test_delete_cluster(self, config: Dict[str, Union[int, str]]) -> None:
         tools.kubectl_bin("delete", "psmdb", config["cluster"], "--wait=false")
         tools.wait_for_delete(f"psmdb/{config['cluster']}")
 

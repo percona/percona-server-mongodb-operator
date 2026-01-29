@@ -1,4 +1,5 @@
 import os
+from typing import Dict
 import pytest
 import subprocess
 import logging
@@ -20,7 +21,7 @@ _current_namespace: str | None = None
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
     """Collect K8s resources when a test fails."""
     outcome = yield
     report = outcome.get_result()
@@ -81,7 +82,7 @@ def setup_env_vars() -> None:
 
 
 @pytest.fixture(scope="class")
-def test_paths(request):
+def test_paths(request: pytest.FixtureRequest) -> Dict[str, Path]:
     """Fixture to provide paths relative to the test file."""
     test_file = Path(request.fspath)
     test_dir = test_file.parent
@@ -159,7 +160,7 @@ def create_namespace():
 
 
 @pytest.fixture(scope="class")
-def create_infra(test_paths, create_namespace):
+def create_infra(test_paths: Dict[str, Path], create_namespace):
     global _current_namespace
     created_namespaces = []
 
@@ -191,7 +192,7 @@ def create_infra(test_paths, create_namespace):
     _current_namespace = None
 
     if os.environ.get("SKIP_DELETE") == "1":
-        logger.info("SKIP_DELETE = 1. Skipping test environment cleanup")
+        logger.info("SKIP_DELETE=1. Skipping test environment cleanup")
         return
 
     def run_cmd(cmd: list[str]) -> None:
@@ -375,7 +376,81 @@ def deploy_cert_manager():
 
 
 @pytest.fixture(scope="class")
-def psmdb_client(test_paths) -> tools.MongoManager:
+def deploy_minio():
+    """Deploy MinIO and clean up after tests."""
+    service_name = "minio-service"
+    bucket = "operator-testing"
+
+    logger.info(f"Installing MinIO: {service_name}")
+
+    subprocess.run(["helm", "uninstall", service_name], capture_output=True, check=False)
+    subprocess.run(["helm", "repo", "remove", "minio"], capture_output=True, check=False)
+    subprocess.run(["helm", "repo", "add", "minio", "https://charts.min.io/"], check=True)
+
+    endpoint = f"http://{service_name}:9000"
+    minio_args = [
+        "helm", "install", service_name, "minio/minio",
+        "--version", os.environ.get("MINIO_VER"),
+        "--set", "replicas=1",
+        "--set", "mode=standalone",
+        "--set", "resources.requests.memory=256Mi",
+        "--set", "rootUser=rootuser",
+        "--set", "rootPassword=rootpass123",
+        "--set", "users[0].accessKey=some-access-key",
+        "--set", "users[0].secretKey=some-secret-key",
+        "--set", "users[0].policy=consoleAdmin",
+        "--set", "service.type=ClusterIP",
+        "--set", "configPathmc=/tmp/",
+        "--set", "securityContext.enabled=false",
+        "--set", "persistence.size=2G",
+        "--set", f"fullnameOverride={service_name}",
+        "--set", "serviceAccount.create=true",
+        "--set", f"serviceAccount.name={service_name}-sa",
+    ]
+
+    tools.retry(lambda: subprocess.run(minio_args, check=True), max_attempts=10, delay=60)
+
+    minio_pod = tools.kubectl_bin(
+        "get", "pods", f"--selector=release={service_name}",
+        "-o", "jsonpath={.items[].metadata.name}"
+    ).strip()
+    tools.wait_pod(minio_pod)
+
+    operator_ns = os.environ.get("OPERATOR_NS")
+    if operator_ns:
+        namespace = tools.kubectl_bin(
+            "config", "view", "--minify", "-o", "jsonpath={..namespace}"
+        ).strip()
+        tools.kubectl_bin(
+            "create", "svc", "-n", operator_ns, "externalname", service_name,
+            f"--external-name={service_name}.{namespace}.svc.cluster.local",
+            "--tcp=9000", check=False
+        )
+
+    logger.info(f"Creating MinIO bucket: {bucket}")
+    tools.kubectl_bin(
+        "run", "-i", "--rm", "aws-cli",
+        "--image=perconalab/awscli", "--restart=Never",
+        "--", "bash", "-c",
+        f"AWS_ACCESS_KEY_ID=some-access-key "
+        f"AWS_SECRET_ACCESS_KEY=some-secret-key "
+        f"AWS_DEFAULT_REGION=us-east-1 "
+        f"/usr/bin/aws --no-verify-ssl --endpoint-url {endpoint} s3 mb s3://{bucket}",
+    )
+
+    yield
+
+    try:
+        subprocess.run(
+            ["helm", "uninstall", service_name, "--wait", "--timeout", "60s"],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Failed to cleanup minio: {e}")
+
+
+@pytest.fixture(scope="class")
+def psmdb_client(test_paths: Dict[str, Path]) -> tools.MongoManager:
     """Deploy and get the client pod name."""
     tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
 

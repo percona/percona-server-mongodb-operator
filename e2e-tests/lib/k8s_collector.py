@@ -22,9 +22,7 @@ class K8sCollector:
 
     def kubectl(self, *args: str) -> str:
         """Run kubectl command and return stdout"""
-        result = subprocess.run(
-            ["kubectl", *args], capture_output=True, text=True, check=False
-        )
+        result = subprocess.run(["kubectl", *args], capture_output=True, text=True, check=False)
         return result.stdout if result.returncode == 0 else ""
 
     def kubectl_ns(self, *args: str) -> str:
@@ -47,12 +45,18 @@ class K8sCollector:
         print(f"Processing {resource_type}...")
         base = f"{self.output_dir}/get/{resource_type}"
 
-        self.save(f"{base}/{resource_type}.txt", self.kubectl_ns("get", resource_type, "-o", "wide"))
+        self.save(
+            f"{base}/{resource_type}.txt", self.kubectl_ns("get", resource_type, "-o", "wide")
+        )
 
         for name in self.get_names(resource_type):
-            self.save(f"{self.output_dir}/describe/{resource_type}_{name}.txt",
-                      self.kubectl_ns("describe", resource_type, name))
-            self.save(f"{base}/{name}.yaml", self.kubectl_ns("get", resource_type, name, "-o", "yaml"))
+            self.save(
+                f"{self.output_dir}/describe/{resource_type}_{name}.txt",
+                self.kubectl_ns("describe", resource_type, name),
+            )
+            self.save(
+                f"{base}/{name}.yaml", self.kubectl_ns("get", resource_type, name, "-o", "yaml")
+            )
 
     def extract_pod_logs(self, pod: str) -> None:
         """Extract logs for all containers in a pod"""
@@ -74,8 +78,10 @@ class K8sCollector:
 
         pods = self.get_names("pods")
         for pod in pods:
-            self.save(f"{self.output_dir}/describe/pod_{pod}.txt",
-                      self.kubectl_ns("describe", "pod", pod))
+            self.save(
+                f"{self.output_dir}/describe/pod_{pod}.txt",
+                self.kubectl_ns("describe", "pod", pod),
+            )
             self.save(f"{base}/{pod}.yaml", self.kubectl_ns("get", "pod", pod, "-o", "yaml"))
 
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -84,10 +90,12 @@ class K8sCollector:
     def extract_events(self) -> None:
         """Extract namespace events"""
         print("Extracting events...")
-        self.save(f"{self.output_dir}/events/events.txt",
-                  self.kubectl_ns("get", "events", "-o", "wide"))
-        self.save(f"{self.output_dir}/events/events.json",
-                  self.kubectl_ns("get", "events", "-o", "json"))
+        self.save(
+            f"{self.output_dir}/events/events.txt", self.kubectl_ns("get", "events", "-o", "wide")
+        )
+        self.save(
+            f"{self.output_dir}/events/events.json", self.kubectl_ns("get", "events", "-o", "json")
+        )
 
     def extract_errors(self) -> None:
         """Extract error lines from all logs into summary"""
@@ -102,15 +110,17 @@ class K8sCollector:
                     continue
                 path = os.path.join(root, file)
                 with open(path) as f:
-                    error_lines = [l for l in f if "error" in l.lower()]
+                    error_lines = [line for line in f if "error" in line.lower()]
                 if error_lines:
                     rel_path = os.path.relpath(path, logs_dir)
                     errors.append(f"=== {rel_path} ===\n" + "".join(error_lines))
 
         if errors:
-            self.save(f"{self.output_dir}/error_summary.log",
-                      f"Errors for {self.namespace} ({self.timestamp})\n{'='*50}\n\n" +
-                      "\n\n".join(errors))
+            self.save(
+                f"{self.output_dir}/error_summary.log",
+                f"Errors for {self.namespace} ({self.timestamp})\n{'=' * 50}\n\n"
+                + "\n\n".join(errors),
+            )
 
     def collect_all(self) -> None:
         """Main collection method"""
@@ -159,4 +169,3 @@ def get_namespace(test_log: str) -> str:
         print(f"Extracted namespace: {match.group(1)}", file=sys.stderr)
         return match.group(1)
     raise ValueError("Namespace not found in logs")
-

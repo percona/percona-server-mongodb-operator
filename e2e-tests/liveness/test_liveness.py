@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
 import pytest
 import logging
 import re
 
 from lib import tools
-from typing import Dict
+from typing import Callable, Dict
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class", autouse=True)
-def config(create_infra) -> Dict[str, str]:
+def config(create_infra: Callable[[str], str]) -> Dict[str, str]:
     """Configuration for tests"""
     return {
         "namespace": create_infra("liveness"),
@@ -20,9 +21,15 @@ def config(create_infra) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths):
+def setup_tests(test_paths: Dict[str, Path], deploy_minio) -> None:
     """Setup test environment"""
-    tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets_with_tls.yml")
+    tools.kubectl_bin(
+        "apply",
+        "-f",
+        f"{test_paths['conf_dir']}/secrets.yml",
+        "-f",
+        f"{test_paths['conf_dir']}/minio-secret.yml",
+    )
 
 
 class TestLiveness:
@@ -37,7 +44,7 @@ class TestLiveness:
         )
 
     @pytest.mark.dependency(depends=["TestLiveness::test_create_first_cluster"])
-    def test_liveness_check_fails_with_invalid_ssl_option(self, config):
+    def test_liveness_check_fails_with_invalid_ssl_option(self, config: Dict[str, str]) -> None:
         tools.kubectl_bin(
             "exec",
             f"{config['cluster']}-rs0-0",
@@ -69,7 +76,9 @@ class TestLiveness:
     @pytest.mark.dependency(
         depends=["TestLiveness::test_liveness_check_fails_with_invalid_ssl_option"]
     )
-    def test_change_liveness_config(self, config, test_paths):
+    def test_change_liveness_config(
+        self, config: Dict[str, str], test_paths: Dict[str, Path]
+    ) -> None:
         tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0-changed.yml")
 
         tools.wait_for_running(f"{config['cluster']}-rs0", 3)
