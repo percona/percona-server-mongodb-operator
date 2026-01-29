@@ -76,6 +76,10 @@ py-deps: uv ## Install e2e-tests Python dependencies
 py-update-deps: uv ## Update e2e-tests Python dependencies
 	$(UV) lock --upgrade
 
+py-fmt: uv ## Format and organize imports in e2e-tests
+	$(UV) run ruff check --select I --fix e2e-tests/
+	$(UV) run ruff format e2e-tests/
+
 py-check: uv ## Run ruff and mypy checks on e2e-tests
 	$(UV) run ruff check e2e-tests/
 	$(UV) run mypy e2e-tests/
