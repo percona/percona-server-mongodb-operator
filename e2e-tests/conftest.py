@@ -1,18 +1,16 @@
-import os
-from typing import Dict
-import pytest
-import subprocess
-import logging
-import yaml
 import json
-import time
+import logging
+import os
 import random
-
-from pathlib import Path
+import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Dict
 
-from lib import tools
-from lib import k8s_collector
+import pytest
+import yaml
+from lib import k8s_collector, tools
 
 logging.getLogger("pytest_dependency").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -27,12 +25,13 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
     report = outcome.get_result()
 
     if report.when == "call" and report.failed and _current_namespace:
-        logger.info(f"Test failed, collecting K8s resources from {_current_namespace}")
-        try:
-            custom_resources = ["psmdb", "psmdb-backup", "psmdb-restore"]
-            k8s_collector.collect_resources(_current_namespace, custom_resources)
-        except Exception as e:
-            logger.warning(f"Failed to collect K8s resources: {e}")
+        if os.environ.get("COLLECT_K8S_ON_FAILURE") == "1":
+            logger.info(f"Test failed, collecting K8s resources from {_current_namespace}")
+            try:
+                custom_resources = ["psmdb", "psmdb-backup", "psmdb-restore"]
+                k8s_collector.collect_resources(_current_namespace, custom_resources)
+            except Exception as e:
+                logger.warning(f"Failed to collect K8s resources: {e}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -70,8 +69,9 @@ def setup_env_vars() -> None:
         "CLEAN_NAMESPACE": "0",
         "DELETE_CRD_ON_START": "0",
         "SKIP_DELETE": "1",
-        "SKIP_BACKUPS_TO_AWS_GCP_AZURE": "1",
+        "SKIP_BACKUPS_TO_AWS_GCP_AZURE": tools.get_cloud_secret_default(),
         "UPDATE_COMPARE_FILES": "0",
+        "COLLECT_K8S_ON_FAILURE": "1",
     }
 
     for key, value in defaults.items():
@@ -82,19 +82,19 @@ def setup_env_vars() -> None:
 
 
 @pytest.fixture(scope="class")
-def test_paths(request: pytest.FixtureRequest) -> Dict[str, Path]:
+def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
     """Fixture to provide paths relative to the test file."""
     test_file = Path(request.fspath)
     test_dir = test_file.parent
     conf_dir = test_dir.parent / "conf"
     src_dir = test_dir.parent.parent
 
-    return {"test_file": test_file, "test_dir": test_dir, "conf_dir": conf_dir, "src_dir": src_dir}
+    return {"test_file": str(test_file), "test_dir": str(test_dir), "conf_dir": str(conf_dir), "src_dir": str(src_dir)}
 
 
 @pytest.fixture(scope="class")
-def create_namespace():
-    def _create_namespace(namespace):
+def create_namespace() -> callable:
+    def _create_namespace(namespace: str) -> str:
         """Create kubernetes namespace and clean up if exists."""
         operator_ns = os.environ.get("OPERATOR_NS")
 
@@ -160,7 +160,7 @@ def create_namespace():
 
 
 @pytest.fixture(scope="class")
-def create_infra(test_paths: Dict[str, Path], create_namespace):
+def create_infra(test_paths: Dict[str, str], create_namespace):
     global _current_namespace
     created_namespaces = []
 
@@ -188,7 +188,6 @@ def create_infra(test_paths: Dict[str, Path], create_namespace):
     yield _create_infra
 
     # Teardown code
-    global _current_namespace
     _current_namespace = None
 
     if os.environ.get("SKIP_DELETE") == "1":
@@ -248,30 +247,16 @@ def create_infra(test_paths: Dict[str, Path], create_namespace):
         futures.append(executor.submit(cleanup_crd))
 
     # Clean up all created namespaces
-    namespace_commands = []
-    for namespace in created_namespaces:
-        namespace_commands.append(
-            ["delete", "--grace-period=0", "--force", "namespace", namespace, "--ignore-not-found"]
-        )
-
+    namespaces_to_delete = created_namespaces.copy()
     if os.environ.get("OPERATOR_NS"):
-        namespace_commands.append(
-            [
-                "delete",
-                "--grace-period=0",
-                "--force",
-                "namespace",
-                os.environ.get("OPERATOR_NS"),
-                "--ignore-not-found",
-            ]
-        )
+        namespaces_to_delete.append(os.environ.get("OPERATOR_NS"))
 
-    for cmd in namespace_commands:
-        run_cmd(cmd)
+    for ns in namespaces_to_delete:
+        run_cmd(["delete", "--grace-period=0", "--force", "namespace", ns, "--ignore-not-found"])
 
 
 @pytest.fixture(scope="class")
-def deploy_chaos_mesh(namespace):
+def deploy_chaos_mesh(namespace: str) -> None:
     """Deploy Chaos Mesh and clean up after tests."""
     try:
         subprocess.run(
@@ -339,7 +324,7 @@ def deploy_chaos_mesh(namespace):
 
 
 @pytest.fixture(scope="class")
-def deploy_cert_manager():
+def deploy_cert_manager() -> None:
     """Deploy Cert Manager and clean up after tests."""
     logger.info("Deploying cert-manager")
     cert_manager_url = f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
@@ -376,7 +361,7 @@ def deploy_cert_manager():
 
 
 @pytest.fixture(scope="class")
-def deploy_minio():
+def deploy_minio() -> None:
     """Deploy MinIO and clean up after tests."""
     service_name = "minio-service"
     bucket = "operator-testing"
@@ -389,30 +374,52 @@ def deploy_minio():
 
     endpoint = f"http://{service_name}:9000"
     minio_args = [
-        "helm", "install", service_name, "minio/minio",
-        "--version", os.environ.get("MINIO_VER"),
-        "--set", "replicas=1",
-        "--set", "mode=standalone",
-        "--set", "resources.requests.memory=256Mi",
-        "--set", "rootUser=rootuser",
-        "--set", "rootPassword=rootpass123",
-        "--set", "users[0].accessKey=some-access-key",
-        "--set", "users[0].secretKey=some-secret-key",
-        "--set", "users[0].policy=consoleAdmin",
-        "--set", "service.type=ClusterIP",
-        "--set", "configPathmc=/tmp/",
-        "--set", "securityContext.enabled=false",
-        "--set", "persistence.size=2G",
-        "--set", f"fullnameOverride={service_name}",
-        "--set", "serviceAccount.create=true",
-        "--set", f"serviceAccount.name={service_name}-sa",
+        "helm",
+        "install",
+        service_name,
+        "minio/minio",
+        "--version",
+        os.environ.get("MINIO_VER"),
+        "--set",
+        "replicas=1",
+        "--set",
+        "mode=standalone",
+        "--set",
+        "resources.requests.memory=256Mi",
+        "--set",
+        "rootUser=rootuser",
+        "--set",
+        "rootPassword=rootpass123",
+        "--set",
+        "users[0].accessKey=some-access-key",
+        "--set",
+        "users[0].secretKey=some-secret-key",
+        "--set",
+        "users[0].policy=consoleAdmin",
+        "--set",
+        "service.type=ClusterIP",
+        "--set",
+        "configPathmc=/tmp/",
+        "--set",
+        "securityContext.enabled=false",
+        "--set",
+        "persistence.size=2G",
+        "--set",
+        f"fullnameOverride={service_name}",
+        "--set",
+        "serviceAccount.create=true",
+        "--set",
+        f"serviceAccount.name={service_name}-sa",
     ]
 
     tools.retry(lambda: subprocess.run(minio_args, check=True), max_attempts=10, delay=60)
 
     minio_pod = tools.kubectl_bin(
-        "get", "pods", f"--selector=release={service_name}",
-        "-o", "jsonpath={.items[].metadata.name}"
+        "get",
+        "pods",
+        f"--selector=release={service_name}",
+        "-o",
+        "jsonpath={.items[].metadata.name}",
     ).strip()
     tools.wait_pod(minio_pod)
 
@@ -422,19 +429,31 @@ def deploy_minio():
             "config", "view", "--minify", "-o", "jsonpath={..namespace}"
         ).strip()
         tools.kubectl_bin(
-            "create", "svc", "-n", operator_ns, "externalname", service_name,
+            "create",
+            "svc",
+            "-n",
+            operator_ns,
+            "externalname",
+            service_name,
             f"--external-name={service_name}.{namespace}.svc.cluster.local",
-            "--tcp=9000", check=False
+            "--tcp=9000",
+            check=False,
         )
 
     logger.info(f"Creating MinIO bucket: {bucket}")
     tools.kubectl_bin(
-        "run", "-i", "--rm", "aws-cli",
-        "--image=perconalab/awscli", "--restart=Never",
-        "--", "bash", "-c",
-        f"AWS_ACCESS_KEY_ID=some-access-key "
-        f"AWS_SECRET_ACCESS_KEY=some-secret-key "
-        f"AWS_DEFAULT_REGION=us-east-1 "
+        "run",
+        "-i",
+        "--rm",
+        "aws-cli",
+        "--image=perconalab/awscli",
+        "--restart=Never",
+        "--",
+        "bash",
+        "-c",
+        "AWS_ACCESS_KEY_ID=some-access-key"
+        "AWS_SECRET_ACCESS_KEY=some-secret-key"
+        "AWS_DEFAULT_REGION=us-east-1"
         f"/usr/bin/aws --no-verify-ssl --endpoint-url {endpoint} s3 mb s3://{bucket}",
     )
 
@@ -450,7 +469,7 @@ def deploy_minio():
 
 
 @pytest.fixture(scope="class")
-def psmdb_client(test_paths: Dict[str, Path]) -> tools.MongoManager:
+def psmdb_client(test_paths: Dict[str, str]) -> tools.MongoManager:
     """Deploy and get the client pod name."""
     tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
 

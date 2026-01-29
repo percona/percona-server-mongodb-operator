@@ -1,9 +1,9 @@
-from pathlib import Path
-import pytest
 import logging
-
-from lib import tools
+from pathlib import Path
 from typing import Callable, Dict, Union
+
+import pytest
+from lib import tools
 
 logger = logging.getLogger(__name__)
 

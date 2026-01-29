@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import pytest
 import logging
-
-from lib import tools
+import time
 from typing import Callable, Dict, Union
+
+import pytest
+from lib import tools
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +171,10 @@ class TestInitDeploy:
     @pytest.mark.dependency(depends=["TestInitDeploy::test_primary_failover"])
     def test_create_second_cluster(self, config, test_paths):
         """Check if possible to create second cluster"""
+        tools.apply_s3_storage_secrets(test_paths["conf_dir"])
         tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster2']}.yml")
         tools.wait_for_running(config["cluster2"], 3)
+
         tools.compare_kubectl(
             test_paths["test_dir"], f"statefulset/{config['cluster2']}", config["namespace"]
         )
@@ -204,6 +207,22 @@ class TestInitDeploy:
             )
 
     @pytest.mark.dependency(depends=["TestInitDeploy::test_second_cluster_data_operations"])
+    def test_connection_count_with_backup(self, config, psmdb_client):
+        """Check number of connections doesn't exceed maximum with backup enabled"""
+        max_conn = 50
+        time.sleep(300)  # Wait for backup agent connections
+
+        conn_count = int(
+            psmdb_client.run_mongosh(
+                "db.serverStatus().connections.current",
+                f"clusterAdmin:clusterAdmin123456@{config['cluster2']}.{config['namespace']}",
+            ).strip()
+        )
+        assert conn_count <= max_conn, (
+            f"Connection count {conn_count} exceeds maximum {max_conn} with backup enabled"
+        )
+
+    @pytest.mark.dependency(depends=["TestInitDeploy::test_connection_count_with_backup"])
     def test_log_files_exist(self, config):
         """Check if mongod log files exist in pod"""
         result = tools.kubectl_bin(

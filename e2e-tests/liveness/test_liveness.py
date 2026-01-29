@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
-import pytest
 import logging
 import re
-
-from lib import tools
 from typing import Callable, Dict
+
+import pytest
+from lib import tools
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ def config(create_infra: Callable[[str], str]) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Dict[str, Path], deploy_minio) -> None:
+def setup_tests(test_paths: Dict[str, str], deploy_minio) -> None:
     """Setup test environment"""
     tools.kubectl_bin(
         "apply",
@@ -77,7 +76,7 @@ class TestLiveness:
         depends=["TestLiveness::test_liveness_check_fails_with_invalid_ssl_option"]
     )
     def test_change_liveness_config(
-        self, config: Dict[str, str], test_paths: Dict[str, Path]
+        self, config: Dict[str, str], test_paths: Dict[str, str]
     ) -> None:
         tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0-changed.yml")
 

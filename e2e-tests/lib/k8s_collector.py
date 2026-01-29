@@ -2,13 +2,12 @@
 
 import os
 import re
+import subprocess
 import sys
 import tarfile
-import subprocess
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from typing import List, Optional
-
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
 

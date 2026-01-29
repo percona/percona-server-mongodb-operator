@@ -1,16 +1,17 @@
-import os
-import re
-import time
-import yaml
+import base64
 import json
 import logging
-import base64
-import urllib.parse
+import os
+import re
 import subprocess
-
-from deepdiff import DeepDiff
+import tempfile
+import time
+import urllib.parse
 from pathlib import Path
-from typing import Callable, Dict, Optional, Any
+from typing import Any, Callable, Dict, Optional
+
+import yaml
+from deepdiff import DeepDiff
 
 logger = logging.getLogger(__name__)
 
@@ -69,25 +70,16 @@ def cat_config(config_file: str) -> str:
 def apply_cluster(config_file: str) -> None:
     """Apply cluster configuration"""
     logger.info("Creating PSMDB cluster")
-    skip_backups = os.environ.get("SKIP_BACKUPS_TO_AWS_GCP_AZURE")
+    config_yaml = cat_config(config_file)
 
-    if not skip_backups:
-        config_yaml = cat_config(config_file)
+    if not os.environ.get("SKIP_BACKUPS_TO_AWS_GCP_AZURE"):
         kubectl_bin("apply", "-f", "-", input_data=config_yaml)
     else:
-        config_yaml = cat_config(config_file)
         config = yaml.safe_load(config_yaml)
-
-        # Remove backup tasks
         if "spec" in config and "backup" in config["spec"] and "tasks" in config["spec"]["backup"]:
-            tasks = config["spec"]["backup"]["tasks"]
-            # Remove tasks at index 1 three times (reverse order to maintain indices)
-            for _ in range(3):
-                if len(tasks) > 1:
-                    del tasks[1]
-
-        modified_yaml = yaml.dump(config)
-        kubectl_bin("apply", "-f", "-", input_data=modified_yaml)
+            # Keep only the first backup task, remove cloud backup tasks
+            config["spec"]["backup"]["tasks"] = config["spec"]["backup"]["tasks"][:1]
+        kubectl_bin("apply", "-f", "-", input_data=yaml.dump(config))
 
 
 def delete_crd_rbac(src_dir: Path) -> None:
@@ -311,10 +303,21 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
                 logger.info(f"Pod {CYAN}{pod_name}{RESET} is ready")
                 return
         except subprocess.CalledProcessError:
-            # Pod likely not created yet
             pass
         time.sleep(1)
-    raise TimeoutError(f"Timeout waiting for {pod_name} to be ready")
+
+    status = (
+        kubectl_bin(
+            "get",
+            "pod",
+            pod_name,
+            "-o",
+            "jsonpath={.status.phase} (Ready={.status.conditions[?(@.type=='Ready')].status})",
+            check=False,
+        ).strip()
+        or "not found"
+    )
+    raise TimeoutError(f"Timeout waiting for {pod_name} to be ready. Last status: {status}")
 
 
 def wait_for_running(
@@ -351,17 +354,29 @@ def wait_for_running(
         logger.info(f"Waiting for cluster {CYAN}{cluster_name}{RESET} readiness")
         while time.time() - start_time < timeout:
             try:
-                result = kubectl_bin(
+                state = kubectl_bin(
                     "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
                 ).strip("'")
-                if result == "ready":
+                if state == "ready":
                     logger.info(f"Cluster {CYAN}{cluster_name}{RESET} is ready")
                     return
             except subprocess.CalledProcessError:
-                logger.error(f"Error checking cluster {CYAN}{cluster_name}{RESET} readiness")
                 pass
             time.sleep(1)
-        raise TimeoutError(f"Timeout waiting for {cluster_name} to be ready")
+
+        # Get state for error message
+        state = (
+            kubectl_bin(
+                "get",
+                "psmdb",
+                cluster_name,
+                "-o",
+                "jsonpath={.status.state}",
+                check=False,
+            ).strip("'")
+            or "unknown"
+        )
+        raise TimeoutError(f"Timeout waiting for {cluster_name} to be ready. Last state: {state}")
 
 
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
@@ -576,6 +591,63 @@ def filter_yaml(
     return filtered_yaml
 
 
+def get_cloud_secret_default(conf_dir: Optional[Path] = None) -> str:
+    """Return default for SKIP_BACKUPS_TO_AWS_GCP_AZURE based on cloud-secret.yml existence."""
+    if conf_dir is None:
+        conf_dir = Path(__file__).parent.parent / "conf"
+    if (conf_dir / "cloud-secret.yml").exists():
+        return ""  # Enable cloud backups
+    return "1"  # Skip cloud backups
+
+
+def apply_s3_storage_secrets(conf_dir: str) -> None:
+    """Apply secrets for cloud storages."""
+    if not os.environ.get("SKIP_BACKUPS_TO_AWS_GCP_AZURE"):
+        logger.info("Creating secrets for cloud storages (minio + cloud)")
+        kubectl_bin(
+            "apply",
+            "-f",
+            f"{conf_dir}/minio-secret.yml",
+            "-f",
+            f"{conf_dir}/cloud-secret.yml",
+        )
+    else:
+        logger.info("Creating secrets for cloud storages (minio only)")
+        kubectl_bin("apply", "-f", f"{conf_dir}/minio-secret.yml")
+
+
+def setup_gcs_credentials(secret_name: str = "gcp-cs-secret") -> bool:
+    """Setup GCS credentials from K8s secret for gsutil."""
+    result = subprocess.run(["gsutil", "ls"], capture_output=True, check=False)
+    if result.returncode == 0:
+        logger.info("GCS credentials already set in environment")
+        return True
+
+    logger.info(f"Setting up GCS credentials from K8s secret: {secret_name}")
+
+    access_key = get_secret_data(secret_name, "AWS_ACCESS_KEY_ID")
+    secret_key = get_secret_data(secret_name, "AWS_SECRET_ACCESS_KEY")
+
+    if not access_key or not secret_key:
+        logger.error("Failed to extract GCS credentials from secret")
+        return False
+
+    boto_fd, boto_path = tempfile.mkstemp(prefix="boto.", suffix=".cfg")
+    try:
+        with os.fdopen(boto_fd, "w") as f:
+            f.write("[Credentials]\n")
+            f.write(f"gs_access_key_id = {access_key}\n")
+            f.write(f"gs_secret_access_key = {secret_key}\n")
+        os.chmod(boto_path, 0o600)
+        os.environ["BOTO_CONFIG"] = boto_path
+        logger.info("GCS credentials configured successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create boto config: {e}")
+        os.unlink(boto_path)
+        return False
+
+
 # TODO: implement this function
 def check_passwords_leak(namespace: Optional[str] = None) -> None:
     """Check for password leaks in Kubernetes pod logs."""
@@ -668,7 +740,7 @@ class MongoManager:
         def clean_mongo_json(data: Dict[str, Any]) -> Dict[str, Any]:
             """Remove timestamps and metadata from MongoDB response"""
 
-            def remove_timestamps(obj: Dict[str, Any]) -> Dict[str, Any]:
+            def remove_timestamps(obj):
                 if isinstance(obj, dict):
                     return {
                         k: remove_timestamps(v)
@@ -687,15 +759,6 @@ class MongoManager:
 
             return remove_timestamps(data)
 
-        # TODO: consider a different approach to ignore order when comparing
-        def ordered(obj):
-            if isinstance(obj, dict):
-                return sorted((k, ordered(v)) for k, v in obj.items())
-            if isinstance(obj, list):
-                return sorted(ordered(x) for x in obj)
-            else:
-                return obj
-
         # Get actual MongoDB user permissions
         result = retry(
             lambda: self.run_mongosh(
@@ -704,10 +767,7 @@ class MongoManager:
             )
         )
         actual_data = clean_mongo_json(json.loads(result))
-
         expected_data = get_expected_file(test_dir, expected_role)
-        expected_data = ordered(expected_data)
-        actual_data = ordered(actual_data)
 
         diff = DeepDiff(expected_data, actual_data, ignore_order=True)
         assert not diff, f"MongoDB user permissions differ: {diff.pretty()}"
