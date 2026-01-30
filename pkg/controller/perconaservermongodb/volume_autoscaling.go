@@ -140,9 +140,6 @@ func (r *ReconcilePerconaServerMongoDB) shouldTriggerResize(
 	config := cr.Spec.StorageAutoscaling()
 
 	if usage.UsagePercent < config.TriggerThresholdPercent {
-		log.V(1).Info("usage below threshold",
-			"usage", usage.UsagePercent,
-			"threshold", config.TriggerThresholdPercent)
 		return false
 	}
 
