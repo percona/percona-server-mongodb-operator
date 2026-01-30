@@ -15,14 +15,6 @@ from deepdiff import DeepDiff
 
 logger = logging.getLogger(__name__)
 
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-BLUE = "\033[34m"
-MAGENTA = "\033[35m"
-CYAN = "\033[36m"
-RESET = "\033[0m"
-
 
 def kubectl_bin(*args: str, check: bool = True, input_data: str = "") -> str:
     """Execute kubectl command"""
@@ -289,7 +281,7 @@ def clean_all_namespaces() -> None:
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
     """Wait for pod to be ready."""
     start_time = time.time()
-    logger.info(f"Waiting for {CYAN}pod/{pod_name}{RESET} to be ready...")
+    logger.info(f"Waiting for [cyan]pod/{pod_name}[/cyan] to be ready...")
     while time.time() - start_time < timeout:
         try:
             result = kubectl_bin(
@@ -300,7 +292,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
                 "jsonpath={.status.conditions[?(@.type=='Ready')].status}",
             ).strip("'")
             if result == "True":
-                logger.info(f"Pod {CYAN}{pod_name}{RESET} is ready")
+                logger.info(f"Pod [cyan]{pod_name}[/cyan] is ready")
                 return
         except subprocess.CalledProcessError:
             pass
@@ -351,14 +343,14 @@ def wait_for_running(
     cluster_name = cluster_name.replace(f"-{rs_name}", "")
     if check_cluster_readyness:
         start_time = time.time()
-        logger.info(f"Waiting for cluster {CYAN}{cluster_name}{RESET} readiness")
+        logger.info(f"Waiting for cluster [cyan]{cluster_name}[/cyan] readiness")
         while time.time() - start_time < timeout:
             try:
                 state = kubectl_bin(
                     "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
                 ).strip("'")
                 if state == "ready":
-                    logger.info(f"Cluster {CYAN}{cluster_name}{RESET} is ready")
+                    logger.info(f"Cluster [cyan]{cluster_name}[/cyan] is ready")
                     return
             except subprocess.CalledProcessError:
                 pass
@@ -381,7 +373,7 @@ def wait_for_running(
 
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
-    logger.info(f"Waiting for {CYAN}{resource}{RESET} to be deleted")
+    logger.info(f"Waiting for [cyan]{resource}[/cyan] to be deleted")
     time.sleep(1)
     try:
         kubectl_bin("wait", "--for=delete", resource, f"--timeout={timeout}s")
@@ -788,12 +780,12 @@ class MongoManager:
         if sort:
             full_cmd = f"{collection}.{command}.{sort}"
 
-        logger.info(f"Running: {CYAN}{full_cmd}{RESET} on db {CYAN}{database}{RESET}")
+        logger.info(f"Running: [cyan]{full_cmd}[/cyan] on db [cyan]{database}[/cyan]")
 
         mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
         result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
 
-        logger.info(f"MongoDB output: {CYAN}{result}{RESET}")
+        logger.info(f"MongoDB output: [cyan]{result}[/cyan]")
 
         with open(test_file) as file:
             expected = json.load(file)

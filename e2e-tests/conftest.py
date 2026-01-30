@@ -11,7 +11,25 @@ from typing import Dict
 import pytest
 import yaml
 from lib import k8s_collector, tools
+from rich.console import Console
+from rich.highlighter import NullHighlighter
+from rich.logging import RichHandler
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    handlers=[
+        RichHandler(
+            console=Console(highlight=False),
+            show_time=True,
+            show_path=False,
+            markup=True,
+            highlighter=NullHighlighter(),
+            keywords=[],
+            log_time_format="[%X.%f]",
+        )
+    ],
+)
 logging.getLogger("pytest_dependency").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
