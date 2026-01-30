@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -102,6 +103,11 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
+	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
+		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
+		return nil
+	}
+
 	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
@@ -193,12 +199,11 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	patch := client.MergeFrom(cr.DeepCopy())
+	orig := cr.DeepCopy()
 
-	// We are modifying cr directly through the pointer. So the original cr object does get the storage size updated.
 	volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = newSize
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), patch); err != nil {
+	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch CR with new storage size")
 	}
 

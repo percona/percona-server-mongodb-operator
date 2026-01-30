@@ -7,14 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // PVCUsage contains information about PVC disk usage
@@ -30,15 +28,8 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	pod *corev1.Pod,
 	pvcName string,
 ) (*PVCUsage, error) {
-	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvcName)
-
 	if pod == nil {
 		return nil, errors.New("pod is nil")
-	}
-
-	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
-		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
-		return nil, nil
 	}
 
 	backoff := wait.Backoff{
