@@ -36,6 +36,16 @@ logger = logging.getLogger(__name__)
 _current_namespace: str | None = None
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--test-name", action="store", default=None, help="Bash test name to run")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Print newline after pytest's verbose test name output."""
+    print()
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
     """Collect K8s resources when a test fails."""
@@ -62,7 +72,7 @@ def setup_env_vars() -> None:
         "KUBE_VERSION": kube_version,
         "EKS": "1" if "eks" in git_version else "0",
         "GKE": "1" if "gke" in git_version else "0",
-        "OPENSHIFT": "1" if tools.is_openshift() else "0",
+        "OPENSHIFT": "1" if tools.is_openshift() else "",
         "MINIKUBE": "1" if tools.is_minikube() else "0",
         "API": "psmdb.percona.com/v1",
         "GIT_COMMIT": tools.get_git_commit(),

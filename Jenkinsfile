@@ -16,7 +16,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --preemptible \
                     --zone=${region} \
                     --machine-type='n1-standard-4' \
-                    --cluster-version='1.31' \
+                    --cluster-version='1.32' \
                     --num-nodes=3 \
                     --labels='delete-cluster-after-hours=6' \
                     --disk-size=30 \
@@ -101,6 +101,16 @@ void pushLogFile(String FILE_NAME) {
     }
 }
 
+void pushReportFile() {
+    echo "Push final_report.html to S3!"
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
+        """
+    }
+}
+
 void pushArtifactFile(String FILE_NAME) {
     echo "Push $FILE_NAME file to S3!"
 
@@ -146,24 +156,6 @@ void markPassedTests() {
     }
 }
 
-void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
-    sh """
-        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-        echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|${CLUSTER_NAME}-${CLUSTER_SUFFIX} "
-        echo
-        kubectl get nodes
-        echo
-        kubectl top nodes
-        echo
-        kubectl get pods --all-namespaces
-        echo
-        kubectl top pod --all-namespaces
-        echo
-        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
-        echo "======================================================"
-    """
-}
 
 String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
@@ -258,7 +250,17 @@ void runTest(Integer TEST_ID) {
                         export DEBUG_TESTS=1
                     fi
                     export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-                    time ./e2e-tests/$testName/run
+                    export PATH="\$HOME/.local/bin:\$PATH"
+                    mkdir -p e2e-tests/reports
+                    
+                    REPORT_OPTS="--html=e2e-tests/reports/${testName}.html --junitxml=e2e-tests/reports/${testName}.xml"
+                    
+                    # Run native pytest if test_*.py exists, otherwise run bash via wrapper
+                    if ls e2e-tests/$testName/test_*.py 1>/dev/null 2>&1; then
+                        time uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
+                    else
+                        time uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
+                    fi
                 """
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -266,7 +268,6 @@ void runTest(Integer TEST_ID) {
             return true
         }
         catch (exc) {
-            printKubernetesStatus("AFTER","$clusterSuffix")
             echo "Test $testName has failed!"
             if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
@@ -290,7 +291,7 @@ void prepareNode() {
         sudo curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
         kubectl version --client --output=yaml
 
-        curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
+        curl -fsSL https://get.helm.sh/helm-v3.20.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
 
         sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.48.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
         sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
@@ -307,6 +308,10 @@ EOF
         sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="\$HOME/.local/bin:\$PATH"
+        uv sync --locked
     """
     installAzureCLI()
     azureAuth()
@@ -423,10 +428,10 @@ pipeline {
         CLOUDSDK_CORE_DISABLE_PROMPTS = 1
         CLEAN_NAMESPACE = 1
         OPERATOR_NS = 'psmdb-operator'
-        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
+        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
-        CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
-        AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+        CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", returnStdout: true).trim()
+        AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", returnStdout: true).trim()
         ENABLE_LOGGING = "true"
     }
     agent {
@@ -458,7 +463,7 @@ pipeline {
                 prepareNode()
                 script {
                     if (AUTHOR_NAME == 'null') {
-                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
@@ -675,12 +680,24 @@ pipeline {
                             }
                         }
                         makeReport()
-                        junit testResults: '*.xml', healthScaleFactor: 1.0
-                        archiveArtifacts '*.xml'
+                        
+                        if (fileExists('e2e-tests/reports')) {
+                            sh """
+                                export PATH="\$HOME/.local/bin:\$PATH"
+                                uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
+                                uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            """
+                            junit testResults: 'final_report.xml', healthScaleFactor: 1.0
+                            archiveArtifacts 'final_report.xml, final_report.html'
+                            pushReportFile()
+                        } else {
+                            junit testResults: '*.xml', healthScaleFactor: 1.0
+                            archiveArtifacts '*.xml'
+                        }
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/final_report.html)\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")
