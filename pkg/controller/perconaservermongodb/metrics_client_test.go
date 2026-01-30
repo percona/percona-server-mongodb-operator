@@ -145,6 +145,24 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 					Name:      "test-pod-0",
 					Namespace: "test-namespace",
 				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "mongod",
+						},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "mongod",
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
+							},
+						},
+					},
+				},
 			}
 
 			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName)

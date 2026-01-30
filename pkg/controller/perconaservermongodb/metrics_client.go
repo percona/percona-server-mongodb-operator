@@ -5,10 +5,15 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
@@ -25,6 +30,23 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	pod *corev1.Pod,
 	pvcName string,
 ) (*PVCUsage, error) {
+	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvcName)
+
+	if pod == nil {
+		return nil, errors.New("pod is nil")
+	}
+
+	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
+		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
+		return nil, nil
+	}
+
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 5 * time.Second,
+		Factor:   2.0,
+	}
+
 	// Execute df command in the mongod container to get disk usage
 	// df -B1 /data/db outputs in bytes
 	// Example output:
@@ -33,9 +55,18 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	var stdout, stderr bytes.Buffer
 	command := []string{"df", "-B1", config.MongodContainerDataDir}
 
-	err := r.clientcmd.Exec(ctx, pod, "mongod", command, nil, &stdout, &stderr, false)
+	err := retry.OnError(backoff, func(err error) bool { return true }, func() error {
+		stdout.Reset()
+		stderr.Reset()
+
+		err := r.clientcmd.Exec(ctx, pod, naming.ComponentMongod, command, nil, &stdout, &stderr, false)
+		if err != nil {
+			return errors.Wrapf(err, "failed to execute df in pod %s: %s", pod.Name, stderr.String())
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to execute df in pod %s: %s", pod.Name, stderr.String())
+		return nil, errors.Wrap(err, "wait for df execution")
 	}
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
