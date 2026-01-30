@@ -121,6 +121,65 @@ Test execution produces excessive output. It is recommended to redirect the outp
 ./e2e-tests/run >> /tmp/tests-run.out 2>&1
 ```
 
+## Python development setup
+
+The e2e tests are being migrated to pytest. This section covers setting up the Python environment.
+
+### Installing uv
+
+[uv](https://github.com/astral-sh/uv) is used for Python dependency management. Install it via make:
+
+```
+make uv
+```
+
+Or manually:
+
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Python make targets
+
+```
+make py-deps          # Install Python dependencies (locked versions)
+make py-update-deps   # Update Python dependencies
+make py-fmt           # Format code and organize imports with ruff
+make py-check         # Run ruff linter and mypy type checks
+```
+
+### Running tests with pytest
+
+First, install dependencies:
+
+```
+make py-deps
+```
+
+Run all pytest-based tests:
+
+```
+uv run pytest e2e-tests/
+```
+
+Run a specific test file:
+
+```
+uv run pytest e2e-tests/init-deploy/test_init_deploy.py
+```
+
+Run a specific test:
+
+```
+uv run pytest e2e-tests/init-deploy/test_init_deploy.py::TestInitDeploy::test_cluster_creation
+```
+
+Run tests matching a pattern:
+
+```
+uv run pytest e2e-tests/ -k "init"
+```
+
 ## Using environment variables to customize the testing process
 
 ### Re-declaring default image names
@@ -129,7 +188,7 @@ You can use environment variables to re-declare all default images used for test
 full list of variables is the following one:
 
 * `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:main` by default,
-* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod4.4` by default,
+* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod8.0` by default,
 * `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
 * `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
 

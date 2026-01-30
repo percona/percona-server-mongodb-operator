@@ -281,7 +281,7 @@ def clean_all_namespaces() -> None:
         ]
 
         if namespaces:
-            subprocess.Popen(["kubectl", "delete", "ns"] + namespaces)
+            kubectl_bin("delete", "ns", *namespaces)
     except subprocess.CalledProcessError:
         logger.error("Failed to clean namespaces")
 

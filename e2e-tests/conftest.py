@@ -89,7 +89,12 @@ def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
     conf_dir = test_dir.parent / "conf"
     src_dir = test_dir.parent.parent
 
-    return {"test_file": str(test_file), "test_dir": str(test_dir), "conf_dir": str(conf_dir), "src_dir": str(src_dir)}
+    return {
+        "test_file": str(test_file),
+        "test_dir": str(test_dir),
+        "conf_dir": str(conf_dir),
+        "src_dir": str(src_dir),
+    }
 
 
 @pytest.fixture(scope="class")
@@ -451,9 +456,9 @@ def deploy_minio() -> None:
         "--",
         "bash",
         "-c",
-        "AWS_ACCESS_KEY_ID=some-access-key"
-        "AWS_SECRET_ACCESS_KEY=some-secret-key"
-        "AWS_DEFAULT_REGION=us-east-1"
+        "AWS_ACCESS_KEY_ID=some-access-key "
+        "AWS_SECRET_ACCESS_KEY=some-secret-key "
+        "AWS_DEFAULT_REGION=us-east-1 "
         f"/usr/bin/aws --no-verify-ssl --endpoint-url {endpoint} s3 mb s3://{bucket}",
     )
 
