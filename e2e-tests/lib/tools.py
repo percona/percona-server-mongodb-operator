@@ -451,8 +451,11 @@ def get_k8s_versions() -> tuple[str, str]:
 
 def is_openshift() -> bool:
     """Detect if running on OpenShift"""
-    result = subprocess.run(["oc", "get", "projects"], capture_output=True)
-    return result.returncode == 0
+    try:
+        result = subprocess.run(["oc", "get", "projects"], capture_output=True)
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
 
 
 def is_minikube() -> bool:
