@@ -221,25 +221,30 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 	usage *PVCUsage,
 	err error,
 ) {
+	if pvcName == "" {
+		return
+	}
+	if usage == nil {
+		return
+	}
+
 	if cr.Status.StorageAutoscaling == nil {
 		cr.Status.StorageAutoscaling = make(map[string]api.StorageAutoscalingStatus)
 	}
 
 	status := cr.Status.StorageAutoscaling[pvcName]
 
-	if usage != nil {
-		newSize := resource.NewQuantity(usage.TotalBytes, resource.BinarySI)
-		if status.CurrentSize != "" {
-			oldSize, parseErr := resource.ParseQuantity(status.CurrentSize)
-			if parseErr == nil && newSize.Cmp(oldSize) > 0 {
-				status.LastResizeTime = metav1.Time{Time: time.Now()}
-				status.ResizeCount++
-			}
+	newSize := resource.NewQuantity(usage.TotalBytes, resource.BinarySI)
+	if status.CurrentSize != "" {
+		oldSize, parseErr := resource.ParseQuantity(status.CurrentSize)
+		if parseErr == nil && newSize.Cmp(oldSize) > 0 {
+			status.LastResizeTime = metav1.Time{Time: time.Now()}
+			status.ResizeCount++
 		}
-
-		status.CurrentSize = newSize.String()
-		status.LastError = ""
 	}
+
+	status.CurrentSize = newSize.String()
+	status.LastError = ""
 
 	if err != nil {
 		status.LastError = err.Error()
