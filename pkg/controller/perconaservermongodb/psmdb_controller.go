@@ -99,7 +99,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:                 client,
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
-		reconcileIn:            time.Second * 5,
+		reconcileIn:            getReconcileInterval(),
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
@@ -138,6 +138,16 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 	}
 
 	return pod.Spec.Containers[0].Image, nil
+}
+
+func getReconcileInterval() time.Duration {
+	defaultInterval := 5 * time.Second
+	if interval := os.Getenv("RECONCILE_INTERVAL"); interval != "" {
+		if d, err := time.ParseDuration(interval); err == nil {
+			return d
+		}
+	}
+	return defaultInterval
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

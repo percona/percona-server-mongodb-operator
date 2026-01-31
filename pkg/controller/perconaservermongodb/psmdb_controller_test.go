@@ -2,6 +2,9 @@ package perconaservermongodb
 
 import (
 	"context"
+	"os"
+	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,6 +15,56 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
+
+func TestGetReconcileInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		want     time.Duration
+	}{
+		{
+			name:     "unset",
+			envValue: "",
+			want:     5 * time.Second,
+		},
+		{
+			name:     "valid duration",
+			envValue: "30s",
+			want:     30 * time.Second,
+		},
+		{
+			name:     "invalid duration falls back to default",
+			envValue: "invalid",
+			want:     5 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original env value
+			originalValue, wasSet := os.LookupEnv("RECONCILE_INTERVAL")
+			defer func() {
+				if wasSet {
+					os.Setenv("RECONCILE_INTERVAL", originalValue)
+				} else {
+					os.Unsetenv("RECONCILE_INTERVAL")
+				}
+			}()
+
+			// Set test env value
+			if tt.envValue != "" {
+				os.Setenv("RECONCILE_INTERVAL", tt.envValue)
+			} else {
+				os.Unsetenv("RECONCILE_INTERVAL")
+			}
+
+			got := getReconcileInterval()
+			if got != tt.want {
+				t.Errorf("getReconcileInterval() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 	ctx := context.Background()
