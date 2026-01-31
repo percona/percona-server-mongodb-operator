@@ -140,14 +140,30 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 	return pod.Spec.Containers[0].Image, nil
 }
 
+// getReconcileInterval returns the reconciliation interval from the RECONCILE_INTERVAL
+// environment variable, or the default of 5 seconds if not set or invalid.
 func getReconcileInterval() time.Duration {
 	defaultInterval := 5 * time.Second
-	if interval := os.Getenv("RECONCILE_INTERVAL"); interval != "" {
-		if d, err := time.ParseDuration(interval); err == nil {
-			return d
-		}
+
+	interval := os.Getenv("RECONCILE_INTERVAL")
+	if interval == "" {
+		return defaultInterval
 	}
-	return defaultInterval
+
+	d, err := time.ParseDuration(interval)
+	if err != nil {
+		log := logf.Log.WithName("psmdb-controller")
+		log.Info("Invalid RECONCILE_INTERVAL value, using default (5s)", "value", interval, "error", err, "default", defaultInterval)
+		return defaultInterval
+	}
+
+	if d <= 0 {
+		log := logf.Log.WithName("psmdb-controller")
+		log.Info("RECONCILE_INTERVAL must be a positive duration, using default (5s)", "value", interval, "default", defaultInterval)
+		return defaultInterval
+	}
+
+	return d
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

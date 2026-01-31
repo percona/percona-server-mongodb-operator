@@ -20,21 +20,36 @@ func TestGetReconcileInterval(t *testing.T) {
 	tests := []struct {
 		name     string
 		envValue string
+		setEnv   bool
 		want     time.Duration
 	}{
 		{
-			name:     "unset",
-			envValue: "",
-			want:     5 * time.Second,
+			name:   "unset",
+			setEnv: false,
+			want:   5 * time.Second,
 		},
 		{
 			name:     "valid duration",
 			envValue: "30s",
+			setEnv:   true,
 			want:     30 * time.Second,
 		},
 		{
 			name:     "invalid duration falls back to default",
 			envValue: "invalid",
+			setEnv:   true,
+			want:     5 * time.Second,
+		},
+		{
+			name:     "zero duration falls back to default",
+			envValue: "0s",
+			setEnv:   true,
+			want:     5 * time.Second,
+		},
+		{
+			name:     "negative duration falls back to default",
+			envValue: "-5s",
+			setEnv:   true,
 			want:     5 * time.Second,
 		},
 	}
@@ -52,7 +67,7 @@ func TestGetReconcileInterval(t *testing.T) {
 			}()
 
 			// Set test env value
-			if tt.envValue != "" {
+			if tt.setEnv {
 				os.Setenv("RECONCILE_INTERVAL", tt.envValue)
 			} else {
 				os.Unsetenv("RECONCILE_INTERVAL")
