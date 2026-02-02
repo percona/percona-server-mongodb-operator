@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import random
@@ -6,26 +5,45 @@ import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict
+from typing import Any, Callable, Dict, Generator
 
 import pytest
 import yaml
-from lib import k8s_collector, tools
+from lib.kubectl import (
+    clean_all_namespaces,
+    get_k8s_versions,
+    is_minikube,
+    is_openshift,
+    kubectl_bin,
+    wait_pod,
+)
+from lib.mongo import MongoManager
+from lib.operator import check_crd_for_deletion, delete_crd_rbac, deploy_operator
+from lib.secrets import get_cloud_secret_default
+from lib.utils import (
+    K8sHighlighter,
+    get_cr_version,
+    get_git_branch,
+    get_git_commit,
+    k8s_theme,
+    retry,
+)
 from rich.console import Console
-from rich.highlighter import NullHighlighter
 from rich.logging import RichHandler
 
+pytest_plugins = ["lib.report_generator"]
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     format="%(message)s",
     handlers=[
         RichHandler(
-            console=Console(highlight=False),
+            console=Console(theme=k8s_theme),
+            highlighter=K8sHighlighter(),
             show_time=True,
             show_path=False,
-            markup=True,
-            highlighter=NullHighlighter(),
-            keywords=[],
+            markup=False,
+            rich_tracebacks=True,
             log_time_format="[%X.%f]",
         )
     ],
@@ -40,44 +58,75 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--test-name", action="store", default=None, help="Bash test name to run")
 
 
+def pytest_collection_modifyitems(
+    session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Rename bash wrapper tests to show actual test name."""
+    test_name = config.getoption("--test-name")
+    if not test_name:
+        return
+
+    for item in items:
+        if item.name == "test_bash_wrapper":
+            item._nodeid = item._nodeid.replace(
+                "test_bash_wrapper", f"test_bash_wrapper[{test_name}]"
+            )
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Print newline after pytest's verbose test name output."""
     print()
 
 
+def _get_current_namespace() -> str | None:
+    """Get namespace from global or temp file (for bash wrapper tests)."""
+    if _current_namespace:
+        return _current_namespace
+    try:
+        with open("/tmp/pytest_current_namespace") as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> None:
-    """Collect K8s resources when a test fails."""
-    outcome = yield
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, None, None]:
+    """Collect K8s resources when a test fails and add to HTML report."""
+    outcome: Any = yield
     report = outcome.get_result()
 
-    if report.when == "call" and report.failed and _current_namespace:
-        if os.environ.get("COLLECT_K8S_ON_FAILURE") == "1":
-            logger.info(f"Test failed, collecting K8s resources from {_current_namespace}")
-            try:
-                custom_resources = ["psmdb", "psmdb-backup", "psmdb-restore"]
-                k8s_collector.collect_resources(_current_namespace, custom_resources)
-            except Exception as e:
-                logger.warning(f"Failed to collect K8s resources: {e}")
+    if report.when == "call" and report.failed:
+        namespace = _get_current_namespace()
+        if not namespace:
+            return
+
+        try:
+            from lib import report_generator
+
+            report.extras = report_generator.generate_report(namespace)
+        except Exception as e:
+            logger.warning(f"Failed to generate HTML report extras: {e}")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
-    git_branch = tools.get_git_branch()
-    git_version, kube_version = tools.get_k8s_versions()
+    git_branch = get_git_branch()
+    git_version, kube_version = get_k8s_versions()
 
     defaults = {
         "KUBE_VERSION": kube_version,
         "EKS": "1" if "eks" in git_version else "0",
         "GKE": "1" if "gke" in git_version else "0",
-        "OPENSHIFT": "1" if tools.is_openshift() else "",
-        "MINIKUBE": "1" if tools.is_minikube() else "0",
+        "OPENSHIFT": is_openshift(),
+        "MINIKUBE": is_minikube(),
         "API": "psmdb.percona.com/v1",
-        "GIT_COMMIT": tools.get_git_commit(),
+        "GIT_COMMIT": get_git_commit(),
         "GIT_BRANCH": git_branch,
-        "OPERATOR_VERSION": tools.get_cr_version(),
+        "OPERATOR_VERSION": get_cr_version(),
         "IMAGE": f"perconalab/percona-server-mongodb-operator:{git_branch}",
         "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
         "IMAGE_MONGOD_CHAIN": (
@@ -97,9 +146,8 @@ def setup_env_vars() -> None:
         "CLEAN_NAMESPACE": "0",
         "DELETE_CRD_ON_START": "0",
         "SKIP_DELETE": "1",
-        "SKIP_BACKUPS_TO_AWS_GCP_AZURE": tools.get_cloud_secret_default(),
+        "SKIP_BACKUPS_TO_AWS_GCP_AZURE": get_cloud_secret_default(),
         "UPDATE_COMPARE_FILES": "0",
-        "COLLECT_K8S_ON_FAILURE": "1",
     }
 
     for key, value in defaults.items():
@@ -112,7 +160,7 @@ def setup_env_vars() -> None:
 @pytest.fixture(scope="class")
 def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
     """Fixture to provide paths relative to the test file."""
-    test_file = Path(request.fspath)
+    test_file = request.path
     test_dir = test_file.parent
     conf_dir = test_dir.parent / "conf"
     src_dir = test_dir.parent.parent
@@ -125,47 +173,36 @@ def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
     }
 
 
+def _wait_for_project_delete(project: str, timeout: int = 180) -> None:
+    """Wait for OpenShift project to be fully deleted."""
+    start = time.time()
+    while time.time() - start < timeout:
+        result = subprocess.run(
+            ["oc", "get", "project", project],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return
+        time.sleep(5)
+    logger.warning(f"Project {project} not deleted within {timeout}s, continuing anyway")
+
+
 @pytest.fixture(scope="class")
-def create_namespace() -> callable:
+def create_namespace() -> Callable[[str], str]:
     def _create_namespace(namespace: str) -> str:
         """Create kubernetes namespace and clean up if exists."""
-        operator_ns = os.environ.get("OPERATOR_NS")
 
-        if int(os.environ.get("CLEAN_NAMESPACE")):
-            tools.clean_all_namespaces()
+        if int(os.environ.get("CLEAN_NAMESPACE") or "0"):
+            clean_all_namespaces()
 
-        if int(os.environ.get("OPENSHIFT")):
-            logger.info("Cleaning up all old namespaces from openshift")
-
-            if operator_ns:
-                try:
-                    result = subprocess.run(
-                        ["oc", "get", "project", operator_ns, "-o", "json"],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-
-                    if result.returncode == 0:
-                        project_data = json.loads(result.stdout)
-                        if project_data.get("metadata", {}).get("name"):
-                            subprocess.run(
-                                [
-                                    "oc",
-                                    "delete",
-                                    "--grace-period=0",
-                                    "--force=true",
-                                    "project",
-                                    namespace,
-                                ],
-                                check=False,
-                            )
-                            time.sleep(120)
-                    else:
-                        subprocess.run(["oc", "delete", "project", namespace], check=False)
-                        time.sleep(40)
-                except Exception:
-                    pass
+        if int(os.environ.get("OPENSHIFT") or "0"):
+            logger.info("Cleaning up existing OpenShift project if exists")
+            subprocess.run(
+                ["oc", "delete", "project", namespace, "--ignore-not-found"],
+                check=False,
+            )
+            _wait_for_project_delete(namespace)
 
             logger.info(f"Create namespace {namespace}")
             subprocess.run(["oc", "new-project", namespace], check=True)
@@ -179,39 +216,42 @@ def create_namespace() -> callable:
 
             # Delete namespace if exists
             try:
-                tools.kubectl_bin("delete", "namespace", namespace, "--ignore-not-found")
-                tools.kubectl_bin("wait", "--for=delete", f"namespace/{namespace}")
+                kubectl_bin("delete", "namespace", namespace, "--ignore-not-found")
+                kubectl_bin("wait", "--for=delete", f"namespace/{namespace}")
             except subprocess.CalledProcessError:
                 pass
 
             logger.info(f"Create namespace {namespace}")
-            tools.kubectl_bin("create", "namespace", namespace)
-            tools.kubectl_bin("config", "set-context", "--current", f"--namespace={namespace}")
+            kubectl_bin("create", "namespace", namespace)
+            kubectl_bin("config", "set-context", "--current", f"--namespace={namespace}")
         return namespace
 
     return _create_namespace
 
 
 @pytest.fixture(scope="class")
-def create_infra(test_paths: Dict[str, str], create_namespace):
+def create_infra(
+    test_paths: Dict[str, str], create_namespace: Callable[[str], str]
+) -> Generator[Callable[[str], str], None, None]:
     global _current_namespace
-    created_namespaces = []
+    created_namespaces: list[str] = []
 
-    def _create_infra(test_name):
+    def _create_infra(test_name: str) -> str:
         """Create the necessary infrastructure for the tests."""
         global _current_namespace
         logger.info("Creating test environment")
         if os.environ.get("DELETE_CRD_ON_START") == "1":
-            tools.delete_crd_rbac(test_paths["src_dir"])
-            tools.check_crd_for_deletion(f"{test_paths['src_dir']}/deploy/crd.yaml")
+            delete_crd_rbac(Path(test_paths["src_dir"]))
+            check_crd_for_deletion(f"{test_paths['src_dir']}/deploy/crd.yaml")
 
-        if os.environ.get("OPERATOR_NS"):
-            create_namespace(os.environ.get("OPERATOR_NS"))
-            tools.deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
+        operator_ns = os.environ.get("OPERATOR_NS")
+        if operator_ns:
+            create_namespace(operator_ns)
+            deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
             namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
         else:
             namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
-            tools.deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
+            deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
 
         # Track created namespace for cleanup and failure collection
         created_namespaces.append(namespace)
@@ -229,7 +269,7 @@ def create_infra(test_paths: Dict[str, str], create_namespace):
 
     def run_cmd(cmd: list[str]) -> None:
         try:
-            tools.kubectl_bin(*cmd)
+            kubectl_bin(*cmd)
         except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
             logger.debug(f"Command failed (continuing cleanup): {' '.join(cmd)}, error: {e}")
 
@@ -281,17 +321,20 @@ def create_infra(test_paths: Dict[str, str], create_namespace):
 
     # Clean up all created namespaces
     namespaces_to_delete = created_namespaces.copy()
-    if os.environ.get("OPERATOR_NS"):
-        namespaces_to_delete.append(os.environ.get("OPERATOR_NS"))
+    operator_ns = os.environ.get("OPERATOR_NS")
+    if operator_ns:
+        namespaces_to_delete.append(operator_ns)
 
     for ns in namespaces_to_delete:
         run_cmd(["delete", "--grace-period=0", "--force", "namespace", ns, "--ignore-not-found"])
 
 
 @pytest.fixture(scope="class")
-def deploy_chaos_mesh(namespace: str) -> None:
+def deploy_chaos_mesh() -> Generator[Callable[[str], None], None, None]:
     """Deploy Chaos Mesh and clean up after tests."""
-    try:
+    deployed_namespaces = []
+
+    def _deploy(namespace: str) -> None:
         subprocess.run(
             ["helm", "repo", "add", "chaos-mesh", "https://charts.chaos-mesh.org"], check=True
         )
@@ -316,8 +359,11 @@ def deploy_chaos_mesh(namespace: str) -> None:
             ],
             check=True,
         )
+        deployed_namespaces.append(namespace)
 
-    except subprocess.CalledProcessError as e:
+    yield _deploy
+
+    for ns in deployed_namespaces:
         try:
             subprocess.run(
                 [
@@ -325,49 +371,29 @@ def deploy_chaos_mesh(namespace: str) -> None:
                     "uninstall",
                     "chaos-mesh",
                     "--namespace",
-                    namespace,
-                    "--ignore-not-found",
+                    ns,
                     "--wait",
                     "--timeout",
                     "60s",
-                ]
+                ],
+                check=True,
             )
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as cleanup_error:
-            logger.warning(f"Failed to cleanup chaos-mesh during error handling: {cleanup_error}")
-        raise e
-
-    yield
-
-    try:
-        subprocess.run(
-            [
-                "helm",
-                "uninstall",
-                "chaos-mesh",
-                "--namespace",
-                namespace,
-                "--wait",
-                "--timeout",
-                "60s",
-            ],
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to cleanup chaos-mesh: {e}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to cleanup chaos-mesh in {ns}: {e}")
 
 
 @pytest.fixture(scope="class")
-def deploy_cert_manager() -> None:
+def deploy_cert_manager() -> Generator[None, None, None]:
     """Deploy Cert Manager and clean up after tests."""
     logger.info("Deploying cert-manager")
     cert_manager_url = f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
     try:
-        tools.kubectl_bin("create", "namespace", "cert-manager")
-        tools.kubectl_bin(
+        kubectl_bin("create", "namespace", "cert-manager")
+        kubectl_bin(
             "label", "namespace", "cert-manager", "certmanager.k8s.io/disable-validation=true"
         )
-        tools.kubectl_bin("apply", "-f", cert_manager_url, "--validate=false")
-        tools.kubectl_bin(
+        kubectl_bin("apply", "-f", cert_manager_url, "--validate=false")
+        kubectl_bin(
             "wait",
             "pod",
             "-l",
@@ -378,7 +404,7 @@ def deploy_cert_manager() -> None:
         )
     except Exception as e:
         try:
-            tools.kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
+            kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
         except (subprocess.CalledProcessError, FileNotFoundError, OSError) as cleanup_error:
             logger.warning(
                 f"Failed to cleanup cert-manager during error handling: {cleanup_error}"
@@ -388,13 +414,13 @@ def deploy_cert_manager() -> None:
     yield
 
     try:
-        tools.kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
+        kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
     except Exception as e:
         logger.error(f"Failed to cleanup cert-manager: {e}")
 
 
 @pytest.fixture(scope="class")
-def deploy_minio() -> None:
+def deploy_minio() -> Generator[None, None, None]:
     """Deploy MinIO and clean up after tests."""
     service_name = "minio-service"
     bucket = "operator-testing"
@@ -406,13 +432,14 @@ def deploy_minio() -> None:
     subprocess.run(["helm", "repo", "add", "minio", "https://charts.min.io/"], check=True)
 
     endpoint = f"http://{service_name}:9000"
+    minio_ver = os.environ.get("MINIO_VER") or ""
     minio_args = [
         "helm",
         "install",
         service_name,
         "minio/minio",
         "--version",
-        os.environ.get("MINIO_VER"),
+        minio_ver,
         "--set",
         "replicas=1",
         "--set",
@@ -445,23 +472,23 @@ def deploy_minio() -> None:
         f"serviceAccount.name={service_name}-sa",
     ]
 
-    tools.retry(lambda: subprocess.run(minio_args, check=True), max_attempts=10, delay=60)
+    retry(lambda: subprocess.run(minio_args, check=True), max_attempts=10, delay=60)
 
-    minio_pod = tools.kubectl_bin(
+    minio_pod = kubectl_bin(
         "get",
         "pods",
         f"--selector=release={service_name}",
         "-o",
         "jsonpath={.items[].metadata.name}",
     ).strip()
-    tools.wait_pod(minio_pod)
+    wait_pod(minio_pod)
 
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
-        namespace = tools.kubectl_bin(
+        namespace = kubectl_bin(
             "config", "view", "--minify", "-o", "jsonpath={..namespace}"
         ).strip()
-        tools.kubectl_bin(
+        kubectl_bin(
             "create",
             "svc",
             "-n",
@@ -470,11 +497,10 @@ def deploy_minio() -> None:
             service_name,
             f"--external-name={service_name}.{namespace}.svc.cluster.local",
             "--tcp=9000",
-            check=False,
         )
 
     logger.info(f"Creating MinIO bucket: {bucket}")
-    tools.kubectl_bin(
+    kubectl_bin(
         "run",
         "-i",
         "--rm",
@@ -502,12 +528,12 @@ def deploy_minio() -> None:
 
 
 @pytest.fixture(scope="class")
-def psmdb_client(test_paths: Dict[str, str]) -> tools.MongoManager:
+def psmdb_client(test_paths: Dict[str, str]) -> MongoManager:
     """Deploy and get the client pod name."""
-    tools.kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
 
-    result = tools.retry(
-        lambda: tools.kubectl_bin(
+    result = retry(
+        lambda: kubectl_bin(
             "get",
             "pods",
             "--selector=name=psmdb-client",
@@ -518,5 +544,5 @@ def psmdb_client(test_paths: Dict[str, str]) -> tools.MongoManager:
     )
 
     pod_name = result.strip()
-    tools.wait_pod(pod_name)
-    return tools.MongoManager(pod_name)
+    wait_pod(pod_name)
+    return MongoManager(pod_name)

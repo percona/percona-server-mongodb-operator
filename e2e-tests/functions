@@ -1817,6 +1817,8 @@ function setup_azure_credentials() {
 create_infra() {
 	local ns="$1"
 
+	echo "$ns" > /tmp/pytest_current_namespace
+
 	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
 		delete_crd
 		check_crd_for_deletion "${GIT_BRANCH}"

@@ -21,6 +21,8 @@ dependencies = [
 [tool.pytest.ini_options]
 addopts = "-v -s --self-contained-html"
 render_collapsed = "all"
+junit_family = "xunit2"
+junit_suite_name = "psmdb-e2e"
 
 [[tool.mypy.overrides]]
 module = ["pytest_html.*"]

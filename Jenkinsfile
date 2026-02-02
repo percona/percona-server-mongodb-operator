@@ -257,9 +257,9 @@ void runTest(Integer TEST_ID) {
                     
                     # Run native pytest if test_*.py exists, otherwise run bash via wrapper
                     if ls e2e-tests/$testName/test_*.py 1>/dev/null 2>&1; then
-                        time uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
+                        uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
                     else
-                        time uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
+                        uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
                     fi
                 """
             }

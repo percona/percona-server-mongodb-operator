@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
+import logging
 import os
-import re
-import subprocess
-import sys
 import tarfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+from lib.kubectl import kubectl_bin
+
+logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
 
@@ -21,12 +23,11 @@ class K8sCollector:
 
     def kubectl(self, *args: str) -> str:
         """Run kubectl command and return stdout"""
-        result = subprocess.run(["kubectl", *args], capture_output=True, text=True, check=False)
-        return result.stdout if result.returncode == 0 else ""
+        return kubectl_bin(*args, check=False)
 
     def kubectl_ns(self, *args: str) -> str:
         """Run kubectl command with namespace flag"""
-        return self.kubectl(*args, "-n", self.namespace)
+        return kubectl_bin(*args, "-n", self.namespace, check=False)
 
     def get_names(self, resource_type: str) -> List[str]:
         """Get list of resource names"""
@@ -41,7 +42,7 @@ class K8sCollector:
 
     def process_resource(self, resource_type: str) -> None:
         """Process a resource type: get list, describe each, get yaml"""
-        print(f"Processing {resource_type}...")
+        logger.debug(f"Processing {resource_type}...")
         base = f"{self.output_dir}/get/{resource_type}"
 
         self.save(
@@ -64,13 +65,13 @@ class K8sCollector:
         ).split()
 
         for container in containers:
-            print(f"  Extracting logs: {pod}/{container}")
+            logger.debug(f"Extracting logs: {pod}/{container}")
             logs = self.kubectl_ns("logs", pod, "-c", container)
             self.save(f"{self.output_dir}/logs/{pod}/{container}.log", logs)
 
     def process_pods(self) -> None:
         """Process pods with parallel log extraction"""
-        print("Processing pods...")
+        logger.debug("Processing pods...")
         base = f"{self.output_dir}/get/pods"
 
         self.save(f"{base}/pods.txt", self.kubectl_ns("get", "pods", "-o", "wide"))
@@ -88,7 +89,7 @@ class K8sCollector:
 
     def extract_events(self) -> None:
         """Extract namespace events"""
-        print("Extracting events...")
+        logger.debug("Extracting events...")
         self.save(
             f"{self.output_dir}/events/events.txt", self.kubectl_ns("get", "events", "-o", "wide")
         )
@@ -121,14 +122,58 @@ class K8sCollector:
                 + "\n\n".join(errors),
             )
 
+    def capture_summary(self) -> Dict[str, str]:
+        """Capture simplified resources for HTML report. Returns dict with resources, logs, events."""
+        sections = []
+
+        sections.append("=== Nodes ===")
+        sections.append(self.kubectl("get", "nodes") or "(no output)")
+        sections.append("")
+
+        sections.append(f"=== All from namespace {self.namespace} ===")
+        sections.append(self.kubectl_ns("get", "all") or "(no output)")
+        sections.append("")
+
+        sections.append("=== Secrets ===")
+        sections.append(self.kubectl_ns("get", "secrets") or "(no output)")
+        sections.append("")
+
+        sections.append("=== PSMDB Cluster ===")
+        sections.append(
+            self.kubectl_ns(
+                "get", "psmdb", "-o", "custom-columns=NAME:.metadata.name,STATE:.status.state"
+            )
+            or "(no output)"
+        )
+        sections.append("")
+
+        sections.append("=== PSMDB Backup ===")
+        sections.append(self.kubectl_ns("get", "psmdb-backup") or "(no output)")
+        sections.append("")
+
+        sections.append("=== PSMDB Restore ===")
+        sections.append(self.kubectl_ns("get", "psmdb-restore") or "(no output)")
+
+        logs = self.kubectl_ns(
+            "logs", "-l", "app.kubernetes.io/name=percona-server-mongodb-operator", "--tail=50"
+        )
+
+        events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
+
+        return {
+            "resources": "\n".join(sections),
+            "logs": f"=== PSMDB Operator Logs ===\n{logs or '(no output)'}",
+            "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
+        }
+
     def collect_all(self) -> None:
         """Main collection method"""
-        print(f"=== Collecting from namespace: {self.namespace} ===")
+        logger.info(f"Collecting from namespace: {self.namespace}")
 
         self.process_pods()
 
         resources = ["statefulsets", "deployments", "secrets", "jobs", "configmaps", "services"]
-        resources.extend(r.strip() for r in self.custom_resources if r.strip())
+        resources.extend(r for r in self.custom_resources if r)
 
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = [executor.submit(self.process_resource, r) for r in resources]
@@ -137,10 +182,10 @@ class K8sCollector:
                 try:
                     f.result()
                 except Exception as e:
-                    print(f"Error: {e}")
+                    logger.error(f"Error: {e}")
 
         self.extract_errors()
-        print(f"=== Done. Output: {self.output_dir} ===")
+        logger.info(f"Done. Output: {self.output_dir}")
 
 
 def collect_resources(
@@ -158,13 +203,4 @@ def collect_resources(
         with tarfile.open(f"{collector.output_dir}.tar.gz", "w:gz") as tar:
             tar.add(collector.output_dir, arcname=os.path.basename(collector.output_dir))
     except Exception as e:
-        print(f"Error collecting from {namespace}: {e}")
-
-
-def get_namespace(test_log: str) -> str:
-    """Extract namespace from test log"""
-    match = re.search(r"create namespace (\S*?\d+)\b", test_log)
-    if match:
-        print(f"Extracted namespace: {match.group(1)}", file=sys.stderr)
-        return match.group(1)
-    raise ValueError("Namespace not found in logs")
+        logger.error(f"Error collecting from {namespace}: {e}")

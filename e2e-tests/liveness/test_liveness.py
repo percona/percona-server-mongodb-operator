@@ -2,10 +2,11 @@
 
 import logging
 import re
-from typing import Callable, Dict
+from typing import Any, Callable, Dict
 
 import pytest
-from lib import tools
+from lib.config import apply_cluster, compare_kubectl
+from lib.kubectl import kubectl_bin, wait_for_running
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,9 @@ def config(create_infra: Callable[[str], str]) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Dict[str, str], deploy_minio) -> None:
+def setup_tests(test_paths: Dict[str, str], deploy_minio: Any) -> None:
     """Setup test environment"""
-    tools.kubectl_bin(
+    kubectl_bin(
         "apply",
         "-f",
         f"{test_paths['conf_dir']}/secrets.yml",
@@ -33,18 +34,20 @@ def setup_tests(test_paths: Dict[str, str], deploy_minio) -> None:
 
 class TestLiveness:
     @pytest.mark.dependency()
-    def test_create_first_cluster(self, config, test_paths):
+    def test_create_first_cluster(
+        self, config: Dict[str, str], test_paths: Dict[str, str]
+    ) -> None:
         """Create first PSMDB cluster"""
-        tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0.yml")
-        tools.wait_for_running(f"{config['cluster']}-rs0", 3)
+        apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0.yml")
+        wait_for_running(f"{config['cluster']}-rs0", 3)
 
-        tools.compare_kubectl(
+        compare_kubectl(
             test_paths["test_dir"], f"statefulset/{config['cluster']}-rs0", config["namespace"]
         )
 
     @pytest.mark.dependency(depends=["TestLiveness::test_create_first_cluster"])
     def test_liveness_check_fails_with_invalid_ssl_option(self, config: Dict[str, str]) -> None:
-        tools.kubectl_bin(
+        kubectl_bin(
             "exec",
             f"{config['cluster']}-rs0-0",
             "-c",
@@ -56,7 +59,7 @@ class TestLiveness:
             check=False,
         )
 
-        logs_output = tools.kubectl_bin(
+        logs_output = kubectl_bin(
             "exec",
             f"{config['cluster']}-rs0-0",
             "-c",
@@ -78,11 +81,11 @@ class TestLiveness:
     def test_change_liveness_config(
         self, config: Dict[str, str], test_paths: Dict[str, str]
     ) -> None:
-        tools.apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0-changed.yml")
+        apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0-changed.yml")
 
-        tools.wait_for_running(f"{config['cluster']}-rs0", 3)
+        wait_for_running(f"{config['cluster']}-rs0", 3)
 
-        tools.compare_kubectl(
+        compare_kubectl(
             test_paths["test_dir"],
             f"statefulset/{config['cluster']}-rs0",
             config["namespace"],
