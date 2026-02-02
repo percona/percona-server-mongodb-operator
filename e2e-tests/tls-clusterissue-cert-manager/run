@@ -1,0 +1,143 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. "${test_dir}/../functions"
+set_debug
+
+check_tls_secret() {
+	local secret_name=$1
+	check_secret_data_key "$secret_name" 'ca.crt'
+	check_secret_data_key "$secret_name" 'tls.crt'
+	check_secret_data_key "$secret_name" 'tls.key'
+}
+
+check_secret_data_key() {
+	local secret_name=$1
+	local data_key=$2
+	local secret_data
+
+	secret_data=$(kubectl_bin get "secrets/${secret_name}" -o json | jq ".data[\"${data_key}\"]")
+	if [ -z "$secret_data" ]; then
+		exit 1
+	fi
+}
+
+# TODO: The problem is about using ClusterIssuer.
+
+main() {
+	if [ -z "$OPERATOR_NS" ]; then
+		echo "Skipping the test. This test runs only in cluster-wide mode"
+		exit 0
+	fi
+
+	create_infra "$namespace"
+	deploy_cert_manager
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	kubectl_bin apply -f "$conf_dir/client_with_tls.yml"
+
+	desc 'create custom cert-manager issuers and certificates'
+	kubectl_bin apply -f "$test_dir/conf/some-name-ca-cert.yml"
+	kubectl_bin apply -f "$test_dir/conf/some-name-ssl-internal.yml"
+	kubectl_bin apply -f "$test_dir/conf/some-name-ssl.yml"
+	kubectl_bin apply -f "$test_dir/conf/some-name-psmdb-ca-issuer.yml"
+	kubectl_bin apply -f "$test_dir/conf/some-name-psmdb-issuer.yml"
+	deploy_cmctl
+	sleep 60
+
+	cluster="some-name"
+	desc "create first PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'compare custom certificates and clusterissuers'
+	compare_kubectl "certificate/${cluster}-ssl" "-custom"
+	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
+	compare_kubectl "clusterissuer/$cluster-psmdb-ca-issuer" "-custom"
+	compare_kubectl "clusterissuer/$cluster-psmdb-issuer" "-custom"
+
+	desc 'delete cluster'
+	kubectl delete psmdb --all
+	wait_for_delete psmdb/$cluster 180
+
+	kubectl delete pvc --all
+
+	desc 'delete custom cert-manager issuers and certificates'
+	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-ca-issuer.yml"
+	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-issuer.yml"
+	kubectl_bin delete -f "$test_dir/conf/some-name-ca-cert.yml"
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl-internal.yml"
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl.yml"
+
+	sleep 30
+
+	desc 'delete ssl secrets, operator should recreate them'
+	kubectl_bin delete secret "$cluster-ssl-internal"
+	kubectl_bin delete secret "$cluster-ssl"
+
+	sleep 30
+
+	desc "recreate PSMDB cluster $cluster"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	compare_kubectl statefulset/${cluster}-rs0
+	compare_kubectl statefulset/${cluster}-cfg
+	compare_kubectl statefulset/${cluster}-mongos
+
+	desc 'check if certificates issued with certmanager'
+	check_tls_secret "$cluster-ssl"
+
+	desc 'check if certificate issued'
+	compare_kubectl certificate/$cluster-ssl
+
+	desc 'check if internal certificate issued'
+	compare_kubectl certificate/$cluster-ssl-internal
+
+	renew_certificate "some-name-ssl"
+	sleep 10
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	renew_certificate "some-name-ssl-internal"
+	sleep 10
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'check if certificate issued'
+	compare_kubectl certificate/$cluster-ssl
+
+	desc 'check if internal certificate issued'
+	compare_kubectl certificate/$cluster-ssl-internal
+
+	desc 'disable TLS'
+	pause_cluster "$cluster"
+	wait_for_cluster_state "${cluster}" "paused"
+
+	disable_tls "$cluster"
+
+	unpause_cluster "$cluster"
+	wait_for_cluster_state "${cluster}" "ready"
+
+	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled" "skip_generation_check"
+	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled" "skip_generation_check"
+	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled" "skip_generation_check"
+
+	destroy "$namespace"
+	desc 'test passed'
+}
+
+main

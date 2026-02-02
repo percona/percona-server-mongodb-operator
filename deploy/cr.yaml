@@ -23,14 +23,14 @@ spec:
   crVersion: 1.22.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
-#  tls:
+  tls:
 #    mode: preferTLS
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    allowInvalidCertificates: true
-#    issuerConf:
-#      name: special-selfsigned-issuer
-#      kind: ClusterIssuer
+    issuerConf:
+      name: special-selfsigned-issuer
+      kind: ClusterIssuer
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials

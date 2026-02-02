@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +28,7 @@ func TestCreateIssuer(t *testing.T) {
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
 			TLS: &api.TLSSpec{
-				IssuerConf: &cmmeta.ObjectReference{
+				IssuerConf: api.IssuerConfReference{
 					Name: customIssuerName,
 				},
 			},
@@ -87,7 +86,7 @@ func TestCreateCertificate(t *testing.T) {
 				SSL: "ssl",
 			},
 			TLS: &api.TLSSpec{
-				IssuerConf: &cmmeta.ObjectReference{
+				IssuerConf: api.IssuerConfReference{
 					Name:  customIssuerName,
 					Kind:  customIssuerKind,
 					Group: customIssuerGroup,

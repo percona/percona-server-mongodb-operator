@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,9 +25,6 @@ import (
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -178,10 +176,24 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode                 `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode             `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool               `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration     `json:"certValidityDuration,omitempty"`
+	IssuerConf               IssuerConfReference `json:"issuerConf,omitempty"`
+}
+
+type IssuerConfReference struct {
+	// Name of the issuer being referred to.
+	// +optional
+	Name string `json:"name"`
+	// Kind of the issuer being referred to.
+	// Defaults to 'Issuer'.
+	// +optional
+	Kind string `json:"kind,omitempty"`
+	// Group of the issuer being referred to.
+	// Defaults to 'cert-manager.io'.
+	// +optional
+	Group string `json:"group,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {

@@ -7,15 +7,15 @@ import (
 	"strings"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
+	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/percona/percona-backup-mongodb/pbm/compress"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -130,6 +130,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
 		cr.Spec.TLS.AllowInvalidCertificates = &t
+	}
+
+	if cr.Spec.TLS.IssuerConf.Kind == "" {
+		cr.Spec.TLS.IssuerConf.Kind = cm.IssuerKind
+	}
+	if cr.Spec.TLS.IssuerConf.Group == "" {
+		cr.Spec.TLS.IssuerConf.Group = "cert-manager.io"
 	}
 
 	if cr.Spec.UnsafeConf {
