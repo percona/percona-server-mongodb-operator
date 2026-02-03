@@ -209,6 +209,57 @@ void makeReport() {
     """
 }
 
+void generateMissingReports() {
+    sh "mkdir -p e2e-tests/reports"
+    
+    for (int i = 0; i < tests.size(); i++) {
+        def testName = tests[i]["name"]
+        def testResult = tests[i]["result"]
+        def testTime = tests[i]["time"] ?: 0
+        
+        if (testResult == "skipped") {
+            continue
+        }
+        
+        def xmlFile = "e2e-tests/reports/${testName}.xml"
+        def htmlFile = "e2e-tests/reports/${testName}.html"
+        
+        if (!fileExists(xmlFile)) {
+            def failures = testResult == "failure" ? 1 : 0
+            def failureElement = testResult == "failure" ? 
+                '<failure message="Incomplete execution">Test did not complete - possible causes: node abort, timeout, cluster creation failure</failure>' : ''
+            
+            writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="pytest tests">
+<testsuite name="psmdb-e2e" errors="0" failures="${failures}" skipped="0" tests="1" time="${testTime}">
+<testcase classname="e2e-tests.${testName}" name="${testName}" time="${testTime}">
+${failureElement}
+</testcase>
+</testsuite>
+</testsuites>"""
+        }
+        
+        if (!fileExists(htmlFile)) {
+            def resultCapitalized = testResult == "failure" ? "Failed" : "Passed"
+            def formattedTime = formatTime(testTime)
+            def logMessage = testResult == "failure" ? 
+                "Test did not complete - possible causes: node abort, timeout, cluster creation failure" : 
+                "Test marked as passed (from previous run)"
+            
+            writeFile file: htmlFile, text: """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title id="head-title">${testName}.html</title>
+</head>
+<body>
+<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report - test execution incomplete"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td class=\\"col-links\\"></td>"], "log": "${logMessage}"}]}}'></div>
+</body>
+</html>"""
+        }
+    }
+}
+
 void clusterRunner(String cluster) {
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]){
         def clusterCreated=0
@@ -680,20 +731,16 @@ pipeline {
                             }
                         }
                         makeReport()
+                        generateMissingReports()
                         
-                        if (fileExists('e2e-tests/reports')) {
-                            sh """
-                                export PATH="\$HOME/.local/bin:\$PATH"
-                                uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
-                                uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
-                            """
-                            junit testResults: 'final_report.xml', healthScaleFactor: 1.0
-                            archiveArtifacts 'final_report.xml, final_report.html'
-                            pushReportFile()
-                        } else {
-                            junit testResults: '*.xml', healthScaleFactor: 1.0
-                            archiveArtifacts '*.xml'
-                        }
+                        sh """
+                            export PATH="\$HOME/.local/bin:\$PATH"
+                            uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
+                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                        """
+                        junit testResults: 'final_report.xml', healthScaleFactor: 1.0
+                        archiveArtifacts 'final_report.xml, final_report.html'
+                        pushReportFile()
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
