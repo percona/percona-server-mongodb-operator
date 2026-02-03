@@ -33,7 +33,7 @@ func (c *caCert) Name() string {
 }
 
 func (c *caCert) Namespace() string {
-	if c.cr.CompareVersion("1.22.0") >= 0 && c.cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
+	if c.cr.CompareVersion("1.22.0") >= 0 && c.cr.Spec.TLS != nil && c.cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
 		return certManagerNamespace()
 	}
 
@@ -53,7 +53,7 @@ func (c *caCert) Object() *cm.Certificate {
 	}
 
 	issuerKind := cm.IssuerKind
-	if cr.CompareVersion("1.22.0") >= 0 {
+	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.TLS != nil {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 	}
 	return &cm.Certificate{

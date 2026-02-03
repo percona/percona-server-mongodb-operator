@@ -136,8 +136,6 @@ func TestCreateCertificate(t *testing.T) {
 }
 
 func TestWaitForCerts(t *testing.T) {
-	ctx := context.Background()
-
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -256,7 +254,7 @@ func TestWaitForCerts(t *testing.T) {
 				dryRun: false,
 			}
 
-			err := controller.WaitForCerts(ctx, cr, CertificateCA(cr))
+			err := controller.WaitForCerts(t.Context(), cr, CertificateCA(cr))
 			assert.NoError(t, err)
 		})
 	}
