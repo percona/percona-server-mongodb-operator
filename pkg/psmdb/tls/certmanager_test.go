@@ -19,8 +19,6 @@ import (
 )
 
 func TestCreateIssuer(t *testing.T) {
-	ctx := context.Background()
-
 	customIssuerName := "issuer-conf-name"
 
 	cr := &api.PerconaServerMongoDB{
@@ -30,6 +28,7 @@ func TestCreateIssuer(t *testing.T) {
 			TLS: &api.TLSSpec{
 				IssuerConf: api.IssuerConfReference{
 					Name: customIssuerName,
+					Kind: cm.IssuerKind,
 				},
 			},
 		},
@@ -40,6 +39,7 @@ func TestCreateIssuer(t *testing.T) {
 	issuer := &cm.Issuer{}
 
 	t.Run("Create issuer with custom name", func(t *testing.T) {
+		ctx := t.Context()
 		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
 			t.Fatal(err)
 		}
@@ -55,6 +55,7 @@ func TestCreateIssuer(t *testing.T) {
 	})
 
 	t.Run("Create issuer with default name", func(t *testing.T) {
+		ctx := t.Context()
 		cr.Spec.CRVersion = "1.15.0"
 		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
 			t.Fatal(err)
