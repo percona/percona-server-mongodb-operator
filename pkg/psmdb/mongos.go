@@ -46,15 +46,21 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 			},
 		}
 	}
-	return appsv1.StatefulSetSpec{
+
+	spec := appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: naming.MongosLabels(cr),
 		},
-		Template:             template,
-		UpdateStrategy:       updateStrategy,
-		RevisionHistoryLimit: cr.Spec.RevisionHistoryLimit,
+		Template:       template,
+		UpdateStrategy: updateStrategy,
 	}
+
+	if cr.CompareVersion("1.23.0") >= 0 {
+		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
+	}
+
+	return spec
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
