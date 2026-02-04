@@ -186,9 +186,13 @@ apply_resourcequota 30Gi
 echo "Continuing to fill disk to test maxSize enforcement"
 fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "7Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "7Gi" 60 10
 
 fill_disk_to_threshold "${cluster}-rs0-0" 80 5600
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "9Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "9Gi" 60 10
 
 fill_disk_to_threshold "${cluster}-rs0-0" 80 7200
 
