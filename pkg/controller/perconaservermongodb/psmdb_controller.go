@@ -157,9 +157,9 @@ func getReconcileInterval() time.Duration {
 		return defaultInterval
 	}
 
-	if d <= 0 {
+	if d < defaultInterval {
 		log := logf.Log.WithName("psmdb-controller")
-		log.Info("RECONCILE_INTERVAL must be a positive duration, using default (5s)", "value", interval, "default", defaultInterval)
+		log.Info("RECONCILE_INTERVAL must be at least 5s, using 5s", "value", interval, "default", defaultInterval)
 		return defaultInterval
 	}
 

@@ -8,6 +8,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,31 +54,27 @@ func TestGetReconcileInterval(t *testing.T) {
 			setEnv:   true,
 			want:     5 * time.Second,
 		},
+		{
+			name:     "duration less than 5s falls back to default",
+			envValue: "1s",
+			setEnv:   true,
+			want:     5 * time.Second,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original env value
-			originalValue, wasSet := os.LookupEnv("RECONCILE_INTERVAL")
 			defer func() {
-				if wasSet {
-					os.Setenv("RECONCILE_INTERVAL", originalValue)
-				} else {
-					os.Unsetenv("RECONCILE_INTERVAL")
-				}
+				err := os.Unsetenv("RECONCILE_INTERVAL")
+				require.NoError(t, err)
 			}()
-
-			// Set test env value
 			if tt.setEnv {
-				os.Setenv("RECONCILE_INTERVAL", tt.envValue)
-			} else {
-				os.Unsetenv("RECONCILE_INTERVAL")
+				err := os.Setenv("RECONCILE_INTERVAL", tt.envValue)
+				require.NoError(t, err)
 			}
 
 			got := getReconcileInterval()
-			if got != tt.want {
-				t.Errorf("getReconcileInterval() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
