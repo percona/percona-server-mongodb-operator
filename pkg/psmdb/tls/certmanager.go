@@ -97,9 +97,8 @@ func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.Perc
 func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	var issuer client.Object
 	meta := metav1.ObjectMeta{
-		Name:      issuerName(cr),
-		Namespace: cr.Namespace,
-		Labels:    naming.ClusterLabels(cr),
+		Name:   issuerName(cr),
+		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
 		IssuerConfig: cm.IssuerConfig{
@@ -114,6 +113,7 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 			ObjectMeta: meta,
 			Spec:       spec,
 		}
+		issuer.SetNamespace(cr.Namespace)
 	case cm.ClusterIssuerKind:
 		issuer = &cm.ClusterIssuer{
 			ObjectMeta: meta,

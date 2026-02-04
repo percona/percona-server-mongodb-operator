@@ -24,7 +24,7 @@ func TestCreateIssuer(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.16.0",
+			CRVersion: version.Version(),
 			TLS: &api.TLSSpec{
 				IssuerConf: api.IssuerConfReference{
 					Name: customIssuerName,
@@ -36,39 +36,70 @@ func TestCreateIssuer(t *testing.T) {
 
 	r := buildFakeClient(cr)
 
-	issuer := &cm.Issuer{}
-
 	t.Run("Create issuer with custom name", func(t *testing.T) {
 		ctx := t.Context()
-		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
+		cr := cr.DeepCopy()
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
-		if err != nil {
-			t.Fatal(err)
-		}
+		issuer := &cm.Issuer{}
 
-		if issuer.Name != customIssuerName {
-			t.Fatalf("Expected issuer name %s, got %s", customIssuerName, issuer.Name)
-		}
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, customIssuerName, issuer.Name)
 	})
 
 	t.Run("Create issuer with default name", func(t *testing.T) {
 		ctx := t.Context()
-		cr.Spec.CRVersion = "1.15.0"
-		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Name = ""
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
-		if err != nil {
-			t.Fatal(err)
-		}
+		issuer := &cm.Issuer{}
 
-		if issuer.Name != issuerName(cr) {
-			t.Fatalf("Expected issuer name %s, got %s", issuerName(cr), issuer.Name)
-		}
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
+		assert.NoError(t, err)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "psmdb-mock-psmdb-issuer", issuer.Name)
+	})
+
+	t.Run("Create clusterissuer with custom name", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = customIssuerName
+
+		issuer := &cm.ClusterIssuer{}
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Name: customIssuerName}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, customIssuerName, issuer.Name)
+	})
+
+	t.Run("Create clusterissuer with default name", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = ""
+
+		issuer := &cm.ClusterIssuer{}
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Name: issuerName(cr)}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "psmdb-mock-psmdb-psmdb-issuer", issuer.Name)
 	})
 }
 
@@ -271,6 +302,7 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 
 	s.AddKnownTypes(cm.SchemeGroupVersion,
 		new(cm.Issuer),
+		new(cm.ClusterIssuer),
 		new(cm.Certificate),
 	)
 
