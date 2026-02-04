@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -719,7 +720,6 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 }
 
 func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelector {
-
 	if cr.Spec.Backup.Storages == nil {
 		return nil
 	}
@@ -727,26 +727,36 @@ func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelect
 	seen := map[string]struct{}{}
 	var out []api.SecretKeySelector
 
-	for _, storage := range cr.Spec.Backup.Storages {
+	// Sort storage names to ensure deterministic ordering
+	// This prevents StatefulSet generation increment due to random map iteration
+	storageNames := make([]string, 0, len(cr.Spec.Backup.Storages))
+	for name := range cr.Spec.Backup.Storages {
+		storageNames = append(storageNames, name)
+	}
+	sort.Strings(storageNames)
+
+	for _, name := range storageNames {
+		storage := cr.Spec.Backup.Storages[name]
+
 		if storage.Type != api.BackupStorageMinio {
 			continue
 		}
-		if storage.Minio.CABundle != nil &&
-			storage.Minio.CABundle.Name != "" {
 
-			key := storage.Minio.CABundle.Key
-			if key == "" {
-				key = "ca.crt"
-			}
+		if storage.Minio.CABundle == nil || storage.Minio.CABundle.Name == "" {
+			continue
+		}
+		key := storage.Minio.CABundle.Key
+		if key == "" {
+			key = "ca.crt"
+		}
 
-			k := storage.Minio.CABundle.Name + "/" + key
-			if _, ok := seen[k]; !ok {
-				out = append(out, api.SecretKeySelector{
-					Name: storage.Minio.CABundle.Name,
-					Key:  key,
-				})
-				seen[k] = struct{}{}
-			}
+		k := storage.Minio.CABundle.Name + "/" + key
+		if _, ok := seen[k]; !ok {
+			out = append(out, api.SecretKeySelector{
+				Name: storage.Minio.CABundle.Name,
+				Key:  key,
+			})
+			seen[k] = struct{}{}
 		}
 	}
 

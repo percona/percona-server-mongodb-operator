@@ -48,7 +48,7 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
-	if cr.Spec.EnableExternalVolumeAutoscaling {
+	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		return nil
 	}
 
@@ -233,7 +233,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return nil
 	}
 
-	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.VolumeExpansionEnabled {
+	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.IsVolumeExpansionEnabled() {
 		// If expansion is disabled we should keep the old value
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil

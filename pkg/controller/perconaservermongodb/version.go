@@ -269,7 +269,7 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		HashicorpVaultEnabled:  len(cr.Spec.Secrets.Vault) > 0,
 		RoleManagementEnabled:  len(cr.Spec.Roles) > 0,
 		UserManagementEnabled:  len(cr.Spec.Users) > 0,
-		VolumeExpansionEnabled: cr.Spec.VolumeExpansionEnabled,
+		VolumeExpansionEnabled: cr.Spec.IsVolumeExpansionEnabled(),
 	}
 
 	if cr.Spec.Platform != nil {
