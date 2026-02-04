@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -448,6 +449,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
+			if strings.Contains(err.Error(), "NodeNotFound") {
+				log.Info("WARNING: NodeNotFound during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
+				return rsMembers, 0, nil
+			}
 			return rsMembers, 0, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
@@ -1063,6 +1068,9 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	stsName := cr.Name + "-" + replset.Name
 	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
 	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, errors.Wrapf(err, "get statefulset %s", stsName)
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
