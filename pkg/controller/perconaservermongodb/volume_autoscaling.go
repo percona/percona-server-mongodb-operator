@@ -86,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 
 		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, volumeSpec); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
-			r.updateAutoscalingStatus(cr, pvc.Name, nil, err)
+			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
 	}
 
@@ -113,7 +113,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
 
-	r.updateAutoscalingStatus(cr, pvc.Name, usage, nil)
+	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
 
 	if !r.shouldTriggerResize(ctx, cr, pvc, usage) {
 		return nil
@@ -216,15 +216,16 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 
 // updateAutoscalingStatus updates the status for a specific PVC
 func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
+	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	pvcName string,
 	usage *PVCUsage,
 	err error,
 ) {
+	log := logf.FromContext(ctx).WithName("StorageAutoscaling")
+
 	if pvcName == "" {
-		return
-	}
-	if usage == nil {
+		log.V(1).Info("no pvc name specified")
 		return
 	}
 
@@ -234,17 +235,18 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 
 	status := cr.Status.StorageAutoscaling[pvcName]
 
-	newSize := resource.NewQuantity(usage.TotalBytes, resource.BinarySI)
-	if status.CurrentSize != "" {
-		oldSize, parseErr := resource.ParseQuantity(status.CurrentSize)
-		if parseErr == nil && newSize.Cmp(oldSize) > 0 {
-			status.LastResizeTime = metav1.Time{Time: time.Now()}
-			status.ResizeCount++
+	if usage != nil {
+		newSize := resource.NewQuantity(usage.TotalBytes, resource.BinarySI)
+		if status.CurrentSize != "" {
+			oldSize, parseErr := resource.ParseQuantity(status.CurrentSize)
+			if parseErr == nil && newSize.Cmp(oldSize) > 0 {
+				status.LastResizeTime = metav1.Time{Time: time.Now()}
+				status.ResizeCount++
+			}
 		}
+		status.CurrentSize = newSize.String()
+		status.LastError = ""
 	}
-
-	status.CurrentSize = newSize.String()
-	status.LastError = ""
 
 	if err != nil {
 		status.LastError = err.Error()
