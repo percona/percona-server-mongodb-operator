@@ -24,8 +24,6 @@ check_secret_data_key() {
 	fi
 }
 
-# TODO: The problem is about using ClusterIssuer.
-
 main() {
 	if [ -z "$OPERATOR_NS" ]; then
 		echo "Skipping the test. This test runs only in cluster-wide mode"
