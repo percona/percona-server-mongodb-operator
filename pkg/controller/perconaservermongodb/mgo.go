@@ -450,7 +450,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
 			if strings.Contains(err.Error(), "NodeNotFound") {
-				log.Info("WARNING: NodeNotFound during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
+				log.V(1).Info("NodeNotFound error during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
 				return rsMembers, 0, nil
 			}
 			return rsMembers, 0, errors.Wrap(err, "delete: write mongo config")
