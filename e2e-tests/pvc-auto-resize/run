@@ -137,10 +137,10 @@ if [[ ${initial_size} != "1Gi" ]]; then
 	exit 1
 fi
 
-desc 'fill disk to trigger autoscaling threshold 80 percent'
-# 1Gi = 1024MB, we want to fill to ~85% to trigger the 80% threshold
-# Fill with 850MB to exceed threshold
-fill_disk_to_threshold "${cluster}-rs0-0" 80 850
+desc 'fill disk to trigger autoscaling threshold 50 percent'
+# 1Gi = 1024MB, we want to fill to ~60% to trigger the 50% threshold
+# Fill with 600MB to exceed threshold
+fill_disk_to_threshold "${cluster}-rs0-0" 50 600
 
 desc 'wait for auto-resize to trigger'
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "3Gi" 60 10
@@ -161,7 +161,7 @@ desc 'test namespace resource quota enforcement'
 apply_resourcequota 9Gi
 
 echo "Filling disk again to trigger autoscaling with quota limit"
-fill_disk_to_threshold "${cluster}-rs0-0" 80 2400
+fill_disk_to_threshold "${cluster}-rs0-0" 50 1700
 
 echo "Waiting to verify PVC does not resize beyond quota (should stay at 3Gi)"
 sleep 30
@@ -184,17 +184,17 @@ desc 'test maxSize limit'
 # Increase quota to allow maxSize testing (3 replicas * 10Gi maxSize = 30Gi)
 apply_resourcequota 30Gi
 echo "Continuing to fill disk to test maxSize enforcement"
-fill_disk_to_threshold "${cluster}-rs0-0" 80 4000
+fill_disk_to_threshold "${cluster}-rs0-0" 50 2900
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
 wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "7Gi" 60 10
 wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "7Gi" 60 10
 
-fill_disk_to_threshold "${cluster}-rs0-0" 80 5600
+fill_disk_to_threshold "${cluster}-rs0-0" 50 4000
 wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
 wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "9Gi" 60 10
 wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "9Gi" 60 10
 
-fill_disk_to_threshold "${cluster}-rs0-0" 80 7200
+fill_disk_to_threshold "${cluster}-rs0-0" 50 5200
 
 final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
 if [[ ${final_size} == "10Gi" ]]; then
