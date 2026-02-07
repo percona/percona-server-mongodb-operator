@@ -499,7 +499,15 @@ func GetPBMStorageGCSConfig(
 			Bucket:    stg.GCS.Bucket,
 			Prefix:    stg.GCS.Prefix,
 			ChunkSize: stg.GCS.ChunkSize,
+			Credentials: gcs.Credentials{
+				WorkloadIdentity: stg.GCS.WorkloadIdentity,
+			},
 		},
+	}
+
+	if !stg.GCS.WorkloadIdentity && stg.GCS.CredentialsSecret == "" {
+		msg := "either workloadIdentity must be enabled or credentialsSecret must be specified for GCS storage"
+		return config.StorageConf{}, errors.New(msg)
 	}
 
 	if stg.GCS.CredentialsSecret != "" {
