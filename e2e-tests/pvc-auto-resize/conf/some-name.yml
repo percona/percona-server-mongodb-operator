@@ -13,7 +13,7 @@ spec:
     enableVolumeScaling: true
     autoscaling:
       enabled: true
-      triggerThresholdPercent: 80
+      triggerThresholdPercent: 50
       growthStep: "2Gi"
       maxSize: "10Gi"
   backup:
