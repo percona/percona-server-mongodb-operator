@@ -1,7 +1,6 @@
 package perconaservermongodb
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -19,7 +18,6 @@ import (
 
 func TestShouldTriggerResize(t *testing.T) {
 	r := &ReconcilePerconaServerMongoDB{}
-	ctx := context.Background()
 
 	tests := []struct {
 		name     string
@@ -139,7 +137,7 @@ func TestShouldTriggerResize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := r.shouldTriggerResize(ctx, tt.cr, tt.pvc, tt.usage)
+			result := r.shouldTriggerResize(t.Context(), tt.cr, tt.pvc, tt.usage)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -410,7 +408,6 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 				TotalBytes:   10 * 1024 * 1024 * 1024,
 				UsagePercent: 50,
 			},
-			err: nil,
 			expectedStatus: api.StorageAutoscalingStatus{
 				CurrentSize: "10Gi",
 				LastError:   "",
@@ -429,7 +426,6 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 				},
 			},
 			pvcName: "mongod-data-test-rs0-0",
-			usage:   nil,
 			err:     errors.New("connection refused"),
 			expectedStatus: api.StorageAutoscalingStatus{
 				CurrentSize: "10Gi",
@@ -453,7 +449,6 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 				TotalBytes:   20 * 1024 * 1024 * 1024,
 				UsagePercent: 40,
 			},
-			err: nil,
 			expectedStatus: api.StorageAutoscalingStatus{
 				CurrentSize: "20Gi",
 				LastError:   "",
@@ -464,7 +459,7 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			r.updateAutoscalingStatus(tt.cr, tt.pvcName, tt.usage, tt.err)
+			r.updateAutoscalingStatus(t.Context(), tt.cr, tt.pvcName, tt.usage, tt.err)
 
 			require.NotNil(t, tt.cr.Status.StorageAutoscaling)
 			status, ok := tt.cr.Status.StorageAutoscaling[tt.pvcName]
@@ -482,8 +477,6 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 }
 
 func TestTriggerResize(t *testing.T) {
-	ctx := context.Background()
-
 	tests := map[string]struct {
 		cr             *api.PerconaServerMongoDB
 		pvc            *corev1.PersistentVolumeClaim
@@ -695,7 +688,7 @@ func TestTriggerResize(t *testing.T) {
 
 			originalSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-			err = r.triggerResize(ctx, tt.cr, tt.pvc, tt.newSize, volumeSpec)
+			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, volumeSpec)
 			require.NoError(t, err)
 
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
