@@ -66,7 +66,7 @@ func issuerName(cr *api.PerconaServerMongoDB) string {
 	switch {
 	case tls != nil && tls.IssuerConf.Name != "":
 		return tls.IssuerConf.Name
-	case tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
+	case tls != nil && cr.CompareVersion("1.22.0") >= 0 && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
 		return cr.Name + "-" + cr.Namespace + suffix
 	}
 	return cr.Name + suffix
@@ -74,7 +74,7 @@ func issuerName(cr *api.PerconaServerMongoDB) string {
 
 func caIssuerName(cr *api.PerconaServerMongoDB) string {
 	const suffix = "-psmdb-ca-issuer"
-	if tls := cr.Spec.TLS; tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
+	if tls := cr.Spec.TLS; cr.CompareVersion("1.22.0") >= 0 && tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
 		return cr.Name + "-" + cr.Namespace + suffix
 	}
 	return cr.Name + suffix
