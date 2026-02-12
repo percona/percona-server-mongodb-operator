@@ -916,7 +916,7 @@ spec:
 #        compressionLevel: 6
   logcollector:
     enabled: true
-    image: percona/fluentbit:4.0.1-1
+    image: percona/fluentbit:4.0.1-2
 #    configuration: |
 #      [SERVICE]
 #          Flush        1

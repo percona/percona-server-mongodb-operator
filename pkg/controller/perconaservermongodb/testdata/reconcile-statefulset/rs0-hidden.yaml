@@ -220,7 +220,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
       - name: logs
-        image: percona/fluentbit:4.0.1-1
+        image: percona/fluentbit:4.0.1-2
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "fluent-bit" ]
         env:
@@ -246,7 +246,7 @@ spec:
           - mountPath: /opt/percona/logcollector/fluentbit/custom
             name: log-collector-volume
       - name: logrotate
-        image: percona/fluentbit:4.0.1-1
+        image: percona/fluentbit:4.0.1-2
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "logrotate" ]
         env:
