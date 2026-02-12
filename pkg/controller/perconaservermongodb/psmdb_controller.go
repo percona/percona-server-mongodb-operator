@@ -292,9 +292,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	// Make sure that secrets specified in the manifest are preserved and not overwritten by the operator.
-	err = r.ensureSecretExistence(ctx, cr)
-	if err != nil {
-		return reconcile.Result{}, err
+	if cr.ObjectMeta.DeletionTimestamp == nil {
+		err = r.ensureSecretExistence(ctx, cr)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	err = cr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
