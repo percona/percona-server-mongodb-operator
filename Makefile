@@ -127,6 +127,7 @@ release: manifests
 		-e "s|perconalab/fluentbit:main-logcollector|$(IMAGE_LOGCOLLECTOR)|g" \
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
+	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" pkg/psmdb/mongos_test.go
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
@@ -151,6 +152,7 @@ after-release: manifests
 		-e "s|$(IMAGE_LOGCOLLECTOR)|perconalab/fluentbit:main-logcollector|g" \
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
+	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
 
 version-service-client: swagger
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
