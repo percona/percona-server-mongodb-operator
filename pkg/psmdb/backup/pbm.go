@@ -115,15 +115,22 @@ func IsErrNoDocuments(err error) bool {
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, addrs []string, tlsEnabled bool) (string, error) {
 	usersSecretName := psmdbv1.UserSecretName(cr)
+	if len(addrs) == 0 {
+		return "", errors.New("no addresses provided")
+	}
+
 	scr, err := getSecret(ctx, k8sclient, cr.Namespace, usersSecretName)
 	if err != nil {
 		return "", errors.Wrap(err, "get secrets")
 	}
 
+	// Use only the first address to avoid issues with Go's url.Parse
+	// which doesn't support MongoDB's multi-host URI format (host1:port,host2:port).
+	// The MongoDB driver will auto-discover other replica set members.
 	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
 		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_USER"])),
 		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
-		strings.Join(addrs, ","),
+		addrs[0],
 	)
 
 	if !tlsEnabled {
