@@ -327,7 +327,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString(string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -344,8 +344,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get gcs credentials secret")
 			}
 			gcsConf.Credentials = gcs.Credentials{
-				ClientEmail: string(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
-				PrivateKey:  string(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
+				ClientEmail: storage.MaskedString(string(gcsSecret.Data[backup.GCSClientEmailSecretKey])),
+				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[backup.GCSPrivateKeySecretKey])),
 			}
 		}
 
@@ -369,8 +369,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
-				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
-				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
+				AccessKeyID:     storage.MaskedString(string(s3secret.Data[backup.AWSAccessKeySecretKey])),
+				SecretAccessKey: storage.MaskedString(string(s3secret.Data[backup.AWSSecretAccessKeySecretKey])),
 			}
 		}
 
@@ -388,8 +388,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 
 				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: string(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
-					HMACSecret:    string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+					HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[backup.AWSAccessKeySecretKey])),
+					HMACSecret:    storage.MaskedString(string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey])),
 				}
 			}
 
@@ -401,7 +401,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			case len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0:
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SSECustomerKey,
+					SseCustomerKey:       storage.MaskedString(cr.Status.S3.ServerSideEncryption.SSECustomerKey),
 				}
 			case len(cluster.Spec.Secrets.SSE) != 0:
 				sseSecret, err := secret(ctx, r.client, cr.Namespace, cluster.Spec.Secrets.SSE)
@@ -410,7 +410,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       string(sseSecret.Data[backup.SSECustomerKey]),
+					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[backup.SSECustomerKey])),
 				}
 			default:
 				return nil, errors.New("no SseCustomerKey specified")
@@ -463,8 +463,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get minio credentials secret")
 			}
 			minioConf.Credentials = mio.Credentials{
-				AccessKeyID:     string(minioSecret.Data[backup.AWSAccessKeySecretKey]),
-				SecretAccessKey: string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+				AccessKeyID:     storage.MaskedString(string(minioSecret.Data[backup.AWSAccessKeySecretKey])),
+				SecretAccessKey: storage.MaskedString(string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey])),
 			}
 		}
 		return mio.New(minioConf, "", nil)
