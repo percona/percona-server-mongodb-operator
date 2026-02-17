@@ -105,18 +105,7 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			continue
 		}
 
-		// Kubernetes annotation keys have a limit of 63 characters for the name part
-		// Format: "percona.com/<name>" where it must be less than or equal to 63 characters
-		// We need to keep the "-hash" suffix (5 chars), so we have 58 chars for the prefix
-		annotationKeyBase := fmt.Sprintf("percona.com/%s-%s", cr.Name, user.Name)
-		const hashSuffix = "-hash"
-		const maxAnnotationNameLength = 63
-		const maxPrefixLength = maxAnnotationNameLength - len(hashSuffix)
-
-		if len(annotationKeyBase) > maxPrefixLength {
-			annotationKeyBase = annotationKeyBase[:maxPrefixLength]
-		}
-		annotationKey := fmt.Sprintf("%s%s", annotationKeyBase, hashSuffix)
+		annotationKey := buildAnnotationKey(cr.Name, user.Name)
 
 		if userInfo == nil && !user.IsExternalDB() {
 			err = createUser(ctx, client, mongoCli, &user, sec, annotationKey, userSecretPassKey)
@@ -431,6 +420,22 @@ func createUser(
 
 	log.Info("User created", "user", user.UserID())
 	return nil
+}
+
+// buildAnnotationKey creates a Kubernetes annotation key for tracking user password hashes.
+// Kubernetes annotation keys have a limit of 63 characters for the name part.
+// Format: "percona.com/<name>" where it must be less than or equal to 63 characters.
+// We need to keep the "-hash" suffix (5 chars), so we have 58 chars for the prefix.
+func buildAnnotationKey(crName, userName string) string {
+	annotationKeyBase := fmt.Sprintf("percona.com/%s-%s", crName, userName)
+	const hashSuffix = "-hash"
+	const maxAnnotationNameLength = 63
+	const maxPrefixLength = maxAnnotationNameLength - len(hashSuffix)
+
+	if len(annotationKeyBase) > maxPrefixLength {
+		annotationKeyBase = annotationKeyBase[:maxPrefixLength]
+	}
+	return fmt.Sprintf("%s%s", annotationKeyBase, hashSuffix)
 }
 
 // getCustomUserSecret gets secret by name defined by `user.PasswordSecretRef.Name` or returns a secret
