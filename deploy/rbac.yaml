@@ -106,6 +106,7 @@ rules:
   - cert-manager.io
   resources:
   - issuers
+  - clusterissuers
   - certificates
   - certificaterequests
   verbs:

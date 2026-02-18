@@ -77,6 +77,7 @@ smart-update
 split-horizon
 stable-resource-version
 storage
+tls-clusterissuer-cert-manager
 tls-issue-cert-manager
 unsafe-psa
 upgrade

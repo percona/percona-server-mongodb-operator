@@ -2,6 +2,7 @@ package tls
 
 import (
 	"context"
+	"os"
 	"regexp"
 	"time"
 
@@ -27,7 +28,6 @@ type CertManagerController interface {
 	ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error)
-	DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error
 	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificates ...Certificate) error
 	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
 	Check(ctx context.Context, config *rest.Config, ns string) error
@@ -60,44 +60,31 @@ func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
-func deprecatedIssuerName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-psmdb-ca"
-}
-
 func issuerName(cr *api.PerconaServerMongoDB) string {
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-		return cr.Spec.TLS.IssuerConf.Name
+	const suffix = "-psmdb-issuer"
+	tls := cr.Spec.TLS
+	switch {
+	case tls != nil && tls.IssuerConf.Name != "":
+		return tls.IssuerConf.Name
+	case tls != nil && cr.CompareVersion("1.22.0") >= 0 && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
+		return cr.Name + "-" + cr.Namespace + suffix
 	}
-
-	if cr.CompareVersion("1.15.0") < 0 {
-		return deprecatedIssuerName(cr)
-	}
-
-	return cr.Name + "-psmdb-issuer"
+	return cr.Name + suffix
 }
 
 func caIssuerName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-psmdb-ca-issuer"
-}
-
-func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	issuer := new(cm.Issuer)
-	err := c.cl.Get(ctx, types.NamespacedName{
-		Name:      deprecatedIssuerName(cr),
-		Namespace: cr.Namespace,
-	}, issuer)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return err
+	const suffix = "-psmdb-ca-issuer"
+	if tls := cr.Spec.TLS; cr.CompareVersion("1.22.0") >= 0 && tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
+		return cr.Name + "-" + cr.Namespace + suffix
 	}
-	return c.cl.Delete(ctx, issuer)
+	return cr.Name + suffix
 }
 
 func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
-	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
-		return "", errors.Wrap(err, "set controller reference")
+	if cr.Namespace == obj.GetNamespace() {
+		if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
+			return "", errors.Wrap(err, "set controller reference")
+		}
 	}
 
 	status, err := util.Apply(ctx, c.cl, obj)
@@ -108,52 +95,71 @@ func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.Perc
 }
 
 func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
-	issuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				CA: &cm.CAIssuer{
-					SecretName: CertificateCA(cr).SecretName(),
-				},
+	var issuer client.Object
+	meta := metav1.ObjectMeta{
+		Name:   issuerName(cr),
+		Labels: naming.ClusterLabels(cr),
+	}
+	spec := cm.IssuerSpec{
+		IssuerConfig: cm.IssuerConfig{
+			CA: &cm.CAIssuer{
+				SecretName: CertificateCA(cr).SecretName(),
 			},
 		},
 	}
-
-	if cr.CompareVersion("1.15.0") < 0 {
-		issuer.Spec = cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
+	switch cr.Spec.TLS.IssuerConf.Kind {
+	case cm.IssuerKind:
+		issuer = &cm.Issuer{
+			ObjectMeta: meta,
+			Spec:       spec,
 		}
+		issuer.SetNamespace(cr.Namespace)
+	case cm.ClusterIssuerKind:
+		issuer = &cm.ClusterIssuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+	default:
+		return "", errors.Errorf("unknown issuer kind: %s", cr.Spec.TLS.IssuerConf.Kind)
 	}
 
 	if cr.CompareVersion("1.17.0") < 0 {
-		issuer.Labels = nil
+		issuer.SetLabels(nil)
 	}
 
 	return c.createOrUpdate(ctx, cr, issuer)
 }
 
 func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
-	issuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      caIssuerName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
+	var issuer client.Object
+	meta := metav1.ObjectMeta{
+		Name:      caIssuerName(cr),
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
+	}
+	spec := cm.IssuerSpec{
+		IssuerConfig: cm.IssuerConfig{
+			SelfSigned: &cm.SelfSignedIssuer{},
 		},
 	}
 
+	switch cr.Spec.TLS.IssuerConf.Kind {
+	case cm.IssuerKind:
+		issuer = &cm.Issuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+	case cm.ClusterIssuerKind:
+		issuer = &cm.ClusterIssuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+	default:
+		return "", errors.Errorf("unknown issuer kind: %s", cr.Spec.TLS.IssuerConf.Kind)
+	}
+
 	if cr.CompareVersion("1.17.0") < 0 {
-		issuer.Labels = nil
+		issuer.SetLabels(nil)
 	}
 
 	return c.createOrUpdate(ctx, cr, issuer)
@@ -218,7 +224,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 				secret := &corev1.Secret{}
 				err := c.cl.Get(ctx, types.NamespacedName{
 					Name:      cert.SecretName(),
-					Namespace: cr.Namespace,
+					Namespace: cert.Namespace(),
 				}, secret)
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
@@ -232,7 +238,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					if err != nil {
 						return err
 					}
-					if metav1.IsControlledBy(secret, certificate) {
+					if metav1.IsControlledBy(secret, certificate) || secret.Namespace != cr.Namespace {
 						continue
 					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
@@ -281,4 +287,12 @@ func (c *certManagerController) GetMergedCA(ctx context.Context, cr *api.Percona
 
 func (c *certManagerController) GetClient() client.Client {
 	return c.cl
+}
+
+func certManagerNamespace() string {
+	ns := os.Getenv("CERTMANAGER_NAMESPACE")
+	if ns == "" {
+		return "cert-manager"
+	}
+	return ns
 }

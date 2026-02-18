@@ -47,6 +47,7 @@ replset-remapping-sharded
 rs-shard-migration
 scaling
 split-horizon
+tls-clusterissuer-cert-manager
 tls-issue-cert-manager
 upgrade
 upgrade-sharded
