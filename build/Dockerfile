@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=ubi10
 
-FROM --platform=${BUILDPLATFORM} golang:1.25 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.26 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
 COPY go.mod go.sum ./
