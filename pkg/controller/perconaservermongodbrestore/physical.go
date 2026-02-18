@@ -50,10 +50,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	status := cr.Status
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
+	replsets := cluster.GetAllReplsets()
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pod := corev1.Pod{}
@@ -536,11 +533,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
+	replsets := cluster.GetAllReplsets()
 	for _, rs := range replsets {
 		stsName := naming.MongodStatefulSetName(cluster, rs)
 
