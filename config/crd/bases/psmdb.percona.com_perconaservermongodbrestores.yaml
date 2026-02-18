@@ -216,6 +216,10 @@ spec:
                     type: object
                   size:
                     type: string
+                  snapshots:
+                    additionalProperties:
+                      type: string
+                    type: object
                   start:
                     format: date-time
                     type: string

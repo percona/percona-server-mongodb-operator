@@ -16,8 +16,13 @@ type PerconaServerMongoDBBackupSpec struct {
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// +kubebuilder:validation:Enum={logical,physical,external,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
+
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
 
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=120
@@ -49,6 +54,11 @@ type PerconaServerMongoDBBackupStatus struct {
 	ReplsetNames []string                     `json:"replsetNames,omitempty"`
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
+
+	// Snapshots contains the names of the VolumeSnapshots created for the backup.
+	// This is set only when type is `external` and volumeSnapshotClass is specified.
+	// The key is tne node name and the value is the name of its corresponding VolumeSnapshot.
+	Snapshots map[string]string `json:"snapshots,omitempty"`
 
 	// Deprecated: Use PBMPods instead
 	PBMPod  string            `json:"pbmPod,omitempty"`

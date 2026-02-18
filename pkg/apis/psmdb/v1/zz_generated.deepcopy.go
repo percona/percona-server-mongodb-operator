@@ -1332,6 +1332,11 @@ func (in *PerconaServerMongoDBBackupSpec) DeepCopyInto(out *PerconaServerMongoDB
 		*out = new(int)
 		**out = **in
 	}
+	if in.VolumeSnapshotClass != nil {
+		in, out := &in.VolumeSnapshotClass, &out.VolumeSnapshotClass
+		*out = new(string)
+		**out = **in
+	}
 	if in.StartingDeadlineSeconds != nil {
 		in, out := &in.StartingDeadlineSeconds, &out.StartingDeadlineSeconds
 		*out = new(int64)
@@ -1381,6 +1386,13 @@ func (in *PerconaServerMongoDBBackupStatus) DeepCopyInto(out *PerconaServerMongo
 		in, out := &in.ReplsetNames, &out.ReplsetNames
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.Snapshots != nil {
+		in, out := &in.Snapshots, &out.Snapshots
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 	if in.PBMPods != nil {
 		in, out := &in.PBMPods, &out.PBMPods
