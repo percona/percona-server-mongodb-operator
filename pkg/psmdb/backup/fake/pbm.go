@@ -93,6 +93,10 @@ func (p *fakePBM) GetBackupMeta(ctx context.Context, bcpName string) (*backup.Ba
 	return nil, nil
 }
 
+func (p *fakePBM) FinishBackup(ctx context.Context, bcpName string) error {
+	return nil
+}
+
 func (p *fakePBM) DeleteBackup(ctx context.Context, name string) error {
 	return nil
 }

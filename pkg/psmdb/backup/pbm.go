@@ -24,6 +24,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -87,6 +88,7 @@ type PBM interface {
 
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
+	FinishBackup(ctx context.Context, bcpName string) error
 
 	DeleteBackup(ctx context.Context, name string) error
 
@@ -1049,6 +1051,21 @@ func (b *pbmC) SetConfigVar(ctx context.Context, key, val string) error {
 
 func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
 	return backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
+}
+
+func (b *pbmC) FinishBackup(ctx context.Context, bcpName string) error {
+	meta, err := backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
+	if err != nil {
+		if errors.Is(err, pbmErrors.ErrNotFound) {
+			return errors.Errorf("backup %q not found", bcpName)
+		}
+		return err
+	}
+	if meta.Status != defs.StatusCopyReady {
+		return errors.Errorf("expected %q status. got %q", defs.StatusCopyReady, meta.Status)
+	}
+
+	return backup.ChangeBackupState(b.Client, bcpName, defs.StatusCopyDone, "")
 }
 
 // deleteBackup deletes backup with the given name from the current storage and pbm database
