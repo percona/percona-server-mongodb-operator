@@ -1,6 +1,6 @@
 IMAGE_OPERATOR=percona/percona-server-mongodb-operator:1.22.0
 IMAGE_MONGOD80=percona/percona-server-mongodb:8.0.17-6
-IMAGE_MONGOD70=percona/percona-server-mongodb:7.0.28-15
+IMAGE_MONGOD70=percona/percona-server-mongodb:7.0.30-16
 IMAGE_MONGOD60=percona/percona-server-mongodb:6.0.27-21
 IMAGE_BACKUP=percona/percona-backup-mongodb:2.12.0
 IMAGE_PMM_CLIENT=percona/pmm-client:2.44.1-1
@@ -14,6 +14,6 @@ EKS_MIN=1.32
 EKS_MAX=1.35
 AKS_MIN=1.32
 AKS_MAX=1.34
-OPENSHIFT_MIN=4.17.47
-OPENSHIFT_MAX=4.20.12
+OPENSHIFT_MIN=4.17.48
+OPENSHIFT_MAX=4.21.1
 MINIKUBE_REL=1.35.0
