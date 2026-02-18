@@ -519,7 +519,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.25 sh -c '
+                            golang:1.26 sh -c '
                                 go install github.com/google/go-licenses@v1.6.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -547,7 +547,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.25 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+                            golang:1.26 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 
