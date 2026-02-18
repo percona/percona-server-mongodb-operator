@@ -165,6 +165,7 @@ rules:
   - volumesnapshots
   verbs:
   - get
+  - list
   - watch
   - create
 ---

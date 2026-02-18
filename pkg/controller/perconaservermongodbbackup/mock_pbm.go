@@ -146,6 +146,21 @@ func (mr *MockPBMMockRecorder) FinishBackup(ctx, bcpName interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishBackup", reflect.TypeOf((*MockPBM)(nil).FinishBackup), ctx, bcpName)
 }
 
+// GetBackupByName mocks base method.
+func (m *MockPBM) GetBackupByName(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBackupByName", ctx, bcpName)
+	ret0, _ := ret[0].(*backup.BackupMeta)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBackupByName indicates an expected call of GetBackupByName.
+func (mr *MockPBMMockRecorder) GetBackupByName(ctx, bcpName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBackupByName", reflect.TypeOf((*MockPBM)(nil).GetBackupByName), ctx, bcpName)
+}
+
 // GetBackupMeta mocks base method.
 func (m *MockPBM) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
 	m.ctrl.T.Helper()

@@ -263,9 +263,14 @@ spec:
               size:
                 type: string
               snapshots:
-                additionalProperties:
-                  type: string
-                type: object
+                items:
+                  properties:
+                    nodeName:
+                      type: string
+                    snapshotName:
+                      type: string
+                  type: object
+                type: array
               start:
                 format: date-time
                 type: string
@@ -505,9 +510,14 @@ spec:
                   size:
                     type: string
                   snapshots:
-                    additionalProperties:
-                      type: string
-                    type: object
+                    items:
+                      properties:
+                        nodeName:
+                          type: string
+                        snapshotName:
+                          type: string
+                      type: object
+                    type: array
                   start:
                     format: date-time
                     type: string
@@ -26705,6 +26715,7 @@ rules:
   - volumesnapshots
   verbs:
   - get
+  - list
   - watch
   - create
 ---

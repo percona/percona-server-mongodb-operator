@@ -7,21 +7,20 @@ import (
 	"time"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
-
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 type snapshotBackups struct {
@@ -42,7 +41,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newSnapshotBackups(ctx context.Con
 }
 
 func (b *snapshotBackups) PBM() backup.PBM {
-	return nil
+	return b.pbm
 }
 
 func (b *snapshotBackups) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
@@ -112,6 +111,10 @@ func (b *snapshotBackups) reconcileSnapshot(
 	if err := controllerutil.SetControllerReference(bcp, volumeSnapshot, cl.Scheme()); err != nil {
 		return nil, errors.Wrap(err, "set controller reference")
 	}
+
+	if err := cl.Create(ctx, volumeSnapshot); err != nil {
+		return nil, errors.Wrap(err, "create volume snapshot")
+	}
 	return volumeSnapshot, nil
 }
 
@@ -120,9 +123,9 @@ func (b *snapshotBackups) reconcileSnapshots(
 	cl client.Client,
 	bcp *api.PerconaServerMongoDBBackup,
 	meta *backup.BackupMeta,
-) (bool, map[string]string, error) {
+) (bool, []api.SnapshotInfo, error) {
 	done := true
-	snapshots := make(map[string]string)
+	snapshots := make([]api.SnapshotInfo, 0)
 
 	podName := func(nodeName string) (string, error) {
 		parts := strings.Split(nodeName, ".")
@@ -133,25 +136,38 @@ func (b *snapshotBackups) reconcileSnapshots(
 	}
 
 	for _, rs := range meta.Replsets {
+		// do not snapshot nodes that are not yet copy ready.
 		if rs.Status != defs.StatusCopyReady {
 			done = false
 			continue
 		}
 
+		// parse pod name from node name.
 		podName, err := podName(rs.Node)
 		if err != nil {
 			return false, nil, errors.Wrap(err, "get pod name")
 		}
 
+		// ensure snapshot is created.
 		pvcName := config.MongodDataVolClaimName + "-" + podName
 		snapshot, err := b.reconcileSnapshot(ctx, cl, pvcName, bcp)
 		if err != nil {
 			return false, nil, errors.Wrap(err, "reconcile snapshot")
 		}
+
 		if snapshot.Status == nil || !ptr.Deref(snapshot.Status.ReadyToUse, false) {
 			done = false
 		}
-		snapshots[podName] = snapshot.GetName()
+
+		// If there is an error, return error.
+		// Note that some errors may be transient, but the controller will retry.
+		if snapshot.Status != nil && snapshot.Status.Error != nil && ptr.Deref(snapshot.Status.Error.Message, "") != "" {
+			return false, nil, errors.Errorf("snapshot error: %s", ptr.Deref(snapshot.Status.Error.Message, ""))
+		}
+		snapshots = append(snapshots, api.SnapshotInfo{
+			NodeName:     rs.Node,
+			SnapshotName: snapshot.GetName(),
+		})
 	}
 	return done, snapshots, nil
 }
@@ -160,7 +176,7 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 	status := cr.Status
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
 
-	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	meta, err := b.pbm.GetBackupByName(ctx, cr.Status.PBMname)
 	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm backup meta")
 	}
@@ -197,8 +213,7 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 
 		status.State = api.BackupStateRequested
 
-	case defs.StatusCopyDone:
-		status.Size = storage.PrettySize(meta.Size)
+	case defs.StatusDone:
 		status.State = api.BackupStateReady
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
@@ -221,7 +236,7 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 		}
 	}
 
-	return api.PerconaServerMongoDBBackupStatus{}, nil
+	return status, nil
 }
 
 func (b *snapshotBackups) Complete(ctx context.Context) error {

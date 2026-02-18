@@ -55,10 +55,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
 
-	// Snapshots contains the names of the VolumeSnapshots created for the backup.
-	// This is set only when type is `external` and volumeSnapshotClass is specified.
-	// The key is tne node name and the value is the name of its corresponding VolumeSnapshot.
-	Snapshots map[string]string `json:"snapshots,omitempty"`
+	Snapshots []SnapshotInfo `json:"snapshots,omitempty"`
 
 	// Deprecated: Use PBMPods instead
 	PBMPod  string            `json:"pbmPod,omitempty"`
@@ -70,6 +67,11 @@ type PerconaServerMongoDBBackupStatus struct {
 	LastWriteAt          *metav1.Time `json:"lastWriteAt,omitempty"`
 	LastTransition       *metav1.Time `json:"lastTransition,omitempty"`
 	LatestRestorableTime *metav1.Time `json:"latestRestorableTime,omitempty"`
+}
+
+type SnapshotInfo struct {
+	NodeName     string `json:"nodeName,omitempty"`
+	SnapshotName string `json:"snapshotName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -105,7 +107,7 @@ type PerconaServerMongoDBBackupList struct {
 }
 
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
-	if len(p.Spec.StorageName) == 0 {
+	if len(p.Spec.StorageName) == 0 && p.Spec.Type != defs.ExternalBackup {
 		return fmt.Errorf("spec storageName field is empty")
 	}
 	if len(p.Spec.GetClusterName()) == 0 {

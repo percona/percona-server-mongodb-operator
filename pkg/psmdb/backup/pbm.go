@@ -87,6 +87,7 @@ type PBM interface {
 	ResyncProfileAndWait(ctx context.Context, name string) error
 
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
+	GetBackupByName(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
 	FinishBackup(ctx context.Context, bcpName string) error
 
@@ -1050,6 +1051,10 @@ func (b *pbmC) SetConfigVar(ctx context.Context, key, val string) error {
 }
 
 func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
+	return backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
+}
+
+func (b *pbmC) GetBackupByName(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
 	return backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
 }
 
