@@ -55,7 +55,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
 
-	Snapshots []SnapshotInfo `json:"snapshots,omitempty"`
+	Snapshots SnapshotInfos `json:"snapshots,omitempty"`
 
 	// Deprecated: Use PBMPods instead
 	PBMPod  string            `json:"pbmPod,omitempty"`
@@ -69,9 +69,20 @@ type PerconaServerMongoDBBackupStatus struct {
 	LatestRestorableTime *metav1.Time `json:"latestRestorableTime,omitempty"`
 }
 
+type SnapshotInfos []SnapshotInfo
+
 type SnapshotInfo struct {
-	NodeName     string `json:"nodeName,omitempty"`
+	ReplsetName  string `json:"replsetName,omitempty"`
 	SnapshotName string `json:"snapshotName,omitempty"`
+}
+
+func (s SnapshotInfos) GetSnapshotInfo(replsetName string) *SnapshotInfo {
+	for _, info := range s {
+		if info.ReplsetName == replsetName {
+			return &info
+		}
+	}
+	return nil
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

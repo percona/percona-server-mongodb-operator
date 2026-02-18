@@ -87,12 +87,13 @@ func (b *snapshotBackups) Start(ctx context.Context, k8sclient client.Client, cl
 func (b *snapshotBackups) reconcileSnapshot(
 	ctx context.Context,
 	cl client.Client,
+	rsName string,
 	pvc string,
 	bcp *api.PerconaServerMongoDBBackup,
 ) (*volumesnapshotv1.VolumeSnapshot, error) {
 	volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.VolumeSnapshotName(bcp, pvc),
+			Name:      naming.VolumeSnapshotName(bcp, rsName),
 			Namespace: bcp.GetNamespace(),
 		},
 	}
@@ -150,7 +151,7 @@ func (b *snapshotBackups) reconcileSnapshots(
 
 		// ensure snapshot is created.
 		pvcName := config.MongodDataVolClaimName + "-" + podName
-		snapshot, err := b.reconcileSnapshot(ctx, cl, pvcName, bcp)
+		snapshot, err := b.reconcileSnapshot(ctx, cl, rs.Name, pvcName, bcp)
 		if err != nil {
 			return false, nil, errors.Wrap(err, "reconcile snapshot")
 		}
@@ -165,7 +166,7 @@ func (b *snapshotBackups) reconcileSnapshots(
 			return false, nil, errors.Errorf("snapshot error: %s", ptr.Deref(snapshot.Status.Error.Message, ""))
 		}
 		snapshots = append(snapshots, api.SnapshotInfo{
-			NodeName:     rs.Node,
+			ReplsetName:  rs.Name,
 			SnapshotName: snapshot.GetName(),
 		})
 	}

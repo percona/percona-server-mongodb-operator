@@ -265,7 +265,7 @@ spec:
               snapshots:
                 items:
                   properties:
-                    nodeName:
+                    replsetName:
                       type: string
                     snapshotName:
                       type: string
@@ -512,7 +512,7 @@ spec:
                   snapshots:
                     items:
                       properties:
-                        nodeName:
+                        replsetName:
                           type: string
                         snapshotName:
                           type: string
@@ -26736,7 +26736,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/psmdb-operator:K8SPSMDB-1363
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

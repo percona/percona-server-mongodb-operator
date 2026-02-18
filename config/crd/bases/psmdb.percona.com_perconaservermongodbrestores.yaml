@@ -219,7 +219,7 @@ spec:
                   snapshots:
                     items:
                       properties:
-                        nodeName:
+                        replsetName:
                           type: string
                         snapshotName:
                           type: string
