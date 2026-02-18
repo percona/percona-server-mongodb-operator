@@ -1614,6 +1614,11 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 	}
 	in.Backup.DeepCopyInto(&out.Backup)
 	in.PMM.DeepCopyInto(&out.PMM)
+	if in.RevisionHistoryLimit != nil {
+		in, out := &in.RevisionHistoryLimit, &out.RevisionHistoryLimit
+		*out = new(int32)
+		**out = **in
+	}
 	out.UpgradeOptions = in.UpgradeOptions
 	in.Sharding.DeepCopyInto(&out.Sharding)
 	if in.InitContainerSecurityContext != nil {

@@ -422,7 +422,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	return appsv1.StatefulSetSpec{
+	spec := appsv1.StatefulSetSpec{
 		ServiceName: cr.Name + "-" + replset.Name,
 		Replicas:    &size,
 		Selector: &metav1.LabelSelector{
@@ -454,7 +454,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 		UpdateStrategy:       updateStrategy,
 		VolumeClaimTemplates: volumeClaimTemplates,
-	}, nil
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 {
+		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
+	}
+
+	return spec, nil
 }
 
 func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMongoDB) *corev1.Volume {
