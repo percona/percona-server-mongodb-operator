@@ -84,3 +84,7 @@ func MongosHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s-pbm-hookscript", cr.Name)
 }
+
+func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, pvc string) string {
+	return fmt.Sprintf("%s-%s", bcp.Name, pvc)
+}
