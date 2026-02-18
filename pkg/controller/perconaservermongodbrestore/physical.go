@@ -85,7 +85,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			status.PITRTarget = ts
 		}
 
-		if err := r.updatePBMConfigSecret(ctx, cr, cluster, bcp); err != nil {
+		if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
 			return status, errors.Wrap(err, "update PBM config secret")
 		}
 
@@ -398,9 +398,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	cmd := []string{
 		"bash", "-c",
 		strings.Join([]string{
-			"install -D /usr/bin/pbm /opt/percona/pbm",
-			"install -D /usr/bin/pbm-agent /opt/percona/pbm-agent",
-			"install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
+			"install -D /usr/local/bin/pbm /opt/percona/pbm",
+			"install -D /usr/local/bin/pbm-agent /opt/percona/pbm-agent",
+			"install -D /usr/local/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
 		}, " && "),
 	}
 	pbmInit := psmdb.EntrypointInitContainer(
@@ -813,9 +813,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 
 func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	ctx context.Context,
-	cr *psmdbv1.PerconaServerMongoDBRestore,
 	cluster *psmdbv1.PerconaServerMongoDB,
-	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
 	log := logf.FromContext(ctx)
 

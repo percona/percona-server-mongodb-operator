@@ -132,7 +132,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 	}()
 
-	err = cr.CheckFields()
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return rr, errors.Wrap(err, "get backup")
+	}
+
+	err = cr.CheckFields(bcp.PBMBackupType())
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "fields check")
 	}
@@ -161,11 +166,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		log.V(1).Info("waiting for resync operation to finish")
 
 		return rr, nil
-	}
-
-	bcp, err := r.getBackup(ctx, cr)
-	if err != nil {
-		return rr, errors.Wrap(err, "get backup")
 	}
 
 	var svr *version.ServerVersion
@@ -260,6 +260,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		status, err = r.reconcilePhysicalRestore(ctx, cr, bcp, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
+		}
+
+	case defs.ExternalBackup:
+		status, err = r.reconcileExternalSnapshotRestore(ctx, cr, bcp, cluster)
+		if err != nil {
+			return rr, errors.Wrap(err, "reconcile external snapshot restore")
 		}
 	}
 

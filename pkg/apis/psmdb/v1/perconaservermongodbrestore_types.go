@@ -101,7 +101,7 @@ func (r *PerconaServerMongoDBRestore) SetDefaults() error {
 	return nil
 }
 
-func (r *PerconaServerMongoDBRestore) CheckFields() error {
+func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) error {
 	if len(r.Spec.ClusterName) == 0 {
 		return fmt.Errorf("spec clusterName field is empty")
 	}
@@ -119,7 +119,8 @@ func (r *PerconaServerMongoDBRestore) CheckFields() error {
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
-		if len(r.Spec.StorageName) == 0 &&
+		if backupType != defs.ExternalBackup &&
+			len(r.Spec.StorageName) == 0 &&
 			r.Spec.BackupSource.S3 == nil &&
 			r.Spec.BackupSource.GCS == nil &&
 			r.Spec.BackupSource.Azure == nil &&

@@ -236,6 +236,10 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 		}
 	}
 
+	status.LastTransition = &metav1.Time{
+		Time: time.Unix(meta.LastTransitionTS, 0),
+	}
+	status.Type = cr.Spec.Type
 	return status, nil
 }
 

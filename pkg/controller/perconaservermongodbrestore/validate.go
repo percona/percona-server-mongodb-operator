@@ -27,6 +27,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		return errors.Wrap(err, "get backup")
 	}
 
+	if bcp.Spec.Type == defs.ExternalBackup {
+		// TODO: should we check that snapshots exist?
+		return nil
+	}
+
 	if bcp.Status.Type != defs.LogicalBackup && cr.Spec.Selective != nil {
 		return errors.New("`.spec.selective` field is supported only for logical backups")
 	}
