@@ -82,8 +82,11 @@ spec:
                 enum:
                 - logical
                 - physical
+                - external
                 - incremental
                 - incremental-base
+                type: string
+              volumeSnapshotClass:
                 type: string
             type: object
           status:
@@ -259,6 +262,10 @@ spec:
                 type: object
               size:
                 type: string
+              snapshots:
+                additionalProperties:
+                  type: string
+                type: object
               start:
                 format: date-time
                 type: string
@@ -497,6 +504,10 @@ spec:
                     type: object
                   size:
                     type: string
+                  snapshots:
+                    additionalProperties:
+                      type: string
+                    type: object
                   start:
                     format: date-time
                     type: string
@@ -26688,6 +26699,14 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - watch
+  - create
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -159,6 +159,14 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - watch
+  - create
 ---
 apiVersion: v1
 kind: ServiceAccount
