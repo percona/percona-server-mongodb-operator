@@ -1,6 +1,5 @@
 package naming
 
 const (
-	AnnotationRestoreName     = perconaPrefix + "restore-name"
-	AnnotationRestoreFinished = perconaPrefix + "restore-finished"
+	AnnotationRestoreName = perconaPrefix + "restore-name"
 )

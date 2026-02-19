@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
@@ -176,14 +177,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRequested(
 			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
+			return errors.Wrap(err, "unmarshal PBM describe-restore output")
+		}
+
 		return nil
 	})
 	if err != nil {
 		return status, err
-	}
-
-	if err := json.Unmarshal(stdoutBuf.Bytes(), &meta); err != nil {
-		return status, errors.Wrap(err, "unmarshal PBM describe-restore output")
 	}
 
 	if meta.Status != defs.StatusCopyReady {
@@ -202,45 +203,66 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
-	status := restore.Status
 	log := logf.FromContext(ctx)
-	if ok, err := r.scaleDownStatefulSetsForSnapshotRestore(ctx, cluster, restore); err != nil {
-		return restore.Status, errors.Wrapf(err, "prepare statefulsets for snapshot restore")
+
+	status := restore.Status
+	if ok, err := r.scaleDownStatefulSetsForSnapshotRestore(ctx, cluster, &status); err != nil {
+		return status, errors.Wrapf(err, "prepare statefulsets for snapshot restore")
 	} else if !ok {
 		log.Info("Waiting for statefulsets to be scaled down", "ready", ok)
 		return status, nil
 	}
 
-	if ok, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, bcp); err != nil {
-		return restore.Status, errors.Wrapf(err, "reconcile pvcs for snapshot restore")
+	if ok, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, bcp, &status); err != nil {
+		return status, errors.Wrapf(err, "reconcile pvcs for snapshot restore")
 	} else if !ok {
 		log.Info("Waiting for pvcs to be reconciled", "ready", ok)
 		return status, nil
 	}
 
-	if ok, err := r.scaleUpStatefulSetsForSnapshotRestore(ctx, cluster); err != nil {
-		return restore.Status, errors.Wrapf(err, "scale up statefulsets for snapshot restore")
+	if ok, err := r.scaleUpStatefulSetsForSnapshotRestore(ctx, cluster, &status); err != nil {
+		return status, errors.Wrapf(err, "scale up statefulsets for snapshot restore")
 	} else if !ok {
 		log.Info("Waiting for statefulsets to be scaled up", "ready", ok)
 		return status, nil
 	}
 
-	if err := r.runPBMRestoreFinish(ctx, cluster, restore); err != nil {
-		return restore.Status, errors.Wrapf(err, "run PBM restore finish")
+	if err := r.runPBMRestoreFinish(ctx, cluster, &status); err != nil {
+		return status, errors.Wrapf(err, "run PBM restore finish")
 	}
 
-	// TODO
-	// Delete all statefulsets.
-	// Resync PBM storage.
+	if ok, err := r.awaitPBMRestoreFinish(ctx, cluster, &status); err != nil {
+		return status, errors.Wrapf(err, "await PBM restore finish")
+	} else if !ok {
+		log.Info("Waiting for PBM restore to finish", "ready", ok)
+		return status, nil
+	}
 
-	return restore.Status, nil
+	if err := r.deleteStatefulSetsForSnapshotRestore(ctx, cluster); err != nil {
+		return status, errors.Wrapf(err, "delete statefulsets for snapshot restore")
+	}
+
+	if err := r.ensureResyncPBMStorage(ctx, cluster); err != nil {
+		return status, errors.Wrapf(err, "ensure resync PBM storage")
+	}
+
+	log.Info("Snapshot restore finished", "status", status.State)
+
+	status.State = psmdbv1.RestoreStateReady
+	status.CompletedAt = ptr.To(metav1.Now())
+
+	return status, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotRestore(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
-	restore *psmdbv1.PerconaServerMongoDBRestore,
+	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
 ) (bool, error) {
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMAgentConfiguredForSnapshot) {
+		return true, nil
+	}
+
 	replsets := cluster.GetAllReplsets()
 
 	// Collect all statefulsets that need to be scaled down.
@@ -280,16 +302,28 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 			sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
 			sfs.Spec.Template.Spec.Containers[0].Args = []string{
 				"restore-finish",
-				restore.Status.PBMname,
+				status.PBMname,
 				"-c", "/etc/pbm/pbm_config.yaml",
 				"--rs", "$(MONGODB_REPLSET)",
-				"--node", "$(POD_NAME).$(SERVICE_NAME)-$(MONGODB_REPLSET).$(NAMESPACE).svc.cluster.local",
+				"--node", "$(POD_NAME).$(SERVICE_NAME)-$(MONGODB_REPLSET).$(NAMESPACE).svc.cluster.local:" + fmt.Sprintf("%d", psmdbv1.DefaultMongoPort),
 				// "--db-config", "/etc/pbm/db-config.yaml", // TODO
 			}
+
+			sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
+			sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
+
 			return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
 		}); err != nil {
 			return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
 		}
+	}
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionPBMAgentConfiguredForSnapshot,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllStatefulSetsScaledDown",
+			Message: "All statefulsets have been scaled down",
+		})
 	}
 	return done, nil
 }
@@ -299,7 +333,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	restore *psmdbv1.PerconaServerMongoDBRestore,
 	backup *psmdbv1.PerconaServerMongoDBBackup,
+	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
 ) (bool, error) {
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot) {
+		return true, nil
+	}
+
 	replsets := cluster.GetAllReplsets()
 
 	type pvcInfo struct {
@@ -348,22 +387,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 			if err != nil {
 				return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.NonVotingStatefulSetName(cluster, rs))
 			}
-			pvcs = append(pvcs, pvcInfo{
-				pvcName:             config.MongodDataVolClaimName + "-" + naming.NonVotingStatefulSetName(cluster, rs) + "-0",
-				volumeClaimTemplate: vct,
-				snapshotName:        snapshot.SnapshotName,
-			})
+			for podIdx := int32(0); podIdx < rs.NonVoting.Size; podIdx++ {
+				pvcs = append(pvcs, pvcInfo{
+					pvcName:             config.MongodDataVolClaimName + "-" + naming.NonVotingPodName(cluster, rs, int(podIdx)),
+					volumeClaimTemplate: vct,
+					snapshotName:        snapshot.SnapshotName,
+				})
+			}
 		}
 		if rs.Hidden.Enabled {
 			vct, err := getVolumeClaimTemplate(naming.HiddenStatefulSetName(cluster, rs))
 			if err != nil {
 				return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.HiddenStatefulSetName(cluster, rs))
 			}
-			pvcs = append(pvcs, pvcInfo{
-				pvcName:             config.MongodDataVolClaimName + "-" + naming.HiddenStatefulSetName(cluster, rs) + "-0",
-				volumeClaimTemplate: vct,
-				snapshotName:        snapshot.SnapshotName,
-			})
+			for podIdx := int32(0); podIdx < rs.Hidden.Size; podIdx++ {
+				pvcs = append(pvcs, pvcInfo{
+					pvcName:             config.MongodDataVolClaimName + "-" + naming.HiddenPodName(cluster, rs, int(podIdx)),
+					volumeClaimTemplate: vct,
+					snapshotName:        snapshot.SnapshotName,
+				})
+			}
 		}
 	}
 
@@ -376,6 +419,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 			done = false
 		}
 	}
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllPVCsRestoredFromSnapshot",
+			Message: "All pvcs have been restored from snapshot",
+		})
+	}
 	return done, nil
 }
 
@@ -383,6 +434,7 @@ func generatePVCFromSnapshot(
 	pvc *corev1.PersistentVolumeClaim,
 	spec corev1.PersistentVolumeClaimSpec,
 	snapshotName string,
+	restoreName string,
 ) {
 	pvc.Spec = spec
 	pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
@@ -391,7 +443,7 @@ func generatePVCFromSnapshot(
 		Name:     snapshotName,
 	}
 	pvc.SetAnnotations(map[string]string{
-		naming.AnnotationRestoreName: snapshotName,
+		naming.AnnotationRestoreName: restoreName,
 	})
 }
 
@@ -410,7 +462,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 	}
 	err := r.client.Get(ctx, client.ObjectKeyFromObject(observedPVC), observedPVC)
 	if k8sErrors.IsNotFound(err) {
-		generatePVCFromSnapshot(observedPVC, volumeClaimTemplate, snapshotName)
+		generatePVCFromSnapshot(observedPVC, volumeClaimTemplate,
+			snapshotName, restore.GetName())
 		if err := r.client.Create(ctx, observedPVC); err != nil {
 			return false, errors.Wrapf(err, "create pvc %s", pvcName)
 		}
@@ -437,7 +490,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRestore(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
+	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
 ) (bool, error) {
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMAgentAwaitingRestoreFinish) {
+		return true, nil
+	}
+
 	replsets := cluster.GetAllReplsets()
 
 	// Collect all statefulsets that need to be scaled up.
@@ -445,10 +503,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 	for _, rs := range replsets {
 		sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}] = rs.Size
 		if rs.NonVoting.Enabled {
-			sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.NonVotingStatefulSetName(cluster, rs)}] = 1
+			sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.NonVotingStatefulSetName(cluster, rs)}] = rs.NonVoting.Size
 		}
 		if rs.Hidden.Enabled {
-			sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.HiddenStatefulSetName(cluster, rs)}] = 1
+			sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.HiddenStatefulSetName(cluster, rs)}] = rs.Hidden.Size
 		}
 	}
 
@@ -477,15 +535,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 			return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
 		}
 	}
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionPBMAgentAwaitingRestoreFinish,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllStatefulSetsScaledUp",
+			Message: "All statefulsets have been scaled up",
+		})
+	}
 	return done, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
-	restore *psmdbv1.PerconaServerMongoDBRestore,
+	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
 ) error {
-	if _, ok := cluster.GetAnnotations()[naming.AnnotationRestoreFinished]; ok {
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMAwaitingRestoreFinished) {
 		return nil
 	}
 
@@ -497,7 +563,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 	}
 
 	restoreFinishCmd := []string{
-		"/opt/percona/pbm", "restore-finish", restore.Status.PBMname, "-c", "/etc/pbm/pbm_config.yaml",
+		"/opt/percona/pbm", "restore-finish", status.PBMname, "-c", "/etc/pbm/pbm_config.yaml",
 	}
 
 	log := logf.FromContext(ctx)
@@ -527,23 +593,147 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 		return fmt.Errorf("failed to finish restore: %w", err)
 	}
 
-	// Annotate the cluster so that we don't run this again.
-	if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		observedCluster := &psmdbv1.PerconaServerMongoDB{}
-		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), observedCluster); err != nil {
-			return errors.Wrapf(err, "get observed cluster")
-		}
-		orig := observedCluster.DeepCopy()
-		annots := observedCluster.GetAnnotations()
-		if annots == nil {
-			annots = make(map[string]string)
-		}
-		annots[naming.AnnotationRestoreFinished] = "true"
-		observedCluster.SetAnnotations(annots)
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    psmdbv1.ConditionPBMAwaitingRestoreFinished,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PBMRestoreFinished",
+		Message: "PBM restore finished",
+	})
 
-		return r.client.Patch(ctx, observedCluster, client.MergeFrom(orig))
-	}); err != nil {
-		return errors.Wrapf(err, "set restore finished annotation")
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
+) (bool, error) {
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMRestoreFinished) {
+		return true, nil
+	}
+
+	log := logf.FromContext(ctx)
+	replsets := cluster.GetAllReplsets()
+	bcpMeta := backup.BackupMeta{}
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return strings.Contains(err.Error(), "container is not created or running") ||
+			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
+			strings.Contains(err.Error(), "unable to upgrade connection") ||
+			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
+	}, func() error {
+		stdoutBuf.Reset()
+		stderrBuf.Reset()
+
+		command := []string{
+			"/opt/percona/pbm", "describe-restore", status.PBMname,
+			"--config", "/etc/pbm/pbm_config.yaml",
+			"--out", "json",
+		}
+
+		pod := corev1.Pod{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}, &pod); err != nil {
+			return errors.Wrap(err, "get pod")
+		}
+
+		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
+		}
+
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &bcpMeta); err != nil {
+			return errors.Wrap(err, "unmarshal PBM describe-restore output")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	if bcpMeta.Status != defs.StatusDone {
+		log.Info("Waiting for restore to be finished", "status", bcpMeta.Status)
+		return false, nil
+	}
+
+	log.Info("Restore finished", "status", bcpMeta.Status)
+
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    psmdbv1.ConditionPBMRestoreFinished,
+		Status:  metav1.ConditionTrue,
+		Reason:  "PBMRestoreFinished",
+		Message: "PBM restore finished",
+	})
+
+	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) deleteStatefulSetsForSnapshotRestore(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) error {
+
+	replsets := cluster.GetAllReplsets()
+
+	// Collect all statefulsets that need to be deleted.
+	toDelete := []types.NamespacedName{}
+	for _, rs := range replsets {
+		stsName := naming.MongodStatefulSetName(cluster, rs)
+		toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+
+		if rs.NonVoting.Enabled {
+			stsName := naming.NonVotingStatefulSetName(cluster, rs)
+			toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+		}
+
+		if rs.Hidden.Enabled {
+			stsName := naming.HiddenStatefulSetName(cluster, rs)
+			toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+		}
+
+		if rs.Arbiter.Enabled {
+			stsName := naming.ArbiterStatefulSetName(cluster, rs)
+			toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+		}
+	}
+
+	for _, nn := range toDelete {
+		if err := r.client.Delete(ctx, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nn.Name,
+				Namespace: nn.Namespace,
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete statefulset %s", nn.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) ensureResyncPBMStorage(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		c := &psmdbv1.PerconaServerMongoDB{}
+		err := r.client.Get(ctx, client.ObjectKeyFromObject(cluster), c)
+		if err != nil {
+			return err
+		}
+
+		orig := c.DeepCopy()
+
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
+		c.Annotations[psmdbv1.AnnotationResyncPBM] = "true"
+
+		return r.client.Patch(ctx, c, client.MergeFrom(orig))
+	})
+	if err != nil {
+		return fmt.Errorf("failed to resync PBM storage: %w", err)
 	}
 	return nil
 }

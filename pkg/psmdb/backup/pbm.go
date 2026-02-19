@@ -379,8 +379,8 @@ func GetPBMStorageMinioConfig(
 		}
 
 		storageConf.Minio.Credentials = mio.Credentials{
-			AccessKeyID:     storage.MaskedString(string(accessKey)),
-			SecretAccessKey: storage.MaskedString(string(secretAccessKey)),
+			AccessKeyID:     storage.MaskedString(accessKey),
+			SecretAccessKey: storage.MaskedString(secretAccessKey),
 		}
 	}
 

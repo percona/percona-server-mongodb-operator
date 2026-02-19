@@ -243,7 +243,3 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 	status.Type = cr.Spec.Type
 	return status, nil
 }
-
-func (b *snapshotBackups) Complete(ctx context.Context) error {
-	return nil
-}

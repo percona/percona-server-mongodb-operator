@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -57,13 +58,22 @@ const (
 
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreStatus struct {
-	State          RestoreState `json:"state,omitempty"`
-	PBMname        string       `json:"pbmName,omitempty"`
-	PITRTarget     string       `json:"pitrTarget,omitempty"`
-	Error          string       `json:"error,omitempty"`
-	CompletedAt    *metav1.Time `json:"completed,omitempty"`
-	LastTransition *metav1.Time `json:"lastTransition,omitempty"`
+	State          RestoreState       `json:"state,omitempty"`
+	PBMname        string             `json:"pbmName,omitempty"`
+	PITRTarget     string             `json:"pitrTarget,omitempty"`
+	Error          string             `json:"error,omitempty"`
+	CompletedAt    *metav1.Time       `json:"completed,omitempty"`
+	LastTransition *metav1.Time       `json:"lastTransition,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 }
+
+const (
+	ConditionPBMAgentConfiguredForSnapshot   string = "PBMAgentConfiguredForSnapshot"
+	ConditionReplsetPVCsRestoredFromSnapshot string = "ReplsetPVCsRestoredFromSnapshot"
+	ConditionPBMAgentAwaitingRestoreFinish   string = "PBMAgentAwaitingRestoreFinish"
+	ConditionPBMAwaitingRestoreFinished      string = "PBMAwaitingRestoreFinish"
+	ConditionPBMRestoreFinished              string = "PBMRestoreFinished"
+)
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -90,6 +100,18 @@ type PerconaServerMongoDBRestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PerconaServerMongoDBRestore `json:"items"`
+}
+
+func (status *PerconaServerMongoDBRestoreStatus) ConditionsEqual(otherStatus *PerconaServerMongoDBRestoreStatus) bool {
+	if len(status.Conditions) != len(otherStatus.Conditions) {
+		return false
+	}
+	for _, cond := range status.Conditions {
+		if !meta.IsStatusConditionPresentAndEqual(otherStatus.Conditions, cond.Type, cond.Status) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *PerconaServerMongoDBRestore) SetDefaults() error {

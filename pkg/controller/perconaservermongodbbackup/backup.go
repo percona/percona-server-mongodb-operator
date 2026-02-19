@@ -289,11 +289,3 @@ func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
 	}
 	return pods
 }
-
-// Complete completes the backup
-func (b *managedBackups) Complete(ctx context.Context) error {
-	if b.pbm == nil {
-		return nil
-	}
-	return b.pbm.Close(ctx)
-}
