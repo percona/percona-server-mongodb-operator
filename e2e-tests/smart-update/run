@@ -44,6 +44,7 @@ else
 	MONGO_VER=$(echo -n "${IMAGE_MONGOD}" | $sed -r 's/.*:([0-9]+\.[0-9]+).*$/\1/')
 fi
 IMAGE_MONGOD="percona/percona-server-mongodb:${MONGO_VER}"
+qualify_image_var IMAGE_MONGOD
 
 desc "create first PSMDB cluster $cluster"
 spinup_psmdb ${cluster}-rs0 ${test_dir}/conf/${cluster}-rs0.yml

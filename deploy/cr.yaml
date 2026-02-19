@@ -21,7 +21,7 @@ spec:
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
   crVersion: 1.22.0
-  image: percona/percona-server-mongodb:8.0.17-6
+  image: percona/percona-server-mongodb:8.0.19-7
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS

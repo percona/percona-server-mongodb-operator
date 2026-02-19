@@ -54,3 +54,5 @@ sleep 120
 wait_restore $backup_name_minio $cluster "ready"
 
 destroy $namespace
+
+desc 'test passed'

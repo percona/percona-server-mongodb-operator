@@ -48,6 +48,11 @@ IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod
 IMAGE_PMM_CLIENT=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
 
+qualify_image_var IMAGE
+qualify_image_var IMAGE_MONGOD
+qualify_image_var IMAGE_PMM_CLIENT
+qualify_image_var IMAGE_BACKUP
+
 if [[ ${TARGET_OPERATOR_VER} == "${INIT_OPERATOR_VER}" ]]; then
 	echo "OPERATOR VERSION and INIT OPERATOR VERSION variables are the same: ${TARGET_OPERATOR_VER} ${INIT_OPERATOR_VER}! Something is wrong!"
 	exit 1

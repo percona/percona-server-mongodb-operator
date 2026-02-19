@@ -15,7 +15,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: psmdb-client
-          image: percona/percona-server-mongodb:7.0
+          image: docker.io/percona/percona-server-mongodb:7.0
           imagePullPolicy: Always
           command:
           - sleep
