@@ -73,13 +73,10 @@ storage "file" {
 EOF
 '
 
-	issuer=$(kubectl_bin get --raw /.well-known/openid-configuration | jq -r .issuer)
-
 	kubectl_bin exec $vault_name-0 -- vault write auth/kubernetes/role/operator \
 		bound_service_account_names=percona-server-mongodb-operator \
 		bound_service_account_namespaces="$sa_namespace" \
 		policies=operator \
-		audience="$issuer" \
 		ttl=1h
 }
 
@@ -112,8 +109,6 @@ create_tls_secret() {
 	local name=$1
 	local service_name=$2
 
-	local csr_name="$name-csr-$RANDOM"
-
 	local tmp_dir
 	tmp_dir=$(mktemp -d)
 
@@ -121,10 +116,12 @@ create_tls_secret() {
 
 	cat <<EOF >"${tmp_dir}/csr.conf"
 [req]
-req_extensions = v3_req
 distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
 [req_distinguished_name]
-[ v3_req ]
+CN = ${service_name}.${namespace}.svc
+[v3_req]
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
@@ -134,42 +131,25 @@ DNS.1 = ${service_name}
 DNS.2 = *.${service_name}
 DNS.3 = *.${service_name}.${namespace}
 DNS.4 = *.${service_name}.${namespace}.svc
-DNS.5 = ${service_name}.${namespace}.svc.cluster.local
-DNS.6 = *.${service_name}.${namespace}.svc.cluster.local
+DNS.5 = ${service_name}.${namespace}.svc
+DNS.6 = ${service_name}.${namespace}.svc.cluster.local
+DNS.7 = *.${service_name}.${namespace}.svc.cluster.local
 IP.1 = 127.0.0.1
 EOF
-	openssl req -new \
+	openssl req -x509 -new -nodes \
 		-key "${tmp_dir}"/vault.key \
-		-subj "/CN=system:node:${service_name}.${namespace}.svc;/O=system:nodes" \
-		-out "${tmp_dir}"/server.csr \
-		-config "${tmp_dir}"/csr.conf
+		-sha256 \
+		-days 3650 \
+		-out "${tmp_dir}"/vault.crt \
+		-config "${tmp_dir}"/csr.conf \
+		-extensions v3_req
 
-	cat <<EOF >"${tmp_dir}"/csr.yaml
-apiVersion: certificates.k8s.io/v1
-kind: CertificateSigningRequest
-metadata:
-  name: ${csr_name}
-spec:
-  signerName: kubernetes.io/kubelet-serving
-  groups:
-  - system:authenticated
-  request: $(cat "${tmp_dir}"/server.csr | base64 | tr -d '\n')
-  usages:
-  - digital signature
-  - key encipherment
-  - server auth
-EOF
-	kubectl create -f "${tmp_dir}"/csr.yaml
-	sleep 10
+	if [ ! -s "${tmp_dir}"/vault.crt ]; then
+		echo "failed to generate vault tls certificate"
+		exit 1
+	fi
 
-	kubectl certificate approve "${csr_name}"
-
-	local serverCert
-	serverCert=$(kubectl get csr "${csr_name}" -o jsonpath='{.status.certificate}')
-
-	echo "${serverCert}" | openssl base64 -d -A -out "${tmp_dir}"/vault.crt
-
-	kubectl get cm kube-root-ca.crt -o jsonpath="{['data']['ca\.crt']}" >"${tmp_dir}"/vault.ca
+	cp "${tmp_dir}"/vault.crt "${tmp_dir}"/vault.ca
 
 	kubectl create secret generic "$name" \
 		--from-file=tls.key="${tmp_dir}"/vault.key \
