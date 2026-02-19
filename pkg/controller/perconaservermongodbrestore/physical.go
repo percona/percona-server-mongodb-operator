@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/bson"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -50,10 +51,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	status := cr.Status
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
+	replsets := cluster.GetAllReplsets()
 
 	if cr.Status.State == psmdbv1.RestoreStateNew {
 		pod := corev1.Pod{}
@@ -85,7 +83,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			status.PITRTarget = ts
 		}
 
-		if err := r.updatePBMConfigSecret(ctx, cr, cluster, bcp); err != nil {
+		if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
 			return status, errors.Wrap(err, "update PBM config secret")
 		}
 
@@ -398,9 +396,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	cmd := []string{
 		"bash", "-c",
 		strings.Join([]string{
-			"install -D /usr/bin/pbm /opt/percona/pbm",
-			"install -D /usr/bin/pbm-agent /opt/percona/pbm-agent",
-			"install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
+			"install -D /usr/local/bin/pbm /opt/percona/pbm",
+			"install -D /usr/local/bin/pbm-agent /opt/percona/pbm-agent",
+			"install -D /usr/local/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
 		}, " && "),
 	}
 	pbmInit := psmdb.EntrypointInitContainer(
@@ -536,11 +534,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
+	replsets := cluster.GetAllReplsets()
 	for _, rs := range replsets {
 		stsName := naming.MongodStatefulSetName(cluster, rs)
 
@@ -811,11 +805,32 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysica
 	return true, nil
 }
 
+// workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
+// PBM masks the storage credentials when masking to YAML/JSON, but they are preserved in BSON.
+func yamlMarshalUnsafe(in any) ([]byte, error) {
+	bsonBytes, err := bson.Marshal(in)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal to bson")
+	}
+
+	var tmp bson.M
+	if err := bson.Unmarshal(bsonBytes, &tmp); err != nil {
+		return nil, errors.Wrap(err, "unmarshal to bson.M")
+	}
+	delete(tmp, "epoch")
+	delete(tmp, "_id")
+
+	yamlBytes, err := yaml.Marshal(tmp)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal to yaml")
+	}
+
+	return yamlBytes, nil
+}
+
 func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	ctx context.Context,
-	cr *psmdbv1.PerconaServerMongoDBRestore,
 	cluster *psmdbv1.PerconaServerMongoDB,
-	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -844,7 +859,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 
 	pbmConfig.PITR.Enabled = false
 
-	confBytes, err := yaml.Marshal(pbmConfig)
+	confBytes, err := yamlMarshalUnsafe(pbmConfig)
 	if err != nil {
 		return errors.Wrap(err, "marshal PBM config to yaml")
 	}
@@ -1035,66 +1050,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) pbmConfigName(cluster *psmdbv1.Pe
 		return "pbm-config"
 	}
 	return cluster.Name + "-pbm-config"
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) waitForPBMOperationsToFinish(ctx context.Context, pod *corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
-
-	waitErr := errors.New("waiting for PBM operation to finish")
-	err := retry.OnError(wait.Backoff{
-		Duration: 5 * time.Second,
-		Factor:   2.0,
-		Cap:      time.Hour,
-		Steps:    12,
-	}, func(err error) bool { return err == waitErr }, func() error {
-		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return strings.Contains(err.Error(), "No agent available") }, func() error {
-			stdoutBuf.Reset()
-			stderrBuf.Reset()
-
-			command := []string{pbmBinary, "status", "--out", "json"}
-			err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false)
-			if err != nil {
-				log.Error(err, "failed to get PBM status")
-				return err
-			}
-
-			log.V(1).Info("PBM status", "status", stdoutBuf.String())
-
-			return nil
-		})
-		if err != nil {
-			return errors.Wrapf(err, "get PBM status stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
-		}
-
-		var pbmStatus struct {
-			Running struct {
-				Type string `json:"type,omitempty"`
-				OpId string `json:"opID,omitempty"`
-			} `json:"running"`
-		}
-
-		if err := json.Unmarshal(stdoutBuf.Bytes(), &pbmStatus); err != nil {
-			return errors.Wrap(err, "unmarshal PBM status output")
-		}
-
-		if len(pbmStatus.Running.OpId) == 0 {
-			return nil
-		}
-
-		log.Info("Waiting for another PBM operation to finish", "type", pbmStatus.Running.Type, "opID", pbmStatus.Running.OpId)
-
-		return waitErr
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) checkIfPBMAgentsReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {

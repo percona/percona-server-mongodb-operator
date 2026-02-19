@@ -16,8 +16,13 @@ type PerconaServerMongoDBBackupSpec struct {
 	Compression      compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// +kubebuilder:validation:Enum={logical,physical,external,incremental,incremental-base}
 	Type defs.BackupType `json:"type,omitempty"`
+
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
 
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=120
@@ -50,6 +55,8 @@ type PerconaServerMongoDBBackupStatus struct {
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
 
+	Snapshots SnapshotInfos `json:"snapshots,omitempty"`
+
 	// Deprecated: Use PBMPods instead
 	PBMPod  string            `json:"pbmPod,omitempty"`
 	PBMPods map[string]string `json:"pbmPods,omitempty"`
@@ -60,6 +67,22 @@ type PerconaServerMongoDBBackupStatus struct {
 	LastWriteAt          *metav1.Time `json:"lastWriteAt,omitempty"`
 	LastTransition       *metav1.Time `json:"lastTransition,omitempty"`
 	LatestRestorableTime *metav1.Time `json:"latestRestorableTime,omitempty"`
+}
+
+type SnapshotInfos []SnapshotInfo
+
+type SnapshotInfo struct {
+	ReplsetName  string `json:"replsetName,omitempty"`
+	SnapshotName string `json:"snapshotName,omitempty"`
+}
+
+func (s SnapshotInfos) GetSnapshotInfo(replsetName string) *SnapshotInfo {
+	for _, info := range s {
+		if info.ReplsetName == replsetName {
+			return &info
+		}
+	}
+	return nil
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -95,7 +118,7 @@ type PerconaServerMongoDBBackupList struct {
 }
 
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
-	if len(p.Spec.StorageName) == 0 {
+	if len(p.Spec.StorageName) == 0 && p.Spec.Type != defs.ExternalBackup {
 		return fmt.Errorf("spec storageName field is empty")
 	}
 	if len(p.Spec.GetClusterName()) == 0 {

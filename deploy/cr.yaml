@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+stringData:
+  AWS_ACCESS_KEY_ID: "minioadmin"
+  AWS_SECRET_ACCESS_KEY: "minioadmin"
+---
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
@@ -122,7 +130,9 @@ spec:
 #      priority: 0
 #    - host: 34.124.76.92
 #    # for more configuration fields refer to https://docs.mongodb.com/manual/reference/configuration-options/
-#    configuration: |
+    configuration: |
+      security:
+        enableEncryption: false
 #      operationProfiling:
 #        mode: slowOp
 #      systemLog:
@@ -759,7 +769,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: perconalab/percona-backup-mongodb:nightly
 #    startingDeadlineSeconds: 300
 #    hookScript:
 #      configMapRef:
@@ -778,7 +788,7 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
-#    storages:
+    storages:
 #      s3-us-east:
 #        main: true
 #        type: s3
@@ -811,19 +821,15 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
-#      minio:
-#        type: minio
-#        minio:
-#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
-#          region: us-east-1
-#          credentialsSecret: my-cluster-name-backup-minio
-#          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
-#          insecureSkipTLSVerify: false
-#          caBundle:
-#           name: minio-ca-bundle
-#           key: ca.crt
-#          prefix: ""
-#          secure: false
+      minio:
+        type: minio
+        minio:
+          bucket: psmdb
+          region: us-east-1
+          credentialsSecret: minio-secret
+          endpointUrl: minio.minio
+          insecureSkipTLSVerify: true
+          secure: true
 #      azure-blob:
 #        type: azure
 #        azure:
