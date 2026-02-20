@@ -245,11 +245,7 @@ account=$(yq eval '.[] | .metadata.name' operator_accounts.yaml)
 rules=$(yq eval '.[] | .rules' operator_roles${suffix}.yaml)
 version="${VERSION}${suffix}"
 
-if command -v gdate >/dev/null 2>&1; then
-	timestamp=$(gdate -u +"%Y-%m-%dT%H:%M:%S.%3NZ")
-else
-	timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-fi
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 relatedImages=$(yq eval bundle.relatedImages.yaml)
 

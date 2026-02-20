@@ -156,6 +156,16 @@ wait_cluster_consistency "$cluster" 64
 desc 'verify cluster is ready'
 kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
 
+if [[ -n ${OPENSHIFT} ]]; then
+	# On OpenShift (AWS), EBS volumes can only be expanded once every 6 hours.
+	# Skip the multi-resize quota and maxSize tests since they require
+	# multiple sequential resizes of the same volume.
+	echo "OpenShift detected, skipping multi-resize tests (AWS EBS rate limit)"
+	destroy "${namespace}"
+	desc "test passed"
+	exit 0
+fi
+
 desc 'test namespace resource quota enforcement'
 # The cluster has 3 replicas with 3Gi PVCs = 9Gi total
 apply_resourcequota 9Gi
