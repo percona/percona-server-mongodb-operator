@@ -21,6 +21,9 @@ import (
 	s "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
 
+// maxAnnotationNameLength is the maximum length for Kubernetes annotation key names (63 characters).
+const maxAnnotationNameLength = 63
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Users == nil && len(cr.Spec.Users) == 0 && cr.Spec.Roles == nil && len(cr.Spec.Roles) == 0 {
 		return nil
@@ -429,7 +432,6 @@ func createUser(
 func buildAnnotationKey(crName, userName string) string {
 	annotationKeyBase := fmt.Sprintf("percona.com/%s-%s", crName, userName)
 	const hashSuffix = "-hash"
-	const maxAnnotationNameLength = 63
 	const maxPrefixLength = maxAnnotationNameLength - len(hashSuffix)
 
 	if len(annotationKeyBase) > maxPrefixLength {
