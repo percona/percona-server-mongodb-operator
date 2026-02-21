@@ -74,7 +74,7 @@ rollback_invalid_image() {
   
   echo
   echo "Deleting crashing pod $cluster_name-rs0-2"
-  kubectl_bin delete pod "$cluster_name-rs0-2"
+  kubectl_bin delete pod "$cluster_name-rs0-2" --wait=false
 }
 
 is_sts_ready() {
