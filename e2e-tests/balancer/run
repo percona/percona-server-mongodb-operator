@@ -131,6 +131,8 @@ main() {
 	check_balancer ${cluster} "true" 10
 
 	destroy "$namespace"
+
+	desc 'test passed'
 }
 
 main

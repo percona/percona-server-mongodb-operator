@@ -94,7 +94,7 @@ spec:
         - configMapRef:
             name: test-configmap-cfg
             optional: true
-        image: percona/percona-server-mongodb:8.0.17-6
+        image: percona/percona-server-mongodb:8.0.19-7
         imagePullPolicy: Always
         livenessProbe:
           exec:
