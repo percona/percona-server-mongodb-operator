@@ -94,7 +94,7 @@ spec:
         - configMapRef:
             name: test-configmap
             optional: true
-        image: percona/percona-server-mongodb:8.0.19-7
+        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -173,7 +173,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: percona/percona-server-mongodb-operator:1.22.0
+        image: perconalab/percona-server-mongodb-operator:main
         imagePullPolicy: Always
         name: mongo-init
         resources:

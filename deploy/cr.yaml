@@ -20,8 +20,8 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
-  crVersion: 1.22.0
-  image: percona/percona-server-mongodb:8.0.19-7
+  crVersion: 1.23.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -34,7 +34,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: percona/percona-server-mongodb-operator:1.22.0
+#  initImage: perconalab/percona-server-mongodb-operator:main
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -74,7 +74,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: percona/pmm-client:3.6.0
+    image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
@@ -759,7 +759,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-backup-mongodb:2.12.0
+    image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
 #    hookScript:
 #      configMapRef:
@@ -916,7 +916,7 @@ spec:
 #        compressionLevel: 6
   logcollector:
     enabled: true
-    image: percona/fluentbit:4.0.1-2
+    image: perconalab/fluentbit:main-logcollector
 #    configuration: |
 #      [SERVICE]
 #          Flush        1

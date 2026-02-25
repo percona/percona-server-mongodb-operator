@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -284,7 +284,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -571,7 +571,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -26734,7 +26734,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.22.0
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
