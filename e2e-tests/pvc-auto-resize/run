@@ -126,7 +126,11 @@ kubectl_bin apply \
 
 desc 'create PSMDB cluster with storageAutoscaling enabled'
 cluster="some-name"
-spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+if [ "$EKS" == 1 ]; then
+	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+else
+	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+fi
 
 desc 'verify initial PVC size is 1Gi'
 initial_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
@@ -156,11 +160,11 @@ wait_cluster_consistency "$cluster" 64
 desc 'verify cluster is ready'
 kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
 
-if [[ -n ${OPENSHIFT} ]]; then
-	# On OpenShift (AWS), EBS volumes can only be expanded once every 6 hours.
+if [[ -n ${OPENSHIFT} || "$EKS" == 1 ]]; then
+	# On AWS (OpenShift/EKS), EBS volumes can only be expanded once every 6 hours.
 	# Skip the multi-resize quota and maxSize tests since they require
 	# multiple sequential resizes of the same volume.
-	echo "OpenShift detected, skipping multi-resize tests (AWS EBS rate limit)"
+	echo "OpenShift/AWS environment detected, skipping multi-resize tests (EBS rate limit)"
 	destroy "${namespace}"
 	desc "test passed"
 	exit 0
