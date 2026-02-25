@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 1
+  generation: 9
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -39,6 +39,18 @@ spec:
         app.kubernetes.io/part-of: percona-server-mongodb
         app.kubernetes.io/replset: rs0
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: mongod
+                  app.kubernetes.io/instance: some-name
+                  app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                  app.kubernetes.io/name: percona-server-mongodb
+                  app.kubernetes.io/part-of: percona-server-mongodb
+                  app.kubernetes.io/replset: rs0
+              topologyKey: kubernetes.io/hostname
       containers:
         - args:
             - --bind_ip_all
@@ -51,6 +63,7 @@ spec:
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
+            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
@@ -103,6 +116,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
