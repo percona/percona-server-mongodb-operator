@@ -16,6 +16,105 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
+// mockMongoClientForRoles is a minimal mock to test updateRoles behavior.
+type mockMongoClientForRoles struct {
+	mongo.Client
+	updateRolesCalled bool
+}
+
+func (m *mockMongoClientForRoles) UpdateUserRoles(ctx context.Context, db, username string, roles []mongo.Role) error {
+	m.updateRolesCalled = true
+	return nil
+}
+
+func TestUpdateRoles(t *testing.T) {
+	tests := []struct {
+		name              string
+		user              *api.User
+		userInfo          *mongo.User
+		expectUpdateCalled bool
+	}{
+		{
+			name: "same roles same order - no update",
+			user: &api.User{
+				Name: "testuser",
+				DB:   "testdb",
+				Roles: []api.UserRole{
+					{Name: "readWrite", DB: "db1"},
+					{Name: "read", DB: "db2"},
+				},
+			},
+			userInfo: &mongo.User{
+				Roles: []mongo.Role{
+					{Role: "readWrite", DB: "db1"},
+					{Role: "read", DB: "db2"},
+				},
+			},
+			expectUpdateCalled: false,
+		},
+		{
+			name: "same roles different order - no update",
+			user: &api.User{
+				Name: "testuser",
+				DB:   "testdb",
+				Roles: []api.UserRole{
+					{Name: "readWrite", DB: "db1"},
+					{Name: "clusterMonitor", DB: "admin"},
+					{Name: "readWrite", DB: "db2"},
+				},
+			},
+			userInfo: &mongo.User{
+				Roles: []mongo.Role{
+					{Role: "clusterMonitor", DB: "admin"},
+					{Role: "readWrite", DB: "db2"},
+					{Role: "readWrite", DB: "db1"},
+				},
+			},
+			expectUpdateCalled: false,
+		},
+		{
+			name: "different roles - update called",
+			user: &api.User{
+				Name: "testuser",
+				DB:   "testdb",
+				Roles: []api.UserRole{
+					{Name: "readWrite", DB: "db1"},
+					{Name: "read", DB: "db2"},
+				},
+			},
+			userInfo: &mongo.User{
+				Roles: []mongo.Role{
+					{Role: "readWrite", DB: "db1"},
+					{Role: "readWrite", DB: "db3"},
+				},
+			},
+			expectUpdateCalled: true,
+		},
+		{
+			name: "nil userInfo - no update",
+			user: &api.User{
+				Name: "testuser",
+				DB:   "testdb",
+				Roles: []api.UserRole{
+					{Name: "readWrite", DB: "db1"},
+				},
+			},
+			userInfo:          nil,
+			expectUpdateCalled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockMongoClientForRoles{}
+			err := updateRoles(t.Context(), mock, tt.user, tt.userInfo)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectUpdateCalled, mock.updateRolesCalled,
+				"UpdateUserRoles called = %v, want %v", mock.updateRolesCalled, tt.expectUpdateCalled)
+		})
+	}
+}
+
 func TestRolesChanged(t *testing.T) {
 	r2 := &mongo.Role{
 		Privileges: []mongo.RolePrivilege{
