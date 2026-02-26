@@ -49,6 +49,7 @@ function apply_resourcequota() {
 function wait_cluster_status() {
 	local cluster=$1
 	local expected=$2
+	local retry=0
 
 	echo -n "Waiting for psmdb/${cluster} status to be ${expected}"
 	until [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}') == "${expected}" ]]; do
@@ -158,6 +159,20 @@ wait_cluster_status ${cluster} "error"
 # user should be able to restore to the previous size and make the cluster ready
 patch_pvc_request "${cluster}" "3G"
 wait_cluster_status ${cluster} "ready"
+
+if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then
+	echo "Deleting and recreating PSMDB cluster ${cluster} to avoid cloud storage resize cooldown"
+	kubectl_bin delete psmdb ${cluster}
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+	if [ "$EKS" == 1 ]; then
+		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+	else
+		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+	fi
+	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/storageScaling", "value":{"enableVolumeScaling":true} }]'
+	sleep 10
+	wait_cluster_consistency "$cluster"
+fi
 
 desc "test restartedAt annotation preservation during PVC resize"
 

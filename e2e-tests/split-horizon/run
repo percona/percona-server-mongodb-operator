@@ -111,6 +111,8 @@ main() {
 	wait_cluster_consistency ${cluster}
 
 	destroy "${namespace}"
+
+	desc 'test passed'
 }
 
 main

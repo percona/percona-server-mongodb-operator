@@ -325,4 +325,4 @@ log "checking backup deletion"
 check_backup_deletion
 
 destroy $namespace
-log "test passed"
+desc 'test passed'

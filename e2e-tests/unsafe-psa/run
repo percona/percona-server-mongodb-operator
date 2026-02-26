@@ -27,6 +27,20 @@ function run_recovery_check() {
 	wait_cluster_consistency "$psmdb"
 }
 
+function get_default_storageclass() {
+	kubectl_bin get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}'
+}
+
+function default_sc_allows_expansion() {
+	local default_sc
+	default_sc=$(get_default_storageclass)
+
+	local allowVolumeExpansion
+	allowVolumeExpansion=$(kubectl_bin get sc "${default_sc}" -o jsonpath='{.allowVolumeExpansion}')
+
+	[[ ${allowVolumeExpansion} == "true" ]]
+}
+
 function patch_pvc_request() {
 	local cluster=$1
 	local size=$2
@@ -49,10 +63,14 @@ function main() {
 	wait_cluster_consistency "$psmdb"
 
 	# PVC resize did not work for PSA deployment and it was fixed in 1.22
-	desc 'resizing PVCs'
-	patch_pvc_request "$psmdb" "2G"
-	wait_cluster_consistency "$psmdb"
-	wait_all_pvc_resize "2Gi"
+	if default_sc_allows_expansion; then
+		desc 'resizing PVCs'
+		patch_pvc_request "$psmdb" "2G"
+		wait_cluster_consistency "$psmdb"
+		wait_all_pvc_resize "2Gi"
+	else
+		echo "Default storageclass does not allow volume expansion, skipping PVC resize"
+	fi
 
 	desc 'run backup on minio'
 	run_backup "minio"
