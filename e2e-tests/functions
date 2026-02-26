@@ -25,12 +25,12 @@ qualify_image_ref() {
 	local ref="$1"
 	local first="${ref%%/*}"
 
-	if [[ "$first" == *.* || "$first" == *:* || "$first" == "localhost" ]]; then
+	if [[ $first == *.* || $first == *:* || $first == "localhost" ]]; then
 		printf '%s' "$ref"
 		return 0
 	fi
 
-	if [[ "$ref" == percona/* || "$ref" == perconalab/* ]]; then
+	if [[ $ref == percona/* || $ref == perconalab/* ]]; then
 		printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
 		return 0
 	fi
@@ -44,14 +44,14 @@ qualify_image_var() {
 	local out=""
 	local ref
 
-	[[ -z "$val" ]] && return 0
+	[[ -z $val ]] && return 0
 
-	if [[ "$val" == *$'\n'* ]]; then
+	if [[ $val == *$'\n'* ]]; then
 		while IFS= read -r ref; do
-			[[ -z "$ref" ]] && continue
+			[[ -z $ref ]] && continue
 			out+=$(qualify_image_ref "$ref")
 			out+=$'\n'
-		done <<< "$val"
+		done <<<"$val"
 		out="${out%$'\n'}"
 		printf -v "$var" '%s' "$out"
 		return 0

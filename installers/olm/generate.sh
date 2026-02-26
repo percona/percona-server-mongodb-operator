@@ -84,8 +84,8 @@ update_yaml_images() {
 		return 1
 	fi
 
-    local temp_file
-    temp_file=$(mktemp)
+	local temp_file
+	temp_file=$(mktemp)
 
 	sed -E 's/(("image":|"initImage":|containerImage:|image:|initImage:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
 	mv "$temp_file" "$yaml_file"
