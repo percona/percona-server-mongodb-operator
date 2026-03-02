@@ -115,7 +115,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 
 		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCmd, nil, stdoutBuf, stderrBuf, false)
 		if err != nil {
-			log.Error(nil, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
+			log.Error(err, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 			return errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
@@ -583,7 +583,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 
 		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreFinishCmd, nil, stdoutBuf, stderrBuf, false)
 		if err != nil {
-			log.Error(nil, "Failed to finish restore", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
+			log.Error(err, "Failed to finish restore", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 			return errors.Wrapf(err, "restore-finish stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 

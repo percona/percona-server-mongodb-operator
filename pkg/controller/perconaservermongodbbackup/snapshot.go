@@ -126,7 +126,7 @@ func (b *snapshotBackups) reconcileSnapshots(
 	done := true
 	snapshots := make([]api.SnapshotInfo, 0)
 
-	podName := func(nodeName string) (string, error) {
+	getPodName := func(nodeName string) (string, error) {
 		parts := strings.Split(nodeName, ".")
 		if parts[0] == "" {
 			return "", errors.Errorf("unexpected node name format: %s", nodeName)
@@ -142,7 +142,7 @@ func (b *snapshotBackups) reconcileSnapshots(
 		}
 
 		// parse pod name from node name.
-		podName, err := podName(rs.Node)
+		podName, err := getPodName(rs.Node)
 		if err != nil {
 			return false, nil, errors.Wrap(err, "get pod name")
 		}

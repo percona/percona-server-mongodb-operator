@@ -217,7 +217,12 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}); err != nil {
 		return rr, err
 	}
-	defer bcp.PBM().Close(ctx)
+
+	defer func() {
+		if err := bcp.PBM().Close(ctx); err != nil {
+			log.Error(err, "failed to close pbm")
+		}
+	}()
 
 	err = r.checkFinalizers(ctx, cr, cluster, bcp)
 	if err != nil {
