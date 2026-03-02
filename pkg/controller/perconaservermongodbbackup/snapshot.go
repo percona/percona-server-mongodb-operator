@@ -128,7 +128,7 @@ func (b *snapshotBackups) reconcileSnapshots(
 
 	podName := func(nodeName string) (string, error) {
 		parts := strings.Split(nodeName, ".")
-		if len(parts) < 1 {
+		if parts[0] == "" {
 			return "", errors.Errorf("unexpected node name format: %s", nodeName)
 		}
 		return parts[0], nil
