@@ -65,8 +65,6 @@ func (b *snapshotBackups) Start(ctx context.Context, k8sclient client.Client, cl
 	if err := b.pbm.SendCmd(ctx, cmd); err != nil {
 		return status, err
 	}
-	status.State = api.BackupStateRequested
-
 	status = api.PerconaServerMongoDBBackupStatus{
 		PBMname: name,
 		LastTransition: &metav1.Time{
