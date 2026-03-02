@@ -34,7 +34,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) newSnapshotBackups(ctx context.Con
 	}
 	cn, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
-		return nil, errors.Wrap(err, "reate pbm object")
+		return nil, errors.Wrap(err, "create pbm object")
 	}
 
 	return &snapshotBackups{pbm: cn, spec: cluster.Spec.Backup}, nil
