@@ -78,8 +78,11 @@ spec:
                 enum:
                 - logical
                 - physical
+                - external
                 - incremental
                 - incremental-base
+                type: string
+              volumeSnapshotClass:
                 type: string
             type: object
           status:
@@ -255,6 +258,15 @@ spec:
                 type: object
               size:
                 type: string
+              snapshots:
+                items:
+                  properties:
+                    replsetName:
+                      type: string
+                    snapshotName:
+                      type: string
+                  type: object
+                type: array
               start:
                 format: date-time
                 type: string

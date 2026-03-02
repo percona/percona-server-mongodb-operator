@@ -82,8 +82,11 @@ spec:
                 enum:
                 - logical
                 - physical
+                - external
                 - incremental
                 - incremental-base
+                type: string
+              volumeSnapshotClass:
                 type: string
             type: object
           status:
@@ -259,6 +262,15 @@ spec:
                 type: object
               size:
                 type: string
+              snapshots:
+                items:
+                  properties:
+                    replsetName:
+                      type: string
+                    snapshotName:
+                      type: string
+                  type: object
+                type: array
               start:
                 format: date-time
                 type: string
@@ -497,6 +509,15 @@ spec:
                     type: object
                   size:
                     type: string
+                  snapshots:
+                    items:
+                      properties:
+                        replsetName:
+                          type: string
+                        snapshotName:
+                          type: string
+                      type: object
+                    type: array
                   start:
                     format: date-time
                     type: string
@@ -544,6 +565,42 @@ spec:
               completed:
                 format: date-time
                 type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
               error:
                 type: string
               lastTransition:
@@ -26661,6 +26718,15 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - list
+  - watch
+  - create
 ---
 apiVersion: v1
 kind: ServiceAccount

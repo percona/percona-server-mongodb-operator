@@ -1744,3 +1744,11 @@ type LogRotateSpec struct {
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
+
+func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
+	replsets := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}

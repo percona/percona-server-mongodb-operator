@@ -197,18 +197,32 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		}
 	}
 
-	var bcp *Backup
+	var bcp backupExecutor
 	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		var err error
-		bcp, err = r.newBackup(ctx, cluster)
-		if err != nil {
-			return errors.Wrap(err, "create backup object")
+		switch {
+		case cr.Spec.Type == defs.ExternalBackup &&
+			cr.Spec.VolumeSnapshotClass != nil && *cr.Spec.VolumeSnapshotClass != "":
+			bcp, err = r.newSnapshotBackups(ctx, cluster)
+			if err != nil {
+				return errors.Wrap(err, "create snapshot backup object")
+			}
+		default:
+			bcp, err = r.newManagedBackups(ctx, cluster)
+			if err != nil {
+				return errors.Wrap(err, "create backup object")
+			}
 		}
 		return nil
 	}); err != nil {
 		return rr, err
 	}
-	defer bcp.Close(ctx)
+
+	defer func() {
+		if err := bcp.PBM().Close(ctx); err != nil {
+			log.Error(err, "failed to close pbm")
+		}
+	}()
 
 	err = r.checkFinalizers(ctx, cr, cluster, bcp)
 	if err != nil {
@@ -232,7 +246,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
 	cr *psmdbv1.PerconaServerMongoDBBackup,
-	bcp *Backup,
+	bcp backupExecutor,
 ) (psmdbv1.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -269,7 +283,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
-	if err := r.ensureReleaseLockFinalizer(ctx, cluster, cr); err != nil {
+	if err := r.ensureReleaseLockFinalizer(ctx, cr); err != nil {
 		return status, errors.Wrapf(err, "ensure %s finalizer", naming.FinalizerReleaseLock)
 	}
 
@@ -279,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 
 	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
-		updatedStatus, err := bcp.Status(ctx, cr, cluster)
+		updatedStatus, err := bcp.Status(ctx, r.client, cluster, cr)
 		if err == nil {
 			status = updatedStatus
 		}
@@ -291,7 +305,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 
 func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
 	ctx context.Context,
-	cluster *psmdbv1.PerconaServerMongoDB,
 	cr *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
 	for _, f := range cr.GetFinalizers() {
@@ -327,7 +340,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString(string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -344,8 +357,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get gcs credentials secret")
 			}
 			gcsConf.Credentials = gcs.Credentials{
-				ClientEmail: string(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
-				PrivateKey:  string(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
+				ClientEmail: storage.MaskedString(string(gcsSecret.Data[backup.GCSClientEmailSecretKey])),
+				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[backup.GCSPrivateKeySecretKey])),
 			}
 		}
 
@@ -369,8 +382,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
-				AccessKeyID:     string(s3secret.Data[backup.AWSAccessKeySecretKey]),
-				SecretAccessKey: string(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
+				AccessKeyID:     storage.MaskedString(string(s3secret.Data[backup.AWSAccessKeySecretKey])),
+				SecretAccessKey: storage.MaskedString(string(s3secret.Data[backup.AWSSecretAccessKeySecretKey])),
 			}
 		}
 
@@ -388,8 +401,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 
 				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: string(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
-					HMACSecret:    string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+					HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[backup.AWSAccessKeySecretKey])),
+					HMACSecret:    storage.MaskedString(string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey])),
 				}
 			}
 
@@ -401,7 +414,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			case len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0:
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       cr.Status.S3.ServerSideEncryption.SSECustomerKey,
+					SseCustomerKey:       storage.MaskedString(cr.Status.S3.ServerSideEncryption.SSECustomerKey),
 				}
 			case len(cluster.Spec.Secrets.SSE) != 0:
 				sseSecret, err := secret(ctx, r.client, cr.Namespace, cluster.Spec.Secrets.SSE)
@@ -410,7 +423,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       string(sseSecret.Data[backup.SSECustomerKey]),
+					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[backup.SSECustomerKey])),
 				}
 			default:
 				return nil, errors.New("no SseCustomerKey specified")
@@ -463,8 +476,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get minio credentials secret")
 			}
 			minioConf.Credentials = mio.Credentials{
-				AccessKeyID:     string(minioSecret.Data[backup.AWSAccessKeySecretKey]),
-				SecretAccessKey: string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey]),
+				AccessKeyID:     storage.MaskedString(string(minioSecret.Data[backup.AWSAccessKeySecretKey])),
+				SecretAccessKey: storage.MaskedString(string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey])),
 			}
 		}
 		return mio.New(minioConf, "", nil)
@@ -499,7 +512,7 @@ func getPBMBackupMeta(cr *psmdbv1.PerconaServerMongoDBBackup) *pbmBackup.BackupM
 	return meta
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b backupExecutor) error {
 	log := logf.FromContext(ctx)
 
 	var err error
@@ -550,7 +563,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) runReleaseLockFinalizer(ctx contex
 	return errors.Wrap(err, "release backup lock")
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b *Backup) error {
+func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB, b backupExecutor) error {
 	if len(cr.Status.PBMname) == 0 {
 		return nil
 	}
@@ -570,8 +583,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	var meta *backup.BackupMeta
 	var err error
 
-	if b.pbm != nil {
-		meta, err = b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if b.PBM() != nil {
+		meta, err = b.PBM().GetBackupMeta(ctx, cr.Status.PBMname)
 		if err != nil {
 			if !errors.Is(err, pbmErrors.ErrNotFound) {
 				return errors.Wrap(err, "get backup meta")
@@ -579,7 +592,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			meta = nil
 		}
 	}
-	if b.pbm == nil || meta == nil {
+	if b.PBM() == nil || meta == nil {
 		stg, err := r.getPBMStorage(ctx, cluster, cr)
 		if err != nil {
 			return errors.Wrap(err, "get storage")
@@ -614,13 +627,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	}
 
 	if cluster.CompareVersion("1.20.0") < 0 {
-		err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
+		err = b.PBM().DeletePITRChunks(ctx, meta.LastWriteTS)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete PITR")
 		}
 		log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
 
-		err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
+		err = b.PBM().DeleteBackup(ctx, cr.Status.PBMname)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete backup")
 		}
@@ -638,14 +651,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	if mainStgName == cr.Status.StorageName {
 		// We should delete PITR oplog chunks until `LastWriteTS` of the backup,
 		// as it's not possible to delete backup if it is a base for the PITR timeline
-		err = b.pbm.DeletePITRChunks(ctx, meta.LastWriteTS)
+		err = b.PBM().DeletePITRChunks(ctx, meta.LastWriteTS)
 		if err != nil {
 			return errors.Wrap(err, "failed to delete PITR")
 		}
 		log.Info("PiTR chunks deleted", "until", meta.LastWriteTS)
 	}
 
-	err = b.pbm.DeleteBackup(ctx, cr.Status.PBMname)
+	err = b.PBM().DeleteBackup(ctx, cr.Status.PBMname)
 	if err != nil {
 		return errors.Wrap(err, "failed to delete backup")
 	}

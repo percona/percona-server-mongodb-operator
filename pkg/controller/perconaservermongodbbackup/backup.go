@@ -35,25 +35,40 @@ var defaultBackoff = wait.Backoff{
 	Steps:    6,
 }
 
-type Backup struct {
+type backupExecutor interface {
+	Start(context.Context, client.Client, *api.PerconaServerMongoDB, *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error)
+	Status(context.Context, client.Client, *api.PerconaServerMongoDB, *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error)
+	PBM() backup.PBM
+}
+
+type managedBackups struct {
 	pbm  backup.PBM
 	spec api.BackupSpec
 }
 
-func (r *ReconcilePerconaServerMongoDBBackup) newBackup(ctx context.Context, cluster *api.PerconaServerMongoDB) (*Backup, error) {
+func (r *ReconcilePerconaServerMongoDBBackup) newManagedBackups(ctx context.Context, cluster *api.PerconaServerMongoDB) (*managedBackups, error) {
 	if cluster == nil {
-		return new(Backup), nil
+		return new(managedBackups), nil
 	}
 	cn, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "create pbm object")
 	}
 
-	return &Backup{pbm: cn, spec: cluster.Spec.Backup}, nil
+	return &managedBackups{pbm: cn, spec: cluster.Spec.Backup}, nil
+}
+
+func (b *managedBackups) PBM() backup.PBM {
+	return b.pbm
 }
 
 // Start requests backup on PBM
-func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *managedBackups) Start(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *api.PerconaServerMongoDB,
+	cr *api.PerconaServerMongoDBBackup,
+) (api.PerconaServerMongoDBBackupStatus, error) {
 	log := logf.FromContext(ctx).WithValues("backup", cr.Name, "storage", cr.Spec.StorageName)
 
 	log.Info("Starting backup")
@@ -183,7 +198,12 @@ func (b *Backup) Start(ctx context.Context, k8sclient client.Client, cluster *ap
 }
 
 // Status return backup status
-func (b *Backup) Status(ctx context.Context, cr *api.PerconaServerMongoDBBackup, cluster *api.PerconaServerMongoDB) (api.PerconaServerMongoDBBackupStatus, error) {
+func (b *managedBackups) Status(
+	ctx context.Context,
+	_ client.Client,
+	cluster *api.PerconaServerMongoDB,
+	cr *api.PerconaServerMongoDBBackup,
+) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
@@ -268,12 +288,4 @@ func backupPods(replsets []pbmBackup.BackupReplset) map[string]string {
 		pods[rs.Name] = rs.Node
 	}
 	return pods
-}
-
-// Close closes the PBM connection
-func (b *Backup) Close(ctx context.Context) error {
-	if b.pbm == nil {
-		return nil
-	}
-	return b.pbm.Close(ctx)
 }

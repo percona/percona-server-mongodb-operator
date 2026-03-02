@@ -24,6 +24,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/connect"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/percona/percona-backup-mongodb/pbm/lock"
 	pbmLog "github.com/percona/percona-backup-mongodb/pbm/log"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
@@ -87,6 +88,7 @@ type PBM interface {
 
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
+	FinishBackup(ctx context.Context, bcpName string) error
 
 	DeleteBackup(ctx context.Context, name string) error
 
@@ -376,8 +378,8 @@ func GetPBMStorageMinioConfig(
 		}
 
 		storageConf.Minio.Credentials = mio.Credentials{
-			AccessKeyID:     string(accessKey),
-			SecretAccessKey: string(secretAccessKey),
+			AccessKeyID:     storage.MaskedString(accessKey),
+			SecretAccessKey: storage.MaskedString(secretAccessKey),
 		}
 	}
 
@@ -421,7 +423,7 @@ func GetPBMStorageS3Config(
 			case len(stg.S3.ServerSideEncryption.SSECustomerKey) != 0:
 				storageConf.S3.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       stg.S3.ServerSideEncryption.SSECustomerKey,
+					SseCustomerKey:       storage.MaskedString(stg.S3.ServerSideEncryption.SSECustomerKey),
 				}
 			case len(cluster.Spec.Secrets.SSE) != 0:
 				sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
@@ -430,7 +432,7 @@ func GetPBMStorageS3Config(
 				}
 				storageConf.S3.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       string(sseSecret.Data[SSECustomerKey]),
+					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[SSECustomerKey])),
 				}
 			default:
 				return storageConf, errors.New("no SseCustomerKey specified")
@@ -459,8 +461,8 @@ func GetPBMStorageS3Config(
 			}
 		}
 		storageConf.S3.Credentials = s3.Credentials{
-			AccessKeyID:     string(s3secret.Data[AWSAccessKeySecretKey]),
-			SecretAccessKey: string(s3secret.Data[AWSSecretAccessKeySecretKey]),
+			AccessKeyID:     storage.MaskedString(string(s3secret.Data[AWSAccessKeySecretKey])),
+			SecretAccessKey: storage.MaskedString(string(s3secret.Data[AWSSecretAccessKeySecretKey])),
 		}
 	}
 
@@ -510,16 +512,16 @@ func GetPBMStorageGCSConfig(
 
 		if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				ClientEmail: string(gcsSecret.Data[GCSClientEmailSecretKey]),
-				PrivateKey:  string(gcsSecret.Data[GCSPrivateKeySecretKey]),
+				ClientEmail: storage.MaskedString(string(gcsSecret.Data[GCSClientEmailSecretKey])),
+				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[GCSPrivateKeySecretKey])),
 			}
 		}
 
 		// s3 compatibility
 		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				HMACAccessKey: string(gcsSecret.Data[AWSAccessKeySecretKey]),
-				HMACSecret:    string(gcsSecret.Data[AWSSecretAccessKeySecretKey]),
+				HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[AWSAccessKeySecretKey])),
+				HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
 			}
 		}
 	}
@@ -582,7 +584,7 @@ func GetPBMStorageAzureConfig(
 			EndpointURL: stg.Azure.EndpointURL,
 			Prefix:      stg.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: string(azureSecret.Data[AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString(string(azureSecret.Data[AzureStorageAccountKeySecretKey])),
 			},
 		},
 	}
@@ -1049,6 +1051,21 @@ func (b *pbmC) SetConfigVar(ctx context.Context, key, val string) error {
 
 func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
 	return backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
+}
+
+func (b *pbmC) FinishBackup(ctx context.Context, bcpName string) error {
+	meta, err := backup.NewDBManager(b.Client).GetBackupByName(ctx, bcpName)
+	if err != nil {
+		if errors.Is(err, pbmErrors.ErrNotFound) {
+			return errors.Errorf("backup %q not found", bcpName)
+		}
+		return err
+	}
+	if meta.Status != defs.StatusCopyReady {
+		return errors.Errorf("expected %q status. got %q", defs.StatusCopyReady, meta.Status)
+	}
+
+	return backup.ChangeBackupState(b.Client, bcpName, defs.StatusCopyDone, "")
 }
 
 // deleteBackup deletes backup with the given name from the current storage and pbm database
