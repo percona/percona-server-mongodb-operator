@@ -20,9 +20,9 @@ metadata:
     capabilities: Deep Insights
     description: >-
       Percona Distribution for MongoDB Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment
-    createdAt: "%Y-%m-%dT%H:%M:%S.%3Z"
+    createdAt: ""
     repository: 'https://github.com/percona/percona-server-mongodb-operator'
-    alm-examples: >-  
+    alm-examples: >-
 
 spec:
   displayName: Percona Distribution for MongoDB Operator
@@ -86,7 +86,7 @@ spec:
   
       * **Set Member as Arbiter** - [Set up a replica set which contains an
       arbiter](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/arbiter.html),
-      which participates in elections but does not store any data.  This reduces
+      which participates in elections but does not store any data. This reduces
       storage costs while helping maintain replica set integrity.
   
   
@@ -119,7 +119,7 @@ spec:
       apiVersion: v1
       kind: Secret
       metadata:
-      name: my-cluster-name-secrets
+        name: my-cluster-name-secrets
       type: Opaque
       data:
         MONGODB_BACKUP_USER: YmFja3Vw
@@ -236,17 +236,15 @@ spec:
     required: [ ]
     install:
       strategy: deployment
-  minKubeVersion: 1.28.0
   maturity: stable
-  replaces: ''
   installModes:
     - supported: true
       type: OwnNamespace
     - supported: true
       type: SingleNamespace
-    - supported: true
+    - supported: false
       type: MultiNamespace
-    - supported: true
+    - supported: false
       type: AllNamespaces
   install:
     strategy: deployment
