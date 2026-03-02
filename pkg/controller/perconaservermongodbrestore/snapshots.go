@@ -10,6 +10,7 @@ import (
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -71,7 +72,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 		return status, errors.Wrap(err, "update PBM config secret")
 	}
 
-	// TODO: also create a new secret with encryption settings, which will be passed to `--db-config` flag.
+	if err := r.createOrUpdateDBConfigSecret(ctx, cluster); err != nil {
+		return status, errors.Wrap(err, "create db config secret")
+	}
 
 	if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "prepare statefulsets for physical restore")
@@ -301,13 +304,38 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 
 			// When the pods come up, they should start pbm with the following command:
 			sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
-			sfs.Spec.Template.Spec.Containers[0].Args = []string{
+
+			encEnabled := clusterHasEncryption(cluster)
+
+			args := []string{
 				"restore-finish",
 				status.PBMname,
 				"-c", "/etc/pbm/pbm_config.yaml",
 				"--rs", "$(MONGODB_REPLSET)",
 				"--node", "$(POD_NAME).$(SERVICE_NAME)-$(MONGODB_REPLSET).$(NAMESPACE).svc.cluster.local:" + fmt.Sprintf("%d", psmdbv1.DefaultMongoPort),
-				// "--db-config", "/etc/pbm/db-config.yaml", // TODO
+			}
+			if encEnabled {
+				args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
+			}
+			sfs.Spec.Template.Spec.Containers[0].Args = args
+
+			if encEnabled {
+				sfs.Spec.Template.Spec.Volumes = append(sfs.Spec.Template.Spec.Volumes, corev1.Volume{
+					Name: "pbm-db-config",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: r.dbConfigSecretName(cluster),
+						},
+					},
+				})
+				sfs.Spec.Template.Spec.Containers[0].VolumeMounts = append(
+					sfs.Spec.Template.Spec.Containers[0].VolumeMounts,
+					corev1.VolumeMount{
+						Name:      "pbm-db-config",
+						MountPath: "/etc/pbm-db-config/",
+						ReadOnly:  true,
+					},
+				)
 			}
 
 			sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
@@ -738,4 +766,91 @@ func (r *ReconcilePerconaServerMongoDBRestore) ensureResyncPBMStorage(
 		return fmt.Errorf("failed to resync PBM storage: %w", err)
 	}
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) dbConfigSecretName(cluster *psmdbv1.PerconaServerMongoDB) string {
+	return cluster.Name + "-pbm-db-config"
+}
+
+type dbConfigEntry struct {
+	Security *dbConfigSecurity `yaml:"security,omitempty"`
+}
+
+type dbConfigSecurity struct {
+	EnableEncryption  *bool   `yaml:"enableEncryption,omitempty"`
+	EncryptionKeyFile *string `yaml:"encryptionKeyFile,omitempty"`
+}
+
+// createOrUpdateDBConfigSecret builds a Secret containing db_config.yaml for
+// PBM's restore-finish --db-config flag.
+func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) error {
+	log := logf.FromContext(ctx)
+
+	dbConfig := make(map[string]dbConfigEntry)
+
+	for _, rs := range cluster.GetAllReplsets() {
+		enabled, err := rs.Configuration.IsEncryptionEnabled()
+		if err != nil {
+			return errors.Wrapf(err, "check encryption for replset %s", rs.Name)
+		}
+		if enabled == nil || !*enabled {
+			continue
+		}
+
+		if rs.Configuration.VaultEnabled() {
+			log.Info("Vault encryption is not supported for snapshot restore db-config; skipping replset", "replset", rs.Name)
+			continue
+		}
+
+		keyFile := psmdbv1.MongodRESTencryptDir + "/" + psmdbv1.EncryptionKeyName
+		dbConfig[rs.Name] = dbConfigEntry{
+			Security: &dbConfigSecurity{
+				EnableEncryption:  ptr.To(true),
+				EncryptionKeyFile: &keyFile,
+			},
+		}
+	}
+
+	if len(dbConfig) == 0 {
+		return nil
+	}
+
+	confBytes, err := yaml.Marshal(dbConfig)
+	if err != nil {
+		return errors.Wrap(err, "marshal db config to yaml")
+	}
+
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.dbConfigSecretName(cluster),
+			Namespace: cluster.Namespace,
+			Labels:    naming.ClusterLabels(cluster),
+		},
+		Data: map[string][]byte{
+			"db_config.yaml": confBytes,
+		},
+	}
+
+	if err := r.createOrUpdate(ctx, &secret); err != nil {
+		return errors.Wrap(err, "create db config secret")
+	}
+
+	return nil
+}
+
+func clusterHasEncryption(cluster *psmdbv1.PerconaServerMongoDB) bool {
+	for _, rs := range cluster.GetAllReplsets() {
+		enabled, err := rs.Configuration.IsEncryptionEnabled()
+		if err != nil || enabled == nil || !*enabled {
+			continue
+		}
+		if rs.Configuration.VaultEnabled() {
+			continue
+		}
+		return true
+	}
+	return false
 }
