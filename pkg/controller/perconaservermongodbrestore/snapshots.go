@@ -9,10 +9,6 @@ import (
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +20,11 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func (r *ReconcilePerconaServerMongoDBRestore) reconcileExternalSnapshotRestore(
@@ -528,7 +529,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 
 			orig := sfs.DeepCopy()
 
-			// Scale down the statefulset.
+			// Scale up the statefulset.
 			sfs.Spec.Replicas = ptr.To(replicas)
 			return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
 		}); err != nil {
