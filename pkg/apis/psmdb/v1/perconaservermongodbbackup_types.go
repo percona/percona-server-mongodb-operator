@@ -71,8 +71,11 @@ type PerconaServerMongoDBBackupStatus struct {
 
 type SnapshotInfos []SnapshotInfo
 
+// SnapshotInfo contains information about a snapshot.
 type SnapshotInfo struct {
-	ReplsetName  string `json:"replsetName,omitempty"`
+	// ReplsetName is the name of the replset that the snapshot belongs to.
+	ReplsetName string `json:"replsetName,omitempty"`
+	// SnapshotName is the name of the snapshot.
 	SnapshotName string `json:"snapshotName,omitempty"`
 }
 
