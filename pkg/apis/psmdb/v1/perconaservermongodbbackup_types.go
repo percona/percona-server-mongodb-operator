@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -121,6 +122,9 @@ type PerconaServerMongoDBBackupList struct {
 }
 
 func (p *PerconaServerMongoDBBackup) CheckFields() error {
+	if p.Spec.Type == defs.ExternalBackup && ptr.Deref(p.Spec.VolumeSnapshotClass, "") == "" {
+		return fmt.Errorf("spec volumeSnapshotClass field is empty")
+	}
 	if len(p.Spec.StorageName) == 0 && p.Spec.Type != defs.ExternalBackup {
 		return fmt.Errorf("spec storageName field is empty")
 	}
