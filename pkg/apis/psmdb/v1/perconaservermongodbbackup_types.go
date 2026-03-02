@@ -81,9 +81,9 @@ type SnapshotInfo struct {
 }
 
 func (s SnapshotInfos) GetSnapshotInfo(replsetName string) *SnapshotInfo {
-	for _, info := range s {
-		if info.ReplsetName == replsetName {
-			return &info
+	for i := range s {
+		if s[i].ReplsetName == replsetName {
+			return &s[i]
 		}
 	}
 	return nil
