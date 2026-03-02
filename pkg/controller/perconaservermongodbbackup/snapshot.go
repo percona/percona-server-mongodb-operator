@@ -175,7 +175,7 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 	status := cr.Status
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
 
-	meta, err := b.pbm.GetBackupByName(ctx, cr.Status.PBMname)
+	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
 	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
 		return status, errors.Wrap(err, "get pbm backup meta")
 	}
