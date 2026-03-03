@@ -278,7 +278,7 @@ run_recovery_check_bkp_source "$backup_name_minio" "$backup_dest_minio" "$cluste
 
 desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
-backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+backup_exists=$(kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
 	| grep -c ${backup_dest_minio} | cat)
@@ -320,7 +320,7 @@ sleep 60
 
 desc 'delete backup and check if it is removed from bucket -- minio'
 kubectl_bin delete psmdb-backup --all
-backup_exists=$(kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+backup_exists=$(kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls s3://operator-testing/ \
 	| grep -c ${backup_dest_minio} | cat)
