@@ -316,10 +316,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 			}
 			if encEnabled {
 				args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
-			}
-			sfs.Spec.Template.Spec.Containers[0].Args = args
-
-			if encEnabled {
 				sfs.Spec.Template.Spec.Volumes = append(sfs.Spec.Template.Spec.Volumes, corev1.Volume{
 					Name: "pbm-db-config",
 					VolumeSource: corev1.VolumeSource{
@@ -337,6 +333,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					},
 				)
 			}
+
+			sfs.Spec.Template.Spec.Containers[0].Args = args
 
 			sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 			sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
