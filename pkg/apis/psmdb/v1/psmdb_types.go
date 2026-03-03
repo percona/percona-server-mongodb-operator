@@ -1170,7 +1170,12 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base,external}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 

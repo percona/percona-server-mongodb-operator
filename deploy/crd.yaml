@@ -1448,6 +1448,9 @@ spec:
                           - physical
                           - incremental
                           - incremental-base
+                          - external
+                          type: string
+                        volumeSnapshotClass:
                           type: string
                       required:
                       - enabled

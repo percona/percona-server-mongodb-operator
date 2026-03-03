@@ -97,6 +97,9 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 	if r := task.GetRetention(cr); !r.DeleteFromStorage {
 		finalizers = []string{}
 	}
+	if backupType == defs.ExternalBackup {
+		finalizers = []string{}
+	}
 	backupCr := &api.PerconaServerMongoDBBackup{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: api.SchemeGroupVersion.String(),
@@ -108,11 +111,12 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 			Labels:       naming.ScheduledBackupLabels(cr, task),
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
-			Type:             backupType,
-			ClusterName:      cr.Name,
-			StorageName:      task.StorageName,
-			Compression:      task.CompressionType,
-			CompressionLevel: task.CompressionLevel,
+			Type:                backupType,
+			ClusterName:         cr.Name,
+			StorageName:         task.StorageName,
+			Compression:         task.CompressionType,
+			CompressionLevel:    task.CompressionLevel,
+			VolumeSnapshotClass: task.VolumeSnapshotClass,
 		},
 	}
 	if err := backupCr.CheckFields(); err != nil {
