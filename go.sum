@@ -420,6 +420,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/percona/percona-backup-mongodb v1.8.1-0.20251104101930-05ab6d7e1004 h1:Q/HeUxMI63ekZYY0TlnfF0Vp3WZ0mmx7gI9iBzehjeY=
 github.com/percona/percona-backup-mongodb v1.8.1-0.20251104101930-05ab6d7e1004/go.mod h1:NYc9wcoGLNXmOHwfsaed+Ej3nxv3dUViHOcCfQneJ84=
+github.com/percona/percona-backup-mongodb v1.8.1-0.20260211104648-63ec17219d7c h1:DWISfU16p/4WseJ+j4Rb61MAp7CBx1Rsffbg0KCV/5A=
+github.com/percona/percona-backup-mongodb v1.8.1-0.20260211104648-63ec17219d7c/go.mod h1:YZ6ek2JZEGcuR228HoRXQYjm5Icu5Fg5qX46voUfI8k=
 github.com/philhofer/fwd v1.2.0 h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=
 github.com/philhofer/fwd v1.2.0/go.mod h1:RqIHx9QI14HlwKwm98g9Re5prTQ6LdeRQn+gXJFxsJM=
 github.com/pierrec/lz4 v2.6.1+incompatible h1:9UY3+iC23yxF0UfGaYrGplQ+79Rg+h/q9FV9ix19jjM=
