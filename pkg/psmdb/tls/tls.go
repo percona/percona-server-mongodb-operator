@@ -43,10 +43,19 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 	}
 
 	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
-	if secret.Annotations[cm.IssuerKindAnnotationKey] != cm.IssuerKind || issuerName == "" {
+	if issuerName == "" {
 		return true, nil
 	}
-	issuer := new(cm.Issuer)
+
+	var issuer client.Object
+	switch secret.Annotations[cm.IssuerKindAnnotationKey] {
+	case cm.IssuerKind:
+		issuer = new(cm.Issuer)
+	case cm.ClusterIssuerKind:
+		issuer = new(cm.ClusterIssuer)
+	default:
+		return true, nil
+	}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      issuerName,
 		Namespace: secret.Namespace,
