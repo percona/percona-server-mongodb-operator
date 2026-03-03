@@ -578,7 +578,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	status *psmdbv1.PerconaServerMongoDBRestoreStatus,
 ) error {
-	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMAwaitingRestoreFinished) ||
+	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMRestoreFinishing) ||
 		meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMRestoreFinished) {
 		return nil
 	}
@@ -622,10 +622,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 	}
 
 	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:    psmdbv1.ConditionPBMAwaitingRestoreFinished,
+		Type:    psmdbv1.ConditionPBMRestoreFinishing,
 		Status:  metav1.ConditionTrue,
-		Reason:  "PBMRestoreFinished",
-		Message: "PBM restore finished",
+		Reason:  "PBMRestoreFinishing",
+		Message: "PBM restore is finishing",
 	})
 
 	return nil
@@ -693,7 +693,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 		Reason:  "PBMRestoreFinished",
 		Message: "PBM restore finished",
 	})
-	meta.RemoveStatusCondition(&status.Conditions, psmdbv1.ConditionPBMAwaitingRestoreFinished)
+	meta.RemoveStatusCondition(&status.Conditions, psmdbv1.ConditionPBMRestoreFinishing)
 	return true, nil
 }
 

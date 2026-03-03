@@ -71,7 +71,7 @@ const (
 	ConditionPBMAgentConfiguredForSnapshot   string = "PBMAgentConfiguredForSnapshot"
 	ConditionReplsetPVCsRestoredFromSnapshot string = "ReplsetPVCsRestoredFromSnapshot"
 	ConditionPBMAgentAwaitingRestoreFinish   string = "PBMAgentAwaitingRestoreFinish"
-	ConditionPBMAwaitingRestoreFinished      string = "PBMAwaitingRestoreFinish"
+	ConditionPBMRestoreFinishing             string = "PBMRestoreFinishing"
 	ConditionPBMRestoreFinished              string = "PBMRestoreFinished"
 )
 
