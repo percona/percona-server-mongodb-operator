@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -357,7 +356,13 @@ func updateRoles(ctx context.Context, mongoCli mongo.Client, user *api.User, use
 		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
 	}
 
-	if reflect.DeepEqual(userInfo.Roles, roles) {
+	sortRoles := cmpopts.SortSlices(func(a, b mongo.Role) bool {
+		if a.DB != b.DB {
+			return a.DB < b.DB
+		}
+		return a.Role < b.Role
+	})
+	if cmp.Equal(userInfo.Roles, roles, sortRoles) {
 		return nil
 	}
 
