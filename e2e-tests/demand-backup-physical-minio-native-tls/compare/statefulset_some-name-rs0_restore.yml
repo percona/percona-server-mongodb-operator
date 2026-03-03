@@ -67,6 +67,8 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: SSL_CERT_FILE
+              value: /etc/s3/certs/ca-bundle.crt
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -177,6 +179,11 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /etc/s3/certs-in
+              name: ca-bundle-in
+              readOnly: true
+            - mountPath: /etc/s3/certs
+              name: ca-bundle
             - mountPath: /etc/pbm/
               name: pbm-config
               readOnly: true

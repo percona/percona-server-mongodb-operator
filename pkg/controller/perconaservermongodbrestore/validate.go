@@ -58,6 +58,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		cfg.Storage = storageConf
 	}
 
+	// The operator pod does not have the custom CA mounted, so it cannot verify
+	// TLS when connecting to MinIO directly. Use InsecureSkipTLSVerify for this
+	// validation step only. The actual TLS verification is handled by pbm-agent,
+	// which has the CA bundle mounted via SSL_CERT_FILE.
+	if storage.Type == psmdbv1.BackupStorageMinio && storage.Minio.CABundle != nil && cfg.Storage.Minio != nil {
+		mioCfg := *cfg.Storage.Minio
+		mioCfg.InsecureSkipTLSVerify = true
+		cfg.Storage.Minio = &mioCfg
+	}
+
 	if err := pbmc.ValidateBackup(ctx, &cfg, bcp); err != nil {
 		return errors.Wrap(err, "failed to validate backup")
 	}

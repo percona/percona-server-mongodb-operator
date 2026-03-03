@@ -1052,6 +1052,20 @@ func (b *pbmC) GetBackupMeta(ctx context.Context, bcpName string) (*backup.Backu
 }
 
 // deleteBackup deletes backup with the given name from the current storage and pbm database
+// applyOperatorMinioInsecureTLS returns a copy of conf with InsecureSkipTLSVerify=true
+// for secure MinIO storage. The operator pod does not have custom CA bundles mounted,
+// so it cannot verify TLS when connecting to MinIO directly.
+// The actual TLS verification is handled by pbm-agent, which has the CA bundle
+// mounted via SSL_CERT_FILE.
+func applyOperatorMinioInsecureTLS(conf config.StorageConf) config.StorageConf {
+	if conf.Type == storage.Minio && conf.Minio != nil && conf.Minio.Secure {
+		mioConf := *conf.Minio
+		mioConf.InsecureSkipTLSVerify = true
+		conf.Minio = &mioConf
+	}
+	return conf
+}
+
 // deleteBackup, deleteBackupImpl and deleteIncremetalChainImpl is copied from PBM v2.11.0 to fix PBM-1633
 // we need to stop maintaining these in operator v1.24.0
 func deleteBackup(ctx context.Context, conn connect.Client, name, node string, event pbmLog.LogEvent) error {
@@ -1086,6 +1100,7 @@ func deleteBackupImpl(
 			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
 		}
 	}
+	conf = applyOperatorMinioInsecureTLS(conf)
 
 	stg, err := util.StorageFromConfig(&conf, node, event)
 	if err != nil {
