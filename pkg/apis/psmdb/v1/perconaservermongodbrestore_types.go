@@ -133,7 +133,7 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 	}
 
 	if r.Spec.BackupSource != nil {
-		if len(r.Spec.BackupSource.Destination) == 0 {
+		if r.Spec.BackupSource.Type != defs.ExternalBackup && len(r.Spec.BackupSource.Destination) == 0 {
 			return errors.New("backupSource destination is required")
 		}
 

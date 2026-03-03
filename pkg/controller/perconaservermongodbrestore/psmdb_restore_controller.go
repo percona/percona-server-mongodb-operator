@@ -344,6 +344,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				GCS:         cr.Spec.BackupSource.GCS,
 				Azure:       cr.Spec.BackupSource.Azure,
 				Filesystem:  cr.Spec.BackupSource.Filesystem,
+				Snapshots:   cr.Spec.BackupSource.Snapshots,
 				PBMname:     backupName,
 			},
 		}, nil
