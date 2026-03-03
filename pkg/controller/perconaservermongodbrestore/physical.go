@@ -396,9 +396,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	cmd := []string{
 		"bash", "-c",
 		strings.Join([]string{
-			"install -D /usr/local/bin/pbm /opt/percona/pbm",
-			"install -D /usr/local/bin/pbm-agent /opt/percona/pbm-agent",
-			"install -D /usr/local/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
+			"install -D $([ -f /usr/local/bin/pbm ] && echo /usr/local/bin/pbm || echo /usr/bin/pbm) /opt/percona/pbm",
+			"install -D $([ -f /usr/local/bin/pbm-agent ] && echo /usr/local/bin/pbm-agent || echo /usr/bin/pbm-agent) /opt/percona/pbm-agent",
+			"install -D $([ -f /usr/local/bin/pbm-agent-entrypoint ] && echo /usr/local/bin/pbm-agent-entrypoint || echo /usr/bin/pbm-agent-entrypoint) /opt/percona/pbm-agent-entrypoint",
 		}, " && "),
 	}
 	pbmInit := psmdb.EntrypointInitContainer(
