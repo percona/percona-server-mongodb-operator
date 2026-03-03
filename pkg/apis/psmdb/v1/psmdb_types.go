@@ -1746,7 +1746,8 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 }
 
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
-	replsets := cr.Spec.Replsets
+	replsets := make([]*ReplsetSpec, len(cr.Spec.Replsets))
+	copy(replsets, cr.Spec.Replsets)
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
