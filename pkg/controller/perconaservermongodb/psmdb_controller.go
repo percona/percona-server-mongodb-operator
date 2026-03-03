@@ -291,6 +291,14 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "set CR version")
 	}
 
+	// Make sure that secrets specified in the manifest are preserved and not overwritten by the operator.
+	if cr.ObjectMeta.DeletionTimestamp == nil {
+		err = r.ensureSecretExistence(ctx, cr)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	err = cr.CheckNSetDefaults(ctx, r.serverVersion.Platform)
 	if err != nil {
 		// If the user created a cluster with finalizers and wrong options, it would be impossible to delete a cluster.
