@@ -372,6 +372,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 		pvcName             string
 		snapshotName        string
 		volumeClaimTemplate corev1.PersistentVolumeClaimSpec
+		labels              map[string]string
 	}
 
 	getVolumeClaimTemplate := func(sfsName string) (corev1.PersistentVolumeClaimSpec, error) {
@@ -401,11 +402,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 		if err != nil {
 			return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.MongodStatefulSetName(cluster, rs))
 		}
+
+		labels := naming.PVCLabels(naming.ComponentMongod, rs.Name, cluster.Name)
+		if rs.ClusterRole == psmdbv1.ClusterRoleConfigSvr {
+			labels = naming.PVCLabels(psmdbv1.ConfigReplSetName, psmdbv1.ConfigReplSetName, cluster.Name)
+		}
+
 		for podIdx := int32(0); podIdx < rs.Size; podIdx++ {
 			pvcs = append(pvcs, pvcInfo{
 				pvcName:             config.MongodDataVolClaimName + "-" + rs.PodName(cluster, int(podIdx)),
 				volumeClaimTemplate: vct,
 				snapshotName:        snapshot.SnapshotName,
+				labels:              labels,
 			})
 		}
 
@@ -419,6 +427,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 					pvcName:             config.MongodDataVolClaimName + "-" + naming.NonVotingPodName(cluster, rs, int(podIdx)),
 					volumeClaimTemplate: vct,
 					snapshotName:        snapshot.SnapshotName,
+					labels:              naming.PVCLabels(naming.ComponentNonVoting, rs.Name, cluster.Name),
 				})
 			}
 		}
@@ -432,6 +441,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 					pvcName:             config.MongodDataVolClaimName + "-" + naming.HiddenPodName(cluster, rs, int(podIdx)),
 					volumeClaimTemplate: vct,
 					snapshotName:        snapshot.SnapshotName,
+					labels:              naming.PVCLabels(naming.ComponentHidden, rs.Name, cluster.Name),
 				})
 			}
 		}
@@ -439,7 +449,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 
 	done := true
 	for _, info := range pvcs {
-		if ready, err := r.reconcilePVCForSnapshotRestore(ctx, info.pvcName, info.snapshotName,
+		if ready, err := r.reconcilePVCForSnapshotRestore(ctx, info.pvcName, info.labels, info.snapshotName,
 			info.volumeClaimTemplate, restore); err != nil {
 			return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
 		} else if !ready {
@@ -459,10 +469,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 
 func generatePVCFromSnapshot(
 	pvc *corev1.PersistentVolumeClaim,
+	labels map[string]string,
 	spec corev1.PersistentVolumeClaimSpec,
 	snapshotName string,
 	restoreName string,
 ) {
+	pvc.SetLabels(labels)
 	pvc.Spec = spec
 	pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
 		APIGroup: ptr.To(volumesnapshotv1.SchemeGroupVersion.Group),
@@ -477,6 +489,7 @@ func generatePVCFromSnapshot(
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 	ctx context.Context,
 	pvcName string,
+	labels map[string]string,
 	snapshotName string,
 	volumeClaimTemplate corev1.PersistentVolumeClaimSpec,
 	restore *psmdbv1.PerconaServerMongoDBRestore,
@@ -489,7 +502,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 	}
 	err := r.client.Get(ctx, client.ObjectKeyFromObject(observedPVC), observedPVC)
 	if k8sErrors.IsNotFound(err) {
-		generatePVCFromSnapshot(observedPVC, volumeClaimTemplate,
+		generatePVCFromSnapshot(observedPVC, labels, volumeClaimTemplate,
 			snapshotName, restore.GetName())
 		if err := r.client.Create(ctx, observedPVC); err != nil {
 			return false, errors.Wrapf(err, "create pvc %s", pvcName)

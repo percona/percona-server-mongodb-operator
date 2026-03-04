@@ -28,8 +28,10 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 		StorageClassName: &storageClassName,
 	}
 
+	labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
+
 	pvc := &corev1.PersistentVolumeClaim{}
-	generatePVCFromSnapshot(pvc, spec, "my-snapshot", "my-restore")
+	generatePVCFromSnapshot(pvc, labels, spec, "my-snapshot", "my-restore")
 
 	assert.Equal(t, spec.AccessModes, pvc.Spec.AccessModes)
 	assert.Equal(t, spec.StorageClassName, pvc.Spec.StorageClassName)
@@ -39,6 +41,7 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 	assert.Equal(t, "VolumeSnapshot", pvc.Spec.DataSource.Kind)
 	assert.Equal(t, ptr.To(volumesnapshotv1.SchemeGroupVersion.Group), pvc.Spec.DataSource.APIGroup)
 	assert.Equal(t, "my-restore", pvc.Annotations[naming.AnnotationRestoreName])
+	assert.Equal(t, labels, pvc.Labels)
 }
 
 func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
@@ -61,13 +64,16 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 		StorageClassName: &newClassName,
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 	}
-	generatePVCFromSnapshot(pvc, newSpec, "new-snapshot", "new-restore")
+
+	labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
+	generatePVCFromSnapshot(pvc, labels, newSpec, "new-snapshot", "new-restore")
 
 	assert.Equal(t, &newClassName, pvc.Spec.StorageClassName)
 	assert.Equal(t, []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}, pvc.Spec.AccessModes)
 	assert.Equal(t, "new-snapshot", pvc.Spec.DataSource.Name)
 	// Annotations should be replaced (only the restore-name annotation)
 	assert.Equal(t, "new-restore", pvc.Annotations[naming.AnnotationRestoreName])
+	assert.Equal(t, labels, pvc.Labels)
 }
 
 func TestReconcileSnapshotNew(t *testing.T) {
@@ -351,7 +357,9 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 	t.Run("creates PVC when not found and returns true", func(t *testing.T) {
 		r := fakeReconciler(restore)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", "my-snapshot", spec, restore)
+		labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
+
+		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.True(t, done)
 
@@ -362,6 +370,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		assert.Equal(t, "my-snapshot", pvc.Spec.DataSource.Name)
 		assert.Equal(t, "VolumeSnapshot", pvc.Spec.DataSource.Kind)
 		assert.Equal(t, "my-restore", pvc.Annotations[naming.AnnotationRestoreName])
+		assert.Equal(t, labels, pvc.Labels)
 	})
 
 	t.Run("returns true when PVC has correct restore annotation", func(t *testing.T) {
@@ -376,7 +385,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		}
 		r := fakeReconciler(restore, existingPVC)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", "my-snapshot", spec, restore)
+		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.True(t, done)
 	})
@@ -393,7 +402,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		}
 		r := fakeReconciler(restore, existingPVC)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", "my-snapshot", spec, restore)
+		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.False(t, done)
 
@@ -417,7 +426,8 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		}
 		r := fakeReconciler(restore, existingPVC)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", "my-snapshot", spec, restore)
+		labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
+		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.False(t, done)
 
