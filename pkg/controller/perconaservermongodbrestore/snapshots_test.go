@@ -791,8 +791,8 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 		}
 	}
 
-	expectedSecretName := clusterName + "-pbm-db-config"
-	expectedKeyFile := psmdbv1.MongodRESTencryptDir + "/" + psmdbv1.EncryptionKeyName
+	expectedSecretName := clusterName + "-rs0-pbm-db-config"
+	expectedKeyFile := "/tmp/" + psmdbv1.EncryptionKeyName
 
 	t.Run("no secret created when encryption is not configured", func(t *testing.T) {
 		cluster := makeCluster("")
@@ -838,7 +838,7 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 		assert.True(t, strings.Contains(content, expectedKeyFile), "expected key file path in content: %s", content)
 	})
 
-	t.Run("no secret created when vault is configured", func(t *testing.T) {
+	t.Run("secret created with vault security config when vault is configured", func(t *testing.T) {
 		cluster := makeCluster(`security:
   enableEncryption: true
   vault:
@@ -846,10 +846,16 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 		r := fakeReconciler(cluster)
 
 		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		secret := &corev1.Secret{}
 		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
-		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret when vault is enabled")
+		require.NoError(t, err)
+
+		data, ok := secret.Data["db_config.yaml"]
+		require.True(t, ok)
+		content := string(data)
+		assert.True(t, strings.Contains(content, "enableEncryption: true"))
+		assert.True(t, strings.Contains(content, "vault.example.com"))
 	})
 }

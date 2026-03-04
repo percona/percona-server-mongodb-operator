@@ -282,11 +282,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 	}
 
 	isEncrypted := func(rs *psmdbv1.ReplsetSpec) (bool, error) {
+		if rs.Configuration.VaultEnabled() {
+			return true, nil
+		}
 		enc, err := rs.Configuration.IsEncryptionEnabled()
 		if err != nil {
 			return false, errors.Wrapf(err, "failed to check if encryption is enabled")
 		}
-		return enc != nil && *enc && !rs.Configuration.VaultEnabled(), nil
+		return enc != nil && *enc, nil
 	}
 
 	// Scale down all statefulsets of each replset.
@@ -334,7 +337,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 						Name: "pbm-db-config",
 						VolumeSource: corev1.VolumeSource{
 							Secret: &corev1.SecretVolumeSource{
-								SecretName: r.dbConfigSecretName(cluster),
+								SecretName: r.dbConfigSecretName(cluster, rs),
 							},
 						},
 					})
@@ -347,17 +350,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 						},
 					)
 
-					// PBM's restore-finish starts a local mongod that recreates the encryption
-					// key database from the key file. MongoDB requires the key file permissions
-					// to satisfy (mode & 0077 == 0), but Kubernetes Secret volumes mount files
-					// with mode 0440 (group-readable) which fails this check. Copy the key to
-					// /tmp with owner-only permissions before starting pbm-agent.
-					encKeyPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName)
-					fixedKeyPath := "/tmp/" + psmdbv1.EncryptionKeyName
-					sfs.Spec.Template.Spec.Containers[0].Command = []string{
-						"bash", "-c",
-						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
-						"--",
+					if !rs.Configuration.VaultEnabled() {
+						// PBM's restore-finish starts a local mongod that recreates the encryption
+						// key database from the key file. MongoDB requires the key file permissions
+						// to satisfy (mode & 0077 == 0), but Kubernetes Secret volumes mount files
+						// with mode 0440 (group-readable) which fails this check. Copy the key to
+						// /tmp with owner-only permissions before starting pbm-agent.
+						encKeyPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName)
+						fixedKeyPath := "/tmp/" + psmdbv1.EncryptionKeyName
+						sfs.Spec.Template.Spec.Containers[0].Command = []string{
+							"bash", "-c",
+							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
+							"--",
+						}
 					}
 				}
 
@@ -812,11 +817,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) ensureResyncPBMStorage(
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) dbConfigSecretName(cluster *psmdbv1.PerconaServerMongoDB) string {
-	return cluster.Name + "-pbm-db-config"
+func (r *ReconcilePerconaServerMongoDBRestore) dbConfigSecretName(cluster *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
+	return cluster.Name + "-" + rs.Name + "-pbm-db-config"
 }
 
-// createOrUpdateDBConfigSecret builds a Secret containing db_config.yaml for
+// createOrUpdateDBConfigSecret builds a per-replset Secret containing db_config.yaml for
 // PBM's restore-finish --db-config flag.
 func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 	ctx context.Context,
@@ -824,53 +829,58 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 ) error {
 	log := logf.FromContext(ctx)
 
-	hasEncryption := false
 	for _, rs := range cluster.GetAllReplsets() {
+		var securityConf interface{}
+
 		if rs.Configuration.VaultEnabled() {
-			log.Info("Vault encryption is not supported for snapshot restore db-config; skipping replset", "replset", rs.Name)
+			sec, err := rs.Configuration.GetOptions("security")
+			if err != nil {
+				return errors.Wrapf(err, "get security config for replset %s", rs.Name)
+			}
+			if sec != nil {
+				log.Info("Using vault security config for snapshot restore db-config", "replset", rs.Name)
+				securityConf = sec
+			}
+		} else {
+			enabled, err := rs.Configuration.IsEncryptionEnabled()
+			if err != nil {
+				return errors.Wrapf(err, "check encryption for replset %s", rs.Name)
+			}
+			if enabled != nil && *enabled {
+				securityConf = map[string]any{
+					"enableEncryption":  true,
+					"encryptionKeyFile": fmt.Sprintf("/tmp/%s", psmdbv1.EncryptionKeyName),
+				}
+			}
+		}
+
+		if securityConf == nil {
 			continue
 		}
 
-		enabled, err := rs.Configuration.IsEncryptionEnabled()
+		data := map[string]any{
+			"security": securityConf,
+		}
+
+		dataBytes, err := yaml.Marshal(data)
 		if err != nil {
-			return errors.Wrapf(err, "check encryption for replset %s", rs.Name)
+			return errors.Wrapf(err, "marshal db config to yaml for replset %s", rs.Name)
 		}
-		if enabled != nil && *enabled {
-			hasEncryption = true
-			break
+
+		secret := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      r.dbConfigSecretName(cluster, rs),
+				Namespace: cluster.Namespace,
+				Labels:    naming.ClusterLabels(cluster),
+			},
+			Data: map[string][]byte{
+				"db_config.yaml": dataBytes,
+			},
 		}
-		break
-	}
 
-	if !hasEncryption {
-		return nil
-	}
-
-	data := map[string]any{
-		"security": map[string]any{
-			"enableEncryption":  true,
-			"encryptionKeyFile": fmt.Sprintf("/tmp/%s", psmdbv1.EncryptionKeyName),
-		},
-	}
-
-	dataBytes, err := yaml.Marshal(data)
-	if err != nil {
-		return errors.Wrap(err, "marshal db config to yaml")
-	}
-
-	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.dbConfigSecretName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    naming.ClusterLabels(cluster),
-		},
-		Data: map[string][]byte{
-			"db_config.yaml": dataBytes,
-		},
-	}
-
-	if err := r.createOrUpdate(ctx, &secret); err != nil {
-		return errors.Wrap(err, "create db config secret")
+		if err := r.createOrUpdate(ctx, &secret); err != nil {
+			return errors.Wrapf(err, "create db config secret for replset %s", rs.Name)
+		}
 	}
 
 	return nil
