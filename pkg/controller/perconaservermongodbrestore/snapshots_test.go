@@ -3,6 +3,7 @@ package perconaservermongodbrestore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
@@ -769,4 +770,86 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected node address arg to end with port %d, args: %v", psmdbv1.DefaultMongoPort, args)
+}
+
+func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
+	const ns = "default"
+
+	clusterName := "my-cluster"
+
+	makeCluster := func(conf psmdbv1.MongoConfiguration) *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: ns,
+			},
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{
+					{Name: "rs0", Size: 1, Configuration: conf},
+				},
+			},
+		}
+	}
+
+	expectedSecretName := clusterName + "-pbm-db-config"
+	expectedKeyFile := psmdbv1.MongodRESTencryptDir + "/" + psmdbv1.EncryptionKeyName
+
+	t.Run("no secret created when encryption is not configured", func(t *testing.T) {
+		cluster := makeCluster("")
+		r := fakeReconciler(cluster)
+
+		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
+		assert.NoError(t, err)
+
+		secret := &corev1.Secret{}
+		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
+		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret to be created")
+	})
+
+	t.Run("no secret created when encryption is explicitly false", func(t *testing.T) {
+		cluster := makeCluster(`security:
+  enableEncryption: false`)
+		r := fakeReconciler(cluster)
+
+		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
+		assert.NoError(t, err)
+
+		secret := &corev1.Secret{}
+		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
+		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret to be created")
+	})
+
+	t.Run("secret created with encryption key file when encryption enabled", func(t *testing.T) {
+		cluster := makeCluster(`security:
+  enableEncryption: true`)
+		r := fakeReconciler(cluster)
+
+		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
+		require.NoError(t, err)
+
+		secret := &corev1.Secret{}
+		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
+		require.NoError(t, err)
+
+		data, ok := secret.Data["db_config.yaml"]
+		require.True(t, ok, "expected db_config.yaml key in secret")
+		content := string(data)
+		assert.True(t, strings.Contains(content, "enableEncryption: true"), "expected enableEncryption: true in content: %s", content)
+		assert.True(t, strings.Contains(content, expectedKeyFile), "expected key file path in content: %s", content)
+	})
+
+	t.Run("no secret created when vault is configured", func(t *testing.T) {
+		cluster := makeCluster(`security:
+  enableEncryption: true
+  vault:
+    serverName: vault.example.com`)
+		r := fakeReconciler(cluster)
+
+		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
+		assert.NoError(t, err)
+
+		secret := &corev1.Secret{}
+		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
+		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret when vault is enabled")
+	})
 }
