@@ -128,6 +128,7 @@ desc 'Testing snapshot backup/restore on encrypted cluster'
 kubectl_bin delete psmdb "${cluster}"
 kubectl_bin wait --for=delete psmdb/"${cluster}" --timeout=600s
 
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
 apply_cluster "${test_dir}/conf/${cluster}-encrypted.yml"
 
 echo 'check if all pods started'
