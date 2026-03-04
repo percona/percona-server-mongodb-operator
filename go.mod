@@ -21,7 +21,7 @@ require (
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
-	github.com/percona/percona-backup-mongodb v1.8.1-0.20260213115858-01eb9981f58a
+	github.com/percona/percona-backup-mongodb v1.8.1-0.20260303132450-cd59a62cb5d8
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.11.1
