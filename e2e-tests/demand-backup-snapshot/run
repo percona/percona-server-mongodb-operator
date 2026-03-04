@@ -6,14 +6,7 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-if [ -z "${VOLUME_SNAPSHOT_CLASS}" ]; then
-	VOLUME_SNAPSHOT_CLASS=$(kubectl_bin get volumesnapshotclass -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-	if [ -z "${VOLUME_SNAPSHOT_CLASS}" ]; then
-		echo "ERROR: No VolumeSnapshotClass found in cluster. Set VOLUME_SNAPSHOT_CLASS env var or install a CSI driver with snapshot support."
-		exit 1
-	fi
-	echo "Auto-detected VolumeSnapshotClass: ${VOLUME_SNAPSHOT_CLASS}"
-fi
+VOLUME_SNAPSHOT_CLASS=$(deploy_volume_snapshot_class)
 
 run_snapshot_backup() {
 	local backup_name=$1

@@ -66,3 +66,5 @@ spec:
             prefixCompression: true
   secrets:
     users: some-users
+    ssl: some-name-ssl
+    sslInternal: some-name-ssl-internal
