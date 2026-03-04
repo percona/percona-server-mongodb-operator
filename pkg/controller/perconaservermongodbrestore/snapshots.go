@@ -800,7 +800,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 ) error {
 	log := logf.FromContext(ctx)
 
-	dbConfig := make(map[string]dbConfigEntry)
+	var dbConfig *dbConfigEntry
 
 	for _, rs := range cluster.GetAllReplsets() {
 		enabled, err := rs.Configuration.IsEncryptionEnabled()
@@ -817,15 +817,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 		}
 
 		keyFile := psmdbv1.MongodRESTencryptDir + "/" + psmdbv1.EncryptionKeyName
-		dbConfig[rs.Name] = dbConfigEntry{
+		dbConfig = &dbConfigEntry{
 			Security: &dbConfigSecurity{
 				EnableEncryption:  ptr.To(true),
 				EncryptionKeyFile: &keyFile,
 			},
 		}
+		break
 	}
 
-	if len(dbConfig) == 0 {
+	if dbConfig == nil {
 		return nil
 	}
 
