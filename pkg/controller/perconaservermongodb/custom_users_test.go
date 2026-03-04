@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -408,6 +409,101 @@ func TestGetCustomUserSecret(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.errMsg)
 			}
 
+		})
+	}
+}
+
+func TestBuildAnnotationKey(t *testing.T) {
+	tests := []struct {
+		name      string
+		crName    string
+		userName  string
+		want      string
+		wantLen   int
+		maxLength int
+	}{
+		{
+			name:      "short names within limit",
+			crName:    "my-cluster",
+			userName:  "user1",
+			want:      "percona.com/my-cluster-user1-hash",
+			wantLen:   33,
+			maxLength: maxAnnotationNameLength,
+		},
+		{
+			name:      "exactly at limit",
+			crName:    "a",
+			userName:  strings.Repeat("x", 44), // 1 + 5 + 44 + 13 (percona.com/-) = 63, will not be truncated
+			want:      "percona.com/a-" + strings.Repeat("x", 44) + "-hash",
+			wantLen:   maxAnnotationNameLength,
+			maxLength: maxAnnotationNameLength,
+		},
+		{
+			name:      "exceeds limit - truncates but keeps hash suffix",
+			crName:    "very-long-cluster-name-that-exceeds",
+			userName:  "very-long-user-name-that-also-exceeds",
+			want:      "percona.com/very-long-cluster-name-that-exceeds-very-long--hash",
+			wantLen:   maxAnnotationNameLength,
+			maxLength: maxAnnotationNameLength,
+		},
+		{
+			name:      "very long cluster name",
+			crName:    strings.Repeat("a", 100),
+			userName:  "user",
+			want:      "percona.com/" + strings.Repeat("a", 46) + "-hash",
+			wantLen:   maxAnnotationNameLength,
+			maxLength: maxAnnotationNameLength,
+		},
+		{
+			name:      "very long user name",
+			crName:    "cluster",
+			userName:  strings.Repeat("b", 100),
+			want:      "percona.com/cluster-" + strings.Repeat("b", 38) + "-hash",
+			wantLen:   maxAnnotationNameLength,
+			maxLength: maxAnnotationNameLength,
+		},
+		{
+			name:      "both names very long",
+			crName:    strings.Repeat("c", 50),
+			userName:  strings.Repeat("d", 50),
+			want:      "percona.com/" + strings.Repeat("c", 46) + "-hash",
+			wantLen:   maxAnnotationNameLength,
+			maxLength: maxAnnotationNameLength,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildAnnotationKey(tt.crName, tt.userName)
+
+			// Extract the name part (after "percona.com/")
+			prefix := "percona.com/"
+			if !strings.HasPrefix(got, prefix) {
+				t.Errorf("buildAnnotationKey() = %v, should start with %v", got, prefix)
+			}
+
+			namePart := got[len(prefix):]
+			gotLen := len(got)
+
+			// Verify the annotation key name part is within Kubernetes limit
+			if len(namePart) > tt.maxLength {
+				t.Errorf("buildAnnotationKey() name part length = %v, should be <= %v. Got: %v", len(namePart), tt.maxLength, got)
+			}
+
+			// Verify it ends with "-hash"
+			if !strings.HasSuffix(got, "-hash") {
+				t.Errorf("buildAnnotationKey() = %v, should end with '-hash'", got)
+			}
+
+			// Verify exact match for non-truncated cases
+			if gotLen <= tt.maxLength && tt.want != "" {
+				assert.Equal(t, tt.want, got, "buildAnnotationKey() = %v, want %v", got, tt.want)
+			}
+
+			// Verify length matches expected for all cases
+			if tt.wantLen > 0 {
+				assert.Equal(t, tt.wantLen, gotLen, "buildAnnotationKey() length = %v, want %v", gotLen, tt.wantLen)
+			}
 		})
 	}
 }
