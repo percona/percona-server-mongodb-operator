@@ -346,6 +346,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 							ReadOnly:  true,
 						},
 					)
+
+					// PBM's restore-finish starts a local mongod that recreates the encryption
+					// key database from the key file. MongoDB requires the key file permissions
+					// to satisfy (mode & 0077 == 0), but Kubernetes Secret volumes mount files
+					// with mode 0440 (group-readable) which fails this check. Copy the key to
+					// /tmp with owner-only permissions before starting pbm-agent.
+					encKeyPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName)
+					fixedKeyPath := "/tmp/" + psmdbv1.EncryptionKeyName
+					sfs.Spec.Template.Spec.Containers[0].Command = []string{
+						"bash", "-c",
+						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
+						"--",
+					}
 				}
 
 				sfs.Spec.Template.Spec.Containers[0].Args = args
@@ -709,6 +722,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 		return false, err
 	}
 
+	if bcpMeta.Status == defs.StatusError {
+		return false, errors.Errorf("restore failed: %s", bcpMeta.Err)
+	}
+
 	if bcpMeta.Status != defs.StatusDone {
 		log.Info("Waiting for restore to be finished", "status", bcpMeta.Status)
 		return false, nil
@@ -832,7 +849,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 	data := map[string]any{
 		"security": map[string]any{
 			"enableEncryption":  true,
-			"encryptionKeyFile": fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName),
+			"encryptionKeyFile": fmt.Sprintf("/tmp/%s", psmdbv1.EncryptionKeyName),
 		},
 	}
 
