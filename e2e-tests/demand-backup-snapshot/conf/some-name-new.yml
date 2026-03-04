@@ -13,7 +13,7 @@ spec:
     mode: requireTLS
   backup:
     enabled: true
-    image: perconalab/percona-backup-mongodb:nightly
+    image: perconalab/percona-server-mongodb-operator:main-backup"
     storages:
       minio:
         type: s3
