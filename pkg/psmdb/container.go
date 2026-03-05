@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"path"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
@@ -211,17 +209,6 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, containerEnv...)
 		container.EnvFrom = append(container.EnvFrom, containerEnvFrom...)
-
-		if cr.Spec.Backup.Enabled {
-			cas := CollectStorageCABundles(cr)
-			if len(cas) > 0 {
-				container.VolumeMounts = append(container.VolumeMounts, GetCAVolumeMounts()...)
-				container.Env = append(container.Env, corev1.EnvVar{
-					Name:  "SSL_CERT_FILE",
-					Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
-				})
-			}
-		}
 	}
 	return container, nil
 }

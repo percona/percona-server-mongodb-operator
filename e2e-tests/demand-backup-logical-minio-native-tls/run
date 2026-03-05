@@ -92,9 +92,6 @@ kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
 kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
   env | grep SSL_CERT_FILE
 
-kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c mongod -- \
-  env | grep SSL_CERT_FILE
-
 cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -- \
   grep -c "BEGIN CERTIFICATE" /etc/s3/certs/ca-bundle.crt)
 

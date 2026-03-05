@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -523,6 +524,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Value: mongoDBURI,
 		},
 	}...)
+
+	// During physical restore the backup-agent container is removed and mongod takes
+	// over PBM operations directly. Add SSL_CERT_FILE and CA volume mounts so mongod
+	// can verify the MinIO TLS certificate when caBundle is configured.
+	if cluster.CompareVersion("1.23.0") >= 0 {
+		cas := psmdb.CollectStorageCABundles(cluster)
+		if len(cas) > 0 {
+			sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(
+				sts.Spec.Template.Spec.Containers[0].VolumeMounts,
+				psmdb.GetCAVolumeMounts()...,
+			)
+			sts.Spec.Template.Spec.Containers[0].Env = append(
+				sts.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "SSL_CERT_FILE",
+					Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
+				},
+			)
+		}
+	}
 
 	err = r.client.Update(ctx, &sts)
 	if err != nil {
