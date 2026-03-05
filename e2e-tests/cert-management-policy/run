@@ -1,0 +1,99 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir="$(realpath "$(dirname "$0")")"
+. "${test_dir}/../functions"
+set_debug
+
+cluster="some-name"
+
+test_user_provided_only() {
+	desc '=== Test: certManagementPolicy: userProvidedOnly ==='
+
+	desc 'create secrets (users + TLS)'
+	kubectl_bin apply -f "$conf_dir/secrets_with_tls.yml"
+
+	desc "create PSMDB cluster $cluster with certManagementPolicy: userProvidedOnly"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+
+	desc 'save SSL secrets for later restore'
+	kubectl_bin get secret ${cluster}-ssl -o yaml >"$tmp_dir/ssl_backup.yaml"
+	kubectl_bin get secret ${cluster}-ssl-internal -o yaml >"$tmp_dir/ssl_internal_backup.yaml"
+
+	desc 'delete SSL secrets to simulate secret loss'
+	kubectl_bin delete secret ${cluster}-ssl ${cluster}-ssl-internal
+
+	desc 'wait for a few reconcile loops'
+	sleep 30
+
+	desc 'verify operator did NOT recreate SSL secrets'
+	if kubectl_bin get secret ${cluster}-ssl 2>/dev/null; then
+		echo "FAIL: operator recreated SSL secret when certManagementPolicy is userProvidedOnly"
+		exit 1
+	fi
+	if kubectl_bin get secret ${cluster}-ssl-internal 2>/dev/null; then
+		echo "FAIL: operator recreated SSL internal secret when certManagementPolicy is userProvidedOnly"
+		exit 1
+	fi
+	echo "PASS: operator did not recreate SSL secrets"
+
+	desc 'verify pods are still running (no restart)'
+	wait_for_running $cluster-rs0 3
+
+	desc 'restore SSL secrets'
+	kubectl_bin apply -f "$tmp_dir/ssl_backup.yaml"
+	kubectl_bin apply -f "$tmp_dir/ssl_internal_backup.yaml"
+
+	desc 'verify cluster is still healthy after secret restore'
+	sleep 10
+	wait_for_running $cluster-rs0 3
+
+	desc 'cleanup cluster'
+	kubectl_bin delete psmdb $cluster
+	wait_for_delete psmdb/$cluster 180
+}
+
+test_auto() {
+	desc '=== Test: certManagementPolicy: auto ==='
+
+	desc 'create only user secrets (no TLS secrets)'
+	kubectl_bin apply -f "$conf_dir/secrets.yml"
+
+	desc "create PSMDB cluster $cluster with certManagementPolicy: auto"
+	apply_cluster "$test_dir/conf/$cluster-auto.yml"
+
+	desc 'wait for operator to auto-create SSL secrets'
+	sleep 30
+
+	desc 'verify operator created SSL secrets automatically'
+	if ! kubectl_bin get secret ${cluster}-ssl 2>/dev/null; then
+		echo "FAIL: operator did not create SSL secret when certManagementPolicy is auto"
+		exit 1
+	fi
+	if ! kubectl_bin get secret ${cluster}-ssl-internal 2>/dev/null; then
+		echo "FAIL: operator did not create SSL internal secret when certManagementPolicy is auto"
+		exit 1
+	fi
+	echo "PASS: operator created SSL secrets automatically"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+}
+
+main() {
+	create_infra "$namespace"
+	destroy_cert_manager || true
+
+	test_user_provided_only
+	test_auto
+
+	destroy "$namespace"
+
+	desc 'test passed'
+}
+
+main
