@@ -250,6 +250,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 		return status, errors.Wrapf(err, "ensure resync PBM storage")
 	}
 
+	if err := r.deleteDBConfigSecrets(ctx, cluster); err != nil {
+		return status, errors.Wrapf(err, "delete db config secrets")
+	}
+
 	log.Info("Snapshot restore finished", "status", status.State)
 
 	status.State = psmdbv1.RestoreStateReady
@@ -819,6 +823,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) ensureResyncPBMStorage(
 
 func (r *ReconcilePerconaServerMongoDBRestore) dbConfigSecretName(cluster *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return cluster.Name + "-" + rs.Name + "-pbm-db-config"
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) deleteDBConfigSecrets(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) error {
+	for _, rs := range cluster.GetAllReplsets() {
+		secret := &corev1.Secret{}
+		secret.Name = r.dbConfigSecretName(cluster, rs)
+		secret.Namespace = cluster.Namespace
+		if err := r.client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete db config secret for replset %s", rs.Name)
+		}
+	}
+	return nil
 }
 
 // createOrUpdateDBConfigSecret builds a per-replset Secret containing db_config.yaml for

@@ -772,6 +772,56 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 	assert.True(t, found, "expected node address arg to end with port %d, args: %v", psmdbv1.DefaultMongoPort, args)
 }
 
+func TestDeleteDBConfigSecrets(t *testing.T) {
+	ctx := context.Background()
+	const ns = "default"
+
+	makeCluster := func(replsets ...*psmdbv1.ReplsetSpec) *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster", Namespace: ns},
+			Spec:       psmdbv1.PerconaServerMongoDBSpec{Replsets: replsets},
+		}
+	}
+
+	makeSecret := func(cluster *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) *corev1.Secret {
+		r := fakeReconciler()
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      r.dbConfigSecretName(cluster, rs),
+				Namespace: ns,
+			},
+		}
+	}
+
+	t.Run("deletes secrets for all replsets", func(t *testing.T) {
+		cluster := makeCluster(
+			&psmdbv1.ReplsetSpec{Name: "rs0", Size: 1},
+			&psmdbv1.ReplsetSpec{Name: "rs1", Size: 1},
+		)
+		rs0, rs1 := cluster.Spec.Replsets[0], cluster.Spec.Replsets[1]
+		secret0 := makeSecret(cluster, rs0)
+		secret1 := makeSecret(cluster, rs1)
+
+		r := fakeReconciler(cluster, secret0, secret1)
+		err := r.deleteDBConfigSecrets(ctx, cluster)
+		assert.NoError(t, err)
+
+		for _, name := range []string{secret0.Name, secret1.Name} {
+			got := &corev1.Secret{}
+			err = r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, got)
+			assert.True(t, k8sErrors.IsNotFound(err), "expected secret %s to be deleted", name)
+		}
+	})
+
+	t.Run("ignores not found secrets", func(t *testing.T) {
+		cluster := makeCluster(&psmdbv1.ReplsetSpec{Name: "rs0", Size: 1})
+		r := fakeReconciler(cluster)
+
+		err := r.deleteDBConfigSecrets(ctx, cluster)
+		assert.NoError(t, err)
+	})
+}
+
 func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 	const ns = "default"
 
@@ -803,7 +853,7 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 
 		secret := &corev1.Secret{}
 		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
-		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret to be created")
+		assert.True(t, k8sErrors.IsNotFound(err))
 	})
 
 	t.Run("no secret created when encryption is explicitly false", func(t *testing.T) {
@@ -816,7 +866,7 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 
 		secret := &corev1.Secret{}
 		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
-		assert.True(t, k8sErrors.IsNotFound(err), "expected no secret to be created")
+		assert.True(t, k8sErrors.IsNotFound(err))
 	})
 
 	t.Run("secret created with encryption key file when encryption enabled", func(t *testing.T) {
