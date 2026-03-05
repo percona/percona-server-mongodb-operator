@@ -20,7 +20,7 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
-  crVersion: 1.22.0
+  crVersion: 1.23.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
