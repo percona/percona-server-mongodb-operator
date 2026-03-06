@@ -340,7 +340,7 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 	})
 }
 
-func TestReconcilePVCForSnapshotRestore(t *testing.T) {
+func TestRestorePVC(t *testing.T) {
 	ctx := context.Background()
 	const ns = "default"
 
@@ -360,7 +360,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 
 		labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
+		done, err := r.restorePVC(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.True(t, done)
 
@@ -386,7 +386,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		}
 		r := fakeReconciler(restore, existingPVC)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
+		done, err := r.restorePVC(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.True(t, done)
 	})
@@ -403,7 +403,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		}
 		r := fakeReconciler(restore, existingPVC)
 
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
+		done, err := r.restorePVC(ctx, "my-pvc", nil, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.False(t, done)
 
@@ -428,7 +428,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 		r := fakeReconciler(restore, existingPVC)
 
 		labels := naming.PVCLabels(naming.ComponentMongod, "rs0", "my-cluster")
-		done, err := r.reconcilePVCForSnapshotRestore(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
+		done, err := r.restorePVC(ctx, "my-pvc", labels, "my-snapshot", spec, restore)
 		assert.NoError(t, err)
 		assert.False(t, done)
 
@@ -439,7 +439,7 @@ func TestReconcilePVCForSnapshotRestore(t *testing.T) {
 	})
 }
 
-func TestReconcilePVCsForSnapshotRestore(t *testing.T) {
+func TestRolloutRestoredPVCs(t *testing.T) {
 	ctx := context.Background()
 	const ns = "default"
 
@@ -503,7 +503,7 @@ func TestReconcilePVCsForSnapshotRestore(t *testing.T) {
 			Reason: "AlreadySet",
 		})
 
-		done, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, backup, status)
+		done, err := r.rolloutRestoredPVCs(ctx, cluster, restore, backup, status)
 		assert.NoError(t, err)
 		assert.True(t, done)
 	})
@@ -512,7 +512,7 @@ func TestReconcilePVCsForSnapshotRestore(t *testing.T) {
 		r := fakeReconciler(cluster, sfs, restore, backup)
 		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{}
 
-		done, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, backup, status)
+		done, err := r.rolloutRestoredPVCs(ctx, cluster, restore, backup, status)
 		assert.NoError(t, err)
 		assert.True(t, done)
 		assert.True(t, apimeta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot))
@@ -541,7 +541,7 @@ func TestReconcilePVCsForSnapshotRestore(t *testing.T) {
 		r := fakeReconciler(cluster, sfs, restore, backupNoSnapshot)
 		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{}
 
-		done, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, backupNoSnapshot, status)
+		done, err := r.rolloutRestoredPVCs(ctx, cluster, restore, backupNoSnapshot, status)
 		assert.Error(t, err)
 		assert.False(t, done)
 		assert.Contains(t, err.Error(), "no snapshots found for replset rs0")
@@ -619,7 +619,7 @@ func TestReconcilePVCsForSnapshotRestore(t *testing.T) {
 		r := fakeReconciler(clusterWithNV, mongodSFS, nvSFS, restoreNV, backupNV)
 		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{}
 
-		done, err := r.reconcilePVCsForSnapshotRestore(ctx, clusterWithNV, restoreNV, backupNV, status)
+		done, err := r.rolloutRestoredPVCs(ctx, clusterWithNV, restoreNV, backupNV, status)
 		assert.NoError(t, err)
 		assert.True(t, done)
 

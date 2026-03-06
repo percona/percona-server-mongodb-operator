@@ -217,7 +217,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 		return status, nil
 	}
 
-	if ok, err := r.reconcilePVCsForSnapshotRestore(ctx, cluster, restore, bcp, &status); err != nil {
+	if ok, err := r.rolloutRestoredPVCs(ctx, cluster, restore, bcp, &status); err != nil {
 		return status, errors.Wrapf(err, "reconcile pvcs for snapshot restore")
 	} else if !ok {
 		log.Info("Waiting for pvcs to be reconciled", "ready", ok)
@@ -393,7 +393,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 	return done, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
+func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
 	restore *psmdbv1.PerconaServerMongoDBRestore,
@@ -403,6 +403,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 	if meta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot) {
 		return true, nil
 	}
+
+	log := logf.FromContext(ctx)
 
 	replsets := cluster.GetAllReplsets()
 
@@ -485,24 +487,24 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCsForSnapshotRestore(
 		}
 	}
 
-	done := true
+	// Rollout PVCs one-by-one.
 	for _, info := range pvcs {
-		if ready, err := r.reconcilePVCForSnapshotRestore(ctx, info.pvcName, info.labels, info.snapshotName,
+		if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
 			info.volumeClaimTemplate, restore); err != nil {
 			return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
 		} else if !ready {
-			done = false
+			log.Info("Waiting for PVC to be restored", "pvc", info.pvcName)
+			return false, nil
 		}
 	}
-	if done {
-		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-			Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
-			Status:  metav1.ConditionTrue,
-			Reason:  "AllPVCsRestoredFromSnapshot",
-			Message: "All pvcs have been restored from snapshot",
-		})
-	}
-	return done, nil
+
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
+		Status:  metav1.ConditionTrue,
+		Reason:  "AllPVCsRestoredFromSnapshot",
+		Message: "All pvcs have been restored from snapshot",
+	})
+	return true, nil
 }
 
 func generatePVCFromSnapshot(
@@ -524,7 +526,7 @@ func generatePVCFromSnapshot(
 	})
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
+func (r *ReconcilePerconaServerMongoDBRestore) restorePVC(
 	ctx context.Context,
 	pvcName string,
 	labels map[string]string,
@@ -538,6 +540,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 			Namespace: restore.GetNamespace(),
 		},
 	}
+
+	log := logf.FromContext(ctx)
+
 	err := r.client.Get(ctx, client.ObjectKeyFromObject(observedPVC), observedPVC)
 	if k8sErrors.IsNotFound(err) {
 		generatePVCFromSnapshot(observedPVC, labels, volumeClaimTemplate,
@@ -545,6 +550,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePVCForSnapshotRestore(
 		if err := r.client.Create(ctx, observedPVC); err != nil {
 			return false, errors.Wrapf(err, "create pvc %s", pvcName)
 		}
+
+		log.Info("PVC restored", "pvc", pvcName)
 		return true, nil
 	} else if err != nil {
 		return false, errors.Wrapf(err, "get observed pvc %s", pvcName)
