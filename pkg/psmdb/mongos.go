@@ -434,7 +434,25 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
-		svc.Annotations = cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations
+		annotations := make(map[string]string)
+		for k, v := range cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations {
+			annotations[k] = v
+		}
+
+		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
+			var hostname string
+			if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+				hostname = BuildDNSHostname(dns, "mongos", name)
+			} else {
+				hostname = BuildDNSHostnameWithoutIndex(dns, "mongos")
+			}
+			annotations["external-dns.alpha.kubernetes.io/hostname"] = hostname
+			if dns.TTL > 0 {
+				annotations["external-dns.alpha.kubernetes.io/ttl"] = strconv.Itoa(dns.TTL)
+			}
+		}
+
+		svc.Annotations = annotations
 		for k, v := range cr.Spec.Sharding.Mongos.Expose.ServiceLabels {
 			if _, ok := svc.Labels[k]; !ok {
 				svc.Labels[k] = v

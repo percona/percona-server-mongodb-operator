@@ -1458,6 +1458,16 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
+
+	ExternalDNS *ExternalDNSConfig `json:"externalDNS,omitempty"`
+}
+
+type ExternalDNSConfig struct {
+	// +kubebuilder:validation:Required
+	Prefix string `json:"prefix"`
+	// +kubebuilder:validation:Required
+	Domain string `json:"domain"`
+	TTL    int    `json:"ttl,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
