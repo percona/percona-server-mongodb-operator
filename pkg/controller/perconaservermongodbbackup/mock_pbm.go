@@ -118,6 +118,20 @@ func (mr *MockPBMMockRecorder) DeleteBackup(ctx, name interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackup", reflect.TypeOf((*MockPBM)(nil).DeleteBackup), ctx, name)
 }
 
+// DeleteBackupMeta mocks base method.
+func (m *MockPBM) DeleteBackupMeta(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBackupMeta", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteBackupMeta indicates an expected call of DeleteBackupMeta.
+func (mr *MockPBMMockRecorder) DeleteBackupMeta(ctx, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackupMeta", reflect.TypeOf((*MockPBM)(nil).DeleteBackupMeta), ctx, name)
+}
+
 // DeletePITRChunks mocks base method.
 func (m *MockPBM) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
 	m.ctrl.T.Helper()

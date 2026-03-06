@@ -91,6 +91,7 @@ type PBM interface {
 	FinishBackup(ctx context.Context, bcpName string) error
 
 	DeleteBackup(ctx context.Context, name string) error
+	DeleteBackupMeta(ctx context.Context, name string) error
 
 	AddProfile(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB, name string, stg psmdbv1.BackupStorageSpec) error
 	GetProfile(ctx context.Context, name string) (*config.Config, error)
@@ -1166,6 +1167,14 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 
 	}
 
+	return nil
+}
+
+func (b *pbmC) DeleteBackupMeta(ctx context.Context, name string) error {
+	_, err := b.Client.BcpCollection().DeleteOne(ctx, bson.M{"name": name})
+	if err != nil {
+		return errors.Wrap(err, "delete metadata from db")
+	}
 	return nil
 }
 

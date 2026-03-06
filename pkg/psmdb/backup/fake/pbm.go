@@ -105,6 +105,10 @@ func (p *fakePBM) DeleteBackup(ctx context.Context, name string) error {
 	return nil
 }
 
+func (p *fakePBM) DeleteBackupMeta(ctx context.Context, name string) error {
+	return nil
+}
+
 func (p *fakePBM) GetProfile(ctx context.Context, name string) (*config.Config, error) {
 	return nil, nil
 }

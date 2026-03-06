@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -624,6 +625,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			return errors.Wrap(err, "delete filesystem backup")
 		}
 		return nil
+	case len(cr.Status.Snapshots) > 0:
+		if err := r.deleteVolumeSnapshots(ctx, cr); err != nil {
+			return errors.Wrap(err, "delete volume snapshots")
+		}
+		if err := b.PBM().DeleteBackupMeta(ctx, cr.Status.PBMname); err != nil {
+			return errors.Wrap(err, "delete backup meta")
+		}
+		return nil
 	}
 
 	if cluster.CompareVersion("1.20.0") < 0 {
@@ -665,6 +674,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 
 	log.Info("Backup deleted")
 
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) deleteVolumeSnapshots(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
+	for _, snapshot := range cr.Status.Snapshots {
+		snapshot := &volumesnapshotv1.VolumeSnapshot{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      snapshot.SnapshotName,
+				Namespace: cr.Namespace,
+			},
+		}
+		err := r.client.Delete(ctx, snapshot)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete volume snapshot")
+		}
+	}
 	return nil
 }
 

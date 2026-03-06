@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -107,10 +106,6 @@ func (b *snapshotBackups) reconcileSnapshot(
 			PersistentVolumeClaimName: &pvc,
 		},
 	}
-	if err := controllerutil.SetControllerReference(bcp, volumeSnapshot, cl.Scheme()); err != nil {
-		return nil, errors.Wrap(err, "set controller reference")
-	}
-
 	if err := cl.Create(ctx, volumeSnapshot); err != nil {
 		return nil, errors.Wrap(err, "create volume snapshot")
 	}
