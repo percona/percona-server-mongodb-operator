@@ -109,7 +109,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 		return nil
 	}
 
-	if bcp.Spec.VolumeSnapshotClass != nil {
+	if len(bcp.Status.Snapshots) > 0 {
 		if err := r.validateSnapshotExistence(ctx, bcp); err != nil {
 			return errors.Wrap(err, "validate snapshot existence")
 		}
