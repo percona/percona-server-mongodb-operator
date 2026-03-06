@@ -49,7 +49,6 @@ run_snapshot_restore_backupsource() {
 	snapshots=$(kubectl_bin get psmdb-backup "${backup_name}" -o jsonpath='{.status.snapshots}')
 
 	log "running cross-cluster snapshot restore to ${target_cluster} from backup ${backup_name}"
-	log "backup destination: ${backup_dest}, snapshot: ${snapshot_name}"
 
 	backup_name="$backup_name" target_cluster="$target_cluster" snapshots="$snapshots" \
 		yq eval '
