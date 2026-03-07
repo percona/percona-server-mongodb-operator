@@ -12646,6 +12646,9 @@ spec:
                   - size
                   type: object
                 type: array
+              revisionHistoryLimit:
+                format: int32
+                type: integer
               roles:
                 items:
                   properties:
