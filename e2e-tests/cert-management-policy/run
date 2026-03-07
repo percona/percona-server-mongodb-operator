@@ -50,8 +50,8 @@ test_user_provided_only() {
 	fi
 	echo "PASS: TLSSecretMissing condition is set"
 
-	desc 'verify pods are still running (no restart)'
-	wait_for_running $cluster-rs0 3
+	desc 'verify pods are still running (no restart, skip cluster readiness check)'
+	wait_for_running $cluster-rs0 3 false
 
 	desc 'restore SSL secrets'
 	kubectl_bin apply -f "$tmp_dir/ssl_backup.yaml"
