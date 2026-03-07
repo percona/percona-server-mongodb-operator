@@ -384,6 +384,8 @@ const (
 	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
 
 	ConditionTypePBMReady AppState = "PBMReady"
+
+	ConditionTypeTLSSecretMissing AppState = "TLSSecretMissing"
 )
 
 type ClusterCondition struct {
