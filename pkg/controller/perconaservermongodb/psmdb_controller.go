@@ -1593,11 +1593,16 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		return &secretObj, nil
 	}
 
+	isUserProvidedOnly := cr.Spec.TLS != nil && cr.Spec.TLS.CertManagementPolicy == api.CertManagementUserProvidedOnly
+
 	sslSecret, err := getSecret(api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			if cr.UnsafeTLSDisabled() {
 				return annotation, nil
+			}
+			if isUserProvidedOnly {
+				return nil, nil
 			}
 			return nil, errTLSNotReady
 		}
@@ -1614,6 +1619,9 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			}
 			if cr.UnsafeTLSDisabled() || isCustomSecret {
 				return annotation, nil
+			}
+			if isUserProvidedOnly {
+				return nil, nil
 			}
 			return nil, errTLSNotReady
 		}
