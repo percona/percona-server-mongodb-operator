@@ -41,6 +41,15 @@ test_user_provided_only() {
 	fi
 	echo "PASS: operator did not recreate SSL secrets"
 
+	desc 'verify TLSSecretMissing status condition is set'
+	local condition
+	condition=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretMissing")].status}')
+	if [[ "$condition" != "True" ]]; then
+		echo "FAIL: TLSSecretMissing condition is not set (got: '$condition')"
+		exit 1
+	fi
+	echo "PASS: TLSSecretMissing condition is set"
+
 	desc 'verify pods are still running (no restart)'
 	wait_for_running $cluster-rs0 3
 
@@ -51,6 +60,15 @@ test_user_provided_only() {
 	desc 'verify cluster is still healthy after secret restore'
 	sleep 10
 	wait_for_running $cluster-rs0 3
+
+	desc 'verify TLSSecretMissing condition is removed after secret restore'
+	local condition_after
+	condition_after=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretMissing")].status}')
+	if [[ -n "$condition_after" ]]; then
+		echo "FAIL: TLSSecretMissing condition should be removed after secret restore (got: '$condition_after')"
+		exit 1
+	fi
+	echo "PASS: TLSSecretMissing condition is removed after secret restore"
 
 	desc 'cleanup cluster'
 	kubectl_bin delete psmdb $cluster
