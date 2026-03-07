@@ -1564,6 +1564,39 @@ func ensurePVCs(
 
 var errTLSNotReady = errors.New("waiting for TLS secret")
 
+// currentSSLAnnotation reads the current SSL annotations from existing StatefulSets
+// to preserve them when the TLS secret is missing.
+func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) map[string]string {
+	annotation := map[string]string{
+		"percona.com/ssl-hash":          "",
+		"percona.com/ssl-internal-hash": "",
+	}
+
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				naming.LabelKubernetesInstance: cr.Name,
+			}),
+		},
+	); err != nil {
+		return annotation
+	}
+
+	for _, sts := range sfsList.Items {
+		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-hash"]; ok {
+			annotation["percona.com/ssl-hash"] = v
+		}
+		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-internal-hash"]; ok {
+			annotation["percona.com/ssl-internal-hash"] = v
+		}
+		break
+	}
+
+	return annotation
+}
+
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
@@ -1609,7 +1642,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLSecretName(cr)),
 				})
-				return nil, nil
+				return r.currentSSLAnnotation(ctx, cr), nil
 			}
 			return nil, errTLSNotReady
 		}
@@ -1635,7 +1668,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLInternalSecretName(cr)),
 				})
-				return nil, nil
+				return r.currentSSLAnnotation(ctx, cr), nil
 			}
 			return nil, errTLSNotReady
 		}
