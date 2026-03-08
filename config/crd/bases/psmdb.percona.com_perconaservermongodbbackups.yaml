@@ -136,9 +136,10 @@ spec:
                     - backoffMax
                     - backoffMultiplier
                     type: object
+                  workloadIdentity:
+                    type: boolean
                 required:
                 - bucket
-                - credentialsSecret
                 type: object
               lastTransition:
                 format: date-time
