@@ -236,12 +236,6 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return errors.Wrap(err, "update cert mangager certs")
 	}
 
-	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
-	if cr.CompareVersion("1.15.0") >= 0 {
-		if err := c.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
-			return errors.Wrap(err, "delete deprecated issuer")
-		}
-	}
 	return nil
 }
 
@@ -385,57 +379,49 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		}
 		return nil
 	}
-	if cr.CompareVersion("1.15.0") >= 0 {
-		err := applyFunc(func() (util.ApplyStatus, error) {
-			return c.ApplyCAIssuer(ctx, cr)
-		})
-		if err != nil {
-			return "", errors.Wrap(err, "apply ca issuer")
-		}
-
-		caCert := tls.CertificateCA(cr)
-		err = applyFunc(func() (util.ApplyStatus, error) {
-			return c.ApplyCertificate(ctx, cr, caCert)
-		})
-		if err != nil {
-			return "", errors.Wrap(err, "create ca certificate")
-		}
-
-		err = c.WaitForCerts(ctx, cr, caCert)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to wait for ca cert")
-		}
+	if err := applyFunc(func() (util.ApplyStatus, error) {
+		return c.ApplyCAIssuer(ctx, cr)
+	}); err != nil {
+		return "", errors.Wrap(err, "apply ca issuer")
 	}
 
-	err := applyFunc(func() (util.ApplyStatus, error) {
+	caCert := tls.CertificateCA(cr)
+
+	if err := applyFunc(func() (util.ApplyStatus, error) {
+		return c.ApplyCertificate(ctx, cr, caCert)
+	}); err != nil {
+		return "", errors.Wrap(err, "create ca certificate")
+	}
+
+	if err := c.WaitForCerts(ctx, cr, caCert); err != nil {
+		return "", errors.Wrap(err, "failed to wait for ca cert")
+	}
+
+	if err := applyFunc(func() (util.ApplyStatus, error) {
 		return c.ApplyIssuer(ctx, cr)
-	})
-	if err != nil {
+	}); err != nil {
 		return "", errors.Wrap(err, "create issuer")
 	}
 
 	tlsCert := tls.CertificateTLS(cr, false)
-	err = applyFunc(func() (util.ApplyStatus, error) {
+	if err := applyFunc(func() (util.ApplyStatus, error) {
 		return c.ApplyCertificate(ctx, cr, tlsCert)
-	})
-	if err != nil {
+	}); err != nil {
 		return "", errors.Wrap(err, "create certificate")
 	}
 
 	certificates := []tls.Certificate{tlsCert}
 
 	if internalCert := tls.CertificateTLS(cr, true); tlsCert.SecretName() != internalCert.SecretName() {
-		err = applyFunc(func() (util.ApplyStatus, error) {
+		if err := applyFunc(func() (util.ApplyStatus, error) {
 			return c.ApplyCertificate(ctx, cr, internalCert)
-		})
-		if err != nil {
+		}); err != nil {
 			return "", errors.Wrap(err, "create certificate")
 		}
 		certificates = append(certificates, internalCert)
 	}
 
-	err = c.WaitForCerts(ctx, cr, certificates...)
-	if err != nil {
+	if err := c.WaitForCerts(ctx, cr, certificates...); err != nil {
 		return "", errors.Wrap(err, "failed to wait for certs")
 	}
 	return applyStatus, nil

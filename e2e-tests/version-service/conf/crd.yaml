@@ -26310,8 +26310,6 @@ spec:
                         type: string
                       name:
                         type: string
-                    required:
-                    - name
                     type: object
                   mode:
                     type: string

@@ -26310,8 +26310,6 @@ spec:
                         type: string
                       name:
                         type: string
-                    required:
-                    - name
                     type: object
                   mode:
                     type: string
@@ -26635,6 +26633,7 @@ rules:
   - cert-manager.io
   resources:
   - issuers
+  - clusterissuers
   - certificates
   - certificaterequests
   verbs:
@@ -26741,3 +26740,5 @@ spec:
               value: "false"
             - name: MAX_CONCURRENT_RECONCILES
               value: "1"
+            - name: CERTMANAGER_NAMESPACE
+              value: "cert-manager"

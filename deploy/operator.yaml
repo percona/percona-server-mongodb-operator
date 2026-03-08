@@ -60,3 +60,5 @@ spec:
               value: "false"
             - name: MAX_CONCURRENT_RECONCILES
               value: "1"
+            - name: CERTMANAGER_NAMESPACE
+              value: "cert-manager"
