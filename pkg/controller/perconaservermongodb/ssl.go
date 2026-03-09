@@ -3,6 +3,8 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"slices"
+	"sort"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -87,6 +89,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	}
 	if !ok {
 		if errSecret == nil && errInternalSecret == nil {
+			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
+				return r.updateSSLManually(ctx, cr)
+			}
 			return nil
 		}
 		err = r.createSSLManually(ctx, cr)
@@ -442,16 +447,7 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	data := make(map[string][]byte)
 	certificateDNSNames := tls.GetCertificateSans(cr)
-
-	caCert, tlsCert, key, err := tls.Issue(certificateDNSNames)
-	if err != nil {
-		return errors.Wrap(err, "create proxy certificate")
-	}
-	data["ca.crt"] = caCert
-	data["tls.crt"] = tlsCert
-	data["tls.key"] = key
 
 	owner, err := OwnerRef(cr, r.scheme)
 	if err != nil {
@@ -459,52 +455,153 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 	}
 	ownerReferences := []metav1.OwnerReference{owner}
 
-	secretObj := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            api.SSLSecretName(cr),
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
-			Labels:          naming.ClusterLabels(cr),
-		},
-		Data: data,
-		Type: corev1.SecretTypeTLS,
-	}
+	caLabels := naming.ClusterLabels(cr)
 	if cr.CompareVersion("1.17.0") < 0 {
-		secretObj.Labels = nil
-	}
-	err = r.createSSLSecret(ctx, &secretObj, certificateDNSNames)
-	if err != nil {
-		return errors.Wrap(err, "create TLS secret")
+		caLabels = nil
 	}
 
-	caCert, tlsCert, key, err = tls.Issue(certificateDNSNames)
+	// Get or create CA secret
+	caCertPEM, caKeyPEM, err := r.getOrCreateManualCA(ctx, cr, ownerReferences, caLabels)
 	if err != nil {
-		return errors.Wrap(err, "create psmdb certificate")
+		return errors.Wrap(err, "get or create CA")
 	}
-	data["ca.crt"] = caCert
-	data["tls.crt"] = tlsCert
-	data["tls.key"] = key
-	secretObjInternal := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            api.SSLInternalSecretName(cr),
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
-			Labels:          naming.ClusterLabels(cr),
-		},
-		Data: data,
-		Type: corev1.SecretTypeTLS,
+
+	// Issue TLS certs signed by the shared CA
+	for _, secretName := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+		tlsCert, tlsKey, err := tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+		if err != nil {
+			return errors.Wrapf(err, "issue TLS certificate for %s", secretName)
+		}
+
+		secretLabels := naming.ClusterLabels(cr)
+		if cr.CompareVersion("1.17.0") < 0 {
+			secretLabels = nil
+		}
+
+		secretObj := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            secretName,
+				Namespace:       cr.Namespace,
+				OwnerReferences: ownerReferences,
+				Labels:          secretLabels,
+			},
+			Data: map[string][]byte{
+				"ca.crt":  caCertPEM,
+				"tls.crt": tlsCert,
+				"tls.key": tlsKey,
+			},
+			Type: corev1.SecretTypeTLS,
+		}
+		if err := r.createSSLSecret(ctx, &secretObj); err != nil {
+			return errors.Wrapf(err, "create TLS secret %s", secretName)
+		}
 	}
-	if cr.CompareVersion("1.17.0") < 0 {
-		secretObjInternal.Labels = nil
-	}
-	err = r.createSSLSecret(ctx, &secretObjInternal, certificateDNSNames)
-	if err != nil {
-		return errors.Wrap(err, "create TLS internal secret")
-	}
+
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, secret *corev1.Secret, DNSNames []string) error {
+// getOrCreateManualCA returns the CA cert and key from the existing CA secret, or creates a new one.
+func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context, cr *api.PerconaServerMongoDB, ownerRefs []metav1.OwnerReference, labels map[string]string) (caCert, caKey []byte, err error) {
+	caSecretName := tls.ManualCASecretName(cr)
+	caSecret, err := r.getSecret(ctx, cr, caSecretName)
+	if err == nil {
+		return caSecret.Data["ca.crt"], caSecret.Data["ca.key"], nil
+	}
+	if !k8serr.IsNotFound(err) {
+		return nil, nil, errors.Wrap(err, "get CA secret")
+	}
+
+	caCertPEM, caKeyPEM, err := tls.IssueCA()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "issue CA")
+	}
+
+	caSecretObj := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            caSecretName,
+			Namespace:       cr.Namespace,
+			OwnerReferences: ownerRefs,
+			Labels:          labels,
+		},
+		Data: map[string][]byte{
+			"ca.crt": caCertPEM,
+			"ca.key": caKeyPEM,
+		},
+	}
+	if err := r.client.Create(ctx, caSecretObj); err != nil {
+		return nil, nil, errors.Wrap(err, "create CA secret")
+	}
+
+	return caCertPEM, caKeyPEM, nil
+}
+
+// needsManualSSLUpdate checks if the TLS certificate SANs differ from the expected SANs.
+func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sslSecret *corev1.Secret) bool {
+	if sslSecret == nil || len(sslSecret.Data["tls.crt"]) == 0 {
+		return false
+	}
+
+	currentSANs, err := tls.GetSANsFromCert(sslSecret.Data["tls.crt"])
+	if err != nil {
+		return false
+	}
+
+	expectedSANs := tls.GetCertificateSans(cr)
+
+	sort.Strings(currentSANs)
+	sort.Strings(expectedSANs)
+
+	return !slices.Equal(currentSANs, expectedSANs)
+}
+
+// updateSSLManually re-signs TLS certificates with the existing CA when SANs change.
+func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx).WithName("updateSSLManually")
+
+	caSecretName := tls.ManualCASecretName(cr)
+	caSecret, err := r.getSecret(ctx, cr, caSecretName)
+	if err != nil {
+		if k8serr.IsNotFound(err) {
+			// CA secret doesn't exist (created before this feature). Cannot re-sign safely.
+			log.Info("CA secret not found, skipping manual SSL update. Delete TLS secrets to trigger full regeneration.", "secret", caSecretName)
+			return nil
+		}
+		return errors.Wrap(err, "get CA secret")
+	}
+
+	caCertPEM := caSecret.Data["ca.crt"]
+	caKeyPEM := caSecret.Data["ca.key"]
+
+	certificateDNSNames := tls.GetCertificateSans(cr)
+	log.Info("SANs changed, re-signing TLS certificates with existing CA")
+
+	for _, secretName := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+		secret, err := r.getSecret(ctx, cr, secretName)
+		if err != nil {
+			if k8serr.IsNotFound(err) {
+				continue
+			}
+			return errors.Wrapf(err, "get secret %s", secretName)
+		}
+
+		tlsCert, tlsKey, err := tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+		if err != nil {
+			return errors.Wrapf(err, "re-sign TLS certificate for %s", secretName)
+		}
+
+		secret.Data["tls.crt"] = tlsCert
+		secret.Data["tls.key"] = tlsKey
+
+		if err := r.client.Update(ctx, secret); err != nil {
+			return errors.Wrapf(err, "update secret %s", secretName)
+		}
+		log.Info("TLS certificate re-signed", "secret", secretName)
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, secret *corev1.Secret) error {
 	oldSecret := new(corev1.Secret)
 
 	err := r.client.Get(ctx, types.NamespacedName{
