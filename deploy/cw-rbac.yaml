@@ -168,6 +168,7 @@ rules:
   - list
   - watch
   - create
+  - delete
 ---
 apiVersion: v1
 kind: ServiceAccount
