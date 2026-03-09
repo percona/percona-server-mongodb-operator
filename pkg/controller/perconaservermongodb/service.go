@@ -72,6 +72,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosSvc(ctx context.Context, 
 		return nil
 	}
 
+	if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
+		if dns.Prefix == "" || dns.Domain == "" {
+			return errors.New("externalDNS requires both prefix and domain for mongos")
+		}
+	}
+
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
 			err := r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos-"+strconv.Itoa(i))

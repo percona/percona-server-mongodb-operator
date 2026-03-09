@@ -1467,7 +1467,8 @@ type ExternalDNSConfig struct {
 	Prefix string `json:"prefix"`
 	// +kubebuilder:validation:Required
 	Domain string `json:"domain"`
-	TTL    int    `json:"ttl,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	TTL int `json:"ttl,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
