@@ -455,13 +455,8 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 	}
 	ownerReferences := []metav1.OwnerReference{owner}
 
-	caLabels := naming.ClusterLabels(cr)
-	if cr.CompareVersion("1.17.0") < 0 {
-		caLabels = nil
-	}
-
 	// Get or create CA secret
-	caCertPEM, caKeyPEM, err := r.getOrCreateManualCA(ctx, cr, ownerReferences, caLabels)
+	caCertPEM, caKeyPEM, err := r.getOrCreateManualCA(ctx, cr, ownerReferences, naming.ClusterLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get or create CA")
 	}
@@ -473,17 +468,12 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 			return errors.Wrapf(err, "issue TLS certificate for %s", secretName)
 		}
 
-		secretLabels := naming.ClusterLabels(cr)
-		if cr.CompareVersion("1.17.0") < 0 {
-			secretLabels = nil
-		}
-
 		secretObj := corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            secretName,
 				Namespace:       cr.Namespace,
 				OwnerReferences: ownerReferences,
-				Labels:          secretLabels,
+				Labels:          naming.ClusterLabels(cr),
 			},
 			Data: map[string][]byte{
 				"ca.crt":  caCertPEM,
