@@ -1,0 +1,186 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}"/../functions
+
+verify_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	local san_list
+	san_list=$(kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' \
+		| base64 -d \
+		| openssl x509 -text -noout 2>/dev/null \
+		| grep "DNS:" \
+		| tr ',' '\n' \
+		| sed 's/.*DNS://g' \
+		| xargs)
+
+	if echo "${san_list}" | grep -q "${expected_san}"; then
+		echo "OK: SAN '${expected_san}' found in secret '${secret_name}'"
+	else
+		echo "FAIL: SAN '${expected_san}' NOT found in secret '${secret_name}'"
+		echo "  SANs found: ${san_list}"
+		return 1
+	fi
+}
+
+verify_ca_secret_exists() {
+	local secret_name=$1
+
+	if kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.ca\.crt}' >/dev/null 2>&1 &&
+		kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.ca\.key}' >/dev/null 2>&1; then
+		echo "OK: CA secret '${secret_name}' exists with ca.crt and ca.key"
+	else
+		echo "FAIL: CA secret '${secret_name}' does not have ca.crt and ca.key"
+		return 1
+	fi
+}
+
+verify_cert_signed_by_ca() {
+	local tls_secret_name=$1
+	local ca_secret_name=$2
+
+	local ca_crt
+	ca_crt=$(kubectl_bin get secret "${ca_secret_name}" -o jsonpath='{.data.ca\.crt}' | base64 -d)
+	local tls_crt
+	tls_crt=$(kubectl_bin get secret "${tls_secret_name}" -o jsonpath='{.data.tls\.crt}' | base64 -d)
+
+	echo "${ca_crt}" >"${tmp_dir}/ca.crt"
+	echo "${tls_crt}" >"${tmp_dir}/tls.crt"
+
+	if openssl verify -CAfile "${tmp_dir}/ca.crt" "${tmp_dir}/tls.crt" >/dev/null 2>&1; then
+		echo "OK: '${tls_secret_name}' is signed by CA in '${ca_secret_name}'"
+	else
+		echo "FAIL: '${tls_secret_name}' is NOT signed by CA in '${ca_secret_name}'"
+		return 1
+	fi
+}
+
+save_cert_hash() {
+	local secret_name=$1
+	local output_var=$2
+
+	kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -fingerprint -noout 2>/dev/null
+}
+
+configure_client_hostAliases() {
+	local hostAliasesJson='[]'
+
+	for svc in $(kubectl get svc | awk '{print $3 "|" $1}' | grep -E '^[0-9].*'); do
+		hostname=$(echo "${svc}" | awk -F '|' '{print $2}')
+		ip=$(echo "${svc}" | awk -F '|' '{print $1}')
+		hostAlias="{\"ip\": \"${ip}\", \"hostnames\": [\"${hostname}.clouddemo.xyz\"]}"
+		hostAliasesJson=$(echo "$hostAliasesJson" | jq --argjson newAlias "$hostAlias" '. += [$newAlias]')
+	done
+
+	kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/replicas', 'value': 0}]"
+
+	wait_for_delete "pod/$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')"
+
+	kubectl_bin patch deployment psmdb-client --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/hostAliases', 'value': $hostAliasesJson}, {'op': 'replace', 'path': '/spec/replicas', 'value': 1}]"
+
+	wait_pod "$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')"
+}
+
+main() {
+	create_infra "${namespace}"
+	destroy_cert_manager || true # Ensure we test manual TLS, not cert-manager
+
+	cluster="some-name"
+	kubectl_bin apply \
+		-f "${conf_dir}"/secrets.yml \
+		-f "${conf_dir}"/client_with_tls.yml
+
+	desc 'deploy cluster with 3 split horizons (manual TLS)'
+	apply_cluster "${test_dir}"/conf/${cluster}-3horizons.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	desc 'verify CA secret exists with ca.crt and ca.key'
+	verify_ca_secret_exists "${cluster}-ca-cert"
+
+	desc 'verify TLS secrets are signed by the CA'
+	verify_cert_signed_by_ca "${cluster}-ssl" "${cluster}-ca-cert"
+	verify_cert_signed_by_ca "${cluster}-ssl-internal" "${cluster}-ca-cert"
+
+	desc 'verify split-horizon DNS names are in certificate SANs'
+	verify_cert_san "${cluster}-ssl" "some-name-rs0-0.clouddemo.xyz"
+	verify_cert_san "${cluster}-ssl" "some-name-rs0-1.clouddemo.xyz"
+	verify_cert_san "${cluster}-ssl" "some-name-rs0-2.clouddemo.xyz"
+	verify_cert_san "${cluster}-ssl-internal" "some-name-rs0-0.clouddemo.xyz"
+
+	desc 'save certificate fingerprint before horizon update'
+	cert_hash_before=$(save_cert_hash "${cluster}-ssl")
+
+	configure_client_hostAliases
+
+	sleep 10 # give some time for client pod to be ready
+
+	desc 'verify horizons via rs.conf()'
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons-3.json
+	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons-3.json
+
+	desc 'update to 5 horizons (triggers SAN change and cert re-signing)'
+	apply_cluster "${test_dir}"/conf/${cluster}-5horizons.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	desc 'verify new horizon DNS names are in certificate SANs after re-signing'
+	verify_cert_san "${cluster}-ssl" "some-name-rs0-3.clouddemo.xyz"
+	verify_cert_san "${cluster}-ssl" "some-name-rs0-4.clouddemo.xyz"
+
+	desc 'verify certificate was re-signed (fingerprint changed)'
+	cert_hash_after=$(save_cert_hash "${cluster}-ssl")
+	if [ "${cert_hash_before}" = "${cert_hash_after}" ]; then
+		echo "FAIL: certificate was not re-signed after horizon update"
+		exit 1
+	fi
+	echo "OK: certificate was re-signed after horizon update"
+
+	desc 'verify TLS secrets are still signed by the SAME CA'
+	verify_cert_signed_by_ca "${cluster}-ssl" "${cluster}-ca-cert"
+	verify_cert_signed_by_ca "${cluster}-ssl-internal" "${cluster}-ca-cert"
+
+	desc 'scale up to 5 members'
+	kubectl_bin patch psmdb ${cluster} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 5}]'
+	wait_for_running "${cluster}-rs0" 5
+	wait_cluster_consistency ${cluster}
+
+	desc 'verify horizons after scale up'
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons-5.json
+	diff "$test_dir"/compare/horizons-5.json "$tmp_dir"/horizons-5.json
+
+	desc 'scale down to 3 members'
+	kubectl_bin patch psmdb ${cluster} \
+		--type='json' \
+		-p='[{"op": "replace", "path": "/spec/replsets/0/size", "value": 3}]'
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	desc 'verify horizons after scale down'
+	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
+		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
+		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons.json
+	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons.json
+
+	desc 'remove horizon configuration'
+	apply_cluster "${test_dir}"/conf/${cluster}.yml
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	destroy "${namespace}"
+
+	desc 'test passed'
+}
+
+main
