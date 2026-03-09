@@ -63,9 +63,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	// validation step only. The actual TLS verification is handled by pbm-agent,
 	// which has the CA bundle mounted via SSL_CERT_FILE.
 	if storage.Type == psmdbv1.BackupStorageMinio && storage.Minio.CABundle != nil && cfg.Storage.Minio != nil {
-		mioCfg := *cfg.Storage.Minio
-		mioCfg.InsecureSkipTLSVerify = true
-		cfg.Storage.Minio = &mioCfg
+		cfg.Storage.Minio.InsecureSkipTLSVerify = true
 	}
 
 	if err := pbmc.ValidateBackup(ctx, &cfg, bcp); err != nil {

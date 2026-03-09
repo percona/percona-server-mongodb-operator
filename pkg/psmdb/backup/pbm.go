@@ -1091,9 +1091,7 @@ func deleteBackupImpl(
 	// operation only. The actual TLS verification is handled by pbm-agent,
 	// which has the CA bundle mounted via SSL_CERT_FILE.
 	if conf.Type == storage.Minio && conf.Minio != nil && conf.Minio.Secure {
-		mioConf := *conf.Minio
-		mioConf.InsecureSkipTLSVerify = true
-		conf.Minio = &mioConf
+		conf.Minio.InsecureSkipTLSVerify = true
 	}
 
 	stg, err := util.StorageFromConfig(&conf, node, event)
