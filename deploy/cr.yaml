@@ -264,7 +264,7 @@ spec:
 #      internalTrafficPolicy: Local
 #      externalTrafficPolicy: Local
 #      externalDNS:
-#        prefix: "prod"
+#        prefix: "service-name"
 #        domain: "mongo.example.com"
 #        ttl: 300
     resources:
@@ -578,7 +578,7 @@ spec:
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
 #        externalDNS:
-#          prefix: "prod"
+#          prefix: "service-name"
 #          domain: "mongo.example.com"
 #          ttl: 300
       resources:
@@ -707,7 +707,7 @@ spec:
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
 #        externalDNS:
-#          prefix: "prod"
+#          prefix: "service-name"
 #          domain: "mongo.example.com"
 #          ttl: 300
 #      hostAliases:
