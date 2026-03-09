@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230216094301-f9489c81b52a
 	github.com/alecthomas/kingpin v2.2.6+incompatible
-	github.com/cert-manager/cert-manager v1.19.3
+	github.com/cert-manager/cert-manager v1.19.4
 	github.com/go-logr/logr v1.4.3
 	github.com/go-openapi/errors v0.22.6
 	github.com/go-openapi/runtime v0.29.2
@@ -14,7 +14,7 @@ require (
 	github.com/go-openapi/validate v0.25.1
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.7
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0
 	github.com/hashicorp/go-version v1.8.0
 	github.com/hashicorp/vault/api v1.22.0
 	github.com/hashicorp/vault/api/auth/kubernetes v0.10.0
@@ -28,7 +28,7 @@ require (
 	go.mongodb.org/mongo-driver v1.17.9
 	go.uber.org/zap v1.27.1
 	golang.org/x/sync v0.19.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.2
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
