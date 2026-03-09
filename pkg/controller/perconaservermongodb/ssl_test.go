@@ -107,8 +107,8 @@ func TestSSLAnnotation_UserProvidedOnly_SecretMissing(t *testing.T) {
 	assert.Equal(t, "existing-hash", annotation["percona.com/ssl-hash"])
 	assert.Equal(t, "existing-internal-hash", annotation["percona.com/ssl-internal-hash"])
 
-	// Verify TLSSecretMissing condition is set
-	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretMissing))
+	// Verify TLSSecretsReady condition is false
+	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 }
 
 func TestSSLAnnotation_UserProvidedOnly_SecretPresent(t *testing.T) {
@@ -145,8 +145,8 @@ func TestSSLAnnotation_UserProvidedOnly_SecretPresent(t *testing.T) {
 	assert.NotEmpty(t, annotation["percona.com/ssl-hash"])
 	assert.NotEmpty(t, annotation["percona.com/ssl-internal-hash"])
 
-	// Verify TLSSecretMissing condition is NOT set
-	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretMissing))
+	// Verify TLSSecretsReady condition is true
+	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 }
 
 func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.T) {
@@ -155,13 +155,13 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 		CertManagementPolicy: api.CertManagementUserProvidedOnly,
 	}
 
-	// First call without secrets - condition should be set
+	// First call without secrets - TLSSecretsReady should be false
 	r := buildFakeClient(cr)
 	_, err := r.sslAnnotation(context.Background(), cr)
 	require.NoError(t, err)
-	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretMissing))
+	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 
-	// Now create secrets and call again - condition should be removed
+	// Now create secrets and call again - TLSSecretsReady should be true
 	sslSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster-ssl",
@@ -186,7 +186,7 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 	r2 := buildFakeClient(cr, sslSecret, sslInternalSecret)
 	_, err = r2.sslAnnotation(context.Background(), cr)
 	require.NoError(t, err)
-	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretMissing))
+	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 }
 
 func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {

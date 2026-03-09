@@ -385,7 +385,7 @@ const (
 
 	ConditionTypePBMReady AppState = "PBMReady"
 
-	ConditionTypeTLSSecretMissing AppState = "TLSSecretMissing"
+	ConditionTypeTLSSecretsReady AppState = "TLSSecretsReady"
 )
 
 type ClusterCondition struct {

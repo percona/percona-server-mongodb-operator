@@ -1637,8 +1637,8 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			if isUserProvidedOnly {
 				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", api.SSLSecretName(cr))
 				cr.Status.AddCondition(api.ClusterCondition{
-					Status:  api.ConditionTrue,
-					Type:    api.ConditionTypeTLSSecretMissing,
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLSecretName(cr)),
 				})
@@ -1663,8 +1663,8 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			if isUserProvidedOnly {
 				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", api.SSLInternalSecretName(cr))
 				cr.Status.AddCondition(api.ClusterCondition{
-					Status:  api.ConditionTrue,
-					Type:    api.ConditionTypeTLSSecretMissing,
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLInternalSecretName(cr)),
 				})
@@ -1676,7 +1676,10 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	}
 	annotation["percona.com/ssl-internal-hash"] = getHash(sslInternalSecret)
 
-	cr.Status.RemoveCondition(api.ConditionTypeTLSSecretMissing)
+	cr.Status.AddCondition(api.ClusterCondition{
+		Status: api.ConditionTrue,
+		Type:   api.ConditionTypeTLSSecretsReady,
+	})
 
 	return annotation, nil
 }

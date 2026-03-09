@@ -41,14 +41,14 @@ test_user_provided_only() {
 	fi
 	echo "PASS: operator did not recreate SSL secrets"
 
-	desc 'verify TLSSecretMissing status condition is set'
+	desc 'verify TLSSecretsReady condition is false'
 	local condition
-	condition=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretMissing")].status}')
-	if [[ "$condition" != "True" ]]; then
-		echo "FAIL: TLSSecretMissing condition is not set (got: '$condition')"
+	condition=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretsReady")].status}')
+	if [[ "$condition" != "False" ]]; then
+		echo "FAIL: TLSSecretsReady condition should be False (got: '$condition')"
 		exit 1
 	fi
-	echo "PASS: TLSSecretMissing condition is set"
+	echo "PASS: TLSSecretsReady condition is False"
 
 	desc 'verify pods are still running (no restart, skip cluster readiness check)'
 	wait_for_running $cluster-rs0 3 false
@@ -61,14 +61,14 @@ test_user_provided_only() {
 	sleep 10
 	wait_for_running $cluster-rs0 3
 
-	desc 'verify TLSSecretMissing condition is removed after secret restore'
+	desc 'verify TLSSecretsReady condition is true after secret restore'
 	local condition_after
-	condition_after=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretMissing")].status}')
-	if [[ -n "$condition_after" ]]; then
-		echo "FAIL: TLSSecretMissing condition should be removed after secret restore (got: '$condition_after')"
+	condition_after=$(kubectl_bin get psmdb ${cluster} -o jsonpath='{.status.conditions[?(@.type=="TLSSecretsReady")].status}')
+	if [[ "$condition_after" != "True" ]]; then
+		echo "FAIL: TLSSecretsReady condition should be True after secret restore (got: '$condition_after')"
 		exit 1
 	fi
-	echo "PASS: TLSSecretMissing condition is removed after secret restore"
+	echo "PASS: TLSSecretsReady condition is True after secret restore"
 
 	desc 'cleanup cluster'
 	kubectl_bin delete psmdb $cluster
