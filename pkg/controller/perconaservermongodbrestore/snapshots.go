@@ -566,6 +566,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) restorePVC(
 		return false, nil
 	}
 
+	log.Info("Deleting PVC", "pvc", pvcName)
 	if err := r.client.Delete(ctx, observedPVC); err != nil {
 		return false, errors.Wrapf(err, "delete pvc %s", pvcName)
 	}
