@@ -367,6 +367,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
 							"--",
 						}
+					} else {
+						vaultTokenPath := config.VaultDir + "/token"
+						fixedVaultTokenPath := "/tmp/vault-token"
+						sfs.Spec.Template.Spec.Containers[0].Command = []string{
+							"bash", "-c",
+							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", vaultTokenPath, fixedVaultTokenPath, fixedVaultTokenPath),
+							"--",
+						}
 					}
 				}
 

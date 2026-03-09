@@ -1,0 +1,231 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+vault_name="vault-service"
+
+VOLUME_SNAPSHOT_CLASS=$(deploy_volume_snapshot_class)
+
+create_tls_secret() {
+	local name=$1
+	local service_name=$2
+
+	local tmp_dir
+	tmp_dir=$(mktemp -d)
+
+	openssl genrsa -out "${tmp_dir}/vault.key" 2048
+
+	cat <<EOF >"${tmp_dir}/csr.conf"
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+CN = ${service_name}.${namespace}.svc
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = ${service_name}
+DNS.2 = *.${service_name}
+DNS.3 = *.${service_name}.${namespace}
+DNS.4 = *.${service_name}.${namespace}.svc
+DNS.5 = ${service_name}.${namespace}.svc
+DNS.6 = ${service_name}.${namespace}.svc.cluster.local
+DNS.7 = *.${service_name}.${namespace}.svc.cluster.local
+IP.1 = 127.0.0.1
+EOF
+	openssl req -x509 -new -nodes \
+		-key "${tmp_dir}"/vault.key \
+		-sha256 \
+		-days 3650 \
+		-out "${tmp_dir}"/vault.crt \
+		-config "${tmp_dir}"/csr.conf \
+		-extensions v3_req
+
+	if [ ! -s "${tmp_dir}"/vault.crt ]; then
+		echo "failed to generate vault tls certificate"
+		exit 1
+	fi
+
+	cp "${tmp_dir}"/vault.crt "${tmp_dir}"/vault.ca
+
+	kubectl create secret generic "$name" \
+		--from-file=tls.key="${tmp_dir}"/vault.key \
+		--from-file=tls.crt="${tmp_dir}"/vault.crt \
+		--from-file=ca.crt="${tmp_dir}"/vault.ca
+
+	rm -rf "$tmp_dir"
+}
+
+setup_vault() {
+	local sa_namespace=$namespace
+	if [ -n "$OPERATOR_NS" ]; then
+		sa_namespace=$OPERATOR_NS
+	fi
+
+	deploy_vault $vault_name \
+		--set "global.enabled=true" \
+		--set "global.tlsDisable=true" \
+		\
+		--set "server.standalone.enabled=true"
+	sleep 10
+
+	wait_pod $vault_name-0
+
+	sleep 20
+
+	kubectl_bin exec $vault_name-0 -- vault auth enable kubernetes
+	cat "$test_dir"/conf/role-binding.yml \
+		| yq ".metadata.namespace=\"$namespace\"" \
+		| yq ".subjects[0].namespace=\"$sa_namespace\"" \
+		| kubectl_bin apply -f -
+
+	token=$(kubectl_bin exec $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
+	kubectl_bin create secret generic vault-sync-secret --from-literal=token="${token}"
+
+	# shellcheck disable=SC2016
+	kubectl_bin exec $vault_name-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT'
+
+	kubectl_bin exec $vault_name-0 -- sh -c 'vault policy write operator - <<EOF
+    # KVv1
+    path "secret/psmdb/operator/*" {
+      capabilities = ["read"]
+    }
+
+    # KVv2
+    path "secret/data/psmdb/operator/*" {
+      capabilities = ["read"]
+    }
+EOF
+'
+
+	kubectl_bin exec $vault_name-0 -- vault write auth/kubernetes/role/operator \
+		bound_service_account_names=percona-server-mongodb-operator \
+		bound_service_account_namespaces="$sa_namespace" \
+		policies=operator \
+		ttl=1h
+}
+
+vault_append() {
+	local key=$1
+	local value=$2
+
+	local tmp_json
+	tmp_json=$(mktemp)
+	local new_tmp_json
+	new_tmp_json=$(mktemp)
+
+	kubectl_bin exec $vault_name-0 -- sh -c "vault kv get -format=json -mount=secret psmdb/operator/$namespace/$cluster/users" | jq '.data.data' >"$tmp_json"
+
+	if [ ! -s "$tmp_json" ]; then
+		echo '{}' >"$tmp_json"
+	fi
+
+	jq --arg key "$key" --arg value "$value" \
+		'(. // {}) + {($key): $value}' \
+		"$tmp_json" >"$new_tmp_json"
+
+	kubectl_bin cp "$new_tmp_json" $vault_name-0:/tmp/data_new.json
+	kubectl_bin exec $vault_name-0 -- sh -c "vault kv put -mount=secret psmdb/operator/$namespace/$cluster/users @\"/tmp/data_new.json\""
+
+	rm -f "$tmp_json" "$new_tmp_json"
+}
+
+run_snapshot_backup() {
+	local backup_name=$1
+
+	log "running snapshot backup $backup_name"
+
+	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${VOLUME_SNAPSHOT_CLASS}'"' \
+		"${test_dir}/conf/backup.yml" \
+		| kubectl_bin apply -f -
+}
+
+run_snapshot_recovery_check() {
+	local backup_name=$1
+
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
+
+	if [ "$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.metadata.annotations.percona\.com/resync-pbm}')" != "true" ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a snapshot restore"
+		exit 1
+	fi
+
+	wait_cluster_consistency "${cluster}"
+	wait_for_pbm_operations "${cluster}"
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+}
+
+cluster="some-name"
+
+create_infra "${namespace}"
+deploy_minio
+apply_s3_storage_secrets
+
+desc 'Setting up Vault'
+setup_vault
+
+desc 'Seeding initial credentials in Vault'
+vault_append "MONGODB_USER_ADMIN_PASSWORD" "userAdmin123456"
+vault_append "MONGODB_BACKUP_PASSWORD" "backup123456#"
+
+desc 'Deploying PSMDB cluster with Vault and snapshot backup'
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+echo 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${cluster}"
+
+desc 'Writing test data'
+run_mongo_tls \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo_tls \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+desc 'Running snapshot backup'
+backup_name="backup-snapshot-vault"
+run_snapshot_backup "${backup_name}"
+wait_backup "${backup_name}"
+
+desc 'Drop collection and restore from snapshot'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_name}"
+run_snapshot_recovery_check "${backup_name}"
+
+desc 'Verifying Vault sync still works after snapshot restore'
+newpass="vault-test-password-after-restore"
+vault_append "MONGODB_BACKUP_PASSWORD" "$newpass"
+sleep 25
+wait_cluster_consistency "${cluster}"
+sleep 15
+backup_user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
+check_mongo_auth "$backup_user:$newpass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+
+log "Vault sync after restore: OK"
+
+destroy_vault "${vault_name}"
+destroy "${namespace}"
+
+desc 'test passed'
