@@ -3964,7 +3964,6 @@ spec:
                               minimum: 0
                               type: integer
                           required:
-                            - prefix
                             - domain
                           type: object
                         externalTrafficPolicy:
@@ -14806,7 +14805,6 @@ spec:
                                 minimum: 0
                                 type: integer
                             required:
-                              - prefix
                               - domain
                             type: object
                           externalTrafficPolicy:
@@ -23265,7 +23263,6 @@ spec:
                                 minimum: 0
                                 type: integer
                             required:
-                              - prefix
                               - domain
                             type: object
                           externalTrafficPolicy:

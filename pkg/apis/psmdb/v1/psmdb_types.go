@@ -1463,8 +1463,7 @@ type Expose struct {
 }
 
 type ExternalDNSConfig struct {
-	// +kubebuilder:validation:Required
-	Prefix string `json:"prefix"`
+	Prefix string `json:"prefix,omitempty"`
 	// +kubebuilder:validation:Required
 	Domain string `json:"domain"`
 	// +kubebuilder:validation:Minimum=0
