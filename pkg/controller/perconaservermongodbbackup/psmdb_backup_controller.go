@@ -594,6 +594,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 		}
 	}
 	if b.PBM() == nil || meta == nil {
+		if len(cr.Status.Snapshots) > 0 {
+			return r.deleteVolumeSnapshots(ctx, cr)
+		}
+
 		stg, err := r.getPBMStorage(ctx, cluster, cr)
 		if err != nil {
 			return errors.Wrap(err, "get storage")
