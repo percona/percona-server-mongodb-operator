@@ -54,6 +54,8 @@ spec:
               value: percona-server-mongodb-operator
             - name: RESYNC_PERIOD
               value: 5s
+            - name: RECONCILE_INTERVAL
+              value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
             - name: MAX_CONCURRENT_RECONCILES

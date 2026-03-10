@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/types"
 
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -25,6 +27,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	bcp, err := r.getBackup(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get backup")
+	}
+
+	if bcp.Spec.Type == defs.ExternalBackup {
+		if err := r.validateExternalBackup(ctx, bcp); err != nil {
+			return errors.Wrap(err, "validate external backup")
+		}
+		return nil
 	}
 
 	if bcp.Status.Type != defs.LogicalBackup && cr.Spec.Selective != nil {
@@ -89,5 +98,38 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 		}
 	}
 
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
+	ctx context.Context,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+) error {
+	if bcp.Spec.Type != defs.ExternalBackup {
+		return nil
+	}
+
+	if len(bcp.Status.Snapshots) > 0 {
+		if err := r.validateSnapshotExistence(ctx, bcp); err != nil {
+			return errors.Wrap(err, "validate snapshot existence")
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) validateSnapshotExistence(
+	ctx context.Context,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+) error {
+	for _, info := range bcp.Status.Snapshots {
+		volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{}
+		if err := r.client.Get(ctx, types.NamespacedName{
+			Namespace: bcp.Namespace,
+			Name:      info.SnapshotName,
+		}, volumeSnapshot); err != nil {
+			return errors.Wrapf(err, "get volume snapshot %s", info.SnapshotName)
+		}
+	}
 	return nil
 }
