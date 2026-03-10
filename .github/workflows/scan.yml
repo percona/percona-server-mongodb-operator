@@ -1,5 +1,7 @@
 name: Scan docker
 on: [pull_request]
+permissions:
+  contents: read
 
 env:
   # Use docker.io for Docker Hub if empty
