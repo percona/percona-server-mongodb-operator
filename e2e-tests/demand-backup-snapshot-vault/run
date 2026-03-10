@@ -221,7 +221,11 @@ sleep 25
 wait_cluster_consistency "${cluster}"
 sleep 15
 backup_user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
-check_mongo_auth "$backup_user:$newpass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+ping=$(run_mongo_tls "db.runCommand({ ping: 1 }).ok" "$backup_user:$newpass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "mongodb" "" "--quiet")
+if [ "${ping}" != "1" ]; then
+	echo "Vault sync check failed: could not authenticate as $backup_user with new password"
+	exit 1
+fi
 
 log "Vault sync after restore: OK"
 

@@ -875,6 +875,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 			}
 			if sec != nil {
 				log.Info("Using vault security config for snapshot restore db-config", "replset", rs.Name)
+				// The container command copies the vault token to /tmp/vault-token with
+				// 0600 permissions (MongoDB requires mode & 0077 == 0, but Kubernetes
+				// Secret volumes mount files with 0444). Update tokenFile in the security
+				// config to point to the fixed path so the local mongod started by
+				// pbm-agent restore-finish can read it.
+				if vaultConf, ok := sec["vault"].(map[interface{}]interface{}); ok {
+					vaultConf["tokenFile"] = "/tmp/vault-token"
+				}
 				securityConf = sec
 			}
 		} else {
