@@ -1,4 +1,6 @@
 name: reviewdog
+permissions:
+  contents: read
 on: [pull_request]
 jobs:
   golangci-lint:
