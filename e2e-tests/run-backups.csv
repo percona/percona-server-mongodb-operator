@@ -29,6 +29,7 @@ demand-backup-physical-sharded-minio
 demand-backup-physical-minio-native-tls
 demand-backup-physical-sharded-minio-native
 demand-backup-sharded
+demand-backup-snapshot
 pitr-physical
 pitr-physical-backup-source
 pitr-sharded
