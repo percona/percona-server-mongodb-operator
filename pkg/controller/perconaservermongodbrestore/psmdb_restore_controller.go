@@ -122,7 +122,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || !cr.Status.ConditionsEqual(&status) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -132,7 +132,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 	}()
 
-	err = cr.CheckFields()
+	bcp, err := r.getBackup(ctx, cr)
+	if err != nil {
+		return rr, errors.Wrap(err, "get backup")
+	}
+
+	err = cr.CheckFields(bcp.PBMBackupType())
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "fields check")
 	}
@@ -161,11 +166,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		log.V(1).Info("waiting for resync operation to finish")
 
 		return rr, nil
-	}
-
-	bcp, err := r.getBackup(ctx, cr)
-	if err != nil {
-		return rr, errors.Wrap(err, "get backup")
 	}
 
 	var svr *version.ServerVersion
@@ -261,6 +261,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		if err != nil {
 			return rr, errors.Wrap(err, "reconcile physical restore")
 		}
+
+	case defs.ExternalBackup:
+		status, err = r.reconcileExternalSnapshotRestore(ctx, cr, bcp, cluster)
+		if err != nil {
+			return rr, errors.Wrap(err, "reconcile external snapshot restore")
+		}
 	}
 
 	return rr, nil
@@ -338,6 +344,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				GCS:         cr.Spec.BackupSource.GCS,
 				Azure:       cr.Spec.BackupSource.Azure,
 				Filesystem:  cr.Spec.BackupSource.Filesystem,
+				Snapshots:   cr.Spec.BackupSource.Snapshots,
 				PBMname:     backupName,
 			},
 		}, nil

@@ -30,6 +30,7 @@ demand-backup-physical-sharded-azure
 demand-backup-physical-sharded-gcp-native
 demand-backup-physical-sharded-minio
 demand-backup-sharded
+demand-backup-snapshot-vault
 init-deploy
 ldap
 ldap-tls

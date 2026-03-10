@@ -671,8 +671,8 @@ func (conf MongoConfiguration) GetTLSMode() (string, error) {
 	return mode, nil
 }
 
-// isEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
-func (conf MongoConfiguration) isEncryptionEnabled() (*bool, error) {
+// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
+func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
 		return nil, err
@@ -1171,7 +1171,12 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base,external}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -1744,4 +1749,13 @@ type LogRotateSpec struct {
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, len(cr.Spec.Replsets))
+	copy(replsets, cr.Spec.Replsets)
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
 }
