@@ -354,19 +354,20 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 						},
 					)
 
-					if !rs.Configuration.VaultEnabled() {
-						// PBM's restore-finish starts a local mongod that recreates the encryption
-						// key database from the key file. MongoDB requires the key file permissions
-						// to satisfy (mode & 0077 == 0), but Kubernetes Secret volumes mount files
-						// with mode 0440 (group-readable) which fails this check. Copy the key to
-						// /tmp with owner-only permissions before starting pbm-agent.
-						encKeyPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName)
-						fixedKeyPath := "/tmp/" + psmdbv1.EncryptionKeyName
-						sfs.Spec.Template.Spec.Containers[0].Command = []string{
-							"bash", "-c",
-							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
-							"--",
-						}
+					// PBM's restore-finish starts a local mongod that recreates the encryption
+					// key database from the key file (or Vault token when Vault is enabled).
+					// MongoDB requires the key file permissions to satisfy (mode & 0077 == 0),
+					// but Kubernetes Secret volumes mount files with mode 0440 (group-readable)
+					// which fails this check. Copy the key/token to /tmp with owner-only
+					// permissions before starting pbm-agent.
+					srcPath, dstPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName), "/tmp/"+psmdbv1.EncryptionKeyName
+					if rs.Configuration.VaultEnabled() {
+						srcPath, dstPath = config.VaultDir+"/token", "/tmp/vault-token"
+					}
+					sfs.Spec.Template.Spec.Containers[0].Command = []string{
+						"bash", "-c",
+						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", srcPath, dstPath, dstPath),
+						"--",
 					}
 				}
 
@@ -705,10 +706,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
-	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+	err := retry.OnError(anotherOpBackoff, func(err error) bool {
 		return strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
+			strings.Contains(err.Error(), "container not found") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
@@ -866,6 +868,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 			}
 			if sec != nil {
 				log.Info("Using vault security config for snapshot restore db-config", "replset", rs.Name)
+				// The container command copies the vault token to /tmp/vault-token with
+				// 0600 permissions (MongoDB requires mode & 0077 == 0, but Kubernetes
+				// Secret volumes mount files with 0444). Update tokenFile in the security
+				// config to point to the fixed path so the local mongod started by
+				// pbm-agent restore-finish can read it.
+				if vaultConf, ok := sec["vault"].(map[interface{}]interface{}); ok {
+					vaultConf["tokenFile"] = "/tmp/vault-token"
+				}
 				securityConf = sec
 			}
 		} else {
