@@ -32,16 +32,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Con
 	log := logf.FromContext(ctx)
 
 	for _, rs := range repls {
-		if dns := rs.Expose.ExternalDNS; dns != nil {
-			if dns.Domain == "" {
-				return errors.Errorf("externalDNS requires domain for replset %s", rs.Name)
-			}
-			if dns.Prefix == "" {
-				dns.Prefix = cr.Name
-			}
-			if !rs.Expose.Enabled {
-				log.Info("externalDNS is configured but expose is not enabled, skipping DNS annotations", "replset", rs.Name)
-			}
+		if rs.Expose.ExternalDNS != nil && !rs.Expose.Enabled {
+			log.Info("externalDNS is configured but expose is not enabled, skipping DNS annotations", "replset", rs.Name)
 		}
 
 		// Create headless service
@@ -73,15 +65,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Con
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosSvc(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
-	}
-
-	if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
-		if dns.Domain == "" {
-			return errors.New("externalDNS requires domain for mongos")
-		}
-		if dns.Prefix == "" {
-			dns.Prefix = cr.Name
-		}
 	}
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
