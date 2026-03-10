@@ -15,7 +15,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: psmdb-client
-          image: percona/percona-server-mongodb:4.4
+          image: docker.io/percona/percona-server-mongodb:4.4
           imagePullPolicy: Always
           command: ["/bin/bash","-c","cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem && sleep 100500"]
           volumeMounts:
