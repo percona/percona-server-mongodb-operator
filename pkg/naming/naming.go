@@ -54,6 +54,10 @@ func NonVotingStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Repl
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentNonVotingShort)
 }
 
+func NonVotingPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, idx int) string {
+	return fmt.Sprintf("%s-%d", NonVotingStatefulSetName(cr, rs), idx)
+}
+
 func NonVotingConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return NonVotingStatefulSetName(cr, rs)
 }
@@ -64,6 +68,10 @@ func HiddenStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Replset
 
 func HiddenConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return HiddenStatefulSetName(cr, rs)
+}
+
+func HiddenPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, idx int) string {
+	return fmt.Sprintf("%s-%d", HiddenStatefulSetName(cr, rs), idx)
 }
 
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
@@ -83,4 +91,8 @@ func MongosHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 
 func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 	return fmt.Sprintf("%s-pbm-hookscript", cr.Name)
+}
+
+func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
+	return fmt.Sprintf("%s-%s", bcp.Name, rsName)
 }
