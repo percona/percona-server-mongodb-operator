@@ -354,27 +354,20 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 						},
 					)
 
-					if !rs.Configuration.VaultEnabled() {
-						// PBM's restore-finish starts a local mongod that recreates the encryption
-						// key database from the key file. MongoDB requires the key file permissions
-						// to satisfy (mode & 0077 == 0), but Kubernetes Secret volumes mount files
-						// with mode 0440 (group-readable) which fails this check. Copy the key to
-						// /tmp with owner-only permissions before starting pbm-agent.
-						encKeyPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName)
-						fixedKeyPath := "/tmp/" + psmdbv1.EncryptionKeyName
-						sfs.Spec.Template.Spec.Containers[0].Command = []string{
-							"bash", "-c",
-							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", encKeyPath, fixedKeyPath, fixedKeyPath),
-							"--",
-						}
-					} else {
-						vaultTokenPath := config.VaultDir + "/token"
-						fixedVaultTokenPath := "/tmp/vault-token"
-						sfs.Spec.Template.Spec.Containers[0].Command = []string{
-							"bash", "-c",
-							fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", vaultTokenPath, fixedVaultTokenPath, fixedVaultTokenPath),
-							"--",
-						}
+					// PBM's restore-finish starts a local mongod that recreates the encryption
+					// key database from the key file (or Vault token when Vault is enabled).
+					// MongoDB requires the key file permissions to satisfy (mode & 0077 == 0),
+					// but Kubernetes Secret volumes mount files with mode 0440 (group-readable)
+					// which fails this check. Copy the key/token to /tmp with owner-only
+					// permissions before starting pbm-agent.
+					srcPath, dstPath := fmt.Sprintf("%s/%s", psmdbv1.MongodRESTencryptDir, psmdbv1.EncryptionKeyName), "/tmp/"+psmdbv1.EncryptionKeyName
+					if rs.Configuration.VaultEnabled() {
+						srcPath, dstPath = config.VaultDir+"/token", "/tmp/vault-token"
+					}
+					sfs.Spec.Template.Spec.Containers[0].Command = []string{
+						"bash", "-c",
+						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", srcPath, dstPath, dstPath),
+						"--",
 					}
 				}
 
