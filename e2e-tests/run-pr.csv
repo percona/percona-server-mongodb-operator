@@ -38,6 +38,7 @@ demand-backup-physical-sharded-minio
 demand-backup-physical-sharded-minio-native
 demand-backup-sharded
 demand-backup-snapshot
+demand-backup-snapshot-vault
 disabled-auth
 expose-sharded
 finalizer
