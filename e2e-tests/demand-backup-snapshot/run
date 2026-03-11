@@ -1,0 +1,165 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+VOLUME_SNAPSHOT_CLASS=$(deploy_volume_snapshot_class)
+
+run_snapshot_backup() {
+	local backup_name=$1
+
+	log "running snapshot backup $backup_name"
+
+	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${VOLUME_SNAPSHOT_CLASS}'"' \
+		"${test_dir}/conf/backup.yml" \
+		| kubectl_bin apply -f -
+}
+
+run_snapshot_recovery_check() {
+	local backup_name=$1
+	local target_cluster=${2:-$cluster}
+
+	wait_restore "${backup_name}" "${target_cluster}" "ready" "0" "3000"
+
+	if [ "$(kubectl_bin get psmdb "${target_cluster}" -o jsonpath='{.metadata.annotations.percona\.com/resync-pbm}')" != "true" ]; then
+		echo "psmdb/${target_cluster} should be annotated with percona.com/resync-pbm after a snapshot restore"
+		exit 1
+	fi
+
+	log "Operator triggered PBM resync: OK"
+
+	wait_cluster_consistency "${target_cluster}"
+	wait_for_pbm_operations "${target_cluster}"
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-0.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-1.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-2.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+	log "Data restored: OK"
+}
+
+run_snapshot_restore_backupsource() {
+	local backup_name=$1
+	local target_cluster=$2
+
+	local snapshots
+	snapshots=$(kubectl_bin get psmdb-backup "${backup_name}" -o jsonpath='{.status.snapshots}')
+
+	log "running cross-cluster snapshot restore to ${target_cluster} from backup ${backup_name}"
+
+	backup_name="$backup_name" target_cluster="$target_cluster" snapshots="$snapshots" \
+		yq eval '
+			.metadata.name = "restore-backupsource-" + strenv(backup_name) |
+			.spec.clusterName = strenv(target_cluster) |
+			.spec.backupSource.snapshots = env(snapshots)
+		' "${test_dir}/conf/restore-backupsource.yml" \
+		| kubectl_bin apply -f -
+}
+
+create_infra "${namespace}"
+deploy_minio
+apply_s3_storage_secrets
+
+cluster="some-name"
+
+desc 'Testing snapshot backup/restore on unencrypted cluster'
+
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+echo 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${cluster}"
+
+echo 'Writing test data'
+run_mongo_tls \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo_tls \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+echo 'Running snapshot backup (unencrypted)'
+backup_name="backup-snapshot"
+run_snapshot_backup "${backup_name}"
+wait_backup "${backup_name}"
+
+echo 'Drop collection and restore from snapshot (unencrypted)'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_name}"
+run_snapshot_recovery_check "${backup_name}"
+
+desc 'Testing cross-cluster snapshot restore to a new cluster'
+
+new_cluster="some-name-new"
+
+apply_cluster "${test_dir}/conf/${new_cluster}.yml"
+
+echo 'check if all pods started on new cluster'
+wait_for_running "${new_cluster}-rs0" 3
+wait_cluster_consistency "${new_cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${new_cluster}"
+
+echo 'Restoring snapshot to new cluster using backupSource'
+run_snapshot_restore_backupsource "${backup_name}" "${new_cluster}"
+run_snapshot_recovery_check "backupsource-${backup_name}" "${new_cluster}"
+
+echo 'Cleaning up new cluster'
+kubectl_bin delete psmdb "${new_cluster}"
+kubectl_bin wait --for=delete psmdb/"${new_cluster}" --timeout=600s
+
+desc 'Testing snapshot backup/restore on encrypted cluster'
+
+kubectl_bin delete psmdb "${cluster}"
+kubectl_bin wait --for=delete psmdb/"${cluster}" --timeout=600s
+
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}-encrypted.yml"
+
+echo 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${cluster}"
+
+echo 'Creating app user and writing test data (encrypted)'
+run_mongo_tls \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo_tls \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+echo 'Running snapshot backup (encrypted)'
+backup_name_enc="backup-snapshot-encrypted"
+run_snapshot_backup "${backup_name_enc}"
+wait_backup "${backup_name_enc}"
+
+echo 'Drop collection and restore from snapshot (encrypted)'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_name_enc}"
+run_snapshot_recovery_check "${backup_name_enc}"
+
+destroy "${namespace}"
+
+desc 'test passed'
