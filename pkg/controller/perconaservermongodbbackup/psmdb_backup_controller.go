@@ -471,6 +471,16 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				NumMaxRetries: cr.Status.Minio.Retryer.NumMaxRetries,
 			}
 		}
+		// The operator pod does not have custom CA bundles mounted, so it cannot verify
+		// TLS when connecting to MinIO directly. Use InsecureSkipTLSVerify when caBundle
+		// is configured. The actual TLS verification is handled by pbm-agent, which has
+		// the CA bundle mounted via SSL_CERT_FILE.
+		if cluster != nil {
+			if stg, ok := cluster.Spec.Backup.Storages[cr.Status.StorageName]; ok &&
+				stg.Type == psmdbv1.BackupStorageMinio && stg.Minio.CABundle != nil {
+				minioConf.InsecureSkipTLSVerify = true
+			}
+		}
 		if cr.Status.Minio.CredentialsSecret != "" {
 			minioSecret, err := secret(ctx, r.client, cr.GetNamespace(), cr.Status.Minio.CredentialsSecret)
 			if err != nil {
