@@ -478,22 +478,15 @@ func TestBuildAnnotationKey(t *testing.T) {
 
 			// Extract the name part (after "percona.com/")
 			prefix := "percona.com/"
-			if !strings.HasPrefix(got, prefix) {
-				t.Errorf("buildAnnotationKey() = %v, should start with %v", got, prefix)
-			}
-
-			namePart := got[len(prefix):]
-			gotLen := len(got)
+			assert.True(t, strings.HasPrefix(got, prefix), "buildAnnotationKey() = %v, should start with %v", got, prefix)
 
 			// Verify the annotation key name part is within Kubernetes limit
-			if len(namePart) > tt.maxLength {
-				t.Errorf("buildAnnotationKey() name part length = %v, should be <= %v. Got: %v", len(namePart), tt.maxLength, got)
-			}
+			namePart := got[len(prefix):]
+			gotLen := len(got)
+			assert.True(t, len(namePart) <= tt.maxLength, "buildAnnotationKey() name part length = %v, should be <= %v. Got: %v", len(namePart), tt.maxLength, got)
 
 			// Verify it ends with "-hash"
-			if !strings.HasSuffix(got, "-hash") {
-				t.Errorf("buildAnnotationKey() = %v, should end with '-hash'", got)
-			}
+			assert.True(t, strings.HasSuffix(got, "-hash"), "buildAnnotationKey() = %v, should end with '-hash'", got)
 
 			// Verify exact match for non-truncated cases
 			if gotLen <= tt.maxLength && tt.want != "" {
