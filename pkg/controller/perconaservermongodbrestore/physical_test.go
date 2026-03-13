@@ -126,7 +126,7 @@ func TestUpdateStatefulSetForPhysicalRestoreSecurityContext(t *testing.T) {
 	ctx := context.Background()
 
 	nonRoot := true
-	noPrivEsc := false
+	allowPrivEsc := false
 	cluster := &psmdbv1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
@@ -144,7 +144,7 @@ func TestUpdateStatefulSetForPhysicalRestoreSecurityContext(t *testing.T) {
 			},
 			InitContainerSecurityContext: &corev1.SecurityContext{
 				RunAsNonRoot:             &nonRoot,
-				AllowPrivilegeEscalation: &noPrivEsc,
+				AllowPrivilegeEscalation: &allowPrivEsc,
 			},
 		},
 	}
