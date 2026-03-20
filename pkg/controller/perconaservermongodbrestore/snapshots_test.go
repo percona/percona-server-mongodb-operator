@@ -102,6 +102,9 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 	ctx := context.Background()
 	const ns = "default"
 
+	encryptionDisabledConf := psmdbv1.MongoConfiguration(`security:
+  enableEncryption: false`)
+
 	cluster := &psmdbv1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
@@ -109,7 +112,12 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		},
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
-				{Name: "rs0", Size: 3},
+				{
+					Name:          "rs0",
+					Size:          3,
+					Storage:       &psmdbv1.MongodSpecStorage{},
+					Configuration: encryptionDisabledConf,
+				},
 			},
 		},
 	}
@@ -210,8 +218,9 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
-						Name: "rs0",
-						Size: 1,
+						Name:          "rs0",
+						Size:          1,
+						Configuration: encryptionDisabledConf,
 						NonVoting: psmdbv1.NonVotingSpec{
 							Enabled: true,
 							Size:    1,
@@ -255,6 +264,209 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, done)
 		assert.True(t, apimeta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionPBMAgentConfiguredForSnapshot))
+	})
+
+	t.Run("encryption explicitly enabled adds db-config volume and bash wrapper command", func(t *testing.T) {
+		encCluster := &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "enc-cluster",
+				Namespace: ns,
+			},
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{
+					{
+						Name:    "rs0",
+						Size:    1,
+						Storage: &psmdbv1.MongodSpecStorage{},
+						Configuration: psmdbv1.MongoConfiguration(`security:
+  enableEncryption: true`),
+					},
+				},
+			},
+		}
+		encRS := encCluster.Spec.Replsets[0]
+
+		sfs := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.MongodStatefulSetName(encCluster, encRS),
+				Namespace: ns,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "mongod"}},
+					},
+				},
+			},
+			Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		}
+
+		r := fakeReconciler(encCluster, sfs)
+		pbmName := "enc-pbm-restore"
+		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{PBMname: pbmName}
+
+		done, err := r.scaleDownStatefulSetsForSnapshotRestore(ctx, encCluster, status)
+		assert.NoError(t, err)
+		assert.False(t, done)
+
+		updated := &appsv1.StatefulSet{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: ns}, updated)
+		require.NoError(t, err)
+
+		container := updated.Spec.Template.Spec.Containers[0]
+		assert.Equal(t, "bash", container.Command[0])
+		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Command[2], psmdbv1.EncryptionKeyName)
+		assert.Contains(t, container.Args, "--db-config")
+		assert.Contains(t, container.Args, "/etc/pbm-db-config/db_config.yaml")
+
+		foundVolume := false
+		for _, v := range updated.Spec.Template.Spec.Volumes {
+			if v.Name == "pbm-db-config" {
+				foundVolume = true
+				require.NotNil(t, v.Secret)
+				assert.Equal(t, r.dbConfigSecretName(encCluster, encRS), v.Secret.SecretName)
+			}
+		}
+		assert.True(t, foundVolume, "expected pbm-db-config volume to be added")
+
+		foundMount := false
+		for _, m := range container.VolumeMounts {
+			if m.Name == "pbm-db-config" {
+				foundMount = true
+				assert.Equal(t, "/etc/pbm-db-config/", m.MountPath)
+				assert.True(t, m.ReadOnly)
+			}
+		}
+		assert.True(t, foundMount, "expected pbm-db-config volume mount to be added")
+	})
+
+	t.Run("encryption explicitly disabled uses plain pbm-agent command", func(t *testing.T) {
+		noEncCluster := &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "noenc-cluster",
+				Namespace: ns,
+			},
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{
+					{
+						Name:    "rs0",
+						Size:    1,
+						Storage: &psmdbv1.MongodSpecStorage{},
+						Configuration: psmdbv1.MongoConfiguration(`security:
+  enableEncryption: false`),
+					},
+				},
+			},
+		}
+		noEncRS := noEncCluster.Spec.Replsets[0]
+
+		sfs := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.MongodStatefulSetName(noEncCluster, noEncRS),
+				Namespace: ns,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:           "mongod",
+								LivenessProbe:  &corev1.Probe{},
+								ReadinessProbe: &corev1.Probe{},
+							},
+						},
+					},
+				},
+			},
+			Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		}
+
+		r := fakeReconciler(noEncCluster, sfs)
+		pbmName := "noenc-pbm-restore"
+		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{PBMname: pbmName}
+
+		done, err := r.scaleDownStatefulSetsForSnapshotRestore(ctx, noEncCluster, status)
+		assert.NoError(t, err)
+		assert.False(t, done)
+
+		updated := &appsv1.StatefulSet{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: ns}, updated)
+		require.NoError(t, err)
+
+		container := updated.Spec.Template.Spec.Containers[0]
+		assert.Equal(t, []string{"/opt/percona/pbm-agent"}, container.Command)
+		assert.Equal(t, "restore-finish", container.Args[0])
+		assert.Equal(t, pbmName, container.Args[1])
+		assert.NotContains(t, container.Args, "--db-config")
+		assert.Nil(t, container.LivenessProbe)
+		assert.Nil(t, container.ReadinessProbe)
+
+		for _, v := range updated.Spec.Template.Spec.Volumes {
+			assert.NotEqual(t, "pbm-db-config", v.Name, "expected no pbm-db-config volume")
+		}
+	})
+
+	t.Run("encryption not specified defaults to encrypted for non-InMemory storage", func(t *testing.T) {
+		defaultCluster := &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "default-cluster",
+				Namespace: ns,
+			},
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{
+					{
+						Name:    "rs0",
+						Size:    1,
+						Storage: &psmdbv1.MongodSpecStorage{},
+					},
+				},
+			},
+		}
+		defaultRS := defaultCluster.Spec.Replsets[0]
+
+		sfs := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.MongodStatefulSetName(defaultCluster, defaultRS),
+				Namespace: ns,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "mongod"}},
+					},
+				},
+			},
+			Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
+		}
+
+		r := fakeReconciler(defaultCluster, sfs)
+		pbmName := "default-pbm-restore"
+		status := &psmdbv1.PerconaServerMongoDBRestoreStatus{PBMname: pbmName}
+
+		done, err := r.scaleDownStatefulSetsForSnapshotRestore(ctx, defaultCluster, status)
+		assert.NoError(t, err)
+		assert.False(t, done)
+
+		updated := &appsv1.StatefulSet{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: ns}, updated)
+		require.NoError(t, err)
+
+		container := updated.Spec.Template.Spec.Containers[0]
+		assert.Equal(t, "bash", container.Command[0], "encryption enabled by default should use bash wrapper")
+		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Args, "--db-config")
+
+		foundVolume := false
+		for _, v := range updated.Spec.Template.Spec.Volumes {
+			if v.Name == "pbm-db-config" {
+				foundVolume = true
+			}
+		}
+		assert.True(t, foundVolume, "expected pbm-db-config volume when encryption defaults to enabled")
 	})
 }
 
@@ -729,7 +941,11 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 	cluster := &psmdbv1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "cl", Namespace: ns},
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
-			Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0", Size: 1}},
+			Replsets: []*psmdbv1.ReplsetSpec{{
+				Name:    "rs0",
+				Size:    1,
+				Storage: &psmdbv1.MongodSpecStorage{},
+			}},
 		},
 	}
 	rs := cluster.Spec.Replsets[0]
@@ -835,7 +1051,7 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 			},
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
-					{Name: "rs0", Size: 1, Configuration: conf},
+					{Name: "rs0", Size: 1, Configuration: conf, Storage: &psmdbv1.MongodSpecStorage{}},
 				},
 			},
 		}
@@ -844,16 +1060,22 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 	expectedSecretName := clusterName + "-rs0-pbm-db-config"
 	expectedKeyFile := "/tmp/" + psmdbv1.EncryptionKeyName
 
-	t.Run("no secret created when encryption is not configured", func(t *testing.T) {
+	t.Run("secret created when encryption is not configured because it defaults to enabled", func(t *testing.T) {
 		cluster := makeCluster("")
 		r := fakeReconciler(cluster)
 
 		err := r.createOrUpdateDBConfigSecret(t.Context(), cluster)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		secret := &corev1.Secret{}
 		err = r.client.Get(t.Context(), types.NamespacedName{Name: expectedSecretName, Namespace: ns}, secret)
-		assert.True(t, k8sErrors.IsNotFound(err))
+		require.NoError(t, err)
+
+		data, ok := secret.Data["db_config.yaml"]
+		require.True(t, ok, "expected db_config.yaml key in secret")
+		content := string(data)
+		assert.True(t, strings.Contains(content, "enableEncryption: true"), "expected enableEncryption: true in content: %s", content)
+		assert.True(t, strings.Contains(content, expectedKeyFile), "expected key file path in content: %s", content)
 	})
 
 	t.Run("no secret created when encryption is explicitly false", func(t *testing.T) {
