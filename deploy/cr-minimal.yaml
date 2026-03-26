@@ -4,7 +4,7 @@ metadata:
   name: minimal-cluster
 spec:
   crVersion: 1.23.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image: docker.io/perconalab/percona-server-mongodb-operator:main-mongod8.0
   unsafeFlags:
     replsetSize: true
     mongosSize: true
@@ -21,7 +21,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 3Gi
+            storage: 50Gi
 
   sharding:
     enabled: true
@@ -32,7 +32,7 @@ spec:
         persistentVolumeClaim:
           resources:
             requests:
-              storage: 3Gi
+              storage: 50Gi
 
     mongos:
       size: 1

@@ -26804,7 +26804,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: docker.io/perconalab/percona-server-mongodb-operator:snapshot-custom
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

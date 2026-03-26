@@ -21,7 +21,7 @@ spec:
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
   crVersion: 1.23.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image: docker.io/perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -34,7 +34,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: perconalab/percona-server-mongodb-operator:main
+#  initImage: docker.io/perconalab/percona-server-mongodb-operator:snapshot-custom
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -74,7 +74,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:3-dev-latest
+    image: docker.io/perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
@@ -284,7 +284,7 @@ spec:
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: 3Gi
+            storage: 50Gi
 
     hidden:
       enabled: false
@@ -351,7 +351,7 @@ spec:
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
-              storage: 3Gi
+              storage: 50Gi
 
     nonvoting:
       enabled: false
@@ -418,7 +418,7 @@ spec:
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
-              storage: 3Gi
+              storage: 50Gi
     arbiter:
       enabled: false
       size: 1
@@ -594,7 +594,7 @@ spec:
 #          accessModes: [ "ReadWriteOnce" ]
           resources:
             requests:
-              storage: 3Gi
+              storage: 50Gi
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
@@ -759,7 +759,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: docker.io/perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
 #    hookScript:
 #      configMapRef:
@@ -925,7 +925,7 @@ spec:
 #        volumeSnapshotClass: YOUR-VOLUME-SNAPSHOT-CLASS
   logcollector:
     enabled: true
-    image: perconalab/fluentbit:main-logcollector
+    image: docker.io/perconalab/fluentbit:main-logcollector
 #    configuration: |
 #      [SERVICE]
 #          Flush        1
