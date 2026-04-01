@@ -13,6 +13,7 @@ demand-backup-incremental-sharded-azure
 demand-backup-incremental-sharded-gcp-native
 demand-backup-incremental-sharded-gcp-s3
 demand-backup-incremental-sharded-minio
+demand-backup-logical-minio-native-tls
 demand-backup-physical-parallel
 demand-backup-physical-aws
 demand-backup-physical-azure
@@ -28,6 +29,8 @@ demand-backup-physical-sharded-minio
 demand-backup-physical-minio-native-tls
 demand-backup-physical-sharded-minio-native
 demand-backup-sharded
+demand-backup-snapshot
+demand-backup-snapshot-vault
 pitr-physical
 pitr-physical-backup-source
 pitr-sharded
