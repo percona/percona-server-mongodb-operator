@@ -1,7 +1,22 @@
 name: Feature request 🧭
-description: Suggest an idea for this project
+description: Suggest an idea for this project (must be linked from roadmap)
 labels: "feature-request"
 body:
+- type: markdown
+  attributes:
+    value: |
+      We prioritize feature work from our **shared roadmap**. If this feature isn't there yet, add it first, then paste the link below.
+      **Roadmap:** https://github.com/orgs/percona/projects/10
+
+- type: input
+  id: roadmap-link
+  attributes:
+    label: "Roadmap item link (required)"
+    description: "URL of the card or item on the Percona Kubernetes Operators Roadmap. Add the idea there first if needed."
+    placeholder: "https://github.com/orgs/percona/projects/10?card=..."
+  validations:
+    required: true
+
 - type: textarea
   attributes:
     label: Proposal
