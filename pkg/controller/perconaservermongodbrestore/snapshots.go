@@ -289,11 +289,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 		if rs.Configuration.VaultEnabled() {
 			return true, nil
 		}
-		enc, err := rs.Configuration.IsEncryptionEnabled()
+		enc, err := rs.IsEncryptionEnabled()
 		if err != nil {
 			return false, errors.Wrapf(err, "failed to check if encryption is enabled")
 		}
-		return enc != nil && *enc, nil
+		return enc, nil
 	}
 
 	// Scale down all statefulsets of each replset.
@@ -879,11 +879,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 				securityConf = sec
 			}
 		} else {
-			enabled, err := rs.Configuration.IsEncryptionEnabled()
+			enabled, err := rs.IsEncryptionEnabled()
 			if err != nil {
 				return errors.Wrapf(err, "check encryption for replset %s", rs.Name)
 			}
-			if enabled != nil && *enabled {
+			if enabled {
 				securityConf = map[string]any{
 					"enableEncryption":  true,
 					"encryptionKeyFile": fmt.Sprintf("/tmp/%s", psmdbv1.EncryptionKeyName),
