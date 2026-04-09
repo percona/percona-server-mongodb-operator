@@ -824,7 +824,7 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		c, ok := cm[member.Host]
-		if ok && c.Tags != nil && !reflect.DeepEqual(c.Tags, member.Tags) {
+		if ok && !member.ArbiterOnly && c.Tags != nil && !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
 			log.Info("Tags changed", "host", member.Host, "old", member.Tags, "new", c.Tags)
