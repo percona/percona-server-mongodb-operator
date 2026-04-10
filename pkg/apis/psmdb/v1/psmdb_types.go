@@ -573,10 +573,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }

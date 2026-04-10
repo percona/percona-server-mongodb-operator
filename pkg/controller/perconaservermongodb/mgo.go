@@ -334,7 +334,11 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 		Votes:        extNode.Votes,
 		Priority:     extNode.Priority,
 		BuildIndexes: true,
-		Tags:         mongo.ReplsetTags{"external": "true"},
+		ArbiterOnly:  extNode.ArbiterOnly,
+	}
+
+	if !extNode.ArbiterOnly {
+		member.Tags = mongo.ReplsetTags{"external": "true"}
 	}
 
 	if strings.Contains(extNode.Host, ":") {
@@ -344,6 +348,9 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	}
 
 	for k, v := range extNode.Tags {
+		if member.Tags == nil {
+			member.Tags = make(mongo.ReplsetTags)
+		}
 		member.Tags[k] = v
 	}
 
