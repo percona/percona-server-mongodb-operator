@@ -223,5 +223,3 @@ replace (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt/v4 v4.2.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 => ./cmd/mongodb-healthcheck/logger/lumberjack/ // https://github.com/natefinch/lumberjack/pull/211
 )
-
-replace github.com/percona/percona-backup-mongodb => ./pbm-patched
