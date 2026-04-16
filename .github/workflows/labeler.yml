@@ -1,8 +1,10 @@
 name: "PR Labeler"
+permissions:
+  contents: read
+  pull-requests: write
 on:
   pull_request:
     types: [opened, synchronize]
-
 jobs:
   label:
     runs-on: ubuntu-latest

@@ -160,7 +160,7 @@ wait_cluster_consistency "$cluster" 64
 desc 'verify cluster is ready'
 kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
 
-if [[ -n ${OPENSHIFT} || "$EKS" == 1 ]]; then
+if [[ -n ${OPENSHIFT} || $EKS == 1 ]]; then
 	# On AWS (OpenShift/EKS), EBS volumes can only be expanded once every 6 hours.
 	# Skip the multi-resize quota and maxSize tests since they require
 	# multiple sequential resizes of the same volume.

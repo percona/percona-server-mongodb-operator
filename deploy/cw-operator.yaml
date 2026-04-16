@@ -25,7 +25,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.22.0
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
@@ -53,6 +53,8 @@ spec:
             - name: OPERATOR_NAME
               value: percona-server-mongodb-operator
             - name: RESYNC_PERIOD
+              value: 5s
+            - name: RECONCILE_INTERVAL
               value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
