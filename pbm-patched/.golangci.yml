@@ -1,0 +1,41 @@
+version: "2"
+linters:
+  enable:
+    - errname
+    - predeclared
+    - staticcheck
+    - misspell
+    - nilerr
+    - nilnil
+    - lll
+    - gochecknoinits
+    - nonamedreturns
+  disable:
+    - contextcheck
+    - exhaustive
+    - gosec
+    - wrapcheck
+  settings:
+    govet:
+      disable:
+        - composites
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

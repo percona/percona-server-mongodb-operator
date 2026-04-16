@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+
+BACKUP_USER="bcp"
+MONGO_PASS="test1234"
+BCP_NAME=""
+COMPOSE_PATH="${test_dir}/docker/docker-compose.yaml"
+COMPOSE_REMAPPING_PATH="${test_dir}/docker/docker-compose-remapping.yaml"
+COMPOSE_RS_PATH="${test_dir}/docker/docker-compose-rs.yaml"
+COMPOSE_SINGLE_PATH="${test_dir}/docker/docker-compose-single.yaml"
+PBM_TEST_CLEANUP=${PBM_TEST_CLEANUP:-true}
+
+run() {
+    local compose=$1
+    local mongo_version=$2
+
+    desc 'Start cluster'
+    case $compose in
+    $COMPOSE_PATH)
+        start_cluster "$mongo_version"
+        ;;
+    $COMPOSE_REMAPPING_PATH)
+        start_replset "$mongo_version" "$COMPOSE_REMAPPING_PATH"
+        ;;
+    $COMPOSE_RS_PATH)
+        start_replset "$mongo_version" "$COMPOSE_RS_PATH"
+        ;;
+    $COMPOSE_SINGLE_PATH)
+        start_replset "$mongo_version" "$COMPOSE_SINGLE_PATH"
+        ;;
+    esac
+
+    docker compose -f $compose up -d docker-host
+    desc 'Run tests'
+    docker compose -f $compose run tests
+    EXIT_CODE=$?
+
+    if [ "$EXIT_CODE" != 0 ]; then
+        docker compose -f $compose logs --no-color --tail=100
+        desc 'PBM logs'
+        docker compose -f $compose exec -T agent-rs101 pbm logs -t 0 -s D -x || true
+        if [ $compose == $COMPOSE_REMAPPING_PATH ]; then
+            docker compose -f $compose exec -T agent-rs201 pbm logs -t 0 -s D -x || true
+        fi
+        desc 'PBM status'
+        docker compose -f $compose exec -T agent-rs101 pbm status || true
+        if [ $compose == $COMPOSE_REMAPPING_PATH ]; then
+            docker compose -f $compose exec -T agent-rs201 pbm status || true
+        fi
+    fi
+
+    if [ "$PBM_TEST_CLEANUP" == true ]; then
+        desc 'Destroy cluster'
+        destroy_cluster $compose
+    fi
+
+    exit $EXIT_CODE
+}
+
+pbm_run() {
+    local cmd="$@"
+
+    docker compose -f $COMPOSE_PATH exec -T agent-rs101 pbm $cmd
+}
+
+mongo_run() {
+    local cmd=$1
+    local rs=$2
+
+    mongo="mongo"
+    if [ "${MONGODB_VERSION:0:1}" -ge 6 ]; then
+        mongo="mongosh"
+    fi
+
+    docker compose -f $COMPOSE_PATH exec -T "${rs}01" $mongo "mongodb://${BACKUP_USER}:${MONGO_PASS}@localhost/?replicaSet=${rs}" --quiet --eval="${cmd}"
+}
+
+wait_backup() {
+    set +o xtrace
+
+    BCP_NAME=$(mongo_run 'db.getSiblingDB("admin").pbmBackups.find({}, {name: 1, _id: 0}).sort({start_ts: -1}).limit(1).toArray().map(function(u) {return u.name})' "cfg" | tail -n 1 | awk -F "'|\"" '{print $2}')
+
+    retry=0
+    until [ "$(mongo_run "db.getSiblingDB(\"admin\").pbmBackups.findOne({name: \"${BCP_NAME}\"}).status" cfg | tail -n 1 | tr -d '\r')" == "done" ]; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 120 ]; then
+            mongo_run "db.getSiblingDB(\"admin\").pbmBackups.findOne({name: \"${BCP_NAME}\"})" "cfg"
+            exit 1
+        fi
+    done
+    set -o xtrace
+}
+
+wait_restore() {
+    set +o xtrace
+
+    retry=0
+    until [ "$(mongo_run "db.getSiblingDB(\"admin\").pbmRestores.findOne({backup: \"${BCP_NAME}\"}).status" cfg | tail -n 1 | tr -d '\r')" == "done" ]; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 120 ]; then
+            mongo_run "db.getSiblingDB(\"admin\").pbmRestores.findOne({backup: \"${BCP_NAME}\"})" "cfg"
+            exit 1
+        fi
+    done
+    set -o xtrace
+}
+
+wait_noop() {
+    set +o xtrace
+
+    retry=0
+    until [ "$(mongo_run 'db.getSiblingDB("admin").pbmLock.find().count()' cfg | tail -n 1 | tr -d '\r')" == 0 ] && [ "$(mongo_run 'db.getSiblingDB("admin").pbmLockOp.find().count()' cfg | tail -n 1 | tr -d '\r')" == 0 ]; do
+        sleep 1
+        echo -n .
+        let retry+=1
+        if [ $retry -ge 120 ]; then
+            mongo_run 'db.getSiblingDB("admin").pbmLock.find()' "cfg"
+            mongo_run 'db.getSiblingDB("admin").pbmLockOp.find()' "cfg"
+            exit 1
+        fi
+    done
+    set -o xtrace
+}
+
+compare() {
+    if [ $1 != $2 ]; then
+        echo "$1 doesn't match $2"
+        exit 1
+    fi
+}
+
+compare_arrays() {
+    local arr1=$1
+    local arr2=$2
+    diff=$(diff <(printf "%s\n" "${arr1[@]}") <(printf "%s\n" "${arr2[@]}"))
+    if [[ -z $diff ]]; then
+        echo "OK"
+    else
+        exit 1
+    fi
+}
+
+desc() {
+    set +o xtrace
+    local msg="$@"
+    printf "\n\n-----------------------------------------------------------------------------------\n"
+    printf "== $msg"
+    printf "\n-----------------------------------------------------------------------------------\n\n"
+    set -o xtrace
+}
+
+start_cluster() {
+    local mongo_version=$1
+
+    genMongoKey
+
+    echo 'Build agents and tests'
+    docker compose -f $COMPOSE_PATH build --no-cache --pull
+
+    mongo="mongo"
+    if [ "${mongo_version:0:1}" -ge 6 ]; then
+        mongo="mongosh"
+    fi
+
+    if [ ! -d "${test_dir}/docker/backups" ]; then
+        mkdir "${test_dir}/docker/backups"
+        chmod -R 777 "${test_dir}/docker/backups"
+    fi
+    export MONGODB_VERSION=${mongo_version:-"8.0"}
+    export MONGODB_IMAGE=${MONGODB_IMAGE:-"perconalab/percona-server-mongodb"}
+    docker compose -f $COMPOSE_PATH up --quiet-pull --no-color -d \
+        cfg01 cfg02 cfg03 rs101 rs102 rs103 rs201 rs202 rs203 mongos minio createbucket
+    sleep 25
+    docker compose -f $COMPOSE_PATH ps
+    export COMPOSE_INTERACTIVE_NO_CLI=1
+    docker compose -f $COMPOSE_PATH exec -T cfg01 /opt/start.sh
+    docker compose -f $COMPOSE_PATH exec -T rs101 /opt/start.sh
+    docker compose -f $COMPOSE_PATH exec -T rs201 /opt/start.sh
+    sleep 15
+    docker compose -f $COMPOSE_PATH exec -T mongos $mongo mongodb://${BACKUP_USER}:${MONGO_PASS}@localhost /opt/mongos_init.js
+
+    docker compose -f $COMPOSE_PATH up --quiet-pull --no-color -d \
+        agent-cfg01 agent-cfg02 agent-cfg03 agent-rs101 agent-rs102 agent-rs103 agent-rs201 agent-rs202 agent-rs203
+}
+
+start_replset() {
+    local mongo_version=$1
+    local compose=$2
+
+    local nodes="rs101 rs102 rs103 minio createbucket"
+    local agents="agent-rs101 agent-rs102 agent-rs103"
+    if [ $compose == $COMPOSE_SINGLE_PATH ]; then
+        local nodes="rs101 minio createbucket"
+        local agents="agent-rs101"
+    elif [ $compose == $COMPOSE_REMAPPING_PATH ]; then
+        local nodes="rs101 rs201 minio createbucket"
+        local agents="agent-rs101 agent-rs201"
+    fi
+
+    genMongoKey
+
+    echo 'Build agents and tests'
+    docker compose -f $compose build --no-cache --pull
+
+    if [ ! -d "${test_dir}/docker/backups" ]; then
+        mkdir "${test_dir}/docker/backups"
+        chmod -R 777 "${test_dir}/docker/backups"
+    fi
+
+    export MONGODB_VERSION=${mongo_version:-"8.0"}
+    export MONGODB_IMAGE=${MONGODB_IMAGE:-"perconalab/percona-server-mongodb"}
+    docker compose -f $compose up --quiet-pull --no-color -d \
+        $nodes
+
+    sleep 25
+    docker compose -f $compose ps
+    export COMPOSE_INTERACTIVE_NO_CLI=1
+    docker compose -f $compose exec -T rs101 /opt/start.sh
+    if [ $compose == $COMPOSE_REMAPPING_PATH ]; then
+        docker compose -f $compose exec -T rs201 /opt/start.sh
+    fi
+    sleep 15
+
+    docker compose -f $compose up -d $agents
+}
+
+genMongoKey() {
+    key_file="${test_dir}/docker/keyFile"
+
+    if [ ! -f $key_file ]; then
+        openssl rand -base64 756 >$key_file
+        chmod 400 $key_file
+    fi
+}
+
+destroy_cluster() {
+    local compose=$1
+
+    docker compose -f $compose ps
+    docker compose -f $compose down -v -t 2
+}

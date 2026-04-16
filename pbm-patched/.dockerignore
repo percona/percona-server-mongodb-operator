@@ -1,0 +1,4 @@
+/bin/
+/dev/
+/.dev
+e2e-tests/docker/backups/pbm/

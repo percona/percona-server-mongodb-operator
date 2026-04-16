@@ -1,0 +1,15 @@
+pbm-agent /usr/bin/
+pbm /usr/bin/
+pbm-speed-test /usr/bin/
+pbm-agent-entrypoint /usr/bin/
+default/pbm-agent /etc/default/
+pbm-storage.conf /etc/
+pbm-agent.service /lib/systemd/system/
+pbm-conf-reference.yml /etc/
+completions/bash/pbm-agent /usr/share/bash-completion/completions/
+completions/bash/pbm /usr/share/bash-completion/completions/
+completions/bash/pbm-speed-test /usr/share/bash-completion/completions/
+completions/zsh/_pbm-agent /usr/share/zsh/vendor-completions/
+completions/zsh/_pbm /usr/share/zsh/vendor-completions/
+completions/zsh/_pbm-speed-test /usr/share/zsh/vendor-completions/
+LICENSE /usr/share/doc/percona-backup-mongodb/

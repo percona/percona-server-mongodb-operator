@@ -1,0 +1,4 @@
+storage:
+  type: filesystem
+  filesystem:
+    path: /opt/backups/pbm_disttxn_4x

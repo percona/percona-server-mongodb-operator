@@ -1,0 +1,17 @@
+percona-backup-mongodb (1.0-1.bionic) bionic; urgency=medium
+
+  * Update distribution
+
+ --  <vagrant@ubuntu-bionic>  Thu, 05 Sep 2019 14:35:53 +0000
+
+percona-backup-mongodb (1.0-1) unstable; urgency=medium
+
+  * Update to new MongoDB-Backup version 1.0
+
+ --  <vagrant@ubuntu-bionic>  Thu, 05 Sep 2019 14:35:43 +0000
+
+percona-backup-mongodb (0.1-1) unstable; urgency=medium
+
+  * Initial release.
+
+ -- Evgeniy Patlan <evgeniy.patlan@percona.com>  Sun, 09 Dec 2018 18:00:13 +0000

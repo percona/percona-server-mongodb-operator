@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      pbm_branch:
+        description: "PBM branch"
+        required: false
+      tests_ver:
+        description: "Tests version"
+        required: false
+      go_ver:
+        description: "Golang version"
+        required: false
+      pr_ver:
+        description: "PR version"
+        required: false
+
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - "e2e-tests/**"
+      - "packaging/**"
+      - "version/**"
+
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - "e2e-tests/**"
+      - "packaging/**"
+      - "version/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        psmdb: ["7.0", "8.0"]
+        shard: [0, 1, 2, 3, 4, 5, 6]
+    env:
+      PBM_BRANCH: ${{ github.event.inputs.pbm_branch || github.ref_name }}
+      GO_VER: ${{ github.event.inputs.go_ver || '1.25-bookworm' }}
+      PR_NUMBER: ${{ github.event.number|| github.event.inputs.pr_ver }}
+      MAKE_TARGET: 'build-cover'
+    steps:
+      - name: Checkout testing repo
+        uses: actions/checkout@v4
+        with:
+          repository: Percona-QA/psmdb-testing
+          ref: ${{ github.event.inputs.tests_ver || 'main'}}
+          path: psmdb-testing
+
+      - name: Setup environment with PSMDB ${{ matrix.psmdb }} for PBM PR/branch ${{ github.event.pull_request.title || env.PR_NUMBER || env.PBM_BRANCH }}
+        run: |
+          PSMDB=perconalab/percona-server-mongodb:${{ matrix.psmdb }} docker compose build easyrsa
+          PSMDB=perconalab/percona-server-mongodb:${{ matrix.psmdb }} docker compose build
+          docker compose up -d
+        working-directory: psmdb-testing/pbm-functional/pytest
+
+      - name: Run pytest shard number ${{ matrix.shard }} on PSMDB ${{ matrix.psmdb }} for PBM PR/branch ${{ github.event.pull_request.title || env.PR_NUMBER || env.PBM_BRANCH }}
+        run: |
+          docker compose run test pytest -s --junitxml=junit.xml --shard-id=${{ matrix.shard }} --num-shards=7 -m 'not jenkins and not skip'
+        working-directory: psmdb-testing/pbm-functional/pytest
+
+      - name: Fetch coverage files
+        run: |
+          docker compose run --rm golang_reports cp -r /gocoverdir/reports /test
+          sudo chmod -R 777 reports
+        working-directory: psmdb-testing/pbm-functional/pytest
+        if: success() || failure()
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.shard }}-${{ matrix.psmdb }}
+          path: psmdb-testing/pbm-functional/pytest/reports/
+        if: success() || failure()
+
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: "**/junit.xml"
+
+  coverage:
+    if: ${{ always() }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+      - name: Download all coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports
+          pattern: reports-*
+          merge-multiple: true
+      - name: Merge coverage reports
+        run: |
+          go tool covdata textfmt -i=./reports -o ./coverage.txt
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.txt
+          flags: integration
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

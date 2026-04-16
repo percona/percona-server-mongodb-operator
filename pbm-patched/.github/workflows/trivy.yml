@@ -1,0 +1,30 @@
+name: Scan
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main", "dev"]
+jobs:
+  scan:
+    name: Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download latest trivy
+        run: |
+          mkdir -p ${{ github.workspace }}/trivy
+          LATEST_TRIVY_VERSION=$(curl --retry 5 --retry-connrefused --retry-delay 5 --fail -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name)
+          TRIVY_VERSION_STRIPPED=$(echo "$LATEST_TRIVY_VERSION" | sed 's/^v//')
+          wget --tries=5 --retry-connrefused --waitretry=5 -O ${{ github.workspace }}/trivy/trivy.tar.gz \
+              https://github.com/aquasecurity/trivy/releases/download/$LATEST_TRIVY_VERSION/trivy_${TRIVY_VERSION_STRIPPED}_Linux-64bit.tar.gz && break || sleep 5
+          tar -xzf ${{ github.workspace }}/trivy/trivy.tar.gz -C ${{ github.workspace }}/trivy
+
+      - name: Generate SBOM
+        run: ${{ github.workspace }}/trivy/trivy fs --format cyclonedx --output ${{ github.workspace }}/sbom.json ${{ github.workspace }}
+
+      - name: Run trivy scan on SBOM
+        run: ${{ github.workspace }}/trivy/trivy sbom ${{ github.workspace }}/sbom.json --severity HIGH,CRITICAL --ignore-unfixed --exit-code=1

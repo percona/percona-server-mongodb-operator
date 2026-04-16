@@ -1,0 +1,31 @@
+name: 'codecov'
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  go-test:
+    name: runner / go-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+      - name: test
+        run: go test -v ./... -covermode=atomic -coverprofile=cover.out
+
+      - name: upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: cover.out
+          flags: unittests
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

@@ -1,0 +1,261 @@
+[
+{
+  "lsid": {
+    "id": {
+      "$binary": {
+        "base64": "HxXre7SSRxe8eq+OjOQOhw==",
+        "subType": "04"
+      }
+    },
+    "uid": {
+      "$binary": {
+        "base64": "Bh/Anp+//gSHltMgOtOX+7sunrF/VwW+VDdA3fRANl0=",
+        "subType": "00"
+      }
+    }
+  },
+  "txnNumber": {
+    "$numberLong": "4"
+  },
+  "op": "i",
+  "ns": "mydb.c1",
+  "ui": {
+    "$binary": {
+      "base64": "f774YvKERIKXSJVH+xCtPw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "_id": {
+      "$oid": "6728e3fcedfb509c06f01307"
+    },
+    "person": "jure",
+    "age": 37
+  },
+  "o2": {
+    "_id": {
+      "$oid": "6728e3fcedfb509c06f01307"
+    }
+  },
+  "stmtId": 0,
+  "ts": {
+    "$timestamp": {
+      "t": 1730733052,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "7"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": "2024-11-04T15:10:52.775Z"
+  },
+  "prevOpTime": {
+    "ts": {
+      "$timestamp": {
+        "t": 0,
+        "i": 0
+      }
+    },
+    "t": {
+      "$numberLong": "-1"
+    }
+  }
+},
+{
+  "lsid": {
+    "id": {
+      "$binary": {
+        "base64": "HxXre7SSRxe8eq+OjOQOhw==",
+        "subType": "04"
+      }
+    },
+    "uid": {
+      "$binary": {
+        "base64": "Bh/Anp+//gSHltMgOtOX+7sunrF/VwW+VDdA3fRANl0=",
+        "subType": "00"
+      }
+    }
+  },
+  "txnNumber": {
+    "$numberLong": "5"
+  },
+  "op": "u",
+  "ns": "mydb.c1",
+  "ui": {
+    "$binary": {
+      "base64": "f774YvKERIKXSJVH+xCtPw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "$v": 2,
+    "diff": {
+      "i": {
+        "city": "split"
+      }
+    }
+  },
+  "o2": {
+    "_id": {
+      "$oid": "6728e3fcedfb509c06f01307"
+    }
+  },
+  "stmtId": 0,
+  "ts": {
+    "$timestamp": {
+      "t": 1730733212,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "7"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": "2024-11-04T15:13:32.123Z"
+  },
+  "prevOpTime": {
+    "ts": {
+      "$timestamp": {
+        "t": 0,
+        "i": 0
+      }
+    },
+    "t": {
+      "$numberLong": "-1"
+    }
+  }
+},
+{
+  "lsid": {
+    "id": {
+      "$binary": {
+        "base64": "HxXre7SSRxe8eq+OjOQOhw==",
+        "subType": "04"
+      }
+    },
+    "uid": {
+      "$binary": {
+        "base64": "Bh/Anp+//gSHltMgOtOX+7sunrF/VwW+VDdA3fRANl0=",
+        "subType": "00"
+      }
+    }
+  },
+  "txnNumber": {
+    "$numberLong": "5"
+  },
+  "op": "u",
+  "ns": "mydb.cX",
+  "ui": {
+    "$binary": {
+      "base64": "f774YvKERIKXSJVH+xCtPw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "$v": 2,
+    "diff": {
+      "i": {
+        "city": "split"
+      }
+    }
+  },
+  "o2": {
+    "_id": {
+      "$oid": "6728e3fcedfb509c06f01307"
+    }
+  },
+  "stmtId": 0,
+  "ts": {
+    "$timestamp": {
+      "t": 1730733212,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "7"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": "2024-11-04T15:13:32.123Z"
+  },
+  "prevOpTime": {
+    "ts": {
+      "$timestamp": {
+        "t": 0,
+        "i": 0
+      }
+    },
+    "t": {
+      "$numberLong": "-1"
+    }
+  }
+},
+{
+  "lsid": {
+    "id": {
+      "$binary": {
+        "base64": "HxXre7SSRxe8eq+OjOQOhw==",
+        "subType": "04"
+      }
+    },
+    "uid": {
+      "$binary": {
+        "base64": "Bh/Anp+//gSHltMgOtOX+7sunrF/VwW+VDdA3fRANl0=",
+        "subType": "00"
+      }
+    }
+  },
+  "txnNumber": {
+    "$numberLong": "6"
+  },
+  "op": "d",
+  "ns": "mydb.c1",
+  "ui": {
+    "$binary": {
+      "base64": "f774YvKERIKXSJVH+xCtPw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "_id": {
+      "$oid": "6728e3fcedfb509c06f01307"
+    }
+  },
+  "stmtId": 0,
+  "ts": {
+    "$timestamp": {
+      "t": 1730733256,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "7"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": "2024-11-04T15:14:16.626Z"
+  },
+  "prevOpTime": {
+    "ts": {
+      "$timestamp": {
+        "t": 0,
+        "i": 0
+      }
+    },
+    "t": {
+      "$numberLong": "-1"
+    }
+  }
+}
+]

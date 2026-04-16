@@ -1,0 +1,82 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+PHONY: override_dh_auto_build override_dh_auto_install
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+export DH_VERBOSE=1
+
+TMP=$(CURDIR)/debian/tmp/
+TMPD=$(CURDIR)/debian/tmp-debug/
+prefix=/usr
+ARCH = $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+ARCH_OS = $(shell dpkg-architecture -qDEB_BUILD_ARCH_OS)
+NCPU = $(shell grep -c processor /proc/cpuinfo)
+DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+
+DEB_SOURCE_PACKAGE ?= $(strip $(shell egrep '^Source: ' debian/control | cut -f 2 -d ':'))
+DEB_VERSION ?= $(shell dpkg-parsechangelog | egrep '^Version:' | cut -f 2 -d ' ')
+DEB_NOEPOCH_VERSION ?= $(shell echo $(DEB_VERSION) | cut -d: -f2-)
+DEB_UPSTREAM_VERSION ?= $(shell echo $(DEB_NOEPOCH_VERSION) | sed 's/-[^-]*$$//')
+DEB_UPSTREAM_VERSION_MAJOR_MINOR := $(shell echo $(DEB_UPSTREAM_VERSION) | sed -r -n 's/^([0-9]+\.[0-9]+).*/\1/p')
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+DISTRIBUTION = $(shell lsb_release -i -s)
+DISTRELEASE = $(shell lsb_release -c -s)
+
+export VERSION=$(shell egrep '^VERSION' VERSION | cut -f 2 -d '=')
+export GITBRANCH=$(shell egrep '^GITBRANCH' VERSION | cut -f 2 -d '=')
+export GITCOMMIT=$(shell egrep '^GITCOMMIT' VERSION | cut -f 2 -d '=')
+
+%:
+	dh $@ --with-systemd
+
+override_dh_builddeb:
+	dh_builddeb -- -Zgzip
+
+override_dh_auto_test override_dh_compress override_dh_fixperms override_dh_strip:
+
+override_dh_auto_build:
+	@echo "RULES.$@"
+	export PATH=/usr/local/go/bin:${PATH}
+	export GOROOT="/usr/local/go/"
+	export GOPATH=${PWD}/build
+	export PATH="/usr/local/go/bin:${PATH}:${GOPATH}"
+	export GOBINPATH="/usr/local/go/bin"
+	mkdir -p build/src/github.com/percona/percona-backup-mongodb
+	cp -r `ls | grep -v build` build/src/github.com/percona/percona-backup-mongodb/
+	cd build/src/github.com/percona/percona-backup-mongodb/ && make build-all
+	rm -rf pbm
+	touch $@
+
+override_dh_auto_install:
+	@echo "RULES.$@"
+	mkdir -p $(TMP)
+	mkdir -p $(TMP)/default
+	mkdir -p $(TMP)/completions/bash
+	mkdir -p $(TMP)/completions/zsh
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp pbm-agent $(TMP)/pbm-agent
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp pbm $(TMP)/pbm
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp pbm-speed-test $(TMP)/pbm-speed-test
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp pbm-agent-entrypoint $(TMP)/pbm-agent-entrypoint
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/bash/pbm-agent $(TMP)/completions/bash/pbm-agent
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/bash/pbm $(TMP)/completions/bash/pbm
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/bash/pbm-speed-test $(TMP)/completions/bash/pbm-speed-test
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/zsh/_pbm-agent $(TMP)/completions/zsh/_pbm-agent
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/zsh/_pbm $(TMP)/completions/zsh/_pbm
+	cd build/src/github.com/percona/percona-backup-mongodb/bin && cp completions/zsh/_pbm-speed-test $(TMP)/completions/zsh/_pbm-speed-test
+	cp -f packaging/conf/pbm-storage.conf  $(TMP)/pbm-storage.conf
+	cp -f packaging/conf/pbm-agent.env  $(TMP)/default/pbm-agent
+	cp -f packaging/conf/pbm-agent.service $(TMP)/pbm-agent.service
+	cp -f packaging/conf/pbm-conf-reference.yml $(TMP)/pbm-conf-reference.yml
+	cp -f LICENSE $(TMP)/LICENSE
+	ls -la $(TMP)
+
+override_dh_systemd_start:
+	dh_systemd_enable --name=pbm-agent pbm-agent.service
+	dh_systemd_start --restart-after-upgrade

@@ -1,0 +1,119 @@
+[
+{
+  "op": "c",
+  "ns": "mydb.$cmd",
+  "ui": {
+    "$binary": {
+      "base64": "lguUWGLtQ7SO+//vs7Rlrw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "create": "c1",
+    "idIndex": {
+      "v": {
+        "$numberInt": "2"
+      },
+      "key": {
+        "_id": {
+          "$numberInt": "1"
+        }
+      },
+      "name": "_id_"
+    }
+  },
+  "ts": {
+    "$timestamp": {
+      "t": 1732706704,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "2"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": {
+      "$numberLong": "1732706704980"
+    }
+  }
+},
+{
+  "op": "c",
+  "ns": "mydb.$cmd",
+  "ui": {
+    "$binary": {
+      "base64": "v+mHa8niRBKG7Z+uqJGARQ==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "drop": "c1"
+  },
+  "o2": {
+    "numRecords": {
+      "$numberInt": "6"
+    }
+  },
+  "ts": {
+    "$timestamp": {
+      "t": 1732706615,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "2"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": {
+      "$numberLong": "1732706615502"
+    }
+  }
+},
+{
+  "op": "c",
+  "ns": "mydb.$cmd",
+  "ui": {
+    "$binary": {
+      "base64": "lguUWGLtQ7SO+//vs7Rlrw==",
+      "subType": "04"
+    }
+  },
+  "o": {
+    "create": "c2",
+    "idIndex": {
+      "v": {
+        "$numberInt": "2"
+      },
+      "key": {
+        "_id": {
+          "$numberInt": "1"
+        }
+      },
+      "name": "_id_"
+    }
+  },
+  "ts": {
+    "$timestamp": {
+      "t": 1732706704,
+      "i": 1
+    }
+  },
+  "t": {
+    "$numberLong": "2"
+  },
+  "v": {
+    "$numberLong": "2"
+  },
+  "wall": {
+    "$date": {
+      "$numberLong": "1732706704980"
+    }
+  }
+}
+]

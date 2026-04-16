@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+if [ -f /usr/share/debconf/confmodule ]; then
+    . /usr/share/debconf/confmodule
+fi
+
+case "$1" in
+
+purge | remove | upgrade | failed-upgrade | abort-install | abort-upgrade | disappear) ;;
+
+*)
+    echo "postrm called with unknown argument '$1'" 1>&2
+    exit 1
+    ;;
+
+esac
+
+if [ "$1" = "upgrade" ]; then
+    userdel pbm || true
+    groupdel pbm || true
+fi
+
+#DEBHELPER#
+
+exit 0

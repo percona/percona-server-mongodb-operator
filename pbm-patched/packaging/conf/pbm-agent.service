@@ -1,0 +1,14 @@
+[Unit]
+Description=pbm-agent
+After=time-sync.target network.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/pbm-agent
+Type=simple
+User=mongod
+Group=mongod
+PermissionsStartOnly=true
+ExecStart=/usr/bin/pbm-agent
+
+[Install]
+WantedBy=multi-user.target

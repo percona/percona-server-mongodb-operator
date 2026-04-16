@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -o xtrace
+set -o errexit
+
+dir=$(realpath $(dirname $0))
+
+fail() {
+    local test=$1
+    echo "test $test failed"
+    exit 1
+}
+
+export TESTS_BCP_TYPE=logical
+$dir/run-new-cluster || fail "restore-on-new-cluster"
+$dir/run-sharded || fail "sharded-cluster"
+$dir/run-rs || fail "replica-set-cluster"
+$dir/run-single || fail "single-node-replica-set"
+$dir/run-remapping || fail "restore-with-remapping"
+
+export TESTS_BCP_TYPE=physical
+$dir/run-sharded || fail "sharded-cluster"
+$dir/run-rs || fail "replica-set-cluster"
+$dir/run-single || fail "single-node-replica-set"

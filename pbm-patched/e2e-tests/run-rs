@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o xtrace
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/functions
+
+MONGO_VERSION=${MONGODB_VERSION:-"8.0"}
+
+desc 'RUN REPLICA SET TESTS'
+
+run $COMPOSE_RS_PATH $MONGO_VERSION

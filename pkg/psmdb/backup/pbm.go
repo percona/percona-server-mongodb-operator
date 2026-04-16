@@ -502,7 +502,11 @@ func GetPBMStorageGCSConfig(
 		},
 	}
 
-	if stg.GCS.CredentialsSecret != "" {
+	// When WorkloadIdentity is enabled, skip credential secret loading entirely.
+	// PBM will use Application Default Credentials (ADC) provided by GKE Workload Identity.
+	useWorkloadIdentity := stg.GCS.Credentials != nil && stg.GCS.Credentials.WorkloadIdentity
+
+	if !useWorkloadIdentity && stg.GCS.CredentialsSecret != "" {
 		gcsSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.GCS.CredentialsSecret)
 		if err != nil {
 			return config.StorageConf{}, errors.Wrap(err, "get GCS credentials secret")

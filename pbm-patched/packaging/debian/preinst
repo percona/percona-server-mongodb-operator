@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if ! getent passwd mongod >/dev/null 2>&1; then
+    adduser --system --no-create-home --group mongod
+fi
+
+if [ ! -d /run/pbm-agent ]; then
+    install -m 0755 -d -omongod -gmongod /run/pbm-agent
+fi
+
+if [ ! -f /var/log/pbm-agent.log ]; then
+    install -m 0755 -omongod -gmongod /dev/null /var/log/pbm-agent.log
+fi
+
+#DEBHELPER#
+
+exit 0

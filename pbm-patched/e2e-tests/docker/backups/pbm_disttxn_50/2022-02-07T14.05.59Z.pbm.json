@@ -1,0 +1,172 @@
+{
+	"opid": "62012747a5255edf83f0a6e9",
+	"name": "2022-02-07T14:05:59Z",
+    "type": "logical",
+	"replsets": [
+		{
+			"name": "rs2",
+			"backup_name": "2022-02-07T14.05.59Z_rs2.dump.s2",
+			"oplog_name": "2022-02-07T14.05.59Z_rs2.oplog.s2",
+			"start_ts": 1644242760,
+			"status": "done",
+			"last_transition_ts": 1644242778,
+			"first_write_ts": {
+				"T": 1644242753,
+				"I": 1
+			},
+			"last_write_ts": {
+				"T": 1644242763,
+				"I": 6
+			},
+			"conditions": [
+				{
+					"timestamp": 1644242760,
+					"status": "running"
+				},
+				{
+					"timestamp": 1644242765,
+					"status": "dumpDone"
+				},
+				{
+					"timestamp": 1644242778,
+					"status": "done"
+				}
+			]
+		},
+		{
+			"name": "rs1",
+			"backup_name": "2022-02-07T14.05.59Z_rs1.dump.s2",
+			"oplog_name": "2022-02-07T14.05.59Z_rs1.oplog.s2",
+			"start_ts": 1644242760,
+			"status": "done",
+			"last_transition_ts": 1644242778,
+			"first_write_ts": {
+				"T": 1644242753,
+				"I": 1
+			},
+			"last_write_ts": {
+				"T": 1644242763,
+				"I": 6
+			},
+			"conditions": [
+				{
+					"timestamp": 1644242760,
+					"status": "running"
+				},
+				{
+					"timestamp": 1644242765,
+					"status": "dumpDone"
+				},
+				{
+					"timestamp": 1644242778,
+					"status": "done"
+				}
+			]
+		},
+		{
+			"name": "cfg",
+			"backup_name": "2022-02-07T14.05.59Z_cfg.dump.s2",
+			"oplog_name": "2022-02-07T14.05.59Z_cfg.oplog.s2",
+			"start_ts": 1644242760,
+			"status": "done",
+			"last_transition_ts": 1644242768,
+			"first_write_ts": {
+				"T": 1644242761,
+				"I": 11
+			},
+			"last_write_ts": {
+				"T": 1644242765,
+				"I": 18
+			},
+			"conditions": [
+				{
+					"timestamp": 1644242760,
+					"status": "running"
+				},
+				{
+					"timestamp": 1644242765,
+					"status": "dumpDone"
+				},
+				{
+					"timestamp": 1644242768,
+					"status": "done"
+				}
+			]
+		}
+	],
+	"compression": "s2",
+	"store": {
+		"type": "filesystem",
+		"s3": {
+			"region": "",
+			"endpointUrl": "",
+			"bucket": ""
+		},
+		"azure": {},
+		"filesystem": {
+			"path": "/opt/backups"
+		}
+	},
+	"mongodb_version": "5.0.5-4",
+	"start_ts": 1644242760,
+	"last_transition_ts": 1644242779,
+	"first_write_ts": {
+		"T": 1644242753,
+		"I": 1
+	},
+	"last_write_ts": {
+		"T": 1644242765,
+		"I": 18
+	},
+	"hb": {
+		"T": 1644242775,
+		"I": 9
+	},
+	"status": "done",
+	"conditions": [
+		{
+			"timestamp": 1644242760,
+			"status": "starting"
+		},
+		{
+			"timestamp": 1644242763,
+			"status": "running"
+		},
+		{
+			"timestamp": 1644242766,
+			"status": "dumpDone"
+		},
+		{
+			"timestamp": 1644242779,
+			"status": "done"
+		}
+	],
+	"n": [
+		{
+			"rs": "cfg",
+			"n": [
+				"cfg03:27017",
+				"cfg01:27017"
+			],
+			"ack": "cfg03:27017"
+		},
+		{
+			"rs": "rs1",
+			"n": [
+				"rs101:27017",
+				"rs102:27017"
+			],
+			"ack": "rs101:27017"
+		},
+		{
+			"rs": "rs2",
+			"n": [
+				"rs203:27017",
+				"rs201:27017"
+			],
+			"ack": "rs201:27017"
+		}
+	],
+	"pbm_version": "1.6.0",
+	"balancer": "full"
+}

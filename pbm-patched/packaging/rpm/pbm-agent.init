@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# pbm-agent - Startup script for pbm-agent
+
+# chkconfig: 35 85 15
+# processname: pbm-agent
+# envfile: /etc/sysconfig/pbm-agent
+# pidfile: /run/pbm-agent/pbm-agent.pid
+
+. /etc/rc.d/init.d/functions
+
+ENVFILE="/etc/sysconfig/pbm-agent"
+. ${ENVFILE}
+OPTIONS="--mongodb-uri='${PBM_MONGODB_URI}'"
+PIDFILEPATH=/run/pbm-agent/pbm-agent.pid
+PIDDIR=$(dirname $PIDFILEPATH)
+USER=mongod
+GROUP=mongod
+pbm_agent=${PBM_AGENT:-/usr/bin/pbm-agent}
+pbm_log="/var/log/pbm-agent.log"
+
+start()
+{
+  # Make sure the default pidfile directory exists
+  if [ ! -d ${PIDDIR} ]; then
+    install -d -m 0755 -o ${USER} -g ${GROUP} ${PIDDIR}
+  fi
+
+  touch ${PIDFILEPATH}
+  chown ${USER} ${PIDFILEPATH}
+  
+  echo -n $"Starting pbm-agent: "
+  daemon --user "$USER" --check ${pbm_agent} " $pbm_agent $OPTIONS > ${pbm_log} 2> ${pbm_log} &"
+  RETVAL=$?
+  echo
+  [ $RETVAL -eq 0 ] && touch /var/lock/subsys/pbm_agent
+}
+
+stop()
+{
+  echo -n $"Stopping pbm-agent: "
+  pbm_agent_killproc "$PIDFILEPATH" $pbm_agent
+  RETVAL=$?
+  echo
+  [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/pbm-agent
+}
+
+restart () {
+	stop
+	start
+}
+
+pbm_agent_killproc()
+{
+  local pid_file=$1
+  local procname=$2
+  local -i delay=300
+  local -i duration=10
+  local pid=`pidof ${procname}`
+
+  kill -TERM $pid >/dev/null 2>&1
+  usleep 100000
+  local -i x=0
+  while [ $x -le $delay ] && checkpid $pid; do
+    sleep $duration
+    x=$(( $x + $duration))
+  done
+
+  kill -KILL $pid >/dev/null 2>&1
+  usleep 100000
+
+  rm -f "${pid_file}"
+
+  checkpid $pid
+  local RC=$?
+  [ "$RC" -eq 0 ] && failure "${procname} shutdown" || success "${procname} shutdown"
+  RC=$((! $RC))
+  return $RC
+}
+
+RETVAL=0
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart|reload|force-reload)
+    restart
+    ;;
+  condrestart)
+    [ -f /var/lock/subsys/pbm-agent ] && restart || :
+    ;;
+  status)
+    status $pbm_agent
+    RETVAL=$?
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status|restart|reload|force-reload|condrestart}"
+    RETVAL=1
+esac
+
+exit $RETVAL
