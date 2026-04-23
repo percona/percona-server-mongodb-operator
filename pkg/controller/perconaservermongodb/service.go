@@ -9,7 +9,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
@@ -29,13 +28,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileServices(ctx context.Context, c
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileReplsetServices(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
-	log := logf.FromContext(ctx)
-
 	for _, rs := range repls {
-		if rs.Expose.ExternalDNS != nil && !rs.Expose.Enabled {
-			log.Info("externalDNS is configured but expose is not enabled, skipping DNS annotations", "replset", rs.Name)
-		}
-
 		// Create headless service
 		service := psmdb.Service(cr, rs)
 		if err := setControllerReference(cr, service, r.scheme); err != nil {
