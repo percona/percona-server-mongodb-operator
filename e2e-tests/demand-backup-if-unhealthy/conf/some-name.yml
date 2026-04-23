@@ -27,9 +27,6 @@ spec:
     affinity:
       antiAffinityTopologyKey: none
     resources:
-      limits:
-        cpu: 100m
-        memory: 300Mi
       requests:
         cpu: 100m
         memory: 100Mi
