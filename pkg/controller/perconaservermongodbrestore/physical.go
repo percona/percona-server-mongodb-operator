@@ -409,6 +409,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		cluster.Spec.ImagePullPolicy,
 		cmd,
 	)
+	if cluster.CompareVersion("1.23.0") >= 0 && cluster.Spec.InitContainerSecurityContext != nil {
+		pbmInit.SecurityContext = cluster.Spec.InitContainerSecurityContext
+	}
 	sts.Spec.Template.Spec.InitContainers = append(sts.Spec.Template.Spec.InitContainers, pbmInit)
 
 	pbmIdx := -1
