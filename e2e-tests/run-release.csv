@@ -1,5 +1,6 @@
 arbiter
 balancer
+cert-management-policy
 cross-site-sharded
 custom-replset-name
 custom-tls
