@@ -43,6 +43,7 @@ spec:
 #    terminationGracePeriod: false
 #    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
+#  revisionHistoryLimit: 10
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
