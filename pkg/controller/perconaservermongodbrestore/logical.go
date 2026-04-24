@@ -14,6 +14,8 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
 
@@ -55,6 +57,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 
 		if isBlockedByPITR {
 			log.Info("Waiting for PITR to be disabled.")
+			status.State = psmdbv1.RestoreStateWaiting
+			return status, nil
+		}
+
+		leaseActive, err := k8s.IsLeaseActive(ctx, r.client, naming.BackupLeaseName(cluster.Name), cluster.Namespace)
+		if err != nil {
+			return status, errors.Wrap(err, "check backup lease")
+		}
+		if leaseActive {
+			log.Info("Waiting for active backup to complete before starting restore.")
+			status.State = psmdbv1.RestoreStateWaiting
+			return status, nil
+		}
+
+		hasActiveLocks, err := pbmc.HasLocks(ctx)
+		if err != nil {
+			return status, errors.Wrap(err, "checking pbm locks")
+		}
+		if hasActiveLocks {
+			log.Info("Waiting for active PBM operation to complete.")
 			status.State = psmdbv1.RestoreStateWaiting
 			return status, nil
 		}
