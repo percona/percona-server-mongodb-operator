@@ -688,7 +688,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 }
 
 func (rs *ReplsetSpec) IsEncryptionEnabled() (bool, error) {
-	enabled, err := rs.Configuration.isEncryptionEnabled()
+	enabled, err := rs.Configuration.IsEncryptionEnabled()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to parse replset configuration")
 	}
