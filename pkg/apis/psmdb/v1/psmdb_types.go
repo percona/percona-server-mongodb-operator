@@ -1290,11 +1290,19 @@ type GCSRetryer struct {
 }
 
 type BackupStorageGCSSpec struct {
-	Bucket            string      `json:"bucket"`
-	Prefix            string      `json:"prefix,omitempty"`
-	CredentialsSecret string      `json:"credentialsSecret"`
-	ChunkSize         int         `json:"chunkSize,omitempty"`
-	Retryer           *GCSRetryer `json:"retryer,omitempty"`
+	Bucket            string          `json:"bucket"`
+	Prefix            string          `json:"prefix,omitempty"`
+	CredentialsSecret string          `json:"credentialsSecret,omitempty"`
+	Credentials       *GCSCredentials `json:"credentials,omitempty"`
+	ChunkSize         int             `json:"chunkSize,omitempty"`
+	Retryer           *GCSRetryer     `json:"retryer,omitempty"`
+}
+
+// GCSCredentials configures how PBM authenticates with GCS.
+// When WorkloadIdentity is true, PBM uses Application Default Credentials (ADC)
+// provided by GKE Workload Identity instead of a credentialsSecret.
+type GCSCredentials struct {
+	WorkloadIdentity bool `json:"workloadIdentity,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
