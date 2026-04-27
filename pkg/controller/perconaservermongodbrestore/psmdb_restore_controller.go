@@ -26,6 +26,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -247,6 +248,43 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				log.Info("Waiting for mongos pods to terminate")
 				return rr, nil
 			}
+		}
+	}
+
+	// Block restore from starting while a backup or restore is already in progress.
+	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
+		leaseName := naming.BackupLeaseName(cluster.Name)
+		leaseActive, err := k8s.IsLeaseActive(ctx, r.client, leaseName, cluster.Namespace)
+		if err != nil {
+			return rr, errors.Wrap(err, "check backup lease")
+		}
+
+		if leaseActive {
+			log.Info("Waiting for active backup to complete before starting restore.", "lease", leaseName)
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+
+		pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+		if err != nil {
+			log.Info("Waiting for pbm-agent.")
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+
+		hasBackupOrRestoreLock, err := pbmc.HasLocks(ctx, backup.IsBackupOrRestoreLock)
+		if closeErr := pbmc.Close(ctx); closeErr != nil {
+			log.Error(closeErr, "failed to close PBM connection")
+		}
+
+		if err != nil {
+			return rr, errors.Wrap(err, "checking pbm locks")
+		}
+
+		if hasBackupOrRestoreLock {
+			log.Info("Waiting for active backup or restore to complete.")
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
 		}
 	}
 
