@@ -855,6 +855,10 @@ func IsPITRLock(l lock.LockHeader) bool {
 	return l.Type == ctrl.CmdPITR
 }
 
+func IsBackupOrRestoreLock(l lock.LockHeader) bool {
+	return l.Type == ctrl.CmdBackup || l.Type == ctrl.CmdRestore
+}
+
 func IsResync(l lock.LockHeader) bool {
 	return l.Type == ctrl.CmdResync
 }

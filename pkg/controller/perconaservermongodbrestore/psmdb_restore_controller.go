@@ -26,6 +26,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -250,6 +251,18 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 	}
 
+	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
+		locked, err := r.checkRestoreLocks(ctx, cluster)
+		if err != nil {
+			return rr, errors.Wrap(err, "check restore locks")
+		}
+
+		if locked {
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+	}
+
 	switch bcp.PBMBackupType() {
 	case "", defs.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp, cluster)
@@ -270,6 +283,44 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	return rr, nil
+}
+
+// checkRestoreLocks returns true if a backup or restore is already in progress and the new restore should wait.
+func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	leaseName := naming.BackupLeaseName(cluster.Name)
+	leaseActive, err := k8s.IsLeaseActive(ctx, r.client, leaseName, cluster.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "check backup lease")
+	}
+
+	if leaseActive {
+		log.Info("Waiting for active backup to complete before starting restore.", "lease", leaseName)
+		return true, nil
+	}
+
+	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	if err != nil {
+		log.Info("Waiting for pbm-agent.")
+		return true, nil
+	}
+
+	hasBackupOrRestoreLock, err := pbmc.HasLocks(ctx, backup.IsBackupOrRestoreLock)
+	if closeErr := pbmc.Close(ctx); closeErr != nil {
+		log.Error(closeErr, "failed to close PBM connection")
+	}
+
+	if err != nil {
+		return false, errors.Wrap(err, "checking pbm locks")
+	}
+
+	if hasBackupOrRestoreLock {
+		log.Info("Waiting for active backup or restore to complete.")
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
