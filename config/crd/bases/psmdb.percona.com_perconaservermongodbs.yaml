@@ -25416,6 +25416,12 @@ spec:
                 properties:
                   allowInvalidCertificates:
                     type: boolean
+                  certManagementPolicy:
+                    default: auto
+                    enum:
+                    - auto
+                    - userProvidedOnly
+                    type: string
                   certValidityDuration:
                     type: string
                   issuerConf:
