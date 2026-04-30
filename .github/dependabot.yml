@@ -45,4 +45,32 @@ updates:
       interval: weekly
       day: "monday"
       time: "01:00"
+  - package-ecosystem: gomod
+    commit-message:
+      prefix: "CLOUD-727"
+    directory: /cmd/mongodb-healthcheck/logger/lumberjack
+    reviewers:
+      - hors
+      - egegunes
+      - gkech
+    labels:
+      - "dependencies"
+    schedule:
+      interval: weekly
+      day: "monday"
+      time: "01:00"
+  - package-ecosystem: gomod
+    commit-message:
+      prefix: "CLOUD-727"
+    directory: /.github/linters
+    reviewers:
+      - hors
+      - egegunes
+      - gkech
+    labels:
+      - "dependencies"
+    schedule:
+      interval: weekly
+      day: "monday"
+      time: "01:00"
 
