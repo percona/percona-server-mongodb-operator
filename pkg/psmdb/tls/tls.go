@@ -62,27 +62,22 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 	return true, nil
 }
 
-// Issue returns CA certificate, TLS certificate and TLS private key
-func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err error) {
-	rsaBits := 2048
-	priv, err := rsa.GenerateKey(rand.Reader, rsaBits)
+// IssueCA generates a new self-signed CA certificate and returns the CA cert and CA private key in PEM format.
+func IssueCA() (caCertPEM []byte, caKeyPEM []byte, err error) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("generate rsa key: %v", err)
+		return nil, nil, fmt.Errorf("generate CA key: %v", err)
 	}
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate serial number for root")
-	}
-	subject := pkix.Name{
-		Organization: []string{"Root CA"},
-	}
-	issuer := pkix.Name{
-		Organization: []string{"Root CA"},
+		return nil, nil, errors.Wrap(err, "generate serial number for CA")
 	}
 	caTemplate := x509.Certificate{
-		SerialNumber:          serialNumber,
-		Subject:               subject,
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Root CA"},
+		},
 		NotBefore:             time.Now(),
 		NotAfter:              validityNotAfter,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment,
@@ -93,26 +88,56 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &priv.PublicKey, priv)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("generate CA certificate: %v", err)
+		return nil, nil, fmt.Errorf("generate CA certificate: %v", err)
 	}
-	certOut := &bytes.Buffer{}
-	err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("encode CA certificate: %v", err)
-	}
-	cert := certOut.Bytes()
 
-	serialNumber, err = rand.Int(rand.Reader, serialNumberLimit)
+	certOut := &bytes.Buffer{}
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return nil, nil, fmt.Errorf("encode CA certificate: %v", err)
+	}
+
+	keyOut := &bytes.Buffer{}
+	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
+		return nil, nil, fmt.Errorf("encode CA private key: %v", err)
+	}
+
+	return certOut.Bytes(), keyOut.Bytes(), nil
+}
+
+// IssueWithCA generates a TLS certificate signed by the given CA and returns the TLS cert and TLS private key in PEM format.
+func IssueWithCA(hosts []string, caCertPEM, caKeyPEM []byte) (tlsCert []byte, tlsKey []byte, err error) {
+	caBlock, _ := pem.Decode(caCertPEM)
+	if caBlock == nil {
+		return nil, nil, fmt.Errorf("failed to decode CA certificate PEM")
+	}
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate serial number for client")
+		return nil, nil, errors.Wrap(err, "parse CA certificate")
 	}
-	subject = pkix.Name{
-		Organization: []string{"PSMDB"},
+
+	caKeyBlock, _ := pem.Decode(caKeyPEM)
+	if caKeyBlock == nil {
+		return nil, nil, fmt.Errorf("failed to decode CA private key PEM")
 	}
+	caKey, err := x509.ParsePKCS1PrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "parse CA private key")
+	}
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "generate serial number for TLS cert")
+	}
+
 	tlsTemplate := x509.Certificate{
-		SerialNumber:          serialNumber,
-		Subject:               subject,
-		Issuer:                issuer,
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"PSMDB"},
+		},
+		Issuer: pkix.Name{
+			Organization: []string{"Root CA"},
+		},
 		NotBefore:             time.Now(),
 		NotAfter:              validityNotAfter,
 		DNSNames:              hosts,
@@ -121,30 +146,61 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 	}
+
 	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate client key")
+		return nil, nil, errors.Wrap(err, "generate TLS key")
 	}
-	tlsDerBytes, err := x509.CreateCertificate(rand.Reader, &tlsTemplate, &caTemplate, &clientKey.PublicKey, priv)
+
+	tlsDerBytes, err := x509.CreateCertificate(rand.Reader, &tlsTemplate, caCert, &clientKey.PublicKey, caKey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, errors.Wrap(err, "generate TLS certificate")
 	}
+
 	tlsCertOut := &bytes.Buffer{}
-	err = pem.Encode(tlsCertOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsDerBytes})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("encode TLS  certificate: %v", err)
+	if err := pem.Encode(tlsCertOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsDerBytes}); err != nil {
+		return nil, nil, fmt.Errorf("encode TLS certificate: %v", err)
 	}
-	tlsCert = tlsCertOut.Bytes()
 
 	keyOut := &bytes.Buffer{}
-	block := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)}
-	err = pem.Encode(keyOut, block)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("encode RSA private key: %v", err)
+	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)}); err != nil {
+		return nil, nil, fmt.Errorf("encode TLS private key: %v", err)
 	}
-	privKey := keyOut.Bytes()
 
-	return cert, tlsCert, privKey, nil
+	return tlsCertOut.Bytes(), keyOut.Bytes(), nil
+}
+
+// Issue returns CA certificate, TLS certificate and TLS private key
+func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err error) {
+	caCertPEM, caKeyPEM, err := IssueCA()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "issue CA")
+	}
+
+	tlsCertPEM, tlsKeyPEM, err := IssueWithCA(hosts, caCertPEM, caKeyPEM)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "issue TLS cert")
+	}
+
+	return caCertPEM, tlsCertPEM, tlsKeyPEM, nil
+}
+
+// GetSANsFromCert extracts DNS SANs from a PEM-encoded TLS certificate.
+func GetSANsFromCert(tlsCertPEM []byte) ([]string, error) {
+	block, _ := pem.Decode(tlsCertPEM)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode TLS certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse TLS certificate")
+	}
+	return cert.DNSNames, nil
+}
+
+// ManualCASecretName returns the name of the CA secret for manual TLS management.
+func ManualCASecretName(cr *api.PerconaServerMongoDB) string {
+	return cr.Name + "-ca-cert"
 }
 
 // Config returns tls.Config to be used in mongo.Config
