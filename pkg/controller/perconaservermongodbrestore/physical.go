@@ -148,12 +148,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				"/opt/percona/pbm", "restore",
 				"--base-snapshot", bcp.Status.PBMname,
 				"--time", cr.Status.PITRTarget,
+				"--yes",
 				"--out", "json",
 			}
 		} else {
 			restoreCommand = []string{
 				"/opt/percona/pbm", "restore",
 				bcp.Status.PBMname,
+				"--yes",
 				"--out", "json",
 			}
 		}
