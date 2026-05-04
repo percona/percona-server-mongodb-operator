@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 
 	restoreCmd := []string{
 		"/opt/percona/pbm", "restore",
-		"--external", "--out", "json",
+		"--external", "--yes", "--out", "json",
 	}
 
 	// TODO: support replset remapping?
