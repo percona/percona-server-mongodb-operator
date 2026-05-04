@@ -505,25 +505,33 @@ func GetPBMStorageGCSConfig(
 		},
 	}
 
-	if stg.GCS.CredentialsSecret != "" {
-		gcsSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.GCS.CredentialsSecret)
-		if err != nil {
-			return config.StorageConf{}, errors.Wrap(err, "get GCS credentials secret")
-		}
+	// When WorkloadIdentity is enabled, skip credential secret loading entirely.
+	// PBM will use Application Default Credentials (ADC) provided by GKE Workload Identity.
+	if stg.GCS.WorkloadIdentity {
+		return storageConf, nil
+	}
 
-		if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
-			storageConf.GCS.Credentials = gcs.Credentials{
-				ClientEmail: storage.MaskedString(string(gcsSecret.Data[GCSClientEmailSecretKey])),
-				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[GCSPrivateKeySecretKey])),
-			}
-		}
+	if stg.GCS.CredentialsSecret == "" {
+		return config.StorageConf{}, errors.New("no credentials specified for the secret name")
+	}
 
-		// s3 compatibility
-		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
-			storageConf.GCS.Credentials = gcs.Credentials{
-				HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[AWSAccessKeySecretKey])),
-				HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
-			}
+	gcsSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.GCS.CredentialsSecret)
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "get GCS credentials secret")
+	}
+
+	if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
+		storageConf.GCS.Credentials = gcs.Credentials{
+			ClientEmail: storage.MaskedString(string(gcsSecret.Data[GCSClientEmailSecretKey])),
+			PrivateKey:  storage.MaskedString(string(gcsSecret.Data[GCSPrivateKeySecretKey])),
+		}
+	}
+
+	// s3 compatibility
+	if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
+		storageConf.GCS.Credentials = gcs.Credentials{
+			HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[AWSAccessKeySecretKey])),
+			HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
 		}
 	}
 
