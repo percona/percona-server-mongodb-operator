@@ -45,6 +45,20 @@ func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder 
 	return lease, nil
 }
 
+func IsLeaseActive(ctx context.Context, c client.Client, name, namespace string) (bool, error) {
+	lease := new(coordv1.Lease)
+
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, lease); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		return false, errors.Wrap(err, "get lease")
+	}
+
+	return lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "", nil
+}
+
 func ReleaseLease(ctx context.Context, c client.Client, name, namespace, holder string) error {
 	lease := new(coordv1.Lease)
 
