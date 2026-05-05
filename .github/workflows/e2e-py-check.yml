@@ -5,6 +5,9 @@ on:
     paths:
       - 'e2e-tests/**/*.py'
 
+permissions:
+  contents: read
+
 jobs:
   quality-check:
     runs-on: ubuntu-latest

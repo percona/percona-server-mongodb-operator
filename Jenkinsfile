@@ -177,7 +177,6 @@ String formatTime(def time) {
 }
 
 @Field def TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
-@Field def TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount = tests.size()
@@ -198,39 +197,33 @@ void makeReport() {
             startedTestAmount++
         }
         TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
     TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
     TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
     TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
     TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
-    TestsReportXML = TestsReportXML + '</testsuite>\n'
-
-    sh """
-        echo "${TestsReportXML}" > TestsReport.xml
-    """
 }
 
 void generateMissingReports() {
     sh "mkdir -p e2e-tests/reports"
-    
+
     for (int i = 0; i < tests.size(); i++) {
         def testName = tests[i]["name"]
         def testResult = tests[i]["result"]
         def testTime = tests[i]["time"] ?: 0
-        
+
         if (testResult == "skipped") {
             continue
         }
-        
+
         def xmlFile = "e2e-tests/reports/${testName}.xml"
         def htmlFile = "e2e-tests/reports/${testName}.html"
-        
+
         if (!fileExists(xmlFile)) {
             def failures = testResult == "failure" ? 1 : 0
-            def failureElement = testResult == "failure" ? 
-                '<failure message="Incomplete execution">Test did not complete - possible causes: node abort, timeout, cluster creation failure</failure>' : ''
-            
+            def failureElement = testResult == "failure" ?
+                '<failure message="Missing report">Test did not produce a report</failure>' : ''
+
             writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
 <testsuites name="pytest tests">
 <testsuite name="psmdb-e2e" errors="0" failures="${failures}" skipped="0" tests="1" time="${testTime}">
@@ -240,14 +233,14 @@ ${failureElement}
 </testsuite>
 </testsuites>"""
         }
-        
+
         if (!fileExists(htmlFile)) {
             def resultCapitalized = testResult == "failure" ? "Failed" : "Passed"
             def formattedTime = formatTime(testTime)
-            def logMessage = testResult == "failure" ? 
-                "Test did not complete - possible causes: node abort, timeout, cluster creation failure" : 
+            def logMessage = testResult == "failure" ?
+                "Test did not produce a report" :
                 "Test marked as passed (from previous run)"
-            
+
             writeFile file: htmlFile, text: """<!DOCTYPE html>
 <html>
 <head>
@@ -255,7 +248,7 @@ ${failureElement}
 <title id="head-title">${testName}.html</title>
 </head>
 <body>
-<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report - test execution incomplete"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td class=\\"col-links\\"></td>"], "log": "${logMessage}"}]}}'></div>
+<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report generated because the test report was missing"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td class=\\"col-links\\"></td>"], "log": "${logMessage}"}]}}'></div>
 </body>
 </html>"""
         }
@@ -285,57 +278,48 @@ void clusterRunner(String cluster) {
 }
 
 void runTest(Integer TEST_ID) {
-    def retryCount = 0
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
+    def timeStart = new Date().getTime()
 
-    waitUntil {
-        def timeStart = new Date().getTime()
-        try {
-            echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
-            tests[TEST_ID]["result"] = "failure"
+    try {
+        echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
+        tests[TEST_ID]["result"] = "failure"
 
-            timeout(time: 90, unit: 'MINUTES') {
-                sh """
-                    if [ $retryCount -eq 0 ]; then
-                        export DEBUG_TESTS=0
-                    else
-                        export DEBUG_TESTS=1
-                    fi
-                    export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-                    export PATH="\$HOME/.local/bin:\$PATH"
-                    mkdir -p e2e-tests/reports
-                    
-                    REPORT_OPTS="--html=e2e-tests/reports/${testName}.html --junitxml=e2e-tests/reports/${testName}.xml"
-                    
-                    # Run native pytest if test_*.py exists, otherwise run bash via wrapper
-                    if ls e2e-tests/$testName/test_*.py 1>/dev/null 2>&1; then
-                        uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
-                    else
-                        uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
-                    fi
-                """
-            }
-            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
-            tests[TEST_ID]["result"] = "passed"
-            return true
+        timeout(time: 90, unit: 'MINUTES') {
+            sh """
+                export DEBUG_TESTS=1
+                export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                export PATH="\$HOME/.local/bin:\$PATH"
+                mkdir -p e2e-tests/reports
+
+                REPORT_OPTS="--html=e2e-tests/reports/${testName}.html --junitxml=e2e-tests/reports/${testName}.xml"
+
+                # Run native pytest if test_*.py exists, otherwise run bash via wrapper
+                if ls e2e-tests/$testName/test_*.py 1>/dev/null 2>&1; then
+                    uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
+                else
+                    uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
+                fi
+            """
         }
-        catch (exc) {
-            echo "Test $testName has failed!"
-            if (retryCount >= 1 || currentBuild.nextBuild != null) {
-                currentBuild.result = 'FAILURE'
-                return true
-            }
-            retryCount++
-            return false
-        }
-        finally {
-            def timeStop = new Date().getTime()
-            def durationSec = (timeStop - timeStart) / 1000
-            tests[TEST_ID]["time"] = durationSec
-            pushLogFile("$testName")
-            echo "The $testName test was finished!"
-        }
+        pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
+        tests[TEST_ID]["result"] = "passed"
+    }
+    catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        echo "Test $testName was interrupted!"
+        throw exc
+    }
+    catch (exc) {
+        echo "Test $testName has failed!"
+        currentBuild.result = 'FAILURE'
+    }
+    finally {
+        def timeStop = new Date().getTime()
+        def durationSec = (timeStop - timeStart) / 1000
+        tests[TEST_ID]["time"] = durationSec
+        pushLogFile("$testName")
+        echo "The $testName test was finished!"
     }
 }
 
