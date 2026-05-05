@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
@@ -85,7 +86,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 
 		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, volumeSpec); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
-			r.updateAutoscalingStatus(cr, pvc.Name, nil, err)
+			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
 	}
 
@@ -102,8 +103,8 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	if pod.Status.Phase != corev1.PodRunning {
-		log.V(1).Info("skipping PVC check: pod not running", "phase", pod.Status.Phase)
+	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
+		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
 		return nil
 	}
 
@@ -112,7 +113,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
 
-	r.updateAutoscalingStatus(cr, pvc.Name, usage, nil)
+	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
 
 	if !r.shouldTriggerResize(ctx, cr, pvc, usage) {
 		return nil
@@ -140,9 +141,6 @@ func (r *ReconcilePerconaServerMongoDB) shouldTriggerResize(
 	config := cr.Spec.StorageAutoscaling()
 
 	if usage.UsagePercent < config.TriggerThresholdPercent {
-		log.V(1).Info("usage below threshold",
-			"usage", usage.UsagePercent,
-			"threshold", config.TriggerThresholdPercent)
 		return false
 	}
 
@@ -201,12 +199,11 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	patch := client.MergeFrom(cr.DeepCopy())
+	orig := cr.DeepCopy()
 
-	// We are modifying cr directly through the pointer. So the original cr object does get the storage size updated.
 	volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = newSize
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), patch); err != nil {
+	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch CR with new storage size")
 	}
 
@@ -219,11 +216,19 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 
 // updateAutoscalingStatus updates the status for a specific PVC
 func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
+	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	pvcName string,
 	usage *PVCUsage,
 	err error,
 ) {
+	log := logf.FromContext(ctx).WithName("StorageAutoscaling")
+
+	if pvcName == "" {
+		log.V(1).Info("no pvc name specified")
+		return
+	}
+
 	if cr.Status.StorageAutoscaling == nil {
 		cr.Status.StorageAutoscaling = make(map[string]api.StorageAutoscalingStatus)
 	}
@@ -239,7 +244,6 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 				status.ResizeCount++
 			}
 		}
-
 		status.CurrentSize = newSize.String()
 		status.LastError = ""
 	}

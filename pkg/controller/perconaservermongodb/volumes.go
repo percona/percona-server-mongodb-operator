@@ -251,6 +251,13 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			continue
 		}
 
+		// Re-read the PVC to get the latest resourceVersion before updating,
+		// as it may have been modified since the initial list (e.g. by fixVolumeLabels
+		// or by the Kubernetes PVC controller).
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(&pvc), &pvc); err != nil {
+			return errors.Wrapf(err, "get persistentvolumeclaim/%s", pvc.Name)
+		}
+
 		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
 			log.Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 			continue

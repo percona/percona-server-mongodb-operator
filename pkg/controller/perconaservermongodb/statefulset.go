@@ -54,18 +54,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
-		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
-	}
-
-	// (non-blocking)
 	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 
-	if _, ok := sfs.Annotations[api.AnnotationPVCResizeInProgress]; ok {
-		log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sfs.Name)
-		return sfs, nil
+	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
+		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+	}
+
+	// Re-read the StatefulSet from the cluster to check for the PVC resize
+	// annotation, as it may have been set during reconcilePVCs and the local
+	// sfs object would be stale.
+	currentSts := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, currentSts); err == nil {
+		if _, ok := currentSts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
+			log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+			return sfs, nil
+		}
 	}
 
 	err = r.createOrUpdate(ctx, sfs)

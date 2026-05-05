@@ -1,6 +1,8 @@
-region = 'us-central1-a'
-testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
-tests = []
+import groovy.transform.Field
+
+@Field def region = 'us-central1-a'
+@Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
+@Field def tests = []
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -174,8 +176,8 @@ String formatTime(def time) {
     }
 }
 
-TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
-TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
+@Field def TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
+@Field def TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
 
 void makeReport() {
     def wholeTestAmount = tests.size()
@@ -400,7 +402,7 @@ boolean isManualBuild() {
     return !causes.isEmpty()
 }
 
-needToRunTests = true
+@Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild()) {
         echo "This is a manual rebuild. Forcing pipeline execution."
@@ -448,13 +450,16 @@ void checkE2EIgnoreFiles() {
     echo "Excluded files: $excludedFiles"
     echo "Changed files: $changedFiles"
 
-    def excludedFilesRegex = excludedFiles.collect{it.replace("**", ".*").replace("*", "[^/]*")}
+    // Use placeholder so the * in ".*" (from **) is not replaced by [^/]*
+    def excludedFilesRegex = excludedFiles.collect{
+        it.replace("**", ".__STARSTAR__").replace("*", "[^/]*").replace(".__STARSTAR__", ".*")
+    }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
-        if (currentBuild.previousBuild?.result != 'SUCCESS') {
+        if (currentBuild.previousBuild?.result != 'SUCCESS' && currentBuild.number != 1) {
             echo "All changed files are e2eignore files, and previous build was unsuccessful. Propagating previous state."
             currentBuild.result = currentBuild.previousBuild?.result
             error "Skipping execution as non-significant changes detected and previous build was unsuccessful."
