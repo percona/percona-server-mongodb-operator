@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -78,9 +79,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context
 			continue
 		}
 		_, ok := cr.Spec.Backup.Storages[task.StorageName]
-		if !ok {
+		if task.Type != defs.ExternalBackup && !ok {
 			return errors.Errorf("there is no storage %s in cluster %s for %s task", task.StorageName, cr.Name, task.Name)
 		}
+
+		if task.Type == defs.ExternalBackup && ptr.Deref(task.VolumeSnapshotClass, "") == "" {
+			return errors.Errorf("spec volumeSnapshotClass field is empty for %s task", task.Name)
+		}
+
 		ctasks[task.Name] = task
 
 		if err := r.createOrUpdateBackupTask(ctx, cr, task); err != nil {

@@ -84,10 +84,10 @@ update_yaml_images() {
 		return 1
 	fi
 
-    local temp_file
-    temp_file=$(mktemp)
+	local temp_file
+	temp_file=$(mktemp)
 
-	sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
+	sed -E 's/(("image":|"initImage":|containerImage:|image:|initImage:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
 	mv "$temp_file" "$yaml_file"
 
 	echo "File '$yaml_file' updated successfully."
@@ -216,16 +216,37 @@ yq eval -i '[.]' operator_roles${suffix}.yaml && yq eval 'length == 1' operator_
 # Render bundle CSV and strip comments.
 csv_stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
 
-cr_example=$(yq eval -o=json ../../deploy/cr.yaml)
+deployment=$(yq eval operator_deployments.yaml)
+containerImage="$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)"
+
+# Include initImage in the example CR.
+# Keep it adjacent to spec.image for readability.
+cr_example=$(
+	yq eval -o=json ../../deploy/cr.yaml |
+		jq --arg initImage "$containerImage" '
+			def insert_after($k; $new):
+				to_entries as $e
+				| reduce $e[] as $item ({};
+						. + {($item.key): $item.value}
+						| if $item.key == $k then . + $new else . end
+					);
+
+			.spec |= (
+				if has("initImage") then del(.initImage) else . end
+				| insert_after("image"; {"initImage": $initImage})
+				| if has("initImage") then . else . + {"initImage": $initImage} end
+			)
+		'
+)
 backup_example=$(yq eval -o=json ../../deploy/backup/backup.yaml)
 restore_example=$(yq eval -o=json ../../deploy/backup/restore.yaml)
 full_example=$(jq -n "[${cr_example}, ${backup_example}, ${restore_example}]")
-deployment=$(yq eval operator_deployments.yaml)
 account=$(yq eval '.[] | .metadata.name' operator_accounts.yaml)
 rules=$(yq eval '.[] | .rules' operator_roles${suffix}.yaml)
 version="${VERSION}${suffix}"
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3Z")
-containerImage="$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)"
+
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
 relatedImages=$(yq eval bundle.relatedImages.yaml)
 
 export examples="${full_example}"
@@ -233,7 +254,6 @@ export deployment=$deployment
 export account=$account
 export rules=$rules
 export version="${version}"
-export minKubeVer="${MIN_KUBE_VERSION}"
 export stem="${csv_stem}"
 export timestamp=$timestamp
 export name="${csv_stem}.v${VERSION}${suffix}"
@@ -248,12 +268,11 @@ yq eval '
   .metadata.annotations["alm-examples"] = strenv(examples) |
   .metadata.annotations["containerImage"] = env(containerImage) |
   .metadata.annotations["olm.skipRange"] = env(skip_range) |
-  .metadata.annotations["createdAt"] = env(timestamp) |
+  .metadata.annotations["createdAt"] = strenv(timestamp) |
   .metadata.name = env(name) |
   .spec.version = env(version) |
   .spec.install.spec[strenv(rulesLevel)] = [{ "serviceAccountName": env(account), "rules": env(rules) }] |
-  .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )] |
-  .spec.minKubeVersion = env(minKubeVer)' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
+  .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )]' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
 
 if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.clusterserviceversion.yaml"

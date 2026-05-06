@@ -94,6 +94,8 @@ spec:
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
               value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
+            - name: SSL_CERT_FILE
+              value: /etc/s3/certs/ca-bundle.crt
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -179,6 +181,11 @@ spec:
             - mountPath: /etc/pbm/
               name: pbm-config
               readOnly: true
+            - mountPath: /etc/s3/certs-in
+              name: ca-bundle-in
+              readOnly: true
+            - mountPath: /etc/s3/certs
+              name: ca-bundle
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:

@@ -326,7 +326,7 @@ func TestBackup_Status(t *testing.T) {
 			mockPBM := NewMockPBM(ctrl)
 			tt.setupMock(mockPBM)
 
-			backup := &Backup{
+			backup := &managedBackups{
 				pbm: mockPBM,
 			}
 
@@ -334,7 +334,7 @@ func TestBackup_Status(t *testing.T) {
 			if cluster == nil {
 				cluster = new(api.PerconaServerMongoDB)
 			}
-			status, err := backup.Status(ctx, tt.inputCR, cluster)
+			status, err := backup.Status(ctx, nil, cluster, tt.inputCR)
 			assert.NoError(t, err)
 
 			assert.Equal(t, tt.expectedStatus.State, status.State)

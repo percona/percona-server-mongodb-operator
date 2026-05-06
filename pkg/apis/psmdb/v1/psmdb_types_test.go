@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMongoConfiguration_GetPort(t *testing.T) {
@@ -448,6 +449,57 @@ func TestBackupSpec_MainStorage(t *testing.T) {
 			stgName, _, err := tt.spec.MainStorage()
 			assert.Equal(t, tt.expected, stgName)
 			assert.Equal(t, tt.expectedErr, err)
+		})
+	}
+}
+
+func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
+	tests := map[string]struct {
+		conf        MongoConfiguration
+		expectNil   bool
+		expectValue bool
+		expectError bool
+	}{
+		"empty config": {
+			conf:      MongoConfiguration(""),
+			expectNil: true,
+		},
+		"security section without enableEncryption": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile`,
+			expectNil: true,
+		},
+		"explicitly true": {
+			conf: `security:
+  enableEncryption: true`,
+			expectValue: true,
+		},
+		"explicitly false": {
+			conf: `security:
+  enableEncryption: false`,
+			expectValue: false,
+		},
+		"invalid value": {
+			conf: `security:
+  enableEncryption: notabool`,
+			expectError: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, err := tt.conf.IsEncryptionEnabled()
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, tt.expectValue, *result)
+			}
 		})
 	}
 }

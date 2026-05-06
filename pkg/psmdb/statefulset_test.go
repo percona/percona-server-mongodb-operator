@@ -194,7 +194,7 @@ func TestCollectStorageCABundles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := collectStorageCABundles(tt.cr)
+			result := CollectStorageCABundles(tt.cr)
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
@@ -212,7 +212,7 @@ func TestCollectStorageCABundles(t *testing.T) {
 }
 
 func TestGetCAVolumeMounts(t *testing.T) {
-	mounts := getCAVolumeMounts()
+	mounts := GetCAVolumeMounts()
 
 	tests := []struct {
 		name     string

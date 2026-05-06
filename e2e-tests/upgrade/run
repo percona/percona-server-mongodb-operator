@@ -44,12 +44,17 @@ OPERATOR_NAME='percona-server-mongodb-operator'
 
 IMAGE=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.operator[].imagePath')
 # we use the starting image from the same repo so we don't need to use initImage option
-if [[ "$(echo ${TARGET_IMAGE} | cut -d'/' -f1)" == "perconalab" ]]; then
+if [[ ${TARGET_IMAGE} == perconalab/* || ${TARGET_IMAGE} == */perconalab/* ]]; then
 	IMAGE="${IMAGE/percona\//perconalab\/}"
 fi
 IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod[].imagePath')
 IMAGE_PMM_CLIENT=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
+
+qualify_image_var IMAGE
+qualify_image_var IMAGE_MONGOD
+qualify_image_var IMAGE_PMM_CLIENT
+qualify_image_var IMAGE_BACKUP
 
 if [[ ${TARGET_OPERATOR_VER} == "${INIT_OPERATOR_VER}" ]]; then
 	echo "OPERATOR VERSION and INIT OPERATOR VERSION variables are the same: ${TARGET_OPERATOR_VER} ${INIT_OPERATOR_VER}! Something is wrong!"
