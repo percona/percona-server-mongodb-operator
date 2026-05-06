@@ -32,6 +32,20 @@ func Labels() map[string]string {
 	}
 }
 
+func PVCLabels(
+	component string,
+	replsetName string,
+	instanceName string,
+) map[string]string {
+	labels := Labels()
+
+	labels[LabelKubernetesComponent] = component
+	labels[LabelKubernetesReplset] = replsetName
+	labels[LabelKubernetesInstance] = instanceName
+
+	return labels
+}
+
 func ClusterLabels(cr *api.PerconaServerMongoDB) map[string]string {
 	l := Labels()
 	l[LabelKubernetesInstance] = cr.Name

@@ -7,6 +7,6 @@ README.md
 LICENSE
 operator.png
 kubernetes.svg
-release_versions
+e2e-tests/release_versions
 .github/**
 .e2eignore

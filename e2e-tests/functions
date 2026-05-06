@@ -21,6 +21,25 @@ IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
 REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
 
+detect_k8s_env() {
+	local provider="unknown"
+	if kubectl_bin api-resources | grep -q 'openshift.io' 2>/dev/null; then
+		provider="openshift"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+		provider="eks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
+		provider="gke"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
+		provider="aks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
+		provider="kind"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
+		provider="minikube"
+	fi
+
+	echo "$provider"
+}
+
 qualify_image_ref() {
 	local ref="$1"
 	local first="${ref%%/*}"
@@ -1186,7 +1205,7 @@ compare_mongo_cmd() {
 	fi
 
 	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
-		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|"c":"NETWORK"|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -2577,4 +2596,23 @@ function wait_pvc_resize() {
 	echo
 	echo "${pvc} was resized"
 	return 0
+}
+
+deploy_volume_snapshot_class() {
+	local snapshot_class_file
+	local k8s_env
+	k8s_env=$(detect_k8s_env)
+
+	case "$k8s_env" in
+		gke)
+			snapshot_class_file="${conf_dir}/gke-volume-snapshot-class.yaml"
+			;;
+		*)
+			echo "Unsupported Kubernetes environment for volume snapshot class: $k8s_env" >&2
+			return 1
+			;;
+	esac
+
+	kubectl_bin apply -f "${snapshot_class_file}" >&2
+	yq eval '.metadata.name' "${snapshot_class_file}"
 }

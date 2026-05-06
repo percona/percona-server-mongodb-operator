@@ -416,7 +416,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.Enabled {
-		cas := collectStorageCABundles(cr)
+		cas := CollectStorageCABundles(cr)
 		if len(cas) > 0 {
 			volumes = append(volumes, getCAVolumes(cas)...)
 		}
@@ -597,9 +597,9 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}...)
 
 	if cr.CompareVersion("1.22.0") >= 0 {
-		cas := collectStorageCABundles(cr)
+		cas := CollectStorageCABundles(cr)
 		if len(cas) > 0 {
-			c.VolumeMounts = append(c.VolumeMounts, getCAVolumeMounts()...)
+			c.VolumeMounts = append(c.VolumeMounts, GetCAVolumeMounts()...)
 			c.Env = append(c.Env, corev1.EnvVar{
 				Name:  "SSL_CERT_FILE",
 				Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
@@ -719,7 +719,7 @@ func PodTopologySpreadConstraints(cr *api.PerconaServerMongoDB, tscs []corev1.To
 	return result
 }
 
-func collectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelector {
+func CollectStorageCABundles(cr *api.PerconaServerMongoDB) []api.SecretKeySelector {
 	if cr.Spec.Backup.Storages == nil {
 		return nil
 	}
@@ -803,7 +803,7 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 	}
 }
 
-func getCAVolumeMounts() []corev1.VolumeMount {
+func GetCAVolumeMounts() []corev1.VolumeMount {
 
 	return []corev1.VolumeMount{
 		{
