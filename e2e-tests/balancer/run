@@ -40,7 +40,6 @@ check_backup_and_restore() {
 
 	log "checking if balancer is disabled"
 	check_balancer ${cluster} "false"
-
 	wait_backup "${backup_name}" "ready"
 
 	log "checking if balancer is ${balancer_end_state} after backup"
@@ -52,7 +51,7 @@ check_backup_and_restore() {
 	wait_restore ${backup_name} ${cluster} "requested" 0
 
 	log "checking if balancer is disabled"
-	check_balancer ${cluster} "false"
+	check_balancer ${cluster} "false" 5
 
 	wait_restore ${backup_name} ${cluster} "ready" 1
 
