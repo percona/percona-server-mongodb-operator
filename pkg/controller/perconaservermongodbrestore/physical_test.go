@@ -1,7 +1,6 @@
 package perconaservermongodbrestore
 
 import (
-	"context"
 	"slices"
 	"testing"
 
@@ -17,107 +16,156 @@ import (
 )
 
 func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
-	ctx := context.Background()
+	nonRoot := true
+	allowPrivEsc := false
+	initSC := &corev1.SecurityContext{
+		RunAsNonRoot:             &nonRoot,
+		AllowPrivilegeEscalation: &allowPrivEsc,
+	}
 
-	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: "default",
+	tests := []struct {
+		name          string
+		crVersion     string
+		clusterInitSC *corev1.SecurityContext
+		wantPbmInitSC *corev1.SecurityContext
+	}{
+		{
+			name:          "latest_version_with_InitContainerSecurityContext",
+			crVersion:     version.Version(),
+			clusterInitSC: initSC,
+			wantPbmInitSC: initSC,
 		},
-		Spec: psmdbv1.PerconaServerMongoDBSpec{
-			CRVersion: version.Version(),
-			Backup: psmdbv1.BackupSpec{
-				Image: "percona/percona-backup-mongodb:latest",
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "extra-volume",
-						MountPath: "/extra",
-					},
-				},
-			},
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Secrets: &psmdbv1.SecretsSpec{
-				Users: "users-secret",
-				SSL:   "ssl-secret",
-			},
+		{
+			name:          "latest_version_without_InitContainerSecurityContext",
+			crVersion:     version.Version(),
+			clusterInitSC: nil,
+			wantPbmInitSC: nil,
+		},
+		{
+			name:          "1_22_with_InitContainerSecurityContext_ignored",
+			crVersion:     "1.22.0",
+			clusterInitSC: initSC,
+			wantPbmInitSC: nil,
+		},
+		{
+			name:          "1_22_without_InitContainerSecurityContext",
+			crVersion:     "1.22.0",
+			clusterInitSC: nil,
+			wantPbmInitSC: nil,
 		},
 	}
 
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster-rs0",
-			Namespace: "default",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "my-cluster"},
-			},
-			Template: corev1.PodTemplateSpec{
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			cluster := &psmdbv1.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "my-cluster"},
+					Name:      "my-cluster",
+					Namespace: "default",
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "mongod",
-							Image: "percona/percona-server-mongodb:latest",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: tt.crVersion,
+					Backup: psmdbv1.BackupSpec{
+						Image: "percona/percona-backup-mongodb:latest",
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "extra-volume",
+								MountPath: "/extra",
+							},
 						},
-						{
-							Name:  naming.ContainerBackupAgent,
-							Image: "percona/percona-backup-agent:latest",
+					},
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					Secrets: &psmdbv1.SecretsSpec{
+						Users: "users-secret",
+						SSL:   "ssl-secret",
+					},
+					InitContainerSecurityContext: tt.clusterInitSC,
+				},
+			}
+
+			sts := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-cluster-rs0",
+					Namespace: "default",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "my-cluster"},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"app": "my-cluster"},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "mongod",
+									Image: "percona/percona-server-mongodb:latest",
+								},
+								{
+									Name:  naming.ContainerBackupAgent,
+									Image: "percona/percona-backup-agent:latest",
+								},
+							},
 						},
 					},
 				},
-			},
-		},
+			}
+
+			secretTLS := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cluster.Spec.Secrets.SSL,
+					Namespace: cluster.Namespace,
+				},
+				Data: map[string][]byte{
+					"ca.crt":  {},
+					"tls.crt": {},
+					"tls.key": {},
+				},
+			}
+
+			r := fakeReconciler(cluster, sts, secretTLS)
+			namespacedName := types.NamespacedName{
+				Name:      sts.Name,
+				Namespace: sts.Namespace,
+			}
+
+			err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			assert.NoError(t, err)
+
+			updatedSTS := &appsv1.StatefulSet{}
+			err = r.client.Get(ctx, namespacedName, updatedSTS)
+			assert.NoError(t, err)
+
+			assert.Equal(t, "true", updatedSTS.Annotations[psmdbv1.AnnotationRestoreInProgress])
+
+			for _, c := range updatedSTS.Spec.Template.Spec.Containers {
+				assert.NotEqual(t, naming.ContainerBackupAgent, c.Name)
+			}
+
+			var pbmInit *corev1.Container
+			for i := range updatedSTS.Spec.Template.Spec.InitContainers {
+				if updatedSTS.Spec.Template.Spec.InitContainers[i].Name == "pbm-init" {
+					pbmInit = &updatedSTS.Spec.Template.Spec.InitContainers[i]
+					break
+				}
+			}
+			assert.NotNil(t, pbmInit)
+			assert.Equal(t, tt.wantPbmInitSC, pbmInit.SecurityContext)
+
+			assert.Equal(t, "/opt/percona/physical-restore-ps-entry.sh", updatedSTS.Spec.Template.Spec.Containers[0].Command[0])
+
+			assert.True(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+					return c.MountPath == "/etc/pbm/"
+				}))
+
+			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
+
+			assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
+			assert.Equal(t, expectedURI, lastEnvVar.Value)
+		})
 	}
-
-	secretTLS := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Spec.Secrets.SSL,
-			Namespace: cluster.Namespace,
-		},
-		Data: map[string][]byte{
-			"ca.crt":  {},
-			"tls.crt": {},
-			"tls.key": {},
-		},
-	}
-
-	r := fakeReconciler(cluster, sts, secretTLS)
-	namespacedName := types.NamespacedName{
-		Name:      sts.Name,
-		Namespace: sts.Namespace,
-	}
-
-	err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
-	assert.NoError(t, err)
-
-	updatedSTS := &appsv1.StatefulSet{}
-	err = r.client.Get(ctx, namespacedName, updatedSTS)
-	assert.NoError(t, err)
-
-	assert.Equal(t, "true", updatedSTS.Annotations[psmdbv1.AnnotationRestoreInProgress])
-
-	for _, c := range updatedSTS.Spec.Template.Spec.Containers {
-		assert.NotEqual(t, naming.ContainerBackupAgent, c.Name)
-	}
-
-	assert.True(t,
-		slices.ContainsFunc(updatedSTS.Spec.Template.Spec.InitContainers, func(c corev1.Container) bool {
-			return c.Name == "pbm-init"
-		}))
-
-	assert.Equal(t, "/opt/percona/physical-restore-ps-entry.sh", updatedSTS.Spec.Template.Spec.Containers[0].Command[0])
-
-	assert.True(t,
-		slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
-			return c.MountPath == "/etc/pbm/"
-		}))
-
-	lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-	expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
-
-	assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
-	assert.Equal(t, expectedURI, lastEnvVar.Value)
 }
