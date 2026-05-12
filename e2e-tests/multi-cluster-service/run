@@ -69,6 +69,7 @@ wait_service_export() {
 }
 
 desc "Register Kubernetes cluster"
+sleep 300
 k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
 k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
 
