@@ -12,7 +12,7 @@
 TEMPLATE USAGE NOTES (delete this block before publishing):
 
 Purpose:
-  Design document template for the Percona Operator for MySQL.
+  Design document template for the Percona Operator for MongoDB.
   Captures design and architecture decisions.
 
   The source code is always the single source of truth for "what exists."
@@ -54,32 +54,31 @@ be revisited.
 ## 2. Background [REQUIRED]
 
 Technical context a developer (or AI agent) needs before reading the design.
-Cover: how the underlying MySQL / Kubernetes / operator concept works,
-relevant protocols, and hard constraints.
+Cover: how the underlying Percona Server for MongoDB (PSMDB) / Kubernetes /
+operator concept works, relevant protocols, and hard constraints.
 
 ### 2.1 Core Concepts
 
-Define terms, MySQL internals, Kubernetes patterns, or domain knowledge
+Define terms, MongoDB internals, Kubernetes patterns, or domain knowledge
 that the rest of the document depends on. Examples:
-  - Group Replication vs Async Replication behavior
-  - How XtraBackup streaming works
-  - How VolumeSnapshots work
-  - How incremental backups work in PXB
-  - cert-manager flow
-  - Kubernetes finalizer semantics
-If a concept is well-known in the team, a one-liner is fine. If it's
-niche, explain it fully.
+- Replset configuration
+- Sharding configuration
+- How Percona Backup for MongoDB (PBM) works
+- cert-manager flow
+- Kubernetes finalizer semantics
+  If a concept is well-known in the team, a one-liner is fine. If it's
+  niche, explain it fully.
 
 ### 2.2 Key Constraints
 
 Hard technical constraints that shape the design. Number them so later
 sections can reference them (e.g., "due to Constraint 2").
 Common constraint categories for this operator:
-  - MySQL limitations (replication protocol, InnoDB requirements)
-  - PXB (Percona Xtrabackup) limitations
-  - Kubernetes limitations (StatefulSet ordering, PVC lifecycle)
-  - Backward compatibility with existing CRs in the wild
-  - Percona Server version support matrix
+- MongoDB limitations
+- PBM limitations
+- Kubernetes limitations (StatefulSet ordering, PVC lifecycle)
+- Backward compatibility with existing CRs in the wild
+- Percona Server for MongoDB version support matrix
 
 1. **Constraint name**: Explanation and why it matters.
 2. **Constraint name**: Explanation and why it matters.
@@ -93,17 +92,19 @@ fits into the operator's reconciliation model and which components are
 involved.
 
 Components in this operator:
-  - Main reconciler (PerconaServerMySQL controller)
-  - Backup/Restore reconcilers
-  - MySQL instances (StatefulSet pods)
-  - Orchestrator (async replication topology)
-  - HAProxy / MySQL Router (proxy layer)
-  - PMM agent (monitoring sidecar)
-  - XtraBackup sidecar (backup/restore)
-  - Binary log server (PiTR)
-  - Bootstrap init container
-  - cert-manager (TLS)
-  - Cloud storage (S3, GCS, Azure)
+- Main reconciler (PerconaServerMongoDB controller)
+- Backup/Restore reconcilers
+- PSMDB instances (StatefulSet pods)
+    - Replsets
+    - Config servers
+    - Arbiter
+    - Hidden members
+    - Nonvoting members
+- Mongos (proxy layer)
+- PMM agent (monitoring sidecar)
+- PBM sidecar (backup/restore)
+- cert-manager (TLS)
+- Cloud storage (S3, GCS, Azure)
 
 ### 3.1 Architecture Before This Change
 
@@ -115,7 +116,7 @@ boundaries involved.
 Trigger (e.g., CR update, scheduled backup, failover event)
   → Reconciler
     → Component A
-      → External System (MySQL, Orchestrator, cloud storage, etc.)
+      → External System (MongoDB, PBM, cloud storage, etc.)
     ← Response
   ← Status update
 ```
@@ -141,28 +142,28 @@ Describe new or changed interfaces. Focus on semantics, defaults,
 validation rules, and interactions with existing fields.
 
 For this operator, interfaces typically include:
-  - PerconaServerMySQL spec/status fields
-  - PerconaServerMySQLBackup spec/status fields
-  - PerconaServerMySQLRestore spec/status fields
-  - New status conditions
-  - Labels / annotations with operator-specific meaning
-  - ConfigMap or Secret contracts between operator and sidecars
+- PerconaServerMongoDB spec/status fields
+- PerconaServerMongoDBBackup spec/status fields
+- PerconaServerMongoDBRestore spec/status fields
+- New status conditions
+- Labels / annotations with operator-specific meaning
+- ConfigMap or Secret contracts between operator and sidecars
 
 ### 4.1 CRD Spec Changes
 
 For each new or changed field, document:
-  1. What it controls and why it exists
-  2. Which CRD it belongs to (PerconaServerMySQL, Backup, or Restore)
-  3. Where it lives in the spec hierarchy (e.g., spec.mysql.X, spec.proxy.haproxy.X)
-  4. Default value and behavior when omitted
-  5. Validation rules (CEL or webhook)
-  6. Interaction with existing fields (e.g., only valid when clusterType is "async")
-  7. Interaction with unsafeFlags (if bypassing safety checks)
+1. What it controls and why it exists
+2. Which CRD it belongs to (PerconaServerMongoDB, Backup, or Restore)
+3. Where it lives in the spec hierarchy (e.g., spec.replsets[].X, spec.backup.X)
+4. Default value and behavior when omitted
+5. Validation rules (CEL or webhook)
+6. Interaction with existing fields (e.g., only valid when sharding is enabled)
+7. Interaction with unsafeFlags (if bypassing safety checks)
 
 - **`spec.path.to.newField`** *(optional, default: `"value"`)*:
   Description of what this field controls. Must be one of `[a, b]`.
   When omitted, the system behaves as [describe]. Only applies when
-  [describe conditions, e.g., clusterType is group-replication].
+  [describe conditions, e.g., sharding is enabled].
 
 ### 4.2 CRD Status Changes [OPTIONAL]
 
@@ -173,11 +174,11 @@ when they transition, and what a user should infer from them.
 
 New or changed contracts between the operator and its sidecars,
 init containers, or external components. Examples:
-  - Environment variables passed to the MySQL container
-  - ConfigMap keys the bootstrap init container reads
-  - Annotations the orchestrator handler reacts to
-  - Secret keys expected by the XtraBackup sidecar
-Describe the agreement, not the exact code.
+- Environment variables passed to the mongod container
+- ConfigMap keys the PMM container reads
+- Annotations that a component reacts to
+- Secret keys expected by the PBM sidecar
+  Describe the agreement, not the exact code.
 
 ### 4.4 User-Facing Behavior Changes [OPTIONAL]
 
@@ -193,13 +194,12 @@ considered and why alternatives were rejected. This prevents future
 developers (and AI agents) from re-proposing rejected approaches.
 
 Common decision categories for this operator:
-  - Reconciler placement: main controller vs. dedicated controller
-  - Data flow: sidecar vs. init container vs. operator-driven exec
-  - State management: CR status vs. ConfigMap vs. annotation
-  - Replication model: behavior differences between GR and async
-  - Proxy layer: HAProxy vs. Router implications
-  - Storage: PVC lifecycle, cloud storage choices
-  - Upgrade path: how existing clusters adopt the new feature
+- Reconciler placement: main controller vs. dedicated controller
+- Data flow: sidecar vs. init container vs. operator-driven exec
+- State management: CR status vs. ConfigMap vs. annotation
+- Sharding: behavior differences between sharded and single replset clusters
+- Storage: PVC lifecycle, cloud storage choices
+- Upgrade path: how existing clusters adopt the new feature
 
 ### 5.1 [Decision Topic]
 
@@ -219,22 +219,22 @@ Repeat 5.N subsections for each significant decision.
 
 ---
 
-## 6. Replication Model Impact [OPTIONAL]
+## 6. Sharding Impact [OPTIONAL]
 
 Some features behave differently (or don't apply)
-depending on the replication model. Explicitly state the behavior
+depending on the sharding. Explicitly state the behavior
 for each model to prevent ambiguity.
 
-If the feature is entirely replication-agnostic, state that and
+If the feature is entirely sharding-agnostic, state that and
 explain why, then remove the subsections.
 
-### 6.1 Group Replication Behavior
+### 6.1 Sharded cluster Behavior
 
-How the feature works with clusterType: group-replication.
+How the feature works with sharding enabled.
 
 ### 6.2 Async Replication Behavior
 
-How the feature works with clusterType: async.
+How the feature works with sharding disabled.
 
 ### 6.3 Differences and Why
 
@@ -249,8 +249,8 @@ Concrete YAML examples for every user-facing workflow. These illustrate
 the intended UX and double as acceptance criteria.
 
 Include at least:
-  1. The existing CR (unchanged — proves backward compatibility)
-  2. Each new workflow the feature introduces
+1. The existing CR (unchanged — proves backward compatibility)
+2. Each new workflow the feature introduces
 
 Show only the relevant portion of the CR, not the entire spec.
 
@@ -259,8 +259,8 @@ Show only the relevant portion of the CR, not the entire spec.
 ```yaml
 # Show that existing CRs continue to work identically.
 # Only include the relevant spec section.
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
 metadata:
   name: cluster1
 spec:
@@ -272,8 +272,8 @@ spec:
 ```yaml
 # Show the new capability end-to-end.
 # Add inline comments explaining operator behavior.
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
 metadata:
   name: cluster1
 spec:
@@ -285,17 +285,17 @@ spec:
 ## 8. Error Handling and Edge Cases [REQUIRED]
 
 One subsection per scenario. Each must specify:
-  - Trigger condition (when does this happen?)
-  - Expected operator behavior (what should the reconciler do?)
-  - User-visible feedback (status condition, event, log message)
+- Trigger condition (when does this happen?)
+- Expected operator behavior (what should the reconciler do?)
+- User-visible feedback (status condition, event, log message)
 
 Examples:
-  - Pod not ready during reconciliation
-  - MySQL unreachable (network partition, crash loop)
-  - Cloud storage credentials invalid or expired
-  - Partial failure during rolling update
-  - Upgrade from older operator version missing new fields
-  - PVC resize or storage class mismatch
+- Pod not ready during reconciliation
+- MongoDB unreachable (network partition, crash loop)
+- Cloud storage credentials invalid or expired
+- Partial failure during rolling update
+- Upgrade from older operator version missing new fields
+- PVC resize or storage class mismatch
 
 ### 8.1 [Scenario Name]
 
@@ -352,9 +352,9 @@ cluster type(s) each scenario applies to (GR, async, or both).
 
 | Scenario | Cluster Type | What It Validates |
 |----------|-------------|-------------------|
-| Scenario 1 | GR + Async | Setup, action, and expected outcome |
-| Scenario 2 | GR only | Setup, action, and expected outcome |
-| Scenario 3 | Async only | Setup, action, and expected outcome |
+| Scenario 1 | Sharded + Single replset | Setup, action, and expected outcome |
+| Scenario 2 | Sharded only | Setup, action, and expected outcome |
+| Scenario 3 | Single replset only | Setup, action, and expected outcome |
 
 ---
 
@@ -364,10 +364,10 @@ Resolve these BEFORE implementation begins. Do not delete resolved
 questions — mark them as resolved so future readers see the outcome.
 
 1. **[Topic]:** Question description.
-   - *Option A:* Pros/cons.
-   - *Option B:* Pros/cons.
-   - *Recommendation:* A, because [reason].
-   - *Resolution:* [Decided X on \<date\>. Reason.]
+    - *Option A:* Pros/cons.
+    - *Option B:* Pros/cons.
+    - *Recommendation:* A, because [reason].
+    - *Resolution:* [Decided X on \<date\>. Reason.]
 
 2. **[Topic]:** Question description.
 
@@ -379,9 +379,9 @@ questions — mark them as resolved so future readers see the outcome.
 
 | Term | Definition |
 |------|------------|
-| GR | Group Replication — MySQL's multi-primary replication protocol |
-| Async | Asynchronous replication — traditional primary-replica replication |
-| PiTR | Point-in-Time Recovery via binary log replay |
+| PBM | Percona Backup for MongoDB - Backup tool for MongoDB |
+| Sharding | A database architecture that partitions data by key ranges and distributes the data among two or more database instances. |
+| PiTR | Point-in-Time Recovery via oplog replay |
 | PMM | Percona Monitoring and Management |
 
 ### B. References
