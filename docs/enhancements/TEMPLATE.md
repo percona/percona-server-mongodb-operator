@@ -232,7 +232,7 @@ explain why, then remove the subsections.
 
 How the feature works with sharding enabled.
 
-### 6.2 Async Replication Behavior
+### 6.2 Single Replset Behavior
 
 How the feature works with sharding disabled.
 
