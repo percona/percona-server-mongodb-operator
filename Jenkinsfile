@@ -18,7 +18,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --preemptible \
                     --zone=${region} \
                     --machine-type='n1-standard-4' \
-                    --cluster-version='1.32' \
+                    --cluster-version='1.33' \
                     --num-nodes=3 \
                     --labels='delete-cluster-after-hours=6' \
                     --disk-size=30 \
@@ -300,7 +300,7 @@ void prepareNode() {
         sudo tee /etc/yum.repos.d/google-cloud-sdk.repo << EOF
 [google-cloud-cli]
 name=Google Cloud CLI
-baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el7-x86_64
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64
 enabled=1
 gpgcheck=1
 repo_gpgcheck=0
