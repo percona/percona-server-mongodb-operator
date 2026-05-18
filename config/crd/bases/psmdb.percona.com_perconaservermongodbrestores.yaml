@@ -261,6 +261,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  nsFrom:
+                    type: string
+                  nsTo:
+                    type: string
                   withUsersAndRoles:
                     type: boolean
                 type: object

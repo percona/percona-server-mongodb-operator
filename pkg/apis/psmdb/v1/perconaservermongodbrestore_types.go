@@ -27,6 +27,8 @@ type PerconaServerMongoDBRestoreSpec struct {
 type SelectiveRestoreOpts struct {
 	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
 	Namespaces        []string `json:"namespaces,omitempty"`
+	NamespaceFrom     string   `json:"nsFrom,omitempty"`
+	NamespaceTo       string   `json:"nsTo,omitempty"`
 }
 
 func (s *SelectiveRestoreOpts) GetNamespaces() []string {
@@ -41,6 +43,20 @@ func (s *SelectiveRestoreOpts) GetWithUsersAndRoles() bool {
 		return false
 	}
 	return s.WithUsersAndRoles
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaceFrom() string {
+	if s == nil {
+		return ""
+	}
+	return s.NamespaceFrom
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaceTo() string {
+	if s == nil {
+		return ""
+	}
+	return s.NamespaceTo
 }
 
 // RestoreState is for restore status states
