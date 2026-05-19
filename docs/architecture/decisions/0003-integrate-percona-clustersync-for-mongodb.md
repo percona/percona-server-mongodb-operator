@@ -25,8 +25,11 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 - Imperative operations (`reset`, `finalize`) -- these are destructive/irreversible and should not be triggered by a declarative reconciliation loop. Users must exec into the PCSM container manually. May be revisited if PCSM adds safe idempotent variants.
 - Reverse synchronization -- PCSM does not support this upstream. Revisit when upstream adds support.
 - Multi-source or multi-target replication -- PCSM only supports single source/target pairs.
-- PMM integration -- may be added in a future iteration if monitoring of PCSM through PMM is needed.
 - Persistent Query Settings migration -- PCSM does not replicate Persistent Query Settings (MongoDB 8+). Migration requires manual export/import via `$querySettings` aggregation and `setQuerySettings` admin command after finalization. The operator will not automate this.
+
+### 1.3 Deferred (Future Iterations)
+
+- PMM integration -- may be added in a future iteration if monitoring of PCSM through PMM is needed.
 
 ---
 
@@ -46,7 +49,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 
 1. **Same major version required:** PCSM only supports replication between the same major MongoDB version (e.g., 7.x to 7.x). Cross-major replication is not supported.
 2. **Single source/target pair:** PCSM supports only one source and one target cluster per instance.
-3. **Sharded support is tech preview:** PCSM can replicate sharded cluster data but does not replicate sharding metadata. Certain admin commands (`movePrimary`, `reshardCollection`, `unshardCollection`, `refineCollectionShardKey`) break replication and force a full initial sync restart.
+3. **Sharded clusters have limitations:** PCSM can replicate sharded cluster data but does not replicate sharding metadata. Certain admin commands (`movePrimary`, `reshardCollection`, `unshardCollection`, `refineCollectionShardKey`) break replication and force a full initial sync restart.
 4. **Initial sync is not resumable:** If PCSM crashes or restarts during initial sync, it restarts from scratch. For large datasets this can mean hours or days of work lost.
 5. **Primary-only connection:** PCSM connects only to the primary node; the `directConnection` option to force secondary connections is ignored.
 6. **Recreate deployment strategy required:** Running two PCSM instances against the same target simultaneously can corrupt data, so RollingUpdate is not safe.
@@ -166,9 +169,6 @@ CR update (clusterSync section)
 - **`spec.clusterSync.excludeNamespaces`** *(optional)*:
   List of `db.collection` patterns to exclude from replication. When omitted, all namespaces are replicated.
 
-- **`spec.clusterSync.allowSharded`** *(optional, default: `false`)*:
-  Explicit opt-in for sharded cluster replication (tech preview). Required when the CR defines a sharded cluster and `clusterSync.enabled=true`. Without this flag, the operator rejects the configuration with a validation error.
-
 ### 4.2 CRD Status Changes
 
 - **`status.clusterSync.state`** *(string)*:
@@ -192,7 +192,6 @@ CR update (clusterSync section)
 
 **CR status:**
 - New `status.clusterSync` section visible in `kubectl get psmdb` output.
-- Status condition `ClusterSyncSharded=True` set when using sharded replication with `allowSharded: true`.
 
 **New resources visible in the namespace:**
 - A PCSM Deployment (visible via `kubectl get deployments`), named after the cluster (e.g., `<cluster-name>-clustersync`).
@@ -262,20 +261,7 @@ The source cluster credentials are provided by the user via `clusterSync.sourceC
 | Delete target user when `enabled=false` | Risk of accidental credential loss when temporarily disabling replication |
 | Operator creates source user on the source cluster | The source cluster may be external and not managed by this operator instance |
 
-### 5.4 Sharded Cluster Support Gating
-
-**Chosen approach:** Allow sharded replication with an explicit opt-in flag (`clusterSync.allowSharded: true`) and set a status condition warning.
-
-**Why:** Due to Constraint 3, sharded support is tech preview. Requiring explicit opt-in prevents accidental use of an unsupported configuration while letting advanced users experiment.
-
-**Alternatives considered:**
-
-| Alternative | Why Rejected |
-|------------|--------------|
-| Block sharded clusters entirely | Too restrictive; prevents valid use cases |
-| Allow without any gating | Users may unknowingly enter an unsupported configuration |
-
-### 5.5 Configuration Change Handling
+### 5.4 Configuration Change Handling
 
 **Chosen approach:** Allow image-only updates freely; for `sourceURI` changes that invalidate the checkpoint, set `state=error` and require the user to manually reset PCSM; for namespace filter changes, warn in status.
 
@@ -295,13 +281,11 @@ The source cluster credentials are provided by the user via `clusterSync.sourceC
 ### 6.1 Sharded Cluster Behavior
 
 When the CR defines a sharded cluster (`sharding.enabled=true`):
-- Requires `clusterSync.allowSharded: true` to enable.
 - PCSM connects via mongos on both source and target clusters. Since it connects through mongos, the cluster topology doesn't matter -- source and target can have different numbers of shards.
 - Before initial sync, PCSM checks which collections are sharded on the source and creates corresponding sharded collections on the target. The only sharding configuration preserved is the shard key; all other sharding details are handled internally by the target cluster.
 - The balancer does not need to be disabled on either cluster. The target cluster's balancer continues to operate normally and manages chunk distribution according to its own configuration.
 - PCSM replicates data, not metadata. Chunk distribution, primary shard names, and zone configuration are NOT preserved from the source. The target cluster manages these internally.
 - Running `movePrimary`, `reshardCollection`, `unshardCollection`, or `refineCollectionShardKey` on the source during replication causes a failure requiring a full initial sync restart.
-- Operator sets status condition `ClusterSyncSharded=True`.
 
 ### 6.2 Single Replset Behavior
 
@@ -371,7 +355,7 @@ spec:
     # ...
 ```
 
-### 7.4 Sharded Cluster Replication (Tech Preview)
+### 7.4 Sharded Cluster Replication
 
 ```yaml
 spec:
@@ -380,7 +364,6 @@ spec:
     # ...
   clusterSync:
     enabled: true
-    allowSharded: true  # Required opt-in for sharded clusters
     image: percona/percona-clustersync-mongodb:1.0.0
     sourceURI: mongodb://mongos1:27017,mongos2:27017/admin
     sourceCredentialsSecret: pcsm-source-credentials
@@ -450,14 +433,6 @@ spec:
 
 **Constraint:** Due to Constraint 1, cross-major replication is unsupported.
 
-### 8.7 Sharded Cluster Without Opt-In Flag
-
-**Scenario:** User enables `clusterSync` on a sharded cluster without setting `allowSharded: true`.
-
-**Constraint:** Operator rejects the configuration with a validation error.
-
-**Rationale:** Sharded support is tech preview (Constraint 3). Explicit opt-in prevents accidental use.
-
 ---
 
 ## 9. Migration and Backward Compatibility
@@ -490,8 +465,7 @@ spec:
 | Backup during initial sync is blocked | Single replset | Backup request is rejected while `initialSyncComplete=false` |
 | Source URI change during replication | Single replset | State set to error; manual reset required |
 | Version mismatch detection | Single replset | PCSM start is blocked; error message in status |
-| Sharded cluster without `allowSharded` flag | Sharded | Configuration is rejected with validation error |
-| Sharded cluster with `allowSharded: true` | Sharded | Replication works; tech preview status condition is set |
+| Sharded cluster replication | Sharded | Replication works via mongos; data and shard keys are replicated |
 | Namespace exclude filters | Single replset | Excluded collections are not replicated; all others are |
 
 ---
