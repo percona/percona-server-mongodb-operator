@@ -947,7 +947,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 
