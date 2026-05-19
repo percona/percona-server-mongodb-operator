@@ -554,6 +554,10 @@ spec:
                     items:
                       type: string
                     type: array
+                  nsFrom:
+                    type: string
+                  nsTo:
+                    type: string
                   withUsersAndRoles:
                     type: boolean
                 type: object
@@ -4931,6 +4935,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -15763,6 +15769,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
