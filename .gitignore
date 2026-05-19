@@ -189,3 +189,7 @@ bin/
 projects/
 installers/olm/operator_*.yaml
 installers/olm/bundles
+
+# Test Reports
+e2e-tests/reports/
+e2e-tests/**/__pycache__/

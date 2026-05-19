@@ -1,0 +1,68 @@
+import logging
+from typing import Callable, Dict, TypedDict
+
+import pytest
+from lib.config import apply_cluster
+from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running
+from lib.mongo import MongoManager
+
+logger = logging.getLogger(__name__)
+
+
+class FinalizerConfig(TypedDict):
+    namespace: str
+    cluster: str
+
+
+@pytest.fixture(scope="class", autouse=True)
+def config(create_infra: Callable[[str], str]) -> FinalizerConfig:
+    """Configuration for tests"""
+    return {
+        "namespace": create_infra("finalizer"),
+        "cluster": "some-name",
+    }
+
+
+@pytest.fixture(scope="class", autouse=True)
+def setup_tests(test_paths: Dict[str, str]) -> None:
+    """Setup test environment"""
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets_with_tls.yml")
+
+
+class TestFinalizer:
+    """Test MongoDB cluster finalizers"""
+
+    @pytest.mark.dependency()
+    def test_create_cluster(self, config: FinalizerConfig, test_paths: Dict[str, str]) -> None:
+        apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}.yml")
+        wait_for_running(f"{config['cluster']}-rs0", 3, False)
+        wait_for_running(f"{config['cluster']}-cfg", 3)
+
+    @pytest.mark.dependency(depends=["TestFinalizer::test_create_cluster"])
+    def test_kill_primary_should_elect_new_one(
+        self, config: FinalizerConfig, psmdb_client: MongoManager
+    ) -> None:
+        primary = psmdb_client.get_mongo_primary(
+            f"clusterAdmin:clusterAdmin123456@{config['cluster']}-rs0.{config['namespace']}",
+            config["cluster"],
+        )
+        if primary == f"{config['cluster']}-rs0-0":
+            kubectl_bin("delete", "pod", "--grace-period=0", "--force", primary)
+            wait_for_running(f"{config['cluster']}-rs0", 3)
+        new_primary = psmdb_client.get_mongo_primary(
+            f"clusterAdmin:clusterAdmin123456@{config['cluster']}-rs0.{config['namespace']}",
+            config["cluster"],
+        )
+        assert new_primary != primary, "Primary did not change after killing the pod"
+
+    @pytest.mark.dependency(depends=["TestFinalizer::test_kill_primary_should_elect_new_one"])
+    def test_delete_cluster(self, config: FinalizerConfig) -> None:
+        kubectl_bin("delete", "psmdb", config["cluster"], "--wait=false")
+        wait_for_delete(f"psmdb/{config['cluster']}")
+
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-cfg-0")
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-cfg-1")
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-cfg-2")
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-rs0-0")
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-rs0-1")
+        wait_for_delete(f"pvc/mongod-data-{config['cluster']}-rs0-2")
