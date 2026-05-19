@@ -350,6 +350,15 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
 		}
+
+		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
+			if dns.Domain == "" {
+				return errors.New("externalDNS requires domain for mongos")
+			}
+			if dns.Prefix == "" {
+				dns.Prefix = cr.Name
+			}
+		}
 	}
 
 	if mongos := cr.Spec.Sharding.Mongos; mongos != nil && cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
@@ -717,6 +726,15 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
 			rs.Expose.ServiceAnnotations = util.MapMerge(rs.Expose.DeprecatedServiceAnnotations, rs.Expose.ServiceAnnotations)
+		}
+	}
+
+	if dns := rs.Expose.ExternalDNS; dns != nil {
+		if dns.Domain == "" {
+			return fmt.Errorf("externalDNS requires domain for replset %s", rs.Name)
+		}
+		if dns.Prefix == "" {
+			dns.Prefix = cr.Name
 		}
 	}
 

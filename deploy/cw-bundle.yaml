@@ -4901,6 +4901,18 @@ spec:
                           type: boolean
                         exposeType:
                           type: string
+                        externalDNS:
+                          properties:
+                            domain:
+                              type: string
+                            prefix:
+                              type: string
+                            ttl:
+                              minimum: 0
+                              type: integer
+                          required:
+                          - domain
+                          type: object
                         externalTrafficPolicy:
                           type: string
                         internalTrafficPolicy:
@@ -15733,6 +15745,18 @@ spec:
                             type: boolean
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:
@@ -24179,6 +24203,18 @@ spec:
                             type: object
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:
