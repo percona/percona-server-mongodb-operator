@@ -45,6 +45,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -567,6 +568,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
 			return err
 		}
+	}
+
+	if err := r.reconcileSearch(ctx, cr, replset); err != nil {
+		return errors.Wrapf(err, "reconcile search for replset %s", replset.Name)
 	}
 
 	_, ok := cr.Status.Replsets[replset.Name]
@@ -1157,6 +1162,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	reconcileConfigMap := func(rs *api.ReplsetSpec, name string, configuration string) error {
+		configuration, err := vectorsearch.InjectMongodConfig(configuration, cr, rs)
+		if err != nil {
+			return errors.Wrap(err, "inject search setParameters")
+		}
 		if configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongod config map %s", name)
@@ -1247,7 +1256,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	reconcileConfigMap := func() error {
 		name := naming.MongosCustomConfigName(cr)
-		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
+		var userConfig string
+		if cr.Spec.Sharding.Enabled {
+			userConfig = string(cr.Spec.Sharding.Mongos.Configuration)
+		}
+		configuration, err := vectorsearch.InjectMongosConfig(userConfig, cr)
+		if err != nil {
+			return errors.Wrap(err, "inject search setParameters")
+		}
+		if !cr.Spec.Sharding.Enabled || configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
 			}
@@ -1261,11 +1278,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 				Labels:    naming.MongosLabels(cr),
 			},
 			Data: map[string]string{
-				"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
+				"mongos.conf": configuration,
 			},
 		}
-		err := r.createOrUpdateConfigMap(ctx, cr, cm)
-		if err != nil {
+		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 			return errors.Wrap(err, "create or update configmap")
 		}
 		return nil
