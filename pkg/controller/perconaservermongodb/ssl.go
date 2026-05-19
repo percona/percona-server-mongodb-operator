@@ -62,6 +62,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
+	// If certManagementPolicy is userProvidedOnly, the operator should not create any certificates automatically.
+	if cr.Spec.TLS != nil && cr.Spec.TLS.CertManagementPolicy == api.CertManagementUserProvidedOnly {
+		logf.FromContext(ctx).Info("certManagementPolicy is userProvidedOnly, skipping automatic certificate management")
+		return nil
+	}
+
 	if k8serr.IsNotFound(errSecret) && errInternalSecret == nil && isCustomSecretInternal {
 		// If the user has only created an internal secret, we should create a copy of it as a non-internal secret.
 		newSecret := secretInternalObj.DeepCopy()
