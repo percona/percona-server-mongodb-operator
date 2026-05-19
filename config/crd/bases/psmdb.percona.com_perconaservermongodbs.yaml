@@ -361,9 +361,10 @@ spec:
                               - backoffMax
                               - backoffMultiplier
                               type: object
+                            workloadIdentity:
+                              type: boolean
                           required:
                           - bucket
-                          - credentialsSecret
                           type: object
                         main:
                           type: boolean

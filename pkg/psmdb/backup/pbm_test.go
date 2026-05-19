@@ -346,6 +346,26 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"gcs workload identity": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:           "operator-testing",
+					Prefix:           "psmdb",
+					WorkloadIdentity: true,
+					ChunkSize:        1024 * 1024 * 10,
+				},
+			},
+			config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					ChunkSize: 1024 * 1024 * 10,
+				},
+			},
+		},
 		"gcs s3 compatibility": {
 			[]client.Object{
 				&corev1.Secret{
