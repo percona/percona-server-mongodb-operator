@@ -1,7 +1,6 @@
 package pmm
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 )
 
 func TestContainer(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tokenSecret := &corev1.Secret{
 		Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(`token`)},
