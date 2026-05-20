@@ -20,6 +20,9 @@ func TestContainer(t *testing.T) {
 	tokenSecret := &corev1.Secret{
 		Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(`token`)},
 	}
+	pmm2Secret := &corev1.Secret{
+		Data: map[string][]byte{"PMM_SERVER_API_KEY": []byte(`key`)},
+	}
 
 	tests := map[string]struct {
 		secret *corev1.Secret
@@ -65,6 +68,17 @@ func TestContainer(t *testing.T) {
 				cr.Spec.CRVersion = "1.22.0"
 				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
 			},
+			assert: assertAuthMechanism("SCRAM-SHA-1"),
+		},
+		"pmm2 enabled - explicit SCRAM-SHA-256 honored on >=1.23.0": {
+			secret: pmm2Secret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm2 enabled - unset mechanism falls back to SCRAM-SHA-1": {
+			secret: pmm2Secret,
 			assert: assertAuthMechanism("SCRAM-SHA-1"),
 		},
 	}
