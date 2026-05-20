@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -130,12 +129,6 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
-	gib, err := RoundUpGiB(requested.Value())
-	if err != nil {
-		return errors.Wrap(err, "round GiB value")
-	}
-
-	requested = *resource.NewQuantity(gib*GiB, resource.BinarySI)
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
@@ -150,7 +143,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 				continue
 			}
 
-			if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
+			if pvc.Status.Capacity.Storage().Cmp(requested) >= 0 {
 				updatedPVCs++
 				log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
 				continue
@@ -226,10 +219,38 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	if requested.Cmp(actual) < 0 {
-		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
-	}
+		if configured.Cmp(requested) == 0 {
+			return nil
+		}
+		if configured.Cmp(requested) < 0 {
+			log.Info("Deleting statefulset with stale volume claim template")
 
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+				if k8serrors.IsNotFound(err) {
+					return nil
+				}
+				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			}
+			return nil
+		}
+		if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+			return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
+		}
+		if cr.Spec.IsVolumeExpansionEnabled() {
+			return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+		}
+	}
 	if requested.Cmp(actual) == 0 {
+		if configured.Cmp(requested) != 0 {
+			log.Info("Deleting statefulset with stale volume claim template")
+
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+				if k8serrors.IsNotFound(err) {
+					return nil
+				}
+				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			}
+		}
 		return nil
 	}
 
@@ -377,21 +398,4 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 	}
 
 	return nil
-}
-
-func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {
-	if allocationUnitBytes == 0 {
-		return 0 // Avoid division by zero
-	}
-	return (volumeSizeBytes + allocationUnitBytes - 1) / allocationUnitBytes
-}
-
-// RoundUpGiB rounds up the volume size in bytes upto multiplications of GiB
-// in the unit of GiB
-func RoundUpGiB(volumeSizeBytes int64) (int64, error) {
-	result := roundUpSize(volumeSizeBytes, GiB)
-	if result > int64(math.MaxInt64) {
-		return 0, errors.Errorf("rounded up size exceeds maximum value of int64: %d", result)
-	}
-	return result, nil
 }
