@@ -898,6 +898,11 @@ spec:
                 type: string
               pmm:
                 properties:
+                  authenticationMechanism:
+                    enum:
+                    - SCRAM-SHA-256
+                    - SCRAM-SHA-1
+                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -970,11 +975,6 @@ spec:
                             type: string
                         type: object
                     type: object
-                  authenticationMechanism:
-                    enum:
-                    - SCRAM-SHA-256
-                    - SCRAM-SHA-1
-                    type: string
                   customClusterName:
                     type: string
                   enabled:
@@ -3992,6 +3992,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -14824,6 +14826,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
