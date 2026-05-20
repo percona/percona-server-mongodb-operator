@@ -29,6 +29,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 
 ### 1.3 Deferred (Future Iterations)
 
+- Source cluster reference by CR name (`sourceCluster`) -- the operator manages both source and target clusters, so it could resolve connection details and create the source user automatically from a CR name reference instead of requiring manual `sourceURI` and `sourceCredentialsSecret`. Deferred to a future iteration; first iteration uses raw `sourceURI`.
 - PMM integration -- may be added in a future iteration if monitoring of PCSM through PMM is needed.
 
 ---
