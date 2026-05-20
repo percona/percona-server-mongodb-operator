@@ -14,6 +14,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
+const (
+	defaultAuthMechanism = "SCRAM-SHA-1"
+)
+
 // containerForPMM2 returns a pmm2 container from the given spec.
 func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) corev1.Container {
 	_, oka := secret.Data[api.PMMAPIKey]
@@ -268,7 +272,7 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 	return pmmAgentEnvs
 }
 
-func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
+func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	// handle disabled TLS
 
 	pmmServerArgs := "$(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push "
@@ -276,12 +280,16 @@ func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
 	if cr.TLSEnabled() {
+		authMechanism := defaultAuthMechanism
+		if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.PMM.AuthenticationMechanism != "" {
+			authMechanism = cr.Spec.PMM.AuthenticationMechanism
+		}
 		tlsParams := []string{
 			"--tls",
 			"--tls-skip-verify",
 			"--tls-certificate-key-file=/tmp/tls.pem",
 			fmt.Sprintf("--tls-ca-file=%s/ca.crt", config.SSLDir),
-			"--authentication-mechanism=SCRAM-SHA-1",
+			fmt.Sprintf("--authentication-mechanism=%s", authMechanism),
 			"--authentication-database=admin",
 		}
 		pmmServerArgs += " " + strings.Join(tlsParams, " ")
@@ -504,7 +512,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		})
 	}
 
-	pmmAgentScriptEnv := PMMAgentScript(cr)
+	pmmAgentScriptEnv := pmmAgentScript(cr)
 	pmm.Env = append(pmm.Env, pmmAgentScriptEnv...)
 
 	return &pmm
@@ -549,7 +557,7 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 	pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
 
-	pmmAgentScriptEnv := PMMAgentScript(cr)
+	pmmAgentScriptEnv := pmmAgentScript(cr)
 	pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
 
 	if cr.CompareVersion("1.10.0") >= 0 {

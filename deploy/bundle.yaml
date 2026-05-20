@@ -1914,6 +1914,11 @@ spec:
                             type: string
                         type: object
                     type: object
+                  authenticationMechanism:
+                    enum:
+                    - SCRAM-SHA-256
+                    - SCRAM-SHA-1
+                    type: string
                   customClusterName:
                     type: string
                   enabled:
