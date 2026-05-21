@@ -33,6 +33,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 - Source cluster reference by CR name (`sourceCluster`) -- the operator manages both source and target clusters, so it could resolve connection details and create the source user automatically from a CR name reference instead of requiring manual `source.uri` and `source.credentialsSecret`. Deferred to a future iteration; first iteration uses a raw URI + Secret.
 - Version service integration for PCSM image -- the PSMDB CR's version service flow auto-fills `spec.image`, `spec.backup.image`, and `spec.pmm.image`. The version service response does not yet expose a PCSM image, so the first iteration requires `spec.image` on the ClusterSync CR. Revisit once PCSM is added to the version service.
 - PMM integration -- may be added in a future iteration if monitoring of PCSM through PMM is needed.
+- High availability / multiple PCSM instances per ClusterSync CR -- the first iteration runs a single PCSM instance (`replicas: 1`, `Recreate` strategy). Constraint 6 forbids two PCSM processes writing to the same target simultaneously, so any future HA must be active/passive. The first-iteration design leaves room for this by keeping callers behind a Service and treating `GET /status` as the source of truth for state, so a future leader-elected setup can swap the underlying workload without changing the controller or CR surface. Today's failover is pod restart + checkpoint recovery (Observation 2).
 
 ---
 
@@ -119,8 +120,12 @@ PerconaServerMongoDB (target CR, unchanged)
 
 1. **Deployment reconciliation:** On each reconcile, the ClusterSync controller ensures the
    PCSM Deployment exists and matches the desired state (image, env vars, resource limits).
+   The PCSM Deployment runs a single replica (`replicas: 1`) with the `Recreate` strategy --
+   see §5.1 and §5.2 for rationale, and §1.3 for the future HA path.
    When the ClusterSync CR is deleted, ownerReferences GC the Deployment, Service, and
-   syncTargetUser Secret.
+   syncTargetUser Secret. The same child resources are also GC'd automatically once
+   `status.state` transitions to `finalized` (see §5.5) -- the CR itself stays as a
+   read-only historical record until the user deletes it.
 
 2. **Lifecycle control via HTTP API:** After the Deployment is ready, the controller calls
    `GET /status` to read the current PCSM state. It compares this against the desired state
@@ -246,7 +251,7 @@ type ClusterSyncTLS struct {
 - `tls` -- when `tls.enabled=true`, `tls.secret` must point to a Secret containing the TLS certificates PCSM should use.
 - `expose` -- Service configuration for the PCSM HTTP API. Reuses the existing `Expose` struct from `psmdb_types.go` (type, loadBalancerSourceRanges, loadBalancerClass, annotations, labels, traffic policies). Defaults to ClusterIP (operator-only access). Set `expose.type=LoadBalancer` or `NodePort` to allow monitoring or interacting with PCSM from outside the cluster.
 - `paused` -- when `true` and PCSM is `running`, the controller calls `POST /pause`. Setting back to `false` calls `POST /resume`.
-- `finalize` -- one-way switch. When set to `true`, the controller calls `POST /finalize` once PCSM is caught up, then transitions `status.state` to `finalized` (terminal). Subsequent spec changes other than CR deletion are rejected.
+- `finalize` -- one-way switch. When set to `true`, the controller calls `POST /finalize` once PCSM is caught up, then transitions `status.state` to `finalized` (terminal). Once finalized, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the ClusterSync CR itself remains as a read-only historical record until the user deletes it. Subsequent spec changes other than CR deletion are rejected (see §5.5).
 
 ### 4.3 Status
 
@@ -366,7 +371,7 @@ The source cluster credentials are provided by the user via `spec.source.credent
 
 **Chosen approach:** Make `spec.source` (URI and credentialsSecret) immutable after CR creation -- reject the update via an admission webhook. To change source, the user deletes and recreates the CR. Image updates, pod knobs, and `spec.paused` remain mutable. Namespace filter changes are mutable but warn in status (PCSM does not re-evaluate filters retroactively). After `status.state=finalized`, all spec changes are rejected (the CR is effectively read-only).
 
-**Why:** The checkpoint is tied to the original source's oplog (Constraint 4); a mid-flight source change has no safe semantics. Making the field immutable surfaces this at admission time with a clear error rather than later via a `failed` state -- it's the same outcome (user has to recreate) without the half-broken intermediate state. Image updates remain safe due to PCSM's built-in recovery (Observation 2). Deleting and recreating the CR is acceptable because the CR lifecycle is already the unit of teardown (Deployment, Service, syncTargetUser all GC via ownerReferences), and the replacement CR triggers a fresh initial sync from the new source. Finalization is terminal -- re-running PCSM after finalization also requires deleting and recreating the ClusterSync CR.
+**Why:** The checkpoint is tied to the original source's oplog (Constraint 4); a mid-flight source change has no safe semantics. Making the field immutable surfaces this at admission time with a clear error rather than later via a `failed` state -- it's the same outcome (user has to recreate) without the half-broken intermediate state. Image updates remain safe due to PCSM's built-in recovery (Observation 2). Deleting and recreating the CR is acceptable because the CR lifecycle is already the unit of teardown (Deployment, Service, syncTargetUser all GC via ownerReferences), and the replacement CR triggers a fresh initial sync from the new source. Finalization is terminal for the CR -- running PCSM again means creating a new ClusterSync CR (the finalized CR can stay as a record; §4.1 cardinality only counts non-finalized CRs).
 
 **Alternatives considered:**
 
@@ -376,6 +381,19 @@ The source cluster credentials are provided by the user via `spec.source.credent
 | Accept update, transition to `failed`, require manual PCSM reset | Same end state as immutability (recreate), but leaves the CR in a confusing half-broken state and adds a manual reset step |
 | Block all updates during initial sync | Too restrictive for safe changes like image updates |
 
+### 5.5 Post-Finalize Resource Cleanup
+
+**Chosen approach (first iteration):** Once `status.state=finalized`, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret. The ClusterSync CR itself stays as a read-only record until the user deletes it.
+
+**Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. Removing `syncTargetUser` shrinks the privilege footprint on the target. Keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`" -- both allowed).
+
+**Alternatives considered:**
+
+| Alternative | Why Rejected |
+|------------|--------------|
+| Leave Deployment/Service/Secret running after finalize | Idle pod consumes resources; broad-privilege target user lingers |
+| Auto-delete the CR itself | Erases the historical record |
+
 ---
 
 ## 6. Sharding Impact
@@ -383,7 +401,7 @@ The source cluster credentials are provided by the user via `spec.source.credent
 ### 6.1 Sharded Cluster Behavior
 
 When the CR defines a sharded cluster (`sharding.enabled=true`):
-- PCSM connects via mongos on both source and target clusters. Since it connects through mongos, the cluster topology doesn't matter -- source and target can have different numbers of shards.
+- PCSM connects via mongos on both source and target clusters. Since it connects through mongos, the cluster topology doesn't matter -- source and target can have different numbers of shards (e.g., a 3-shard source replicating onto a 7-shard target is supported with no extra configuration; the target's mongos routes writes to the right shard based on the preserved shard key).
 - Before initial sync, PCSM checks which collections are sharded on the source and creates corresponding sharded collections on the target. The only sharding configuration preserved is the shard key; all other sharding details are handled internally by the target cluster.
 - The balancer does not need to be disabled on either cluster. The target cluster's balancer continues to operate normally and manages chunk distribution according to its own configuration.
 - PCSM replicates data, not metadata. Chunk distribution, primary shard names, and zone configuration are NOT preserved from the source. The target cluster manages these internally.
@@ -466,7 +484,7 @@ spec:
 
 ### 7.5 Finalize Migration
 
-After verifying lag is acceptable, set `finalize: true` to complete the migration. The controller calls `POST /finalize` once, creates required indexes on the target, and transitions the CR to `status.state=finalized`. This is terminal — to start fresh, delete and recreate the CR.
+After verifying lag is acceptable, set `finalize: true` to complete the migration. The controller calls `POST /finalize` once, creates required indexes on the target, transitions the CR to `status.state=finalized`, and then deletes the PCSM Deployment, Service, and `syncTargetUser` Secret (see §5.5). The CR itself stays as a read-only historical record until the user removes it. This is terminal for that CR -- to run a new migration the user creates a new ClusterSync CR (any name); the finalized CR does not block it because the cardinality rule in §4.1 only counts non-finalized CRs.
 
 ```yaml
 spec:
@@ -640,7 +658,7 @@ kubectl delete psmdb-clustersync cluster1-sync
     - *Resolution:* Pending -- open for team discussion.
 
 12. **Finalization support:** PCSM only creates indexes on the target when `POST /finalize` is called. Without it, the target has data but incomplete indexes.
-    - *Resolution:* Decided B on 2026-05-21. `spec.finalize` is a one-way bool on the ClusterSync CR. When set to `true` and PCSM is caught up, the controller calls `POST /finalize` once and transitions `status.state` to `finalized` (terminal). To run a new migration, the user deletes the ClusterSync CR and creates a new one. Picked over the `mode` enum for simplicity -- the state machine is one-way, so a bool reflects the actual semantics.
+    - *Resolution:* Decided B on 2026-05-21. `spec.finalize` is a one-way bool on the ClusterSync CR. When set to `true` and PCSM is caught up, the controller calls `POST /finalize` once and transitions `status.state` to `finalized` (terminal). After finalize, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the CR stays as a read-only historical record (see §5.5). To run a new migration the user just creates a new ClusterSync CR -- the finalized one doesn't block it (§4.1 cardinality rule only counts non-finalized CRs). Picked over the `mode` enum for simplicity -- the state machine is one-way, so a bool reflects the actual semantics.
 
 ---
 
