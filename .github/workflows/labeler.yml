@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: "Label PR"
-        uses: actions/labeler@v6
+        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           sync-labels: true
