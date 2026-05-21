@@ -11,8 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -75,6 +78,64 @@ func TestGetReconcileInterval(t *testing.T) {
 
 			got := getReconcileInterval()
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestEnsureSecurityKeys(t *testing.T) {
+	s := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(s))
+	require.NoError(t, psmdbv1.SchemeBuilder.AddToScheme(s))
+
+	tests := []struct {
+		name               string
+		vaultSecret        string
+		wantCreatedSecrets bool
+	}{
+		{
+			name:               "creates security keys without vault",
+			wantCreatedSecrets: true,
+		},
+		{
+			name:        "skips security keys with vault",
+			vaultSecret: "vault-secret",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1",
+					Namespace: "default",
+				},
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					Secrets: &psmdbv1.SecretsSpec{
+						EncryptionKey: "cluster1-mongodb-encryption-key",
+						Vault:         tt.vaultSecret,
+					},
+				},
+			}
+			cl := fake.NewClientBuilder().WithScheme(s).Build()
+			r := &ReconcilePerconaServerMongoDB{
+				client: cl,
+				scheme: s,
+			}
+
+			require.NoError(t, r.ensureSecurityKeys(t.Context(), cr))
+
+			assertSecretExists := func(name string) {
+				t.Helper()
+				err := cl.Get(t.Context(), types.NamespacedName{Name: name, Namespace: cr.Namespace}, &corev1.Secret{})
+				if tt.wantCreatedSecrets {
+					assert.NoError(t, err)
+					return
+				}
+				assert.True(t, k8serrors.IsNotFound(err), "expected %s to be absent, got %v", name, err)
+			}
+
+			assertSecretExists(cr.Spec.Secrets.GetInternalKey(cr))
+			assertSecretExists(cr.Spec.Secrets.EncryptionKey)
 		})
 	}
 }
