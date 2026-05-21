@@ -609,11 +609,10 @@ kubectl delete psmdb-clustersync cluster1-sync
 3. **Cluster pause interaction:** When `spec.pause=true`, should the operator automatically pause PCSM first?
    - *Resolution:* Decided A (auto-pause) on 2026-05-21. Before the PSMDB reconciler scales down the StatefulSets, it signals the ClusterSync controller (annotation or status condition on matching ClusterSync CRs) to call `POST /pause`. Once `status.state=paused`, the PSMDB reconciler proceeds with scale-down. On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the signal so the ClusterSync controller can resume PCSM. Avoids unnecessary failure/recovery cycles. See §8.3 for the full flow.
 
-4. **Backup/restore and PCSM concurrency:** Should backups and restores be blocked while PCSM is active?
-   - *Resolution:* Decided block both for the full ClusterSync lifecycle (`pending`, `initialSync`, `replicating`, `paused`). Allowed only when no ClusterSync CR targets the cluster or the CR is `finalized`.
+4. **Backup/restore and PCSM concurrency:** Should backups and restores be blocked on the target cluster while PCSM is active?
+   - *Resolution:* Decided block both on the target cluster for the full ClusterSync lifecycle (`pending`, `initialSync`, `replicating`, `paused`). Allowed only when no ClusterSync CR targets the cluster or the CR is `finalized`.
    - *Why backups (not just during initial sync):* PBM holds the backup cursor open while a backup runs; with PCSM continuously applying source writes onto the target, the cursor pins WiredTiger history and on-disk usage can grow unbounded. Lag-spike framing missed this risk -- the disk-growth risk is the same in `initialSync`, `replicating`, and `paused`.
    - *Why restores:* A restore overwrites data PCSM is continuously replicating onto. No safe interleave.
-   - *Still pending:* Team confirmation before implementation.
 
 5. **Sync completion status:** How to expose "sync finished" in status?
    - *Resolution:* Decided 2026-05-21. Initial-sync completion is conveyed by `status.state` transitioning out of `initialSync` (to `replicating`, `paused`, or `finalized`) and by an `InitialSyncComplete` condition in `status.conditions`. Steady-state "caught up" is `status.lagTimeSeconds=0`. A separate `initialSyncComplete` bool was dropped as redundant with `state`. A `readyToFinalize` field is not added in the first iteration -- users can read `lagTimeSeconds` directly and set `spec.finalize=true` when it's acceptable.
