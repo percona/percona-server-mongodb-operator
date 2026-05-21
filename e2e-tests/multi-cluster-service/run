@@ -69,10 +69,36 @@ wait_service_export() {
 }
 
 desc "Register Kubernetes cluster"
-k8s_cluster_name=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_region=$(kubectl -n default run --quiet curl --rm --restart=Never -it --image=appropriate/curl -- -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+
+cat <<EOF | kubectl -n default apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: curl
+  namespace: default
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: curl
+      image: appropriate/curl
+      imagePullPolicy: Always
+      command: ["sh"]
+      args:
+      - -c
+      - "sleep 100500"
+EOF
+
+kubectl -n default wait --for=condition=Ready pod/curl
+log "pod/curl is ready"
+
+k8s_cluster_name=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
+k8s_cluster_region=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+log "gke-cluster=${k8s_cluster_region}/${k8s_cluster_name}"
 
 gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
+log "GKE cluster ${k8s_cluster_region}/${k8s_cluster_name} is registered to the hub"
+
+kubectl -n default delete pod curl
 
 wait_mcs_api
 
