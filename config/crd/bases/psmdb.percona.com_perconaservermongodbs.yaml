@@ -3987,6 +3987,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -14819,6 +14821,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
