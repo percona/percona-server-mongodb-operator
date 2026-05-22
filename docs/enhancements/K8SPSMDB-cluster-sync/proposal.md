@@ -23,7 +23,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 
 ### 1.2 Non-Goals (Out of Scope)
 
-- Imperative operations (`reset`, `finalize`) -- these are destructive/irreversible and should not be triggered by a declarative reconciliation loop. Users must exec into the PCSM container manually. May be revisited if PCSM adds safe idempotent variants.
+- Imperative `reset` -- destructive/irreversible (wipes checkpoint state) and has no declarative analogue; users must exec into the PCSM container manually. May be revisited if PCSM adds a safe idempotent variant. (`finalize` is in scope: it is driven declaratively via `spec.finalize=true`; see §5.5 and §11 Q12.)
 - Reverse synchronization -- PCSM does not support this upstream. Revisit when upstream adds support.
 - Multi-source or multi-target replication -- PCSM only supports single source/target pairs.
 - Persistent Query Settings migration -- PCSM does not replicate Persistent Query Settings (MongoDB 8+). Migration requires manual export/import via `$querySettings` aggregation and `setQuerySettings` admin command after finalization. The operator will not automate this.
@@ -47,7 +47,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 - **Checkpoint:** A persisted position in the source's change stream that allows PCSM to resume real-time replication after a restart without re-running initial sync.
 - **Finalization:** A one-time operation that completes the migration. PCSM finalizes replication, creates required indexes on the target, and stops. After finalization, starting PCSM again begins a new initial sync from scratch.
 - **PCSM workflow:** `start` (begin replication) → initial sync → real-time replication → `pause`/`resume` (control replication) → `finalize` (complete migration) → cutover (switch clients to target).
-- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator will use `POST /start`, `POST /pause`, `POST /resume`, and `GET /status` to control the PCSM lifecycle. The operator will NOT call `POST /finalize` or `POST /reset` -- these are destructive operations left as manual actions (see Non-Goals). The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
+- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator uses `POST /start`, `POST /pause`, `POST /resume`, `POST /finalize`, and `GET /status` to control the PCSM lifecycle. `POST /finalize` is driven by the one-way `spec.finalize=true` switch (see §5.5 and §11 Q12). The operator will NOT call `POST /reset` -- it wipes checkpoint state and is left as a manual action (see Non-Goals). The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
 
 ### 2.2 Key Constraints
 
