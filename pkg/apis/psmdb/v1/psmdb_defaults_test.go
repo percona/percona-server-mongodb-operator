@@ -1,407 +1,76 @@
-package v1_test
+package v1
 
 import (
+	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	corevs "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func TestSetSafeDefaultPre116(t *testing.T) {
-	type args struct {
-		replset  *api.ReplsetSpec
-		expected *api.ReplsetSpec
+func TestUnmanagedUsesTCPLivenessProbe(t *testing.T) {
+	t.Parallel()
+
+	cr := &PerconaServerMongoDB{}
+	cr.Name = "my-cluster-name"
+	cr.Spec.CRVersion = "1.22.0"
+	cr.Spec.Image = "percona/percona-server-mongodb:8.0.19-7"
+	cr.Spec.Unmanaged = true
+	cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+	volumeSpec := &VolumeSpec{
+		PersistentVolumeClaim: PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("3Gi"),
+					},
+				},
+			},
+		},
+	}
+	cr.Spec.Replsets = []*ReplsetSpec{{
+		Name: "rs0",
+		Size: 3,
+		VolumeSpec: volumeSpec,
+		NonVoting: NonVotingSpec{
+			Enabled: true,
+			Size:    1,
+			VolumeSpec: volumeSpec,
+		},
+		Hidden: HiddenSpec{
+			Enabled: true,
+			Size:    1,
+			VolumeSpec: volumeSpec,
+		},
+	}}
+
+	if err := cr.CheckNSetDefaults(context.Background(), version.PlatformKubernetes); err != nil {
+		t.Fatalf("CheckNSetDefaults() error = %v", err)
 	}
 
-	vs := &api.VolumeSpec{
-		EmptyDir: &corevs.EmptyDirVolumeSource{
-			Medium: corevs.StorageMediumDefault,
-		},
-	}
-	tests := map[string]args{
-		"even number": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
-			},
-			&api.ReplsetSpec{
-				Size: 5,
-			},
-		},
-		"even number2": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-			},
-			&api.ReplsetSpec{
-				Size: 3,
-			},
-		},
-		"0 w/o arbiter ": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       0,
-			},
-			&api.ReplsetSpec{
-				Size: 3,
-			},
-		},
-		"0 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       0,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"1 w/o arbiter ": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       1,
-			},
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-			},
-		},
-		"1 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       1,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"odd with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"odd with two arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"odd with three arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    3,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"even with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"even4 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"even with two arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-		"even with three arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    3,
-				},
-			},
-			&api.ReplsetSpec{
-				Size: 4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-		},
-	}
+	rs := cr.Spec.Replsets[0]
 
-	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
-		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.15.0",
-			Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
-			Sharding:  api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
-		},
-	}
-
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			// TODO: separate testing different platforms, this will not test OpenShift properly
-			for _, platform := range []version.Platform{version.PlatformKubernetes, version.PlatformOpenshift} {
-				err := test.replset.SetDefaults(platform, cr, logf.Log.WithName("TestSetSafeDefault"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				assert.Equal(t, test.expected.Size, test.replset.Size)
-				if test.replset.Arbiter.Enabled {
-					assert.Equal(t, test.expected.Arbiter.Size, test.replset.Arbiter.Size)
-				}
-			}
-		})
-	}
+	assertTCPLivenessProbe(t, rs.GetPort(), rs.LivenessProbe)
+	assertTCPLivenessProbe(t, rs.GetPort(), rs.NonVoting.LivenessProbe)
+	assertTCPLivenessProbe(t, rs.GetPort(), rs.Hidden.LivenessProbe)
 }
 
-func TestSetSafeDefault(t *testing.T) {
-	type args struct {
-		replset     *api.ReplsetSpec
-		expectedErr string
-	}
+func assertTCPLivenessProbe(t *testing.T, port int32, probe *LivenessProbeExtended) {
+	t.Helper()
 
-	vs := &api.VolumeSpec{
-		EmptyDir: &corevs.EmptyDirVolumeSource{
-			Medium: corevs.StorageMediumDefault,
-		},
+	if probe == nil {
+		t.Fatal("liveness probe is nil")
 	}
-	tests := map[string]args{
-		"even number": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
-			},
-			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"even number2": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-			},
-			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"0 w/o arbiter ": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       0,
-			},
-			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"0 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       0,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			"check safe defaults: replset size must be at least 4 with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"1 w/o arbiter ": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       1,
-			},
-			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"1 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       1,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			"check safe defaults: replset size must be at least 4 with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"odd with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			"check safe defaults: replset size must be at least 4 with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"odd with two arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			"check safe defaults: arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"odd with three arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       3,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    3,
-				},
-			},
-			"check safe defaults: arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"even with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    1,
-				},
-			},
-			"check safe defaults: replset size must be at least 4 with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"even4 with arbiter": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       4,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			"check safe defaults: arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"even with two arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    2,
-				},
-			},
-			"check safe defaults: arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
-		"even with three arbiters": {
-			&api.ReplsetSpec{
-				VolumeSpec: vs,
-				Size:       2,
-				Arbiter: api.Arbiter{
-					Enabled: true,
-					Size:    3,
-				},
-			},
-			"check safe defaults: arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
-		},
+	if probe.Exec != nil {
+		t.Fatalf("expected exec liveness probe to be nil, got %v", probe.Exec.Command)
 	}
-
-	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
-		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.16.0",
-			Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
-			Sharding:  api.Sharding{Enabled: true, Mongos: &api.MongosSpec{Size: 3}},
-		},
+	if probe.TCPSocket == nil {
+		t.Fatal("expected tcp socket liveness probe")
 	}
-
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			for _, platform := range []version.Platform{version.PlatformKubernetes, version.PlatformOpenshift} {
-				err := test.replset.SetDefaults(platform, cr, logf.Log.WithName("TestSetSafeDefault"))
-				if err == nil {
-					t.Fatalf("expected error: %v, got nil", test.expectedErr)
-				}
-
-				assert.EqualError(t, err, test.expectedErr)
-			}
-		})
+	if got := probe.TCPSocket.Port.IntValue(); got != int(port) {
+		t.Fatalf("tcp socket port = %d, want %d", got, port)
 	}
 }

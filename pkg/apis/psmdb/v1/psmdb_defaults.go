@@ -437,7 +437,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		if replset.LivenessProbe.StartupDelaySeconds == 0 {
 			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
 		}
-		if replset.LivenessProbe.Exec == nil {
+		if replset.LivenessProbe.Exec == nil && replset.LivenessProbe.TCPSocket == nil {
+			if cr.Spec.Unmanaged {
+				replset.LivenessProbe.TCPSocket = &corev1.TCPSocketAction{
+					Port: intstr.FromInt(int(replset.GetPort())),
+				}
+			} else {
 			replset.LivenessProbe.Exec = &corev1.ExecAction{
 				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
@@ -458,6 +463,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 			if cr.CompareVersion("1.14.0") >= 0 {
 				replset.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			}
 			}
 		}
 
@@ -840,7 +846,12 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if nv.LivenessProbe.StartupDelaySeconds < 1 {
 		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
-	if nv.LivenessProbe.ProbeHandler.Exec == nil {
+	if nv.LivenessProbe.ProbeHandler.Exec == nil && nv.LivenessProbe.ProbeHandler.TCPSocket == nil {
+		if cr.Spec.Unmanaged {
+			nv.LivenessProbe.Probe.ProbeHandler.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(rs.GetPort())),
+			}
+		} else {
 		nv.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
 			Command: []string{"/data/db/mongodb-healthcheck", "k8s", "liveness"},
 		}
@@ -855,8 +866,9 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.CompareVersion("1.14.0") >= 0 {
 			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
+		}
 	}
-	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+	if nv.LivenessProbe.ProbeHandler.Exec != nil && !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
 			nv.LivenessProbe.ProbeHandler.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
@@ -944,20 +956,26 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	if h.LivenessProbe.StartupDelaySeconds < 1 {
 		h.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
-	if h.LivenessProbe.Exec == nil {
-		h.LivenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
-		}
+	if h.LivenessProbe.Exec == nil && h.LivenessProbe.TCPSocket == nil {
+		if cr.Spec.Unmanaged {
+			h.LivenessProbe.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(rs.GetPort())),
+			}
+		} else {
+			h.LivenessProbe.Exec = &corev1.ExecAction{
+				Command: []string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"},
+			}
 
-		if cr.TLSEnabled() {
-			h.LivenessProbe.Exec.Command = append(
-				h.LivenessProbe.Exec.Command,
-				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
-			)
+			if cr.TLSEnabled() {
+				h.LivenessProbe.Exec.Command = append(
+					h.LivenessProbe.Exec.Command,
+					"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+				)
+			}
 		}
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
-	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
+	if h.LivenessProbe.Exec != nil && !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		h.LivenessProbe.Exec.Command = append(
 			h.LivenessProbe.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
