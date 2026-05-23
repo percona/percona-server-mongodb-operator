@@ -86,6 +86,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                          PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	RevisionHistoryLimit         *int32                               `json:"revisionHistoryLimit,omitempty"`
 	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName                string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
@@ -573,10 +574,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
