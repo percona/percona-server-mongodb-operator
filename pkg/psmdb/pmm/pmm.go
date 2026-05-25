@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	defaultAuthMechanism = "SCRAM-SHA-1"
+	scramSHA1AuthMechanism   = "SCRAM-SHA-1"
+	scramSHA256AuthMechanism = "SCRAM-SHA-256"
 )
 
 // containerForPMM2 returns a pmm2 container from the given spec.
@@ -280,8 +281,11 @@ func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
 	if cr.TLSEnabled() {
-		authMechanism := defaultAuthMechanism
-		if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.PMM.AuthenticationMechanism != "" {
+		authMechanism := scramSHA256AuthMechanism
+		switch {
+		case cr.CompareVersion("1.23.0") < 0:
+			authMechanism = scramSHA1AuthMechanism
+		case cr.Spec.PMM.AuthenticationMechanism != "":
 			authMechanism = cr.Spec.PMM.AuthenticationMechanism
 		}
 		tlsParams := []string{

@@ -58,9 +58,9 @@ func TestContainer(t *testing.T) {
 			},
 			assert: assertAuthMechanism("SCRAM-SHA-256"),
 		},
-		"pmm enabled - unset mechanism falls back to SCRAM-SHA-1 on >=1.23.0": {
+		"pmm enabled - unset mechanism falls back to SCRAM-SHA-256 on >=1.23.0": {
 			secret: tokenSecret,
-			assert: assertAuthMechanism("SCRAM-SHA-1"),
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
 		},
 		"pmm enabled - explicit SCRAM-SHA-256 ignored on <1.23.0": {
 			secret: tokenSecret,
@@ -77,9 +77,17 @@ func TestContainer(t *testing.T) {
 			},
 			assert: assertAuthMechanism("SCRAM-SHA-256"),
 		},
-		"pmm2 enabled - unset mechanism falls back to SCRAM-SHA-1": {
+		"pmm2 enabled - unset mechanism falls back to SCRAM-SHA-256 on >=1.23.0": {
 			secret: pmm2Secret,
-			assert: assertAuthMechanism("SCRAM-SHA-1"),
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm enabled - TLS disabled omits authentication-mechanism flag": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertNoAuthMechanism(),
 		},
 	}
 
@@ -141,6 +149,23 @@ func assertAuthMechanism(want string) func(t *testing.T, container *corev1.Conta
 			}
 		}
 		assert.Contains(t, prerun, "--authentication-mechanism="+want)
+	}
+}
+
+func assertNoAuthMechanism() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.NotContains(t, prerun, "--authentication-mechanism")
+		assert.NotContains(t, prerun, "--tls")
 	}
 }
 
