@@ -130,6 +130,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
+	originalRequested := requested.DeepCopy()
 	gib, err := RoundUpGiB(requested.Value())
 	if err != nil {
 		return errors.Wrap(err, "round GiB value")
@@ -229,7 +230,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
-	if requested.Cmp(actual) == 0 {
+	if actual.Cmp(originalRequested) >= 0 {
 		return nil
 	}
 
