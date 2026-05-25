@@ -122,10 +122,14 @@ PerconaServerMongoDB (target CR, unchanged)
    PCSM Deployment exists and matches the desired state (image, env vars, resource limits).
    The PCSM Deployment runs a single replica (`replicas: 1`) with the `Recreate` strategy --
    see §5.1 and §5.2 for rationale, and §1.3 for the future HA path.
-   When the ClusterSync CR is deleted, ownerReferences GC the Deployment, Service, and
-   syncTargetUser Secret. The same child resources are also GC'd automatically once
-   `status.state` transitions to `finalized` (see §5.5) -- the CR itself stays as a
-   read-only historical record until the user deletes it.
+   The controller registers a Kubernetes finalizer
+   (`psmdb.percona.com/clustersync-cleanup`) on the ClusterSync CR. When the CR is deleted,
+   the finalizer drops the `syncTargetUser` MongoDB user on the target cluster and then
+   releases, allowing ownerReferences to GC the Deployment, Service, and `syncTargetUser`
+   K8s Secret. When `status.state` transitions to `finalized`, the controller performs the
+   same cleanup proactively (drop MongoDB user + delete child resources) without waiting
+   for CR deletion -- see §5.5 -- so that the CR can remain as a historical record without
+   leaving a broad-privilege user on the target.
 
 2. **Lifecycle control via HTTP API:** After the Deployment is ready, the controller calls
    `GET /status` to read the current PCSM state. It compares this against the desired state
@@ -353,9 +357,11 @@ PCSM requires users on both the source and target clusters. The operator only ma
 | Source user | User's responsibility (not managed by the operator) | Source cluster | `backup`, `clusterMonitor`, `readAnyDatabase` |
 | `syncTargetUser` | Operator | Target cluster (local) | `restore`, `clusterMonitor`, `clusterManager`, `readWriteAnyDatabase` |
 
-**Chosen approach:** The ClusterSync controller creates `syncTargetUser` on the target cluster when the ClusterSync CR is created, and deletes it when the CR is deleted. The lifecycle is bound to the CR.
+**Chosen approach:** The ClusterSync controller creates `syncTargetUser` on the target cluster when the ClusterSync CR is created. It drops the user on the target cluster at the earlier of (a) `status.state` transitioning to `finalized` (see §5.5), or (b) ClusterSync CR deletion. To guarantee (b) — that the MongoDB user is dropped on the target *before* ownerReferences GC the K8s `syncTargetUser` Secret — the controller registers a Kubernetes finalizer (`psmdb.percona.com/clustersync-cleanup`) on the ClusterSync CR and releases it only after the `dropUser` call succeeds.
 
-**Why:** With a separate CRD, "intent to use PCSM" is expressed by the existence of the CR. Creating the user only when a ClusterSync CR exists avoids leaving a broad-privilege user (`readWriteAnyDatabase`) on clusters that never use PCSM. Deleting it on CR delete is unambiguous — there is no "temporarily disabled" sub-state to worry about (the user pauses replication via `spec.paused`, which doesn't affect the user). To suspend replication without losing the user, set `spec.paused=true` instead of deleting the CR.
+Both cleanup paths must be idempotent: `dropUser` treats "user does not exist" as success, so a `kubectl delete` after a finalize transition (where path (a) already dropped the user) runs the finalizer as a no-op rather than failing. The same property covers controller restarts and retried reconciles — re-invoking either cleanup never errors.
+
+**Why:** With a separate CRD, "intent to use PCSM" is expressed by the existence of the CR. Creating the user only when a ClusterSync CR exists avoids leaving a broad-privilege user (`readWriteAnyDatabase`) on clusters that never use PCSM. Dropping the user at finalize time (rather than only on CR delete) matters because a finalized CR may live indefinitely as a historical record — tying user cleanup to CR delete would leave the broad-privilege user on the target for as long as that record is kept. The finalizer covers the pre-finalize delete path: without it, ownerReferences would drop the K8s Secret while the MongoDB user lingered on the target. To suspend replication without dropping the user, set `spec.paused=true` instead of deleting the CR — pause does not affect the user.
 
 The source cluster credentials are provided by the user via `spec.source.credentialsSecret`, a Kubernetes Secret with `username` and `password` keys. The operator reads the Secret and injects the credentials into `PCSM_SOURCE_URI` with percent-encoding per RFC 3986. Credentials are never stored in the CR spec.
 
@@ -383,9 +389,9 @@ The source cluster credentials are provided by the user via `spec.source.credent
 
 ### 5.5 Post-Finalize Resource Cleanup
 
-**Chosen approach (first iteration):** Once `status.state=finalized`, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret. The ClusterSync CR itself stays as a read-only record until the user deletes it.
+**Chosen approach (first iteration):** Once `status.state=finalized`, the controller drops the `syncTargetUser` MongoDB user on the target cluster, then deletes the PCSM Deployment, Service, and `syncTargetUser` K8s Secret. The ClusterSync CR itself stays as a read-only record until the user deletes it.
 
-**Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. Removing `syncTargetUser` shrinks the privilege footprint on the target. Keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`" -- both allowed).
+**Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. The MongoDB-side `dropUser` happens at finalize time — not on CR delete — because a finalized CR may live indefinitely as a historical record; tying user cleanup to CR delete would leave a broad-privilege user (`readWriteAnyDatabase`) on the target for as long as the CR is kept. Once the user and child K8s objects are gone, the CR's privilege footprint is zero regardless of how long it stays. Keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`" -- both allowed).
 
 **Alternatives considered:**
 
