@@ -463,12 +463,14 @@ the single `mongot` StatefulSet. No special handling is needed.
   - `storage.dataPath: /data/mongot`
 
   - `server.grpc.address: 0.0.0.0:27028`
-  - `server.grpc.tls.mode` -- defaults to `mTLS`. Users who run with
-    cluster TLS disabled must opt out via
-    `spec.search.configuration: server.grpc.tls.mode: Disabled`
-    (see §8.5).
-  - `server.grpc.tls.certificateKeyFile: /tmp/tls.pem` -- tls.key+tls.crt, concatenated in mongot entrypoint
-  - `server.grpc.tls.caFile: /etc/mongodb-ssl/ca.crt`
+  - `server.grpc.tls.mode` -- derived from cluster TLS:
+    `mTLS` when `cr.TLSEnabled()`, otherwise `Disabled`.
+    Overridable via `spec.search.configuration`.
+  - `server.grpc.tls.certificateKeyFile: /tmp/tls.pem` (only when
+    cluster TLS is enabled) -- tls.key+tls.crt, concatenated in
+    mongot entrypoint
+  - `server.grpc.tls.caFile: /etc/mongodb-ssl/ca.crt` (only when
+    cluster TLS is enabled)
 
   - `healthCheck.address: 0.0.0.0:8080` -- used by liveness and readiness probes
 
@@ -870,9 +872,10 @@ spec:
       requests:
         cpu: "2"
         memory: 2Gi
-    # mongot's gRPC listener defaults to mTLS. To run against a
-    # cluster with TLS disabled, opt out through the raw mongot
-    # configuration overlay:
+    # mongot's gRPC TLS mode follows the cluster's TLS state
+    # automatically (mTLS when cluster TLS is enabled, Disabled
+    # otherwise). To force a different mode, override through the
+    # raw mongot configuration overlay:
     # configuration: |
     #   server:
     #     grpc:
@@ -1132,28 +1135,14 @@ schedulable.
 `ssl` Secret because it does not exist.
 
 **Expected behavior:**
-- The user must turn off `mongot`'s gRPC TLS through the raw
-  `mongot` configuration overlay:
-  ```yaml
-  spec:
-    search:
-      configuration: |
-        server:
-          grpc:
-            tls:
-              mode: Disabled
-  ```
-- Once `server.grpc.tls.mode` is `Disabled` in the rendered
-  `mongot.conf`, `vectorsearch.InjectMongodConfig` /
-  `InjectMongosConfig` set `searchTLSMode: disabled` on `mongod`
-  and `mongos` accordingly.
-
-**Implementation status:** the operator does **not** auto-derive
-`server.grpc.tls.mode` from cluster TLS state today. Leaving
-`spec.search.configuration` unset on a TLS-disabled cluster
-produces a `mongot.conf` that references the (missing) cluster
-`ssl` Secret, and `mongot` will fail to start until the user opts
-out as above. Auto-derivation is a follow-up.
+- `defaultMongotConfig` reads `cr.TLSEnabled()` and emits
+  `server.grpc.tls.mode: Disabled` with no certificate paths.
+  `mongot` starts without TLS material.
+- `vectorsearch.InjectMongodConfig` / `InjectMongosConfig` then
+  set `searchTLSMode: disabled` on `mongod` and `mongos` because
+  the rendered `mongot.conf` has TLS disabled.
+- The user can still override either side through
+  `spec.search.configuration` if they want a different mode.
 
 ---
 
