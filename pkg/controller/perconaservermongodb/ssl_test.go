@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -35,8 +36,7 @@ func newTestCR() *api.PerconaServerMongoDB {
 	}
 }
 
-func TestCurrentSSLAnnotation_WithExistingStatefulSet(t *testing.T) {
-	cr := newTestCR()
+func TestCurrentSSLAnnotation(t *testing.T) {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster-rs0",
@@ -57,28 +57,40 @@ func TestCurrentSSLAnnotation_WithExistingStatefulSet(t *testing.T) {
 		},
 	}
 
-	r := buildFakeClient(cr, sts)
-	result := r.currentSSLAnnotation(t.Context(), cr)
-
-	assert.Equal(t, "abc123", result["percona.com/ssl-hash"])
-	assert.Equal(t, "def456", result["percona.com/ssl-internal-hash"])
-}
-
-func TestCurrentSSLAnnotation_NoStatefulSet(t *testing.T) {
-	cr := newTestCR()
-	r := buildFakeClient(cr)
-	result := r.currentSSLAnnotation(t.Context(), cr)
-
-	assert.Equal(t, "", result["percona.com/ssl-hash"])
-	assert.Equal(t, "", result["percona.com/ssl-internal-hash"])
-}
-
-func TestSSLAnnotation_UserProvidedOnly_SecretMissing(t *testing.T) {
-	cr := newTestCR()
-	cr.Spec.TLS = &api.TLSSpec{
-		CertManagementPolicy: api.CertManagementUserProvidedOnly,
+	tests := []struct {
+		name             string
+		objects          []client.Object
+		wantSSLHash      string
+		wantInternalHash string
+	}{
+		{
+			name:             "with existing statefulset",
+			objects:          []client.Object{sts},
+			wantSSLHash:      "abc123",
+			wantInternalHash: "def456",
+		},
+		{
+			name:             "no statefulset",
+			objects:          nil,
+			wantSSLHash:      "",
+			wantInternalHash: "",
+		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newTestCR()
+			objs := append([]client.Object{cr}, tt.objects...)
+			r := buildFakeClient(objs...)
+			result := r.currentSSLAnnotation(t.Context(), cr)
+
+			assert.Equal(t, tt.wantSSLHash, result["percona.com/ssl-hash"])
+			assert.Equal(t, tt.wantInternalHash, result["percona.com/ssl-internal-hash"])
+		})
+	}
+}
+
+func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster-rs0",
@@ -97,23 +109,6 @@ func TestSSLAnnotation_UserProvidedOnly_SecretMissing(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	r := buildFakeClient(cr, sts)
-	annotation, err := r.sslAnnotation(t.Context(), cr)
-
-	require.NoError(t, err)
-	assert.Equal(t, "existing-hash", annotation["percona.com/ssl-hash"])
-	assert.Equal(t, "existing-internal-hash", annotation["percona.com/ssl-internal-hash"])
-
-	// Verify TLSSecretsReady condition is false
-	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
-}
-
-func TestSSLAnnotation_UserProvidedOnly_SecretPresent(t *testing.T) {
-	cr := newTestCR()
-	cr.Spec.TLS = &api.TLSSpec{
-		CertManagementPolicy: api.CertManagementUserProvidedOnly,
 	}
 
 	sslSecret := &corev1.Secret{
@@ -137,15 +132,48 @@ func TestSSLAnnotation_UserProvidedOnly_SecretPresent(t *testing.T) {
 		},
 	}
 
-	r := buildFakeClient(cr, sslSecret, sslInternalSecret)
-	annotation, err := r.sslAnnotation(t.Context(), cr)
+	tests := []struct {
+		name                 string
+		objects              []client.Object
+		checkAnnotation      func(t *testing.T, ann map[string]string)
+		wantSecretsReadyCond bool
+	}{
+		{
+			name:    "secrets missing — preserves existing sts annotations",
+			objects: []client.Object{sts},
+			checkAnnotation: func(t *testing.T, ann map[string]string) {
+				assert.Equal(t, "existing-hash", ann["percona.com/ssl-hash"])
+				assert.Equal(t, "existing-internal-hash", ann["percona.com/ssl-internal-hash"])
+			},
+			wantSecretsReadyCond: false,
+		},
+		{
+			name:    "secrets present — computes fresh hashes",
+			objects: []client.Object{sslSecret, sslInternalSecret},
+			checkAnnotation: func(t *testing.T, ann map[string]string) {
+				assert.NotEmpty(t, ann["percona.com/ssl-hash"])
+				assert.NotEmpty(t, ann["percona.com/ssl-internal-hash"])
+			},
+			wantSecretsReadyCond: true,
+		},
+	}
 
-	require.NoError(t, err)
-	assert.NotEmpty(t, annotation["percona.com/ssl-hash"])
-	assert.NotEmpty(t, annotation["percona.com/ssl-internal-hash"])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newTestCR()
+			cr.Spec.TLS = &api.TLSSpec{
+				CertManagementPolicy: api.CertManagementUserProvidedOnly,
+			}
 
-	// Verify TLSSecretsReady condition is true
-	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
+			objs := append([]client.Object{cr}, tt.objects...)
+			r := buildFakeClient(objs...)
+			annotation, err := r.sslAnnotation(t.Context(), cr)
+			require.NoError(t, err)
+
+			tt.checkAnnotation(t, annotation)
+			assert.Equal(t, tt.wantSecretsReadyCond, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
+		})
+	}
 }
 
 func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.T) {
