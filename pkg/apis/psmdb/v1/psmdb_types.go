@@ -442,6 +442,11 @@ type PMMSpec struct {
 
 	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
 	CustomClusterName string `json:"customClusterName,omitempty"`
+
+	// AuthenticationMechanism is the SASL mechanism the PMM client uses to
+	// authenticate the clusterMonitor user against mongod/mongos.
+	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
+	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
