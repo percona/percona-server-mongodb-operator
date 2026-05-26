@@ -7,6 +7,7 @@ test_dir=$(realpath $(dirname $0))
 set_debug
 # EKS cluster should be run without the policy AmazonS3FullAccess
 # This policy makes the test false passed.
+start_time=$SECONDS
 
 if [ $EKS -ne 1 ]; then
 	echo "Skip the test. We run it for EKS only "
@@ -20,7 +21,9 @@ eks_cluster=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cl
 IFS='.' read -r eks_cluster_name eks_cluster_region _ <<<"$eks_cluster"
 
 eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$eks_cluster_region --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
-policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
+
+account_id=$(aws sts get-caller-identity --query Account --output text)
+policy_arn="arn:aws:iam::${account_id}:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
 desc "delete role"
@@ -34,7 +37,8 @@ aws iam delete-role --role-name "$role_name" || true
 
 desc "create role"
 jq --arg eks_cluster_oidc "$eks_cluster_oidc" \
-	'.Statement[0].Principal.Federated = "arn:aws:iam::119175775298:oidc-provider/\($eks_cluster_oidc)" |
+	--arg account_id "$account_id" \
+	'.Statement[0].Principal.Federated = "arn:aws:iam::\($account_id):oidc-provider/\($eks_cluster_oidc)" |
     .Statement[0].Condition.StringEquals[($eks_cluster_oidc + ":aud")] = "sts.amazonaws.com"' \
 	$test_dir/conf/template.json >$test_dir/conf/role-trust-policy.json
 
@@ -235,8 +239,6 @@ done
 kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout restart deployment/percona-server-mongodb-operator
 kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout status deployment/percona-server-mongodb-operator --timeout=300s
 
-echo "Pods recreated during B.5 rolling restart: $recreated_after_restart (expected: 3 mongod replicas)"
-
 desc 'verify backup-agent now has AWS_ROLE_ARN'
 kubectl exec "$cluster-rs0-0" -c backup-agent -- sh -c '
 	if [ -z "$AWS_ROLE_ARN" ]; then
@@ -276,6 +278,9 @@ echo "OK: backup works after deleting aws-s3-secret (definitive proof of IRSA-on
 
 kubectl_bin delete psmdb-backup --all --ignore-not-found=true
 
-destroy $namespace
+duration=$((SECONDS - start_time))
+printf 'Test duration: %02d:%02d:%02d\n' $((duration / 3600)) $((duration % 3600 / 60)) $((duration % 60))
+
+#destroy $namespace
 
 desc 'test passed'
