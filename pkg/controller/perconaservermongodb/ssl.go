@@ -533,6 +533,7 @@ func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context
 
 	currentSANs, err := tls.GetDNSNamesFromCert(sslSecret.Data["tls.crt"])
 	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to parse TLS certificate SANs")
 		return false
 	}
 
