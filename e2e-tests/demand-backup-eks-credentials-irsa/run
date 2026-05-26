@@ -216,7 +216,7 @@ sleep 5
 backup_dest_secret=$(get_backup_dest "$backup_name_secret")
 setup_aws_credentials
 check_backup_existence_aws "$backup_dest_secret" "/rs0/myApp.test.gz"
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+
 echo "OK: backup via credentialsSecret works"
 
 desc 'B.3 — annotate SAs with IAM role-arn (expected: 0 restarts)'
@@ -265,7 +265,7 @@ wait_backup "$backup_name_irsa"
 backup_dest_irsa=$(get_backup_dest "$backup_name_irsa")
 setup_aws_credentials
 check_backup_existence_aws "$backup_dest_irsa" "/rs0/myApp.test.gz"
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+
 echo "OK: backup via IRSA works (credentialsSecret no longer in CR)"
 
 desc 'B.8 — delete the unused aws-s3-secret and run one more backup to prove IRSA-only operation'
