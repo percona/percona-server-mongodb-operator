@@ -146,7 +146,7 @@ func TestIssueWithCA_InvalidInputs(t *testing.T) {
 	})
 }
 
-func TestGetSANsFromCert(t *testing.T) {
+func TestGetDNSNamesFromCert(t *testing.T) {
 	hosts := []string{"localhost", "mongo-0.example.com", "*.mongo.ns"}
 
 	caCert, caKey, err := IssueCA()
@@ -155,7 +155,7 @@ func TestGetSANsFromCert(t *testing.T) {
 	tlsCert, _, err := IssueWithCA(hosts, caCert, caKey)
 	require.NoError(t, err)
 
-	sans, err := GetSANsFromCert(tlsCert)
+	sans, err := GetDNSNamesFromCert(tlsCert)
 	require.NoError(t, err)
 
 	sort.Strings(sans)
@@ -163,11 +163,11 @@ func TestGetSANsFromCert(t *testing.T) {
 	assert.Equal(t, hosts, sans)
 }
 
-func TestGetSANsFromCert_InvalidInput(t *testing.T) {
-	_, err := GetSANsFromCert([]byte("not-a-cert"))
+func TestGetDNSNamesFromCert_InvalidInput(t *testing.T) {
+	_, err := GetDNSNamesFromCert([]byte("not-a-cert"))
 	assert.Error(t, err)
 
-	_, err = GetSANsFromCert(nil)
+	_, err = GetDNSNamesFromCert(nil)
 	assert.Error(t, err)
 }
 

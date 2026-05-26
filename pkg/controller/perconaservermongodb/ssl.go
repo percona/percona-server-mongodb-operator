@@ -531,7 +531,7 @@ func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context
 		return false
 	}
 
-	currentSANs, err := tls.GetSANsFromCert(sslSecret.Data["tls.crt"])
+	currentSANs, err := tls.GetDNSNamesFromCert(sslSecret.Data["tls.crt"])
 	if err != nil {
 		return false
 	}

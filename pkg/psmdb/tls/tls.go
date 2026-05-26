@@ -185,8 +185,8 @@ func Issue(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err er
 	return caCertPEM, tlsCertPEM, tlsKeyPEM, nil
 }
 
-// GetSANsFromCert extracts DNS SANs from a PEM-encoded TLS certificate.
-func GetSANsFromCert(tlsCertPEM []byte) ([]string, error) {
+// GetDNSNamesFromCert extracts DNS names from the SANs of a PEM-encoded TLS certificate.
+func GetDNSNamesFromCert(tlsCertPEM []byte) ([]string, error) {
 	block, _ := pem.Decode(tlsCertPEM)
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode TLS certificate PEM")
