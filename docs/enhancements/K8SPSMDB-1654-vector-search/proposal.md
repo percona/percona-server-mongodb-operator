@@ -1,12 +1,12 @@
 # K8SPSMDB-1654: MongoDB Vector Search Integration
 
-| Field        | Value                                    |
-|--------------|------------------------------------------|
-| Author       | Ege Güneş                                |
-| Status       | Draft                                    |
-| Created      | 2026-05-11                               |
-| Last Updated | 2026-05-25                               |
-| Reviewers    | TBD                                      |
+| Field        | Value                                       |
+|--------------|---------------------------------------------|
+| Author       | Ege Güneş                                   |
+| Status       | In Review                                   |
+| Created      | 2026-05-11                                  |
+| Last Updated | 2026-05-26                                  |
+| Reviewers    | Ivan Groenewold, Slava Sarzhan, Mayank Shah |
 
 ---
 
