@@ -4943,6 +4943,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -12718,6 +12720,9 @@ spec:
                   - size
                   type: object
                 type: array
+              revisionHistoryLimit:
+                format: int32
+                type: integer
               roles:
                 items:
                   properties:
@@ -15784,6 +15789,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
