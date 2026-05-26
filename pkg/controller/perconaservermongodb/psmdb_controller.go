@@ -1592,7 +1592,7 @@ var errTLSNotReady = errors.New("waiting for TLS secret")
 
 // currentSSLAnnotation reads the current SSL annotations from existing StatefulSets
 // to preserve them when the TLS secret is missing.
-func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) map[string]string {
+func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := map[string]string{
 		naming.AnnotationSSLHash:          "",
 		naming.AnnotationSSLInternalHash: "",
@@ -1607,7 +1607,7 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 			}),
 		},
 	); err != nil {
-		return annotation
+		return nil, errors.Wrap(err, "failed to get statefulset list")
 	}
 
 	if len(sfsList.Items) > 0 {
@@ -1620,7 +1620,7 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 		}
 	}
 
-	return annotation
+	return annotation, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
@@ -1668,7 +1668,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLSecretName(cr)),
 				})
-				return r.currentSSLAnnotation(ctx, cr), nil
+				return r.currentSSLAnnotation(ctx, cr)
 			}
 			return nil, errTLSNotReady
 		}
@@ -1694,7 +1694,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 					Reason:  "TLSSecretNotFound",
 					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLInternalSecretName(cr)),
 				})
-				return r.currentSSLAnnotation(ctx, cr), nil
+				return r.currentSSLAnnotation(ctx, cr)
 			}
 			return nil, errTLSNotReady
 		}

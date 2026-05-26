@@ -82,7 +82,8 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 			cr := newTestCR()
 			objs := append([]client.Object{cr}, tt.objects...)
 			r := buildFakeClient(objs...)
-			result := r.currentSSLAnnotation(t.Context(), cr)
+			result, err := r.currentSSLAnnotation(t.Context(), cr)
+			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantSSLHash, result[naming.AnnotationSSLHash])
 			assert.Equal(t, tt.wantInternalHash, result[naming.AnnotationSSLInternalHash])
