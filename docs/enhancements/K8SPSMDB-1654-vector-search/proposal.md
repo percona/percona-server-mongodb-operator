@@ -5,7 +5,7 @@
 | Author       | Ege Güneş                                |
 | Status       | Draft                                    |
 | Created      | 2026-05-11                               |
-| Last Updated | 2026-05-13                               |
+| Last Updated | 2026-05-25                               |
 | Reviewers    | TBD                                      |
 
 ---
@@ -71,6 +71,29 @@ already have.
   design decision on its own (Envoy sidecar vs Gateway API). v1
   supports `size: 1` per replset/shard; postponed to a later
   release.
+
+### 1.3 Implementation Status (snapshot)
+
+Tracks how the current code on this branch lines up with the
+proposal. Updated as the implementation evolves.
+
+| Area | Status | Notes |
+|---|---|---|
+| `SearchSpec` / `SearchReplsetOverride` types + defaulting + size validation | Done | `pkg/apis/psmdb/v1/psmdb_types.go`, `psmdb_defaults.go`. Per-replset overrides applied via `getSearchSpec` in the StatefulSet builder. |
+| Per-replset `<...>-search` StatefulSet, headless Service, ConfigMap, PVC | Done | `pkg/psmdb/vectorsearch/`. ConfigSvr replsets are skipped. |
+| `searchCoordinator` user provisioning + secret keys | Done | `MONGODB_SEARCH_USER` / `MONGODB_SEARCH_PASSWORD` added to the system users Secret when search is enabled; user created with `RoleSearch` in `createOrUpdateSystemUsers`. |
+| `mongod.conf` setParameter injection (`mongotHost`, `searchIndexManagementHostAndPort`, `useGrpcForSearch`) | Done | `vectorsearch.InjectMongodConfig`. Operator value always wins. |
+| `mongos.conf` setParameter injection for sharded clusters | Done | `vectorsearch.InjectMongosConfig` — `searchIndexManagementHostAndPort` is a map keyed by shard name. |
+| TLS cert SAN extension to cover `<...>-search` Services | Done | `tls.searchSans` in `pkg/psmdb/tls/tls.go`. |
+| Per-replset/shard `SearchStatus` (`Size`, `Ready`, `Status`, `Message`) | Done | Populated by `searchStatus`; ConfigSvr excluded; map cleared when disabled. |
+| `SearchReady` / `SearchUnsupportedByPSMDBImage` cluster conditions | **Not wired** | Constants exist (`ConditionTypeSearchReady`, `ConditionTypeSearchUnsupportedByPSMDBImage`) but no reconciler path sets them yet. |
+| Runtime version gate against `cr.Status.MongoVersion` | **Not wired** | §8.1. |
+| `searchTLSMode` derived automatically from cluster TLS state | **Partial** | The operator only emits `searchTLSMode` when the rendered `mongot.conf` carries a `server.grpc.tls.mode`. The default `mongot.conf` does not set it, so users must opt in through `spec.search.configuration`. The string written is the `mongot` enum (`TLS`/`mTLS`/`Disabled`), not the CR-side enum (`preferTLS`/`disabled`). |
+| Sharded `mongot.conf` `syncSource.router` block | **Stub** | Emitted as an empty struct (`TODO` in `configmap.go`). Sharded sync is not yet functional end-to-end. |
+| `jvmFlags` propagation onto the `mongot` container; auto 50%-heap default | **Not wired** | Field accepted on the CR but not passed to the container env/args. |
+| PBM-restore hook that restarts `<...>-search` pods; `SearchReindexing` condition | **Not wired** | §8.3. Users must restart search pods manually after restore. |
+| Drift status condition when users set operator-owned keys in `spec.replsets[].configuration` | **Not wired** | The overlay silently overwrites the user's value. |
+| Storage-near-full warning condition / PVC autoscaling for the search PVC | **Not wired** | Open question §11.7. |
 
 ---
 
@@ -183,19 +206,22 @@ PerconaServerMongoDB CR (spec.search.enabled: true; spec.sharding.enabled: false
   └─ reconciler
       ├─ Secrets   (… + searchCoordinator user added to users Secret)
       ├─ ConfigMap mongod.conf  ── operator-injected setParameters:
-      │                              mongotHost: <cluster>-<rs>-search:27027
-      │                              searchIndexManagementHostAndPort: <cluster>-<rs>-search:27027
+      │                              mongotHost: <cluster>-<rs>-search-0.<cluster>-<rs>-search.<ns>.<dnsSuffix>:27028
+      │                              searchIndexManagementHostAndPort: <same as mongotHost>
       │                              useGrpcForSearch: true
-      │                              searchTLSMode: preferTLS   (when cluster TLS enabled)
+      │                              searchTLSMode: <derived from rendered mongot.conf>
       ├─ ConfigMap <cluster>-<rs>-search-config  ── mongot YAML config
       ├─ Service   <cluster>-<rs>          (existing, mongod)
-      ├─ Service   <cluster>-<rs>-search   (new, mongot gRPC, TLS)
+      ├─ Service   <cluster>-<rs>-search   (new, headless; gRPC 27028, metrics 9946)
       ├─ StatefulSet <cluster>-<rs>        (existing, mongod)
       └─ StatefulSet <cluster>-<rs>-search (new)
             Pod containers:
-              - mongot          (27027, TLS)
-            PVC: mongot-data
-            Mounts: keyfile Secret, ssl Secret (server cert + CA)
+              - mongot          (gRPC 27028 + healthCheck 8080 + metrics 9946)
+            PVC: mongot-data (mounted at /data/mongot)
+            Mounts: keyfile Secret (/etc/mongodb-secrets/mongodb-key),
+                    users Secret (/etc/users-secret),
+                    mongot.conf ConfigMap (/etc/mongot/mongot.conf),
+                    ssl Secret (/etc/mongodb-ssl, when cluster TLS enabled)
 ```
 
 **Sharded cluster:**
@@ -205,7 +231,7 @@ PerconaServerMongoDB CR (spec.search.enabled: true; spec.sharding.enabled: true)
   └─ reconciler
       ├─ Secrets   (… + searchCoordinator user added to users Secret)
       ├─ ConfigMap mongos.conf  ── operator-injected setParameters:
-      │                              searchIndexManagementHostAndPort: <shard0>-search:27027
+      │                              searchIndexManagementHostAndPort: <shard0>-search:27028
       │                              (one entry per shard, written by the operator)
       ├─ ConfigMap mongod.conf (per shard) ── as above, pointing at that shard's mongot
       ├─ StatefulSet <cluster>-cfg                  (existing, config servers)
@@ -236,17 +262,26 @@ Key connections:
 - Each `mongod` learns about its replset/shard's `mongot` through
   operator-managed `setParameter` lines in the generated `mongod.conf`,
   on top of any user `configuration` (operator-managed lines override
-  user values for the keys it owns).
-- `mongos` learns about the search-index catalog (per-shard
-  `searchIndexManagementHostAndPort`) through equivalent
-  operator-managed entries in `mongos.conf`.
+  user values for the keys it owns). The endpoint pins pod-0 of the
+  headless StatefulSet
+  (`<sts>-0.<svc>.<ns>.<dnsSuffix>:27028`) — single-replica today, and
+  forward-compatible with the future `size > 1` L7 LB path (§5.4).
+- `mongos` learns about the search-index catalog through equivalent
+  operator-managed entries in `mongos.conf`. The
+  `searchIndexManagementHostAndPort` parameter is rendered as a YAML
+  map keyed by shard name (`<shardName>: <searchHost>:27028`), with
+  `useGrpcForSearch: true` set cluster-wide. The ConfigSvr replset is
+  excluded.
 - `mongot` opens a permanent change-stream connection to a `mongod`
   in its replset/shard, authenticating with the keyfile as the
   `searchCoordinator` user. When the cluster has TLS enabled,
   `mongot` verifies `mongod`'s certificate against the cluster CA
   and presents its own certificate to `mongod`.
 - Each `<cluster>-<rs>-search` / `<cluster>-<shardName>-search`
-  Service serves a single `mongot` pod on port 27027.
+  headless Service serves a single `mongot` pod and publishes
+  not-ready addresses (so gRPC clients can resolve the pod IP during
+  the catch-up window after a restart). It exposes the gRPC port
+  (27028) and the metrics port (9946).
 - Index lifecycle commands (`createSearchIndex`, …) issued through
   `mongos` (sharded) or `mongod` (replset) are forwarded to the
   matching `mongot`. `mongos` automatically scatter-gathers
@@ -426,63 +461,111 @@ the single `mongot` StatefulSet. No special handling is needed.
 
 - **`status.search`** — `map[string]SearchStatus` keyed by replset
   name in non-sharded clusters, and by shard name in sharded
-  clusters (the same pattern as `status.replsets` today):
+  clusters (the same pattern as `status.replsets` today). The
+  ConfigSvr replset is excluded; entries for replsets that no longer
+  exist are pruned. When `spec.search.enabled=false` the map is
+  cleared (and omitted from the serialized status):
   ```go
   type SearchStatus struct {
-      Size    int      `json:"size"`
-      Ready   int      `json:"ready"`
+      Size    int32    `json:"size"`
+      Ready   int32    `json:"ready"`
       Status  AppState `json:"status,omitempty"`
       Message string   `json:"message,omitempty"`
   }
   ```
-- New status conditions:
-  - `SearchReady` — for every enabled replset/shard, the `mongot` pod
-    is Ready and `mongod` reports a healthy connection.
-  - `SearchUnsupportedByPSMDBImage` — feature requested but the
-    running PSMDB binary does not expose the required parameters.
+  The `Status` field tracks the same `AppState` values as
+  `status.replsets` (`initializing` / `ready` / `paused` /
+  `stopping` / `error`); the state machine mirrors `rsStatus`:
+  `AppStateInit` until every replica is Ready, `AppStateReady` once
+  Ready==Size, `AppStateError` on prolonged Unschedulable.
+- New status condition constants:
+  - `SearchReady` (`ConditionTypeSearchReady`) — placeholder for the
+    "every enabled replset/shard is Ready" condition.
+  - `SearchUnsupportedByPSMDBImage`
+    (`ConditionTypeSearchUnsupportedByPSMDBImage`) — placeholder for
+    the "PSMDB binary does not expose the required parameters" case.
+
+  **Implementation status:** the constants are defined in
+  `pkg/apis/psmdb/v1/psmdb_types.go` but the reconciler does not yet
+  emit either condition. Wiring is tracked as a follow-up — `Status`
+  on the per-replset/shard `SearchStatus` entry is currently the
+  only signal users can read.
 
 ### 4.3 Internal Contracts
 
-- **`mongod` `setParameter` block (operator-managed):**
-  - `mongotHost: <cluster>-<rs|shardName>-search.<ns>.svc.cluster.local:27027`
-  - `searchIndexManagementHostAndPort:
-    <cluster>-<rs|shardName>-search.<ns>.svc.cluster.local:27027`
+- **`mongod` `setParameter` block (operator-managed):** the values
+  below are overlaid onto the user-supplied `spec.replsets[].configuration`
+  by `vectorsearch.InjectMongodConfig`; the operator's values always
+  win on conflict. The replset playing `ClusterRoleConfigSvr` skips
+  injection (ConfigSvr never gets a `mongot`).
+  - `mongotHost: <sts>-0.<svc>.<ns>.<dnsSuffix>:27028` — pinned to
+    pod-0 of the headless StatefulSet (single-replica today).
+  - `searchIndexManagementHostAndPort:` same value as `mongotHost`.
   - `useGrpcForSearch: true`
-  - `searchTLSMode: preferTLS` when cluster TLS is enabled (default);
-    `disabled` otherwise. The mode is derived from the cluster TLS
-    state and cannot be set by the user except through
-    `spec.search.tls.mode`.
-  The operator owns these four keys exclusively; if a user tries to
-  override them in `spec.replsets[].configuration`, the values are
-  logged and ignored (the operator's value wins), and a status
-  condition is set if drift is detected.
+  - `searchTLSMode:` set only when the effective `mongot.conf`
+    declares `server.grpc.tls.mode` (either by operator default or
+    via `spec.search.configuration`). The value is the string form
+    of `mongot.ConfigTLSMode` (`TLS` / `mTLS` / `Disabled`) — note
+    that this is the `mongot`-side enum and differs from
+    `spec.search.tls.mode` (`preferTLS` / `disabled`), which is the
+    operator-facing CR field. Mapping between the two enums is a
+    known follow-up; the default `mongot.conf` does not yet set the
+    gRPC TLS block, so `searchTLSMode` is currently only emitted
+    when a user supplies it through `spec.search.configuration`.
 - **`mongos.conf` `setParameter` block (operator-managed, sharded
-  only):** the `searchIndexManagementHostAndPort` value is per-shard
-  in the mongod config, but `mongos` needs a cluster-wide view of
-  the index catalog. The operator fills `mongos.conf` with the
-  per-shard search endpoints through the same mechanism (the exact
-  field shape depends on what upstream MongoDB 8.2+ defines — see
-  open question §11.9).
+  only):** rendered by `vectorsearch.InjectMongosConfig`. `mongos`
+  needs a cluster-wide view of the search-index catalog, so:
+  - `searchIndexManagementHostAndPort:` a YAML map keyed by shard
+    name — `{ <shardName>: <searchHost>:27028, ... }` — covering
+    every non-ConfigSvr replset.
+  - `useGrpcForSearch: true`
+  - `searchTLSMode:` mirrors the `mongod` rule above.
 - **`mongot.conf` (operator-generated, in `<...>-search-config`
-  ConfigMap):** YAML config with the source `mongod` URI (replset
-  connection string), keyfile path, persistent-data path, replicas
-  count (always 1 in v1), TLS mode and cert/CA paths, log level, JVM
-  heap, and a user `configuration` block merged on top.
-- **Keyfile mount:** the existing internal-auth keyfile Secret is
-  mounted into the `mongot` pod at the same path used by `mongod`
-  (`/etc/mongodb-encryption/mongodb-encryption-key`), read-only.
+  ConfigMap):** YAML config with:
+  - `syncSource.replicaSet` (non-sharded) or `syncSource.router`
+    (sharded) — the per-pod FQDNs of the mongod replset/shard,
+    `username: searchCoordinator`, `passwordFile` pointing at
+    `/etc/users-secret/MONGODB_SEARCH_PASSWORD`. **Implementation
+    gap:** the sharded `syncSource.router` block is currently
+    emitted as an empty struct (`TODO` in `configmap.go`). The
+    keyfile-path / TLS material wiring on the syncSource is also
+    pending — `caFile`, `x509`, and `tls` are typed in
+    `pkg/psmdb/vectorsearch/mongot/config.go` but the default
+    config does not yet populate them.
+  - `storage.dataPath: /data/mongot`
+  - `server.grpc.address: 0.0.0.0:27028`. The `tls` sub-block is
+    not set by default — users opt in via
+    `spec.search.configuration`.
+  - `healthCheck.address: 0.0.0.0:8080`
+  - `metrics.address: 0.0.0.0:9946`
+  - `logging.verbosity: INFO`
+  - `spec.search.configuration` is unmarshaled on top via `yaml.v2`,
+    so only the fields the user sets are overridden — every other
+    default is preserved.
+- **Keyfile mount:** the existing internal-auth keyfile Secret
+  (`cr.Spec.Secrets.GetInternalKey(cr)`) is mounted read-only at
+  `/etc/mongodb-secrets` (the value of `config.MongodSecretsDir`);
+  the file inside is `mongodb-key`, matching the layout `mongod`
+  already uses.
 - **TLS material:** when cluster TLS is enabled, the existing
-  `<cluster>-ssl` Secret is mounted into the `mongot` pod. The
-  operator extends the cert-manager `Certificate` template (or, for
-  user-provided certs, the documented SAN requirements) to include
-  `<cluster>-<rs|shardName>-search` and the wildcard
-  `*.<cluster>-<rs|shardName>-search.<ns>.svc.cluster.local`.
-  `mongot` presents this cert to `mongod` and uses the cluster CA
+  `<cluster>-ssl` Secret is mounted into the `mongot` pod at
+  `/etc/mongodb-ssl`. The operator extends the cert-manager
+  `Certificate` template (or, for user-provided certs, the
+  documented SAN requirements) through `tls.searchSans` — see
+  `pkg/psmdb/tls/tls.go` — to add the `<cluster>-<rs|shardName>-search`
+  short name plus its namespaced variants and wildcards under both
+  the cluster DNS suffix and the multi-cluster suffix. `mongot`
+  presents this cert on its gRPC listener and uses the cluster CA
   to verify `mongod`.
 - **`searchCoordinator` user:** stored in the system users Secret
-  under a new key (for example, `MONGODB_SEARCH_USER` /
-  `MONGODB_SEARCH_PASSWORD`). The `reconcileUsers` step makes sure
-  the user exists with the built-in `searchCoordinator` role.
+  under `MONGODB_SEARCH_USER` / `MONGODB_SEARCH_PASSWORD` (constants
+  `api.EnvMongoDBSearchUser` / `api.EnvMongoDBSearchPassword`).
+  `fillSecretData` adds the user key only when `spec.search.enabled`
+  is true (so disabled clusters do not provision a stray account),
+  and `createOrUpdateSystemUsers` creates the MongoDB user with the
+  built-in `searchCoordinator` role (`api.RoleSearch`) on the next
+  reconcile. The same secret entry is also enqueued for password
+  rotation by the users reconciler once it exists.
 
 ### 4.4 User-Facing Behavior Changes
 
@@ -635,8 +718,11 @@ Gateway — is a separate feature.
 `searchTLSMode` on `mongod`, and the equivalent search-management
 keys on `mongos` for sharded clusters. If users try to set them in
 `spec.replsets[].configuration` or
-`spec.sharding.mongos.configuration`, the values are dropped and a
-status condition is set.
+`spec.sharding.mongos.configuration`, the YAML overlay applied by
+`vectorsearch.InjectMongodConfig` / `InjectMongosConfig`
+unconditionally overwrites the user's value — the operator value
+wins. (Emitting an explicit drift-detection status condition is a
+documented follow-up; today the overlap is silent.)
 
 **Why:** these values are derived from the operator's own Service
 DNS naming. If a user sets them manually, the generated config goes
@@ -760,11 +846,17 @@ Implementation:
   through operator-managed `setParameter` entries in `mongos.conf`,
   so `createSearchIndex` / `dropSearchIndex` /
   `listSearchIndexes` calls routed through `mongos` reach the
-  correct shard's `mongot`. The operator extends the existing
-  `mongos` ConfigMap rendering to include these entries (the exact
-  MongoDB 8.2+ key shape for the per-shard catalog is tracked as
-  open question §11.9; the same configuration approach applies
-  regardless).
+  correct shard's `mongot`. Rendered shape:
+  `searchIndexManagementHostAndPort: { <shardName>:
+  <searchHost>:27028, ... }` plus `useGrpcForSearch: true` —
+  see §4.3.
+- Each shard's `mongot.conf` is supposed to set its sync source to
+  the shard's mongod replset through `syncSource.router`. The
+  current implementation emits an empty `router` block for sharded
+  clusters (the `ConfigRouter` fields — `hostAndPort`, `username`,
+  `passwordFile`, `x509`, `tls` — are wired through the
+  `mongot.Config` types but not yet populated). Sharded search is
+  therefore not functional end-to-end until that gap is closed.
 - `$vectorSearch` queries against `mongos` scatter-gather across
   shards and merge by `$searchScore`. This is built-in MongoDB
   behavior; the operator is not involved at query time.
@@ -987,10 +1079,15 @@ spec:
     resources:
       requests:
         cpu: "4"
-        memory: 16Gi      # JVM heap auto-set to 8Gi (50%)
+        memory: 16Gi
       limits:
         cpu: "4"
         memory: 16Gi
+    # NOTE: jvmFlags is accepted on the CR (and overridable per
+    # replset) but the operator does not yet propagate it onto the
+    # mongot container — wiring is tracked as a follow-up. The
+    # planned default is `-Xmx<50% of resources.memory>` plus
+    # whatever flags the user appends here.
     jvmFlags: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
     logLevel: INFO
     configuration: |
@@ -1050,6 +1147,16 @@ db.products.aggregate([
 - An event is emitted on the CR.
 - No tight requeue loop: re-check only when the image changes.
 
+**Implementation status:** the version gate is not yet enforced.
+`setSearchDefaults` (in `pkg/apis/psmdb/v1/psmdb_defaults.go`)
+intentionally **does not** reject based on the configured image
+tag because the tag alone is not reliable; the proposal places the
+check at runtime against `cr.Status.MongoVersion` in the status
+reconciler, but that wiring is still pending. Today an
+unsupported PSMDB image will let the `mongot` StatefulSet come up,
+but `$search` / `$vectorSearch` will fail with a `mongod`-side
+unknown-parameter error and no clear condition.
+
 ### 8.2 `mongot` Pod Unreachable
 
 **Scenario:** `mongot` pod is `CrashLoopBackOff` / `NotReady`, but
@@ -1077,6 +1184,17 @@ db.products.aggregate([
   back, without waiting for the `mongot` reindex.
 - A `SearchReindexing=True` condition is set during the resync
   window and cleared when `status.search.<rs>.ready=size`.
+
+**Implementation status:** the restore-side trigger that deletes
+the `<...>-search` pods after a PBM restore — and the
+`SearchReindexing` condition that goes with it — is **not yet
+wired up**. The restore controller has no
+search-aware step today; without it, `mongot` keeps tailing from a
+change-stream position that no longer matches the rewound oplog
+and its indexes diverge from the restored data. Users who restore
+with search enabled must `kubectl delete pod -l
+app.kubernetes.io/component=search` themselves until the
+reconciler hook lands.
 
 ### 8.4 Anti-affinity in Small Clusters
 
@@ -1158,17 +1276,17 @@ schedulable.
 | 3 | Create vector index and query (replset) | Single replset | `createSearchIndex` succeeds; `$vectorSearch` returns expected docs in score order. |
 | 4 | Create vector index and query (sharded) | Sharded | `createSearchIndex` issued via `mongos` materializes on every shard's `mongot`; `$vectorSearch` against `mongos` scatter-gathers and merges by `$searchScore`. |
 | 5 | Disable search | Single replset + Sharded | All `mongot` StatefulSets / Services / ConfigMaps / PVCs are removed (following retention rules); `setParameter`s are removed from `mongod` and `mongos`; `status.search` is cleared. |
-| 6 | Backup + restore | Single replset + Sharded | PBM does not snapshot `mongot` PVCs; after restore, `mongot` resyncs per replset/shard; `SearchReindexing` changes True→False. |
+| 6 | Backup + restore | Single replset + Sharded | PBM does not snapshot `mongot` PVCs; after restore, `mongot` resyncs per replset/shard; `SearchReindexing` changes True→False. *Blocked on the restore-side hook described in §8.3.* |
 | 7 | Rolling `mongod` update | Single replset + Sharded | `mongot` stays Ready; `$vectorSearch` is still queryable. |
 | 8 | TLS cluster — enable search end-to-end | Single replset (TLS on, default) | The `mongot` listener serves TLS using the `<cluster>-ssl` cert with the search SAN; the `mongod` → `mongot` handshake succeeds; `$vectorSearch` works. |
-| 9 | TLS cert rotation | Single replset (TLS on) | After rotation, `mongot` reloads the cert; `SearchTLSDegraded` does not persist; `$vectorSearch` recovers. |
+| 9 | TLS cert rotation | Single replset (TLS on) | After rotation, `mongot` reloads the cert; the gRPC handshake recovers and `$vectorSearch` continues to work. *No `SearchTLSDegraded` condition is defined yet — the test must observe the data-plane behavior, not a condition.* |
 | 10 | Cluster TLS disabled | Single replset (TLS off) | `searchTLSMode: disabled` on `mongod`; the `mongot` listener uses plaintext; a warning event is emitted; functionality is unchanged. |
-| 11 | PSMDB image without vector support | Single replset (with a non-search PSMDB tag) | The operator reports `SearchUnsupportedByPSMDBImage`; no `mongot` STS is created. |
+| 11 | PSMDB image without vector support | Single replset (with a non-search PSMDB tag) | The operator reports `SearchUnsupportedByPSMDBImage`; no `mongot` STS is created. *Blocked on the runtime version gate described in §8.1.* |
 | 12 | `size: 2` (or any value ≠ 1) | Single replset | The CR is rejected with an HA-not-supported message. |
 | 13 | Naming-length violation | Sharded with an intentionally long cluster + shard name | The CR is rejected with a clear "shorten cluster or shard name" message. |
 | 14 | Per-shard override | Sharded (≥2 shards), one shard with `replsets[].search` override | The overridden shard's `mongot` StatefulSet reflects the override (resources, affinity, storage); other shards use the cluster-wide values. Editing the override restarts only that shard's `mongot`. |
 | 15 | Per-replset override of a cluster-only field | Any | The CR is rejected with a reference to §4.1 (for example, setting `replsets[0].search.image`). |
-| 16 | PVC at ≥90% usage | Single replset | The `SearchStorageNearFull` condition appears at the read-only threshold from Constraint 3 (§2.2); no automatic action. |
+| 16 | PVC at ≥90% usage | Single replset | The `SearchStorageNearFull` condition appears at the read-only threshold from Constraint 3 (§2.2); no automatic action. *Condition not yet defined; pending the autoscaling design in open question §11.7.* |
 
 Each scenario validates: the state of resources, the conditions on
 the CR, observable MongoDB-side behavior, and that there are no
@@ -1318,16 +1436,16 @@ To resolve before implementation begins.
 9. **`mongos`-side configuration for the per-shard search
    catalog.** Sharded clusters need `mongos` to know the per-shard
    `mongot` endpoints so index-management RPCs reach the correct
-   shard. The exact key shape that upstream MongoDB 8.2+ defines on
-   `mongos` for this catalog is not yet pinned down in our
-   documentation (it may be a repeated `setParameter`, a map-shaped
-   parameter, or an entirely separate config file).
-   - *Resolution:* TBD; confirm against upstream MongoDB 8.2+
-     release notes and the upstream MongoDB K8s operator's
-     `MongoDBSearch` implementation before coding the sharded
-     `mongos` configuration path. The operator-side plumbing
-     (rendering per-shard endpoints into the `mongos` ConfigMap) is
-     the same regardless of the exact field shape.
+   shard.
+   - *Resolution:* the implementation renders
+     `searchIndexManagementHostAndPort` on `mongos` as a YAML map
+     keyed by shard name (`{ <shardName>: <searchHost>:27028, ... }`)
+     alongside `useGrpcForSearch: true`. See
+     `vectorsearch.InjectMongosConfig`. The upstream key shape on
+     `mongos` for the multi-shard catalog should still be
+     re-validated against MongoDB 8.2+ release notes once a
+     search-capable image is in CI; if the upstream shape turns out
+     to differ, the change is local to `InjectMongosConfig`.
 
 ---
 
