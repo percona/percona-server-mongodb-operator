@@ -1,7 +1,6 @@
 package perconaservermongodb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,7 +58,7 @@ func TestCurrentSSLAnnotation_WithExistingStatefulSet(t *testing.T) {
 	}
 
 	r := buildFakeClient(cr, sts)
-	result := r.currentSSLAnnotation(context.Background(), cr)
+	result := r.currentSSLAnnotation(t.Context(), cr)
 
 	assert.Equal(t, "abc123", result["percona.com/ssl-hash"])
 	assert.Equal(t, "def456", result["percona.com/ssl-internal-hash"])
@@ -68,7 +67,7 @@ func TestCurrentSSLAnnotation_WithExistingStatefulSet(t *testing.T) {
 func TestCurrentSSLAnnotation_NoStatefulSet(t *testing.T) {
 	cr := newTestCR()
 	r := buildFakeClient(cr)
-	result := r.currentSSLAnnotation(context.Background(), cr)
+	result := r.currentSSLAnnotation(t.Context(), cr)
 
 	assert.Equal(t, "", result["percona.com/ssl-hash"])
 	assert.Equal(t, "", result["percona.com/ssl-internal-hash"])
@@ -101,7 +100,7 @@ func TestSSLAnnotation_UserProvidedOnly_SecretMissing(t *testing.T) {
 	}
 
 	r := buildFakeClient(cr, sts)
-	annotation, err := r.sslAnnotation(context.Background(), cr)
+	annotation, err := r.sslAnnotation(t.Context(), cr)
 
 	require.NoError(t, err)
 	assert.Equal(t, "existing-hash", annotation["percona.com/ssl-hash"])
@@ -139,7 +138,7 @@ func TestSSLAnnotation_UserProvidedOnly_SecretPresent(t *testing.T) {
 	}
 
 	r := buildFakeClient(cr, sslSecret, sslInternalSecret)
-	annotation, err := r.sslAnnotation(context.Background(), cr)
+	annotation, err := r.sslAnnotation(t.Context(), cr)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, annotation["percona.com/ssl-hash"])
@@ -157,7 +156,7 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 
 	// First call without secrets - TLSSecretsReady should be false
 	r := buildFakeClient(cr)
-	_, err := r.sslAnnotation(context.Background(), cr)
+	_, err := r.sslAnnotation(t.Context(), cr)
 	require.NoError(t, err)
 	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 
@@ -184,7 +183,7 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 	}
 
 	r2 := buildFakeClient(cr, sslSecret, sslInternalSecret)
-	_, err = r2.sslAnnotation(context.Background(), cr)
+	_, err = r2.sslAnnotation(t.Context(), cr)
 	require.NoError(t, err)
 	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 }
@@ -196,7 +195,7 @@ func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
 	}
 
 	r := buildFakeClient(cr)
-	err := r.reconcileSSL(context.Background(), cr)
+	err := r.reconcileSSL(t.Context(), cr)
 
 	// Should return nil (no error) without attempting to create certificates
 	assert.NoError(t, err)
