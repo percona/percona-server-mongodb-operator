@@ -143,7 +143,7 @@ PerconaServerMongoDB (target CR, unchanged)
    - `state` → `status.state`
    - `lagTimeSeconds` → `status.lagTimeSeconds`
    - `error` → `status.error`
-   - State transitions also append/update entries in `status.conditions` (e.g., `InitialSyncComplete`, `Replicating`, `Finalized`) with their own `LastTransitionTime`, so historical timing is captured without dedicated timestamp fields.
+   - State transitions also append/update entries in `status.conditions` (e.g., `InitialSyncComplete`, `Replicating`, `Finalized`) with their own `LastTransitionTime`, so transition history is captured in conditions rather than requiring dedicated timestamp fields for every state change. Dedicated lifecycle timestamps may still exist for specific anchors such as `StartedAt`.
 
 4. **Interaction with the PSMDB reconciler:** The two controllers coordinate through CR
    state, not direct calls:
@@ -195,8 +195,11 @@ deleting it tears down all managed resources via ownerReferences. There is no
 
 **Cardinality:** At most one non-finalized ClusterSync CR may target a given
 `spec.clusterName` at a time (PCSM Constraint 2 — single source/target pair).
-Enforced by an admission webhook or by the controller setting `status.state=failed`
-if a conflicting CR already exists.
+Enforced by a `coordination.k8s.io/v1` Lease named after `spec.clusterName` in
+the operator namespace: the controller acquires the Lease before transitioning
+out of `pending` and releases it when the CR reaches `finalized` or is deleted.
+A second CR targeting the same `clusterName` fails to acquire the Lease and
+transitions to `status.state=failed` with a clear reason.
 
 **OwnerReferences:** Following the backup/restore precedent, the ClusterSync CR is
 NOT owned by the target PSMDB CR — deleting the cluster does not auto-delete
@@ -617,7 +620,7 @@ kubectl delete psmdb-clustersync cluster1-sync
 | Restore while ClusterSync is active is blocked | Single replset | Restore request is rejected under the same conditions as backup |
 | `source.uri` change attempt during replication | Single replset | Admission webhook rejects the update; existing replication continues; user must delete and recreate the CR to change source |
 | Version mismatch detection | Single replset | PCSM start is blocked; error message in status |
-| Two ClusterSync CRs targeting the same cluster | Single replset | Second CR is rejected (admission webhook) or transitions to failed state |
+| Two ClusterSync CRs targeting the same cluster | Single replset | Second CR fails to acquire the cardinality Lease and transitions to `status.state=failed` |
 | Sharded cluster replication | Sharded | Replication works via mongos; data and shard keys are replicated |
 | Namespace exclude filters | Single replset | Excluded collections are not replicated; all others are |
 
