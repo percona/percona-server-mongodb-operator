@@ -49,8 +49,8 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"percona.com/ssl-hash":          "abc123",
-						"percona.com/ssl-internal-hash": "def456",
+						naming.AnnotationSSLHash:          "abc123",
+						naming.AnnotationSSLInternalHash: "def456",
 					},
 				},
 			},
@@ -84,8 +84,8 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 			r := buildFakeClient(objs...)
 			result := r.currentSSLAnnotation(t.Context(), cr)
 
-			assert.Equal(t, tt.wantSSLHash, result["percona.com/ssl-hash"])
-			assert.Equal(t, tt.wantInternalHash, result["percona.com/ssl-internal-hash"])
+			assert.Equal(t, tt.wantSSLHash, result[naming.AnnotationSSLHash])
+			assert.Equal(t, tt.wantInternalHash, result[naming.AnnotationSSLInternalHash])
 		})
 	}
 }
@@ -103,8 +103,8 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						"percona.com/ssl-hash":          "existing-hash",
-						"percona.com/ssl-internal-hash": "existing-internal-hash",
+						naming.AnnotationSSLHash:          "existing-hash",
+						naming.AnnotationSSLInternalHash: "existing-internal-hash",
 					},
 				},
 			},
@@ -142,8 +142,8 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			name:    "secrets missing — preserves existing sts annotations",
 			objects: []client.Object{sts},
 			checkAnnotation: func(t *testing.T, ann map[string]string) {
-				assert.Equal(t, "existing-hash", ann["percona.com/ssl-hash"])
-				assert.Equal(t, "existing-internal-hash", ann["percona.com/ssl-internal-hash"])
+				assert.Equal(t, "existing-hash", ann[naming.AnnotationSSLHash])
+				assert.Equal(t, "existing-internal-hash", ann[naming.AnnotationSSLInternalHash])
 			},
 			wantSecretsReadyCond: false,
 		},
@@ -151,8 +151,8 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			name:    "secrets present — computes fresh hashes",
 			objects: []client.Object{sslSecret, sslInternalSecret},
 			checkAnnotation: func(t *testing.T, ann map[string]string) {
-				assert.NotEmpty(t, ann["percona.com/ssl-hash"])
-				assert.NotEmpty(t, ann["percona.com/ssl-internal-hash"])
+				assert.NotEmpty(t, ann[naming.AnnotationSSLHash])
+				assert.NotEmpty(t, ann[naming.AnnotationSSLInternalHash])
 			},
 			wantSecretsReadyCond: true,
 		},

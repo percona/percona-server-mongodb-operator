@@ -1594,8 +1594,8 @@ var errTLSNotReady = errors.New("waiting for TLS secret")
 // to preserve them when the TLS secret is missing.
 func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) map[string]string {
 	annotation := map[string]string{
-		"percona.com/ssl-hash":          "",
-		"percona.com/ssl-internal-hash": "",
+		naming.AnnotationSSLHash:          "",
+		naming.AnnotationSSLInternalHash: "",
 	}
 
 	sfsList := appsv1.StatefulSetList{}
@@ -1612,11 +1612,11 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 
 	if len(sfsList.Items) > 0 {
 		sts := sfsList.Items[0]
-		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-hash"]; ok {
-			annotation["percona.com/ssl-hash"] = v
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLHash]; ok {
+			annotation[naming.AnnotationSSLHash] = v
 		}
-		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-internal-hash"]; ok {
-			annotation["percona.com/ssl-internal-hash"] = v
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLInternalHash]; ok {
+			annotation[naming.AnnotationSSLInternalHash] = v
 		}
 	}
 
@@ -1626,8 +1626,8 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
-	annotation["percona.com/ssl-hash"] = ""
-	annotation["percona.com/ssl-internal-hash"] = ""
+	annotation[naming.AnnotationSSLHash] = ""
+	annotation[naming.AnnotationSSLInternalHash] = ""
 
 	getHash := func(secret *corev1.Secret) string {
 		if secret == nil {
@@ -1674,7 +1674,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
-	annotation["percona.com/ssl-hash"] = getHash(sslSecret)
+	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {
@@ -1700,7 +1700,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLInternalSecretName(cr))
 	}
-	annotation["percona.com/ssl-internal-hash"] = getHash(sslInternalSecret)
+	annotation[naming.AnnotationSSLInternalHash] = getHash(sslInternalSecret)
 
 	cr.Status.AddCondition(api.ClusterCondition{
 		Status: api.ConditionTrue,
