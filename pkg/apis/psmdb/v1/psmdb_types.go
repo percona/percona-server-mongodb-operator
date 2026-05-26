@@ -574,10 +574,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
@@ -946,7 +947,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 
