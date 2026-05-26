@@ -1610,14 +1610,14 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 		return annotation
 	}
 
-	for _, sts := range sfsList.Items {
+	if len(sfsList.Items) > 0 {
+		sts := sfsList.Items[0]
 		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-hash"]; ok {
 			annotation["percona.com/ssl-hash"] = v
 		}
 		if v, ok := sts.Spec.Template.Annotations["percona.com/ssl-internal-hash"]; ok {
 			annotation["percona.com/ssl-internal-hash"] = v
 		}
-		break
 	}
 
 	return annotation
