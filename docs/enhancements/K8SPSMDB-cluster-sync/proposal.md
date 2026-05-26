@@ -23,17 +23,17 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 
 ### 1.2 Non-Goals (Out of Scope)
 
-- Imperative `reset` -- destructive/irreversible (wipes checkpoint state) and has no declarative analogue; users must exec into the PCSM container manually. May be revisited if PCSM adds a safe idempotent variant. (`finalize` is in scope: it is driven declaratively via `spec.finalize=true`; see §5.5 and §11 Q12.)
-- Reverse synchronization -- PCSM does not support this upstream. Revisit when upstream adds support.
-- Multi-source or multi-target replication -- PCSM only supports single source/target pairs.
-- Persistent Query Settings migration -- PCSM does not replicate Persistent Query Settings (MongoDB 8+). Migration requires manual export/import via `$querySettings` aggregation and `setQuerySettings` admin command after finalization. The operator will not automate this.
+- Imperative `reset`: destructive/irreversible (wipes checkpoint state) and has no declarative analogue; users must exec into the PCSM container manually. May be revisited if PCSM adds a safe idempotent variant. (`finalize` is in scope: it is driven declaratively via `spec.finalize=true`; see §5.5 and §11 Q12.)
+- Reverse synchronization: PCSM does not support this upstream. Revisit when upstream adds support.
+- Multi-source or multi-target replication: PCSM only supports single source/target pairs.
+- Persistent Query Settings migration: PCSM does not replicate Persistent Query Settings (MongoDB 8+). Migration requires manual export/import via `$querySettings` aggregation and `setQuerySettings` admin command after finalization. The operator will not automate this.
 
 ### 1.3 Deferred (Future Iterations)
 
-- Source cluster reference by CR name (`sourceCluster`) -- the operator manages both source and target clusters, so it could resolve connection details and create the source user automatically from a CR name reference instead of requiring manual `source.uri` and `source.credentialsSecret`. Deferred to a future iteration; first iteration uses a raw URI + Secret.
-- Version service integration for PCSM image -- the PSMDB CR's version service flow auto-fills `spec.image`, `spec.backup.image`, and `spec.pmm.image`. The version service response does not yet expose a PCSM image, so the first iteration requires `spec.image` on the ClusterSync CR. Revisit once PCSM is added to the version service.
-- PMM integration -- may be added in a future iteration if monitoring of PCSM through PMM is needed.
-- High availability / multiple PCSM instances per ClusterSync CR -- the first iteration runs a single PCSM instance (`replicas: 1`, `Recreate` strategy). Constraint 6 forbids two PCSM processes writing to the same target simultaneously, so any future HA must be active/passive. The first-iteration design leaves room for this by keeping callers behind a Service and treating `GET /status` as the source of truth for state, so a future leader-elected setup can swap the underlying workload without changing the controller or CR surface. Today's failover is pod restart + checkpoint recovery (Observation 2).
+- Source cluster reference by CR name (`sourceCluster`): the operator manages both source and target clusters, so it could resolve connection details and create the source user automatically from a CR name reference instead of requiring manual `source.uri` and `source.credentialsSecret`. Deferred to a future iteration; first iteration uses a raw URI + Secret.
+- Version service integration for PCSM image: the PSMDB CR's version service flow auto-fills `spec.image`, `spec.backup.image`, and `spec.pmm.image`. The version service response does not yet expose a PCSM image, so the first iteration requires `spec.image` on the ClusterSync CR. Revisit once PCSM is added to the version service.
+- PMM integration: may be added in a future iteration if monitoring of PCSM through PMM is needed.
+- High availability / multiple PCSM instances per ClusterSync CR: the first iteration runs a single PCSM instance (`replicas: 1`, `Recreate` strategy). Constraint 6 forbids two PCSM processes writing to the same target simultaneously, so any future HA must be active/passive. The first-iteration design leaves room for this by keeping callers behind a Service and treating `GET /status` as the source of truth for state, so a future leader-elected setup can swap the underlying workload without changing the controller or CR surface. Today's failover is pod restart + checkpoint recovery (Observation 2).
 
 ---
 
@@ -42,12 +42,12 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 ### 2.1 Core Concepts
 
 - **Percona ClusterSync for MongoDB (PCSM):** A standalone binary that replicates data between two MongoDB deployments. It performs an initial sync followed by real-time replication.
-- **Initial sync:** The first phase of replication. PCSM clones all data from the source to the target, then applies all changes that occurred since the clone started. For sharded clusters, PCSM first retrieves shard key information from the source and creates collections on the target with the same shard keys before copying data. Cannot resume after failure -- must restart from scratch.
+- **Initial sync:** The first phase of replication. PCSM clones all data from the source to the target, then applies all changes that occurred since the clone started. For sharded clusters, PCSM first retrieves shard key information from the source and creates collections on the target with the same shard keys before copying data. Cannot resume after failure; must restart from scratch.
 - **Real-time replication:** After initial sync completes, PCSM captures change stream events from the source and applies them to the target, ensuring real-time synchronization. Resumes from the last stored checkpoint after restart.
 - **Checkpoint:** A persisted position in the source's change stream that allows PCSM to resume real-time replication after a restart without re-running initial sync.
 - **Finalization:** A one-time operation that completes the migration. PCSM finalizes replication, creates required indexes on the target, and stops. After finalization, starting PCSM again begins a new initial sync from scratch.
 - **PCSM workflow:** `start` (begin replication) → initial sync → real-time replication → `pause`/`resume` (control replication) → `finalize` (complete migration) → cutover (switch clients to target).
-- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator uses `POST /start`, `POST /pause`, `POST /resume`, `POST /finalize`, and `GET /status` to control the PCSM lifecycle. `POST /finalize` is driven by the one-way `spec.finalize=true` switch (see §5.5 and §11 Q12). The operator will NOT call `POST /reset` -- it wipes checkpoint state and is left as a manual action (see Non-Goals). The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
+- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator uses `POST /start`, `POST /pause`, `POST /resume`, `POST /finalize`, and `GET /status` to control the PCSM lifecycle. `POST /finalize` is driven by the one-way `spec.finalize=true` switch (see §5.5 and §11 Q12). The operator will NOT call `POST /reset`; it wipes checkpoint state and is left as a manual action (see Non-Goals). The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
 
 ### 2.2 Key Constraints
 
@@ -112,8 +112,8 @@ PerconaServerMongoDB (target CR, unchanged)
 | Resource | Purpose |
 |----------|---------|
 | Deployment | Runs the PCSM container. Uses `Recreate` strategy. |
-| Service | Exposes the PCSM HTTP API (port 2242). Type is configurable via `spec.expose` -- defaults to ClusterIP for operator-only access; LoadBalancer/NodePort for external monitoring (per §11 Q6). |
-| Secret (syncTargetUser) | Target cluster credentials, created and rotated by the operator. Deleted when the ClusterSync CR is deleted. |
+| Service | Exposes the PCSM HTTP API (port 2242). Type is configurable via `spec.expose`, defaults to ClusterIP for operator-only access; LoadBalancer/NodePort for external monitoring (per §11 Q6). |
+| Secret (syncTargetUser) | Target cluster credentials, created and rotated by the operator. Deleted proactively when `status.state` transitions to `finalized`, or on ClusterSync CR deletion if finalize did not occur (see §5.5). |
 | Secret (source.credentialsSecret) | Source cluster credentials, created by the user. Read-only for the operator; not owned by the CR. |
 
 **Reconciliation flow:**
@@ -128,7 +128,7 @@ PerconaServerMongoDB (target CR, unchanged)
    releases, allowing ownerReferences to GC the Deployment, Service, and `syncTargetUser`
    K8s Secret. When `status.state` transitions to `finalized`, the controller performs the
    same cleanup proactively (drop MongoDB user + delete child resources) without waiting
-   for CR deletion -- see §5.5 -- so that the CR can remain as a historical record without
+   for CR deletion (see §5.5), so that the CR can remain as a historical record without
    leaving a broad-privilege user on the target.
 
 2. **Lifecycle control via HTTP API:** After the Deployment is ready, the controller calls
@@ -248,14 +248,15 @@ type ClusterSyncTLS struct {
 
 **Field notes:**
 
-- `clusterName` -- references the target `PerconaServerMongoDB` CR in the same namespace. The controller resolves it to construct `PCSM_TARGET_URI`.
-- `image` -- required in the first iteration. See §1.3 (Deferred) for the version service plan.
-- `source.uri` -- connection string for the source cluster without credentials. Format: `mongodb://h1:p1,h2:p2/admin?replicaSet=rs0`. Credentials from `source.credentialsSecret` are injected at runtime.
-- `source.credentialsSecret` -- name of a Kubernetes Secret with `username` and `password` keys. The operator percent-encodes both per RFC 3986 before injecting them into `PCSM_SOURCE_URI`.
-- `tls` -- when `tls.enabled=true`, `tls.secret` must point to a Secret containing the TLS certificates PCSM should use.
-- `expose` -- Service configuration for the PCSM HTTP API. Reuses the existing `Expose` struct from `psmdb_types.go` (type, loadBalancerSourceRanges, loadBalancerClass, annotations, labels, traffic policies). Defaults to ClusterIP (operator-only access). Set `expose.type=LoadBalancer` or `NodePort` to allow monitoring or interacting with PCSM from outside the cluster.
-- `paused` -- when `true` and PCSM is `running`, the controller calls `POST /pause`. Setting back to `false` calls `POST /resume`.
-- `finalize` -- one-way switch. When set to `true`, the controller calls `POST /finalize` once PCSM is caught up, then transitions `status.state` to `finalized` (terminal). Once finalized, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the ClusterSync CR itself remains as a read-only historical record until the user deletes it. Subsequent spec changes other than CR deletion are rejected (see §5.5).
+- `clusterName`: references the target `PerconaServerMongoDB` CR in the same namespace. The controller resolves it to construct `PCSM_TARGET_URI`.
+- `image`: required in the first iteration. See §1.3 (Deferred) for the version service plan.
+- `source.uri`: connection string for the source cluster without credentials. Format: `mongodb://h1:p1,h2:p2/admin?replicaSet=rs0`. Credentials from `source.credentialsSecret` are injected at runtime.
+- `source.credentialsSecret`: name of a Kubernetes Secret with `username` and `password` keys. The operator percent-encodes both per RFC 3986 before injecting them into `PCSM_SOURCE_URI`.
+- `tls`: when `tls.enabled=true`, `tls.secret` must point to a Secret containing the TLS certificates PCSM should use.
+- `expose`: Service configuration for the PCSM HTTP API. Reuses the existing `Expose` struct from `psmdb_types.go` (type, loadBalancerSourceRanges, loadBalancerClass, annotations, labels, traffic policies). Defaults to ClusterIP (operator-only access). Set `expose.type=LoadBalancer` or `NodePort` to allow monitoring or interacting with PCSM from outside the cluster.
+- `excludeNamespaces`: list of **MongoDB namespaces** (NOT Kubernetes namespaces) to exclude from replication. A MongoDB namespace is `<database>.<collection>` (e.g., `db3.collection3`); a database-wide exclude is `<database>.*`. Passed through to PCSM verbatim as its `--exclude-namespaces` argument. The name is inherited from PCSM's CLI surface; see §11 for the rename discussion if the API is still under review.
+- `paused`: when `true` and PCSM is `running`, the controller calls `POST /pause`. Setting back to `false` calls `POST /resume`.
+- `finalize`: one-way switch. When set to `true`, the controller calls `POST /finalize` once PCSM is caught up, then transitions `status.state` to `finalized` (terminal). Once finalized, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the ClusterSync CR itself remains as a read-only historical record until the user deletes it. Subsequent spec changes other than CR deletion are rejected (see §5.5).
 
 ### 4.3 Status
 
@@ -295,7 +296,7 @@ Mapped from: `metadata.name`, `spec.clusterName`, `status.state`, `status.lagTim
 ### 4.5 Internal Contracts
 
 - **`PCSM_SOURCE_URI`** environment variable: Constructed from `spec.source.uri` with credentials from `spec.source.credentialsSecret` injected and percent-encoded per RFC 3986.
-- **`PCSM_TARGET_URI`** environment variable: Constructed automatically by the controller from the target PSMDB CR (resolved via `spec.clusterName`) -- replset members or mongos endpoints -- with `syncTargetUser` credentials.
+- **`PCSM_TARGET_URI`** environment variable: Constructed automatically by the controller from the target PSMDB CR (resolved via `spec.clusterName`, replset members or mongos endpoints) with `syncTargetUser` credentials.
 
 ### 4.6 User-Facing Behavior Changes
 
@@ -307,12 +308,12 @@ Mapped from: `metadata.name`, `spec.clusterName`, `status.state`, `status.lagTim
 **PSMDB CR:** No fields added or modified. The PSMDB CR remains unchanged.
 
 **Kubernetes Events emitted by the controller (on the ClusterSync CR):**
-- `ClusterSyncStarted` -- replication started via `POST /start`.
-- `ClusterSyncPaused` -- replication paused via `POST /pause`.
-- `ClusterSyncResumed` -- replication resumed via `POST /resume`.
-- `ClusterSyncFinalized` -- migration finalized via `POST /finalize`.
-- `ClusterSyncFailed` -- PCSM entered a failed state; `error` field has details.
-- `InitialSyncComplete` -- initial sync finished, PCSM switched to real-time replication.
+- `ClusterSyncStarted`: replication started via `POST /start`.
+- `ClusterSyncPaused`: replication paused via `POST /pause`.
+- `ClusterSyncResumed`: replication resumed via `POST /resume`.
+- `ClusterSyncFinalized`: migration finalized via `POST /finalize`.
+- `ClusterSyncFailed`: PCSM entered a failed state; `error` field has details.
+- `InitialSyncComplete`: initial sync finished, PCSM switched to real-time replication.
 
 **Operator log messages:**
 - Lifecycle transitions (start, pause, resume, finalize) are logged at info level.
@@ -375,9 +376,9 @@ The source cluster credentials are provided by the user via `spec.source.credent
 
 ### 5.4 Configuration Change Handling
 
-**Chosen approach:** Make `spec.source` (URI and credentialsSecret) immutable after CR creation -- reject the update via an admission webhook. To change source, the user deletes and recreates the CR. Image updates, pod knobs, and `spec.paused` remain mutable. Namespace filter changes are mutable but warn in status (PCSM does not re-evaluate filters retroactively). After `status.state=finalized`, all spec changes are rejected (the CR is effectively read-only).
+**Chosen approach:** Make `spec.source` (URI and credentialsSecret) immutable after CR creation; reject the update via an admission webhook. To change source, the user deletes and recreates the CR. Image updates, pod knobs, and `spec.paused` remain mutable. Namespace filter changes are mutable but warn in status (PCSM does not re-evaluate filters retroactively). After `status.state=finalized`, all spec changes are rejected (the CR is effectively read-only).
 
-**Why:** The checkpoint is tied to the original source's oplog (Constraint 4); a mid-flight source change has no safe semantics. Making the field immutable surfaces this at admission time with a clear error rather than later via a `failed` state -- it's the same outcome (user has to recreate) without the half-broken intermediate state. Image updates remain safe due to PCSM's built-in recovery (Observation 2). Deleting and recreating the CR is acceptable because the CR lifecycle is already the unit of teardown (Deployment, Service, syncTargetUser all GC via ownerReferences), and the replacement CR triggers a fresh initial sync from the new source. Finalization is terminal for the CR -- running PCSM again means creating a new ClusterSync CR (the finalized CR can stay as a record; §4.1 cardinality only counts non-finalized CRs).
+**Why:** The checkpoint is tied to the original source's oplog (Constraint 4); a mid-flight source change has no safe semantics. Making the field immutable surfaces this at admission time with a clear error rather than later via a `failed` state; it's the same outcome (user has to recreate) without the half-broken intermediate state. Image updates remain safe due to PCSM's built-in recovery (Observation 2). Deleting and recreating the CR is acceptable because the CR lifecycle is already the unit of teardown (Deployment, Service, syncTargetUser all GC via ownerReferences), and the replacement CR triggers a fresh initial sync from the new source. Finalization is terminal for the CR; running PCSM again means creating a new ClusterSync CR (the finalized CR can stay as a record; §4.1 cardinality only counts non-finalized CRs).
 
 **Alternatives considered:**
 
@@ -391,7 +392,7 @@ The source cluster credentials are provided by the user via `spec.source.credent
 
 **Chosen approach (first iteration):** Once `status.state=finalized`, the controller drops the `syncTargetUser` MongoDB user on the target cluster, then deletes the PCSM Deployment, Service, and `syncTargetUser` K8s Secret. The ClusterSync CR itself stays as a read-only record until the user deletes it.
 
-**Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. The MongoDB-side `dropUser` happens at finalize time — not on CR delete — because a finalized CR may live indefinitely as a historical record; tying user cleanup to CR delete would leave a broad-privilege user (`readWriteAnyDatabase`) on the target for as long as the CR is kept. Once the user and child K8s objects are gone, the CR's privilege footprint is zero regardless of how long it stays. Keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`" -- both allowed).
+**Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. The MongoDB-side `dropUser` happens at finalize time — not on CR delete — because a finalized CR may live indefinitely as a historical record; tying user cleanup to CR delete would leave a broad-privilege user (`readWriteAnyDatabase`) on the target for as long as the CR is kept. Once the user and child K8s objects are gone, the CR's privilege footprint is zero regardless of how long it stays. Keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`", both allowed).
 
 **Alternatives considered:**
 
@@ -407,7 +408,7 @@ The source cluster credentials are provided by the user via `spec.source.credent
 ### 6.1 Sharded Cluster Behavior
 
 When the CR defines a sharded cluster (`sharding.enabled=true`):
-- PCSM connects via mongos on both source and target clusters. Since it connects through mongos, the cluster topology doesn't matter -- source and target can have different numbers of shards (e.g., a 3-shard source replicating onto a 7-shard target is supported with no extra configuration; the target's mongos routes writes to the right shard based on the preserved shard key).
+- PCSM connects via mongos on both source and target clusters. Since it connects through mongos, the cluster topology doesn't matter; source and target can have different numbers of shards (e.g., a 3-shard source replicating onto a 7-shard target is supported with no extra configuration; the target's mongos routes writes to the right shard based on the preserved shard key).
 - Before initial sync, PCSM checks which collections are sharded on the source and creates corresponding sharded collections on the target. The only sharding configuration preserved is the shard key; all other sharding details are handled internally by the target cluster.
 - The balancer does not need to be disabled on either cluster. The target cluster's balancer continues to operate normally and manages chunk distribution according to its own configuration.
 - PCSM replicates data, not metadata. Chunk distribution, primary shard names, and zone configuration are NOT preserved from the source. The target cluster manages these internally.
@@ -490,7 +491,7 @@ spec:
 
 ### 7.5 Finalize Migration
 
-After verifying lag is acceptable, set `finalize: true` to complete the migration. The controller calls `POST /finalize` once, creates required indexes on the target, transitions the CR to `status.state=finalized`, and then deletes the PCSM Deployment, Service, and `syncTargetUser` Secret (see §5.5). The CR itself stays as a read-only historical record until the user removes it. This is terminal for that CR -- to run a new migration the user creates a new ClusterSync CR (any name); the finalized CR does not block it because the cardinality rule in §4.1 only counts non-finalized CRs.
+After verifying lag is acceptable, set `finalize: true` to complete the migration. The controller calls `POST /finalize` once, creates required indexes on the target, transitions the CR to `status.state=finalized`, and then deletes the PCSM Deployment, Service, and `syncTargetUser` Secret (see §5.5). The CR itself stays as a read-only historical record until the user removes it. This is terminal for that CR; to run a new migration the user creates a new ClusterSync CR (any name); the finalized CR does not block it because the cardinality rule in §4.1 only counts non-finalized CRs.
 
 ```yaml
 spec:
@@ -551,13 +552,13 @@ kubectl delete psmdb-clustersync cluster1-sync
 
 **Expected behavior (both):**
 - Backup and restore controllers list ClusterSync CRs with `spec.clusterName` matching the cluster. If any has `status.state ∈ {pending, initialSync, replicating, paused}`, the request is rejected (extends existing concurrent backup/restore prevention from K8SPSMDB-1643).
-- Backups and restores are allowed only when no ClusterSync CR targets the cluster, or when the CR's `status.state=finalized` (terminal -- PCSM has stopped).
+- Backups and restores are allowed only when no ClusterSync CR targets the cluster, or when the CR's `status.state=finalized` (terminal, PCSM has stopped).
 
-**Why block backups for the full lifecycle (not just initial sync):** PBM holds the backup cursor open while a backup runs. With PCSM continuously applying source writes onto the target, that cursor pins WiredTiger history aggressively and on-disk usage can grow unbounded for the duration of the backup -- on top of PBM and PCSM contending for the oplog. The risk is the same in `initialSync`, `replicating`, and `paused` states.
+**Why block backups for the full lifecycle (not just initial sync):** PBM holds the backup cursor open while a backup runs. With PCSM continuously applying source writes onto the target, that cursor pins WiredTiger history aggressively and on-disk usage can grow unbounded for the duration of the backup, on top of PBM and PCSM contending for the oplog. The risk is the same in `initialSync`, `replicating`, and `paused` states.
 
 **Why block restores for the full lifecycle:** A restore writes the full dataset onto the target, which conflicts with PCSM continuously applying source change-stream events. There is no safe interleave.
 
-**Recommended workflow if a backup or restore is needed during an active migration:** delete the ClusterSync CR first (tears down PCSM), perform the operation, then -- only for restores or if continuing migration -- re-create the ClusterSync CR to restart from a fresh initial sync.
+**Recommended workflow if a backup or restore is needed during an active migration:** delete the ClusterSync CR first (tears down PCSM), perform the operation, then (only for restores or if continuing migration) re-create the ClusterSync CR to restart from a fresh initial sync.
 
 ### 8.5 Source URI Changed During Active Replication
 
@@ -625,25 +626,25 @@ kubectl delete psmdb-clustersync cluster1-sync
 ## 11. Open Questions
 
 1. **Target user creation and deletion:** The operator only manages `syncTargetUser` on the local (target) cluster. The source user is the user's responsibility. When should `syncTargetUser` be created and deleted?
-   - *Resolution:* Bound to the ClusterSync CR lifecycle (decided 2026-05-21 after moving to a separate CRD). Created when the ClusterSync CR is created; deleted when the CR is deleted. Avoids leaving a broad-privilege user on clusters that never use PCSM. Users who want to suspend replication without losing the user set `spec.paused=true` rather than deleting the CR.
+   - *Resolution:* Bound to the ClusterSync CR lifecycle (decided 2026-05-21 after moving to a separate CRD). Created when the ClusterSync CR is created; dropped at the earlier of (a) `status.state` transitioning to `finalized` (proactive cleanup drops the MongoDB user and deletes the Deployment, Service, and `syncTargetUser` Secret; see §5.5), or (b) ClusterSync CR deletion if finalize did not occur, where the `psmdb.percona.com/clustersync-cleanup` finalizer drops the MongoDB user before ownerReferences GC the K8s Secret. Avoids leaving a broad-privilege user on clusters that never use PCSM, and avoids leaving it on the target while a finalized CR is kept as a historical record. Users who want to suspend replication without losing the user set `spec.paused=true` rather than deleting the CR.
 
 2. **Cluster-wide mode conflicts:** If two CRs each define `clusterSync` pointing at each other or at the same source, conflicting PCSM Deployments may be created. How should the operator handle this?
-   - *Resolution:* Pending -- open for team discussion.
+   - *Resolution:* Pending, open for team discussion.
 
 3. **Cluster pause interaction:** When `spec.pause=true`, should the operator automatically pause PCSM first?
    - *Resolution:* Decided A (auto-pause) on 2026-05-21. Before the PSMDB reconciler scales down the StatefulSets, it signals the ClusterSync controller (annotation or status condition on matching ClusterSync CRs) to call `POST /pause`. Once `status.state=paused`, the PSMDB reconciler proceeds with scale-down. On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the signal so the ClusterSync controller can resume PCSM. Avoids unnecessary failure/recovery cycles. See §8.3 for the full flow.
 
 4. **Backup/restore and PCSM concurrency:** Should backups and restores be blocked on the target cluster while PCSM is active?
    - *Resolution:* Decided block both on the target cluster for the full ClusterSync lifecycle (`pending`, `initialSync`, `replicating`, `paused`). Allowed only when no ClusterSync CR targets the cluster or the CR is `finalized`.
-   - *Why backups (not just during initial sync):* PBM holds the backup cursor open while a backup runs; with PCSM continuously applying source writes onto the target, the cursor pins WiredTiger history and on-disk usage can grow unbounded. Lag-spike framing missed this risk -- the disk-growth risk is the same in `initialSync`, `replicating`, and `paused`.
+   - *Why backups (not just during initial sync):* PBM holds the backup cursor open while a backup runs; with PCSM continuously applying source writes onto the target, the cursor pins WiredTiger history and on-disk usage can grow unbounded. Lag-spike framing missed this risk; the disk-growth risk is the same in `initialSync`, `replicating`, and `paused`.
    - *Why restores:* A restore overwrites data PCSM is continuously replicating onto. No safe interleave.
 
 5. **Sync completion status:** How to expose "sync finished" in status?
-   - *Resolution:* Decided 2026-05-21. Initial-sync completion is conveyed by `status.state` transitioning out of `initialSync` (to `replicating`, `paused`, or `finalized`) and by an `InitialSyncComplete` condition in `status.conditions`. Steady-state "caught up" is `status.lagTimeSeconds=0`. A separate `initialSyncComplete` bool was dropped as redundant with `state`. A `readyToFinalize` field is not added in the first iteration -- users can read `lagTimeSeconds` directly and set `spec.finalize=true` when it's acceptable.
+   - *Resolution:* Decided 2026-05-21. Initial-sync completion is conveyed by `status.state` transitioning out of `initialSync` (to `replicating`, `paused`, or `finalized`) and by an `InitialSyncComplete` condition in `status.conditions`. Steady-state "caught up" is `status.lagTimeSeconds=0`. A separate `initialSyncComplete` bool was dropped as redundant with `state`. A `readyToFinalize` field is not added in the first iteration; users can read `lagTimeSeconds` directly and set `spec.finalize=true` when it's acceptable.
 
 6. **Multi-cluster DNS and expose configuration:** How should `spec.source.uri` interact with `clusterServiceDNSMode` on the target PSMDB CR? Should PCSM be exposed via a Service with configurable `exposeType`?
-   - *Resolution:* Decided 2026-05-21. External access is needed so users can monitor or interact with PCSM from outside the cluster. The ClusterSync CR exposes `spec.expose` (reuses the existing `Expose` struct in `psmdb_types.go`). Defaults to ClusterIP. Users who need external access set `expose.type=LoadBalancer` (or `NodePort`) and optionally `loadBalancerSourceRanges`, `loadBalancerClass`, annotations, labels, traffic policies -- same surface as the PSMDB CR's expose.
-   - *Still pending:* The `clusterServiceDNSMode` interaction with `spec.source.uri`. The source URI is user-supplied today, so `clusterServiceDNSMode` (which governs target-side DNS) does not influence it. Revisit if/when `sourceCluster` (CR name reference) lands (§1.3) -- at that point the operator constructs the source URI from the source PSMDB CR and must honor that cluster's DNS mode.
+   - *Resolution:* Decided 2026-05-21. External access is needed so users can monitor or interact with PCSM from outside the cluster. The ClusterSync CR exposes `spec.expose` (reuses the existing `Expose` struct in `psmdb_types.go`). Defaults to ClusterIP. Users who need external access set `expose.type=LoadBalancer` (or `NodePort`) and optionally `loadBalancerSourceRanges`, `loadBalancerClass`, annotations, labels, traffic policies, same surface as the PSMDB CR's expose.
+   - *Still pending:* The `clusterServiceDNSMode` interaction with `spec.source.uri`. The source URI is user-supplied today, so `clusterServiceDNSMode` (which governs target-side DNS) does not influence it. Revisit if/when `sourceCluster` (CR name reference) lands (§1.3); at that point the operator constructs the source URI from the source PSMDB CR and must honor that cluster's DNS mode.
 
 7. **Log collector integration:** Should the PCSM Deployment get a Fluent Bit sidecar when `logcollector.enabled=true`?
    - *Resolution:* Pending.
@@ -661,10 +662,10 @@ kubectl delete psmdb-clustersync cluster1-sync
     - List ClusterSync CRs targeting the same `clusterName` and read `status.state` (no HTTP calls needed, but relies on status being up-to-date).
     - Call `GET /status` on the PCSM HTTP API directly (neither controller currently makes external HTTP calls).
     - Use a K8s lease or annotation as a signal from the ClusterSync controller to the backup/restore controllers.
-    - *Resolution:* Pending -- open for team discussion.
+    - *Resolution:* Pending, open for team discussion.
 
 12. **Finalization support:** PCSM only creates indexes on the target when `POST /finalize` is called. Without it, the target has data but incomplete indexes.
-    - *Resolution:* Decided B on 2026-05-21. `spec.finalize` is a one-way bool on the ClusterSync CR. When set to `true` and PCSM is caught up, the controller calls `POST /finalize` once and transitions `status.state` to `finalized` (terminal). After finalize, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the CR stays as a read-only historical record (see §5.5). To run a new migration the user just creates a new ClusterSync CR -- the finalized one doesn't block it (§4.1 cardinality rule only counts non-finalized CRs). Picked over the `mode` enum for simplicity -- the state machine is one-way, so a bool reflects the actual semantics.
+    - *Resolution:* Decided B on 2026-05-21. `spec.finalize` is a one-way bool on the ClusterSync CR. When set to `true` and PCSM is caught up, the controller calls `POST /finalize` once and transitions `status.state` to `finalized` (terminal). After finalize, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the CR stays as a read-only historical record (see §5.5). To run a new migration the user just creates a new ClusterSync CR; the finalized one doesn't block it (§4.1 cardinality rule only counts non-finalized CRs). Picked over the `mode` enum for simplicity; the state machine is one-way, so a bool reflects the actual semantics.
 
 ---
 
@@ -674,8 +675,8 @@ kubectl delete psmdb-clustersync cluster1-sync
 
 | Term | Definition |
 |------|------------|
-| PCSM | Percona ClusterSync for MongoDB -- replication tool for cross-cluster data sync |
-| PBM | Percona Backup for MongoDB -- backup tool for MongoDB |
+| PCSM | Percona ClusterSync for MongoDB: replication tool for cross-cluster data sync |
+| PBM | Percona Backup for MongoDB: backup tool for MongoDB |
 | PMM | Percona Monitoring and Management |
 | Sharding | A database architecture that partitions data by key ranges across multiple instances |
 | PiTR | Point-in-Time Recovery via oplog replay |
@@ -713,4 +714,4 @@ kubectl delete psmdb-clustersync cluster1-sync
 - You cannot resume initial synchronization if an issue occurred. You must start it from scratch.
 - Database upgrade during the sync, even in the paused state, is not supported
 - Reverse synchronization is not supported
-- External authentication via Kerberos, AWS and LDAP -- needs clarification on whether the operator should support these auth mechanisms for PCSM connections
+- External authentication via Kerberos, AWS and LDAP: needs clarification on whether the operator should support these auth mechanisms for PCSM connections
