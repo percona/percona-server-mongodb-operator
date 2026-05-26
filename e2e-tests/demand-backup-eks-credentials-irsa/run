@@ -7,7 +7,6 @@ test_dir=$(realpath $(dirname $0))
 set_debug
 # EKS cluster should be run without the policy AmazonS3FullAccess
 # This policy makes the test false passed.
-start_time=$SECONDS
 
 if [ $EKS -ne 1 ]; then
 	echo "Skip the test. We run it for EKS only "
@@ -278,9 +277,6 @@ echo "OK: backup works after deleting aws-s3-secret (definitive proof of IRSA-on
 
 kubectl_bin delete psmdb-backup --all --ignore-not-found=true
 
-duration=$((SECONDS - start_time))
-printf 'Test duration: %02d:%02d:%02d\n' $((duration / 3600)) $((duration % 3600 / 60)) $((duration % 60))
-
-#destroy $namespace
+destroy $namespace
 
 desc 'test passed'
