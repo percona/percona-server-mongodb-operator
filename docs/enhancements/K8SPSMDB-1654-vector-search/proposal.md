@@ -317,9 +317,9 @@ shards may need to differ. See §5.7 for the reasoning.
 
 #### Cluster-level — `spec.search`
 
-The cluster-level block holds enable/disable, image and TLS (fields
-that must be uniform), and the cluster-wide *defaults* for the
-overridable fields.
+The cluster-level block holds enable/disable, image, and raw
+`mongot` configuration (fields that must be uniform), and the
+cluster-wide *defaults* for the overridable fields.
 
 - **`spec.search`** *(optional, default: feature disabled)* —
   top-level block; if absent or `enabled: false`, current behavior
@@ -385,8 +385,8 @@ type SearchReplsetOverride struct {
 ```
 
 Fields **not** overridable (cluster-wide only): `enabled`, `image`,
-`imagePullPolicy`, `tls`, `logLevel`, `configuration`. Setting any
-of these in `spec.replsets[].search` is a validation error.
+`imagePullPolicy`, `configuration`. Setting any of these in
+`spec.replsets[].search` is a validation error.
 
 In single-replset (non-sharded) clusters the per-replset block is
 still allowed — it simply becomes a more specific configuration for
@@ -427,15 +427,14 @@ the single `mongot` StatefulSet. No special handling is needed.
     pod-0 of the search StatefulSet (single-replica today).
   - `searchIndexManagementHostAndPort:` same value as `mongotHost`.
   - `useGrpcForSearch: true`
-	-	`skipAuthenticationToSearchIndexManagementServer: false`
-	- `skipAuthenticationToMongot: false`
-  - `searchTLSMode:` depends on the value of `server.grpc.tls.mode` (either
-    by operator default or via `spec.search.configuration`). The value is
-    the string form of `mongot.ConfigTLSMode` (`TLS` / `mTLS` / `Disabled`).
-    Operator sets `server.grpc.tls.mode` to `mTLS` if TLS is enabled in the
-    cluster, otherwise it's set to `Disabled`. If `server.grpc.tls.mode`
-    is not set to disabled, `searchTLSMode` is set to `requireTLS`. If
-    `server.grpc.tls.mode` is disabled, `searchTLSMode` is set to `disabled`.
+  - `skipAuthenticationToSearchIndexManagementServer: false`
+  - `skipAuthenticationToMongot: false`
+  - `searchTLSMode:` derived from the rendered `mongot.conf`
+    (`server.grpc.tls.mode`). If `mongot`'s gRPC listener has TLS
+    enabled (any value other than `Disabled`), `searchTLSMode` is
+    set to `requireTLS`. If `mongot`'s gRPC listener has TLS
+    disabled, `searchTLSMode` is set to `disabled`. The value is
+    the string form of `api.TLSMode`.
 
 - **`mongos.conf` `setParameter` block (operator-managed, sharded
   only):** rendered by `vectorsearch.InjectMongosConfig`. `mongos`
@@ -445,8 +444,8 @@ the single `mongot` StatefulSet. No special handling is needed.
     upstream MongoDB operator is doing.
   - `searchIndexManagementHostAndPort:` same value as `mongotHost`.
   - `useGrpcForSearch: true`
-	-	`skipAuthenticationToSearchIndexManagementServer: false`
-	- `skipAuthenticationToMongot: false`
+  - `skipAuthenticationToSearchIndexManagementServer: false`
+  - `skipAuthenticationToMongot: false`
   - `searchTLSMode:` mirrors the `mongod` rule above.
 
 - **`mongot.conf` (operator-generated, in `<...>-search-config`
@@ -464,8 +463,11 @@ the single `mongot` StatefulSet. No special handling is needed.
   - `storage.dataPath: /data/mongot`
 
   - `server.grpc.address: 0.0.0.0:27028`
-  - `server.grpc.tls.mode` -- `mTLS` if TLS is enabled in cluster, else `Disabled`
-  - `server.grpc.tls.certificateKeyFile: /tmp/tls.pem` -- tls.key+tls.crt, concatenated in mongot entrypoint 
+  - `server.grpc.tls.mode` -- defaults to `mTLS`. Users who run with
+    cluster TLS disabled must opt out via
+    `spec.search.configuration: server.grpc.tls.mode: Disabled`
+    (see §8.5).
+  - `server.grpc.tls.certificateKeyFile: /tmp/tls.pem` -- tls.key+tls.crt, concatenated in mongot entrypoint
   - `server.grpc.tls.caFile: /etc/mongodb-ssl/ca.crt`
 
   - `healthCheck.address: 0.0.0.0:8080` -- used by liveness and readiness probes
@@ -693,15 +695,18 @@ users with large vector indexes should plan for it).
 
 **Chosen approach:** Divide `SearchSpec` into two parts.
 Cluster-wide fields, where uniformity matters for correctness or
-operations (`enabled`, `image`, `imagePullPolicy`, `tls`,
-`logLevel`, `configuration`), live only on `spec.search`. Settings
-where shards may differ in production for valid reasons (`size`,
+operations (`enabled`, `image`, `imagePullPolicy`,
+`configuration`), live only on `spec.search`. Settings where
+shards may differ in production for valid reasons (`size`,
 `storage`, `resources`, `jvmFlags`, `affinity`, `nodeSelector`,
 `tolerations`, `annotations`, `labels`, security contexts) appear
 as cluster-wide defaults on `spec.search` AND can be overridden
 per-replset through `spec.replsets[].search`. The per-replset block
 fully replaces (does not merge) the matching cluster-wide value for
-that replset/shard's `mongot` StatefulSet.
+that replset/shard's `mongot` StatefulSet. TLS settings and log
+level live inside the raw `configuration` YAML overlay (they are
+not exposed as typed fields), so they share the cluster-wide
+restriction that `configuration` itself has.
 
 **Why:**
 
@@ -734,12 +739,13 @@ that replset/shard's `mongot` StatefulSet.
   one-size-fits-all would prevent real customers from using the
   feature.
 
-- **Image, TLS, log level must be cluster-wide.** Different
-  `mongot` image versions across shards are very hard to operate
-  (the debug matrix grows quickly); different TLS settings would
-  break the cluster-wide security guarantee; uniform log levels
-  keep logs consistent across shards so operators can correlate
-  events without first checking which shard uses which level.
+- **Image and raw `mongot` configuration must be cluster-wide.**
+  Different `mongot` image versions across shards are very hard to
+  operate (the debug matrix grows quickly). Letting one shard ship
+  with different TLS settings or a different log level would break
+  the cluster-wide security guarantee and make logs harder to
+  correlate across shards, so the raw `configuration` overlay
+  (which is where TLS and log level live) is also cluster-only.
   Users who really need a different log level on one shard for
   debugging can do it temporarily with `kubectl edit` on the
   StatefulSet, outside the operator's declarative interface.
@@ -864,9 +870,14 @@ spec:
       requests:
         cpu: "2"
         memory: 2Gi
-    # TLS defaults to preferTLS when cluster TLS is enabled;
-    # tls:
-    #   mode: requireTLS
+    # mongot's gRPC listener defaults to mTLS. To run against a
+    # cluster with TLS disabled, opt out through the raw mongot
+    # configuration overlay:
+    # configuration: |
+    #   server:
+    #     grpc:
+    #       tls:
+    #         mode: Disabled
 ```
 
 What the operator does on apply:
@@ -1004,11 +1015,10 @@ spec:
       limits:
         cpu: "4"
         memory: 16Gi
-    # NOTE: jvmFlags is accepted on the CR (and overridable per
-    # replset) but the operator does not yet propagate it onto the
-    # mongot container — wiring is tracked as a follow-up. The
-    # planned default is `-Xmx<50% of resources.memory>` plus
-    # whatever flags the user appends here.
+    # The operator passes jvmFlags to mongot via `--jvm-flags`. If
+    # the user does not set `-Xmx` / `-Xms`, the operator defaults
+    # both to 50% of the effective `resources.memory` (request, or
+    # limit if request is unset).
     jvmFlags:
     - "-XX:+UseG1GC"
     - "-XX:MaxGCPauseMillis=200"
@@ -1122,8 +1132,28 @@ schedulable.
 `ssl` Secret because it does not exist.
 
 **Expected behavior:**
-- `mongot.conf` is generated without TLS material; `searchTLSMode:
-  disabled` is set on `mongod`.
+- The user must turn off `mongot`'s gRPC TLS through the raw
+  `mongot` configuration overlay:
+  ```yaml
+  spec:
+    search:
+      configuration: |
+        server:
+          grpc:
+            tls:
+              mode: Disabled
+  ```
+- Once `server.grpc.tls.mode` is `Disabled` in the rendered
+  `mongot.conf`, `vectorsearch.InjectMongodConfig` /
+  `InjectMongosConfig` set `searchTLSMode: disabled` on `mongod`
+  and `mongos` accordingly.
+
+**Implementation status:** the operator does **not** auto-derive
+`server.grpc.tls.mode` from cluster TLS state today. Leaving
+`spec.search.configuration` unset on a TLS-disabled cluster
+produces a `mongot.conf` that references the (missing) cluster
+`ssl` Secret, and `mongot` will fail to start until the user opts
+out as above. Auto-derivation is a follow-up.
 
 ---
 
