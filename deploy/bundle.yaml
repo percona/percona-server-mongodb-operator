@@ -1842,6 +1842,11 @@ spec:
                 type: string
               pmm:
                 properties:
+                  authenticationMechanism:
+                    enum:
+                    - SCRAM-SHA-256
+                    - SCRAM-SHA-1
+                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
