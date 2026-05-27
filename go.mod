@@ -32,10 +32,10 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.36.0
+	k8s.io/api v0.36.1
 	k8s.io/apiextensions-apiserver v0.36.0
 	k8s.io/apimachinery v0.36.1
-	k8s.io/client-go v0.36.0
+	k8s.io/client-go v0.36.1
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/mcs-api v0.5.0
