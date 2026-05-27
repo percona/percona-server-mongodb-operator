@@ -86,6 +86,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                          PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	RevisionHistoryLimit         *int32                               `json:"revisionHistoryLimit,omitempty"`
 	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName                string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
@@ -453,6 +454,11 @@ type PMMSpec struct {
 
 	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
 	CustomClusterName string `json:"customClusterName,omitempty"`
+
+	// AuthenticationMechanism is the SASL mechanism the PMM client uses to
+	// authenticate the clusterMonitor user against mongod/mongos.
+	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
+	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -585,10 +591,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
@@ -957,7 +964,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 

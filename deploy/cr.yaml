@@ -44,6 +44,7 @@ spec:
 #    terminationGracePeriod: false
 #    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
+#  revisionHistoryLimit: 10
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -77,6 +78,7 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
