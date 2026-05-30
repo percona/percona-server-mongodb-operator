@@ -766,9 +766,13 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		outb.Reset()
 		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
 		if err != nil {
-			return nil, nil, fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
+			if !r.userAdminCanAuthenticate(ctx, &pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
+				return nil, nil, fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
+			}
+			log.Info("user admin already exists and can authenticate, skipping creation", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+		} else {
+			log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		}
-		log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 
 		return &pod, &api.ReplsetMemberStatus{
 			Name:     member.Host,
@@ -778,6 +782,28 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 	}
 
 	return nil, nil, errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Context, pod *corev1.Pod, mongoCmd, user, pwd string) bool {
+	log := logf.FromContext(ctx)
+
+	var outb, errb bytes.Buffer
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(
+			`%s --quiet -u '%s' -p '%s' --authenticationDatabase admin --eval 'quit(db.adminCommand({connectionStatus: 1}).authInfo.authenticatedUsers.length > 0 ? 0 : 1)'`,
+			mongoCmd,
+			strings.ReplaceAll(user, "'", `'"'"'`),
+			strings.ReplaceAll(pwd, "'", `'"'"'`),
+		),
+	}
+
+	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false); err != nil {
+		log.V(1).Info("userAdmin authentication check failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
+		return false
+	}
+
+	return true
 }
 
 func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
