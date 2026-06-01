@@ -150,6 +150,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 		return errors.New("one of backupName or backupSource is required")
 	}
 
+	if backupType != defs.LogicalBackup && r.Spec.Selective != nil && r.Spec.Selective.NamespaceFrom != "" {
+		return errors.New("nsFrom and nsTo are only available for logical backups")
+	}
+
 	if r.Spec.BackupSource != nil {
 		if r.Spec.BackupSource.Type != defs.ExternalBackup && len(r.Spec.BackupSource.Destination) == 0 {
 			return errors.New("backupSource destination is required")
