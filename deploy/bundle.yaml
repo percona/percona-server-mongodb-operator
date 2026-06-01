@@ -561,6 +561,12 @@ spec:
                   withUsersAndRoles:
                     type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: nsFrom and nsTo need to be set together
+                  rule: (!has(self.nsFrom) && !has(self.nsTo)) || (has(self.nsFrom)
+                    && has(self.nsTo))
+                - message: nsFrom and nsTo can't be the same
+                  rule: (!has(self.nsFrom) && !has(self.nsTo)) || self.nsFrom != self.nsTo
               storageName:
                 type: string
             type: object

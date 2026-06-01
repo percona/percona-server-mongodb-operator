@@ -24,6 +24,8 @@ type PerconaServerMongoDBRestoreSpec struct {
 	RSMap        map[string]string                 `json:"replsetRemapping,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="(!has(self.nsFrom) && !has(self.nsTo)) || (has(self.nsFrom) && has(self.nsTo))",message="nsFrom and nsTo need to be set together"
+// +kubebuilder:validation:XValidation:rule="(!has(self.nsFrom) && !has(self.nsTo)) || self.nsFrom != self.nsTo",message="nsFrom and nsTo can't be the same"
 type SelectiveRestoreOpts struct {
 	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
 	Namespaces        []string `json:"namespaces,omitempty"`
