@@ -755,23 +755,27 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
 
-		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to get userAdmin credentials")
 		}
 
-		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
-		errb.Reset()
-		outb.Reset()
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			if !r.userAdminCanAuthenticate(ctx, &pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
-				return nil, nil, fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
-			}
+		if r.userAdminCanAuthenticate(ctx, &pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
 			log.Info("user admin already exists and can authenticate, skipping creation", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		} else {
-			log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+			log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+			cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
+			errb.Reset()
+			outb.Reset()
+			err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
+			if err != nil {
+				if !r.userAdminCanAuthenticate(ctx, &pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
+					return nil, nil, fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
+				}
+				log.Info("user admin can authenticate after createUser error, continuing", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+			} else {
+				log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+			}
 		}
 
 		return &pod, &api.ReplsetMemberStatus{

@@ -59,11 +59,13 @@ func (p *initMongoClientProvider) Standalone(ctx context.Context, cr *api.Percon
 // replsetInitExecRecorder mocks the in-pod command execution performed by
 // handleReplsetInit and records how many times createUser/auth-check were run.
 type replsetInitExecRecorder struct {
-	createUserErr           error // returned by createUser on every call
-	createUserErrAfterFirst error // if set, returned by createUser on calls after the first (e.g. user already exists / auth now required)
-	authCheckErr            error
-	createUserCalls         int32
-	authCheckCalls          int32
+	createUserErr             error // returned by createUser on every call
+	createUserErrAfterFirst   error // if set, returned by createUser on calls after the first (e.g. user already exists / auth now required)
+	authCheckErr              error
+	authCheckErrAfterFirstSet bool
+	authCheckErrAfterFirst    error
+	createUserCalls           int32
+	authCheckCalls            int32
 }
 
 func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
@@ -88,7 +90,10 @@ func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, con
 		}
 		return m.createUserErr
 	case strings.Contains(joined, "connectionStatus"):
-		atomic.AddInt32(&m.authCheckCalls, 1)
+		n := atomic.AddInt32(&m.authCheckCalls, 1)
+		if n > 1 && m.authCheckErrAfterFirstSet {
+			return m.authCheckErrAfterFirst
+		}
 		return m.authCheckErr
 	default:
 		return nil
@@ -232,9 +237,9 @@ func setupReplsetInitTest(t *testing.T, provider *initMongoClientProvider, exec 
 // must NOT be marked initialized in that case (otherwise the next reconcile
 // connects as clusterAdmin, which does not exist yet, and deadlocks). On the
 // next reconcile, once the transient error clears, init must recover:
-// handleReplsetInit is idempotent (createUser now fails because the user exists,
-// but userAdmin authenticates), createOrUpdateSystemUsers succeeds, and only
-// then is initialized persisted.
+// handleReplsetInit is idempotent (userAdmin authenticates, so createUser is
+// skipped), createOrUpdateSystemUsers succeeds, and only then is initialized
+// persisted.
 func TestReconcileClusterInitRecoversAfterSystemUsersFailure(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
 	ctx := context.Background()
@@ -242,7 +247,9 @@ func TestReconcileClusterInitRecoversAfterSystemUsersFailure(t *testing.T) {
 	exec := &replsetInitExecRecorder{
 		// First createUser (initial creation) succeeds; subsequent ones fail as
 		// they would on a real cluster once auth is enabled and the user exists.
-		createUserErrAfterFirst: errors.New("MongoServerError: Command createUser requires authentication"),
+		createUserErrAfterFirst:   errors.New("MongoServerError: Command createUser requires authentication"),
+		authCheckErr:              errors.New("Authentication failed"),
+		authCheckErrAfterFirstSet: true,
 	}
 	provider := &initMongoClientProvider{
 		clusterAdminErr: errors.New("dial: no reachable servers"),
@@ -264,16 +271,16 @@ func TestReconcileClusterInitRecoversAfterSystemUsersFailure(t *testing.T) {
 	// Transient failure clears.
 	provider.userAdminErr = nil
 
-	// Reconcile 2: re-enters init branch (still not initialized). createUser now
-	// fails (user exists / auth required) but userAdmin authenticates, so init
-	// recovers and createOrUpdateSystemUsers succeeds.
+	// Reconcile 2: re-enters init branch (still not initialized). userAdmin
+	// authenticates, so createUser is skipped and createOrUpdateSystemUsers
+	// succeeds.
 	_, members, err := r.reconcileCluster(ctx, cr, rs, nil)
 	require.NoError(t, err)
 	assert.True(t, cr.Status.Replsets[rs.Name].Initialized, "initialized after successful system user creation")
 	assert.Contains(t, members, cr.Name+"-"+rs.Name+"-0")
 	assert.True(t, hasInitCondition(cr, rs.Name))
-	assert.Equal(t, int32(2), atomic.LoadInt32(&exec.createUserCalls), "createUser retried on second reconcile")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls), "idempotent auth check used on retry")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&exec.createUserCalls), "createUser should not be retried when userAdmin already authenticates")
+	assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check used before createUser on each init attempt")
 }
 
 // TestReconcileClusterInitHappyPath verifies the unchanged happy path: when
@@ -283,7 +290,9 @@ func TestReconcileClusterInitHappyPath(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
 	ctx := context.Background()
 
-	exec := &replsetInitExecRecorder{}
+	exec := &replsetInitExecRecorder{
+		authCheckErr: errors.New("Authentication failed"),
+	}
 	provider := &initMongoClientProvider{
 		clusterAdminErr: errors.New("dial: no reachable servers"),
 		// userAdminErr nil -> createOrUpdateSystemUsers succeeds
@@ -299,19 +308,39 @@ func TestReconcileClusterInitHappyPath(t *testing.T) {
 	assert.Equal(t, mongo.MemberStatePrimary, members[cr.Name+"-"+rs.Name+"-0"].State)
 	assert.True(t, hasInitCondition(cr, rs.Name))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&exec.createUserCalls))
+	assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls))
 }
 
 // TestHandleReplsetInitIdempotentAdminUser covers the idempotency of admin user
-// creation: when createUser fails but userAdmin can already authenticate, init
-// recovers; when authentication also fails, the real error is returned.
+// creation: when userAdmin can already authenticate, createUser is skipped; when
+// createUser fails but authentication succeeds immediately after, init recovers;
+// when authentication also fails, the real error is returned.
 func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
 	ctx := context.Background()
 
-	t.Run("recovers when userAdmin can authenticate", func(t *testing.T) {
+	t.Run("skips creation when userAdmin can authenticate", func(t *testing.T) {
 		exec := &replsetInitExecRecorder{
-			createUserErr: errors.New("MongoServerError: Command createUser requires authentication"),
-			authCheckErr:  nil, // authentication succeeds
+			authCheckErr: nil, // authentication succeeds
+		}
+		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
+
+		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
+		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		require.NoError(t, err)
+		require.NotNil(t, pod)
+		require.NotNil(t, primary)
+		assert.Equal(t, mongo.MemberStatePrimary, primary.State)
+		assert.Equal(t, int32(0), atomic.LoadInt32(&exec.createUserCalls), "createUser should be skipped when userAdmin already authenticates")
+		assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls))
+	})
+
+	t.Run("recovers when userAdmin authenticates after createUser error", func(t *testing.T) {
+		exec := &replsetInitExecRecorder{
+			authCheckErr:              errors.New("Authentication failed"),
+			authCheckErrAfterFirstSet: true,
+			authCheckErrAfterFirst:    nil,
+			createUserErr:             errors.New("MongoServerError: Command createUser requires authentication"),
 		}
 		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
 
@@ -322,7 +351,7 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		require.NotNil(t, primary)
 		assert.Equal(t, mongo.MemberStatePrimary, primary.State)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&exec.createUserCalls))
-		assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted after createUser fails")
+		assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before createUser and after createUser fails")
 	})
 
 	t.Run("returns error when userAdmin cannot authenticate", func(t *testing.T) {
@@ -336,6 +365,6 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		_, _, err := r.handleReplsetInit(ctx, cr, rs, pods)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exec add admin user")
-		assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before giving up")
+		assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before createUser and before giving up")
 	})
 }
