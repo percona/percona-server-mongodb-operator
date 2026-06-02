@@ -115,6 +115,76 @@ check_recovery() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "$cmp_postfix"
 }
 
+collection_exists() {
+	local collection=$1
+	run_mongo \
+		"use myApp\n JSON.stringify(db.getCollectionNames())" \
+		"myApp:myPass@$cluster.$namespace" "" "" "--quiet" \
+		| grep -v "switched to" \
+		| jq "index(\"$collection\") != null"
+}
+
+run_recovery_check_namespace_remap() {
+	local backup_name=$1
+	local cluster_name=$2
+	local database=$3
+	local src_collection=$4
+	local dst_collection=$5
+
+	local cluster
+	cluster="$cluster_name-rs0"
+
+	local restore_name="restore-$backup_name-remapped"
+
+	desc "write more data before namespace remap restore by date"
+	sleep 60
+	run_mongo \
+		"use $database\n db.$src_collection.insert({ x: 100501 })" \
+		"myApp:myPass@$cluster.$namespace"
+
+	desc 'waiting for chunks to be uploaded'
+	sleep 120
+
+	local restore_date
+	restore_date=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
+
+	run_mongo \
+		"use $database\n db.$dst_collection.drop()" \
+		"myApp:myPass@$cluster.$namespace"
+
+	if [[ $(collection_exists "$dst_collection") == "true" ]]; then
+		echo "Collection $dst_collection exists before restore"
+		exit 1
+	fi
+
+	desc 'check namespace remap restore by date'
+	yq "$test_dir/conf/restore-namespace-remap.yml" \
+		| yq ".metadata.name=\"$restore_name\"" \
+		| yq ".spec.clusterName=\"$cluster_name\"" \
+		| yq ".spec.backupName=\"$backup_name\"" \
+		| yq ".spec.pitr.type=\"date\"" \
+		| yq ".spec.pitr.date=\"$restore_date\"" \
+		| yq ".spec.selective.nsFrom=\"$database.$src_collection\"" \
+		| yq ".spec.selective.nsTo=\"$database.$dst_collection\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "$backup_name-remapped" "$cluster_name"
+	echo
+	set -o xtrace
+
+	if [[ $(collection_exists "$dst_collection") == "false" ]]; then
+		echo "Collection $dst_collection doesn't exist after restore"
+		exit 1
+	fi
+
+	if [[ $(collection_exists "$src_collection") == "false" ]]; then
+		echo "Collection $src_collection missing after remap restore"
+		exit 1
+	fi
+
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-remapped" ".svc.cluster.local" "$database" "$dst_collection"
+}
+
 main() {
 	create_infra $namespace
 	deploy_minio
@@ -161,6 +231,10 @@ main() {
 	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-1"
 
 	check_recovery $backup_name_minio-1 latest "" "-3rd" "" "${cluster/-rs0/}"
+
+	desc 'pitr restore with namespace remap -- minio'
+
+	run_recovery_check_namespace_remap "$backup_name_minio-1" "${cluster/-rs0/}" "myApp" "test" "testRemapped"
 
 	desc 'restore pitr using backupSource'
 
