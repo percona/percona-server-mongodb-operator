@@ -126,13 +126,13 @@ collection_exists() {
 
 run_recovery_check_namespace_remap() {
 	local backup_name=$1
-	local cluster_name=$2
-	local database=$3
-	local src_collection=$4
-	local dst_collection=$5
+	local restore_date=$2
+	local cluster_name=$3
+	local database=$4
+	local src_collection=$5
+	local dst_collection=$6
 
-	local cluster
-	cluster="$cluster_name-rs0"
+	local cluster="$cluster_name-rs0"
 
 	local restore_name="restore-$backup_name-remapped"
 
@@ -144,9 +144,6 @@ run_recovery_check_namespace_remap() {
 
 	desc 'waiting for chunks to be uploaded'
 	sleep 120
-
-	local restore_date
-	restore_date=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
 
 	run_mongo \
 		"use $database\n db.$dst_collection.drop()" \
@@ -185,6 +182,14 @@ run_recovery_check_namespace_remap() {
 	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-remapped" ".svc.cluster.local" "$database" "$dst_collection"
 }
 
+function get_time_now() {
+	run_mongo 'new Date().toISOString()' \
+		"myApp:myPass@$cluster.$namespace" \
+		"mongodb" "" "--quiet" \
+		| grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' \
+		| cut -c1-19 | tr T " "
+}
+
 main() {
 	create_infra $namespace
 	deploy_minio
@@ -217,72 +222,55 @@ main() {
 		'use myApp\n db.test2.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster.$namespace"
 
+	desc 'restore pitr date'
 	run_backup $backup_name_minio 0
-
 	write_document "-2nd"
 	sleep 2
-
-	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
-
+	time_now=$(get_time_now)
 	check_recovery $backup_name_minio-0 date "$time_now" "-2nd" "" "${cluster/-rs0/}" "test2"
 
+	desc 'restore pitr latest'
 	run_backup $backup_name_minio 1
-
 	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-1"
-
 	check_recovery $backup_name_minio-1 latest "" "-3rd" "" "${cluster/-rs0/}"
 
-	desc 'pitr restore with namespace remap -- minio'
-
-	run_recovery_check_namespace_remap "$backup_name_minio-1" "${cluster/-rs0/}" "myApp" "test" "testRemapped"
-
-	desc 'restore pitr using backupSource'
-
-	reset_collection
-
+	desc 'pitr restore with namespace remap'
 	run_backup $backup_name_minio 2
-
 	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-2"
+	time_now=$(get_time_now)
+	run_recovery_check_namespace_remap "$backup_name_minio-2" "${time_now}" "${cluster/-rs0/}" "myApp" "test" "testRemapped"
 
-	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
-
-	check_recovery "${backup_name_minio}-2" date "$time_now" "" backupSource "${cluster/-rs0/}"
-
+	desc 'restore pitr date using backupSource'
+	reset_collection
 	run_backup $backup_name_minio 3
-
 	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-3"
+	time_now=$(get_time_now)
+	check_recovery "${backup_name_minio}-3" date "$time_now" "" backupSource "${cluster/-rs0/}"
 
-	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${cluster/-rs0/}"
+	desc 'restore pitr latest using backupSource'
+	run_backup $backup_name_minio 4
+	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-4"
+	check_recovery "${backup_name_minio}-4" latest "" "-4th" backupSource "${cluster/-rs0/}"
 
 	desc 'restore pitr using backupSource on second cluster with another prefix in storage'
 
 	second_cluster="cluster2-rs0"
 	apply_cluster "$test_dir/conf/$second_cluster.yml"
-
-	desc 'check if all 3 Pods started'
 	wait_for_running $second_cluster 3
-
 	wait_backup_agent $second_cluster-0
 	wait_backup_agent $second_cluster-1
 	wait_backup_agent $second_cluster-2
-
-	desc 'create user myApp'
 	run_mongo \
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$second_cluster.$namespace"
 	sleep 2
-
 	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster" "restore2.yml"
 
 	backup_name_minio_2="backup-minio2"
-
 	run_backup $backup_name_minio_2 0
-
-	time_now=$(run_mongo 'new Date().toISOString()' "myApp:myPass@$second_cluster.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -c1-19 | tr T " ")
+	time_now=$(get_time_now)
 	write_document "-5th" "$second_cluster"
-
 	sleep 2
-
 	check_recovery $backup_name_minio_2-0 date "$time_now" "-4th" "" "${second_cluster/-rs0/}"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
