@@ -150,7 +150,7 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 		return errors.New("one of backupName or backupSource is required")
 	}
 
-	if backupType != defs.LogicalBackup && r.Spec.Selective != nil && r.Spec.Selective.NamespaceFrom != "" {
+	if backupType != defs.LogicalBackup && r.IsCloningNamespace() {
 		return errors.New("nsFrom and nsTo are only available for logical backups")
 	}
 
@@ -190,6 +190,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMongoDBRestore) IsCloningNamespace() bool {
+	return r.Spec.Selective != nil && r.Spec.Selective.NamespaceFrom != ""
 }
 
 // +kubebuilder:validation:Type=string

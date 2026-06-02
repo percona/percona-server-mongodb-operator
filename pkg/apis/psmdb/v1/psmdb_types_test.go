@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -500,6 +501,74 @@ func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
 				require.NotNil(t, result)
 				assert.Equal(t, tt.expectValue, *result)
 			}
+		})
+	}
+}
+
+func TestCanRestore(t *testing.T) {
+	tests := map[string]struct {
+		spec      PerconaServerMongoDBSpec
+		restore   *PerconaServerMongoDBRestore
+		expectErr string
+	}{
+		"managed cluster, no sharding, no cloning": {
+			spec:    PerconaServerMongoDBSpec{},
+			restore: &PerconaServerMongoDBRestore{},
+		},
+		"unmanaged cluster": {
+			spec:      PerconaServerMongoDBSpec{Unmanaged: true},
+			restore:   &PerconaServerMongoDBRestore{},
+			expectErr: "can't run restore in an unmanaged cluster",
+		},
+		"sharded cluster with namespace cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Sharding: Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+			expectErr: "namespace cloning is not supported in sharded clusters",
+		},
+		"sharded cluster without namespace cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Sharding: Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{},
+		},
+		"unsharded cluster with namespace cloning": {
+			spec: PerconaServerMongoDBSpec{},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+		},
+		"unmanaged takes precedence over sharded cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Unmanaged: true,
+				Sharding:  Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+			expectErr: "can't run restore in an unmanaged cluster",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &PerconaServerMongoDB{Spec: tc.spec}
+			err := cr.CanRestore(context.Background(), tc.restore)
+			if tc.expectErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.EqualError(t, err, tc.expectErr)
 		})
 	}
 }
