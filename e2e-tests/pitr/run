@@ -264,7 +264,7 @@ main() {
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$second_cluster.$namespace"
 	sleep 2
-	check_recovery "${backup_name_minio}-3" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-3-second-cluster" "restore2.yml"
+	check_recovery "${backup_name_minio}-4" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-4-second-cluster" "restore2.yml"
 
 	backup_name_minio_2="backup-minio2"
 	run_backup $backup_name_minio_2 0
