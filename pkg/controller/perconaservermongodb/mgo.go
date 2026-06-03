@@ -777,7 +777,11 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 		return errors.Wrap(err, "failed to get userAdmin credentials")
 	}
 
-	if r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
+	canAuth, err := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+	if err != nil {
+		return err
+	}
+	if canAuth {
 		log.Info("user admin already exists and can authenticate, skipping creation", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 		return nil
 	}
@@ -792,7 +796,11 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 
 	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false)
 	if err != nil {
-		if !r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password) {
+		canAuth, authErr := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+		if authErr != nil {
+			return fmt.Errorf("exec add admin user: %v / %s / %s; check userAdmin authentication: %v", err, outb.String(), errb.String(), authErr)
+		}
+		if !canAuth {
 			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
 		}
 		log.Info("user admin can authenticate after createUser error, continuing", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
@@ -803,7 +811,7 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Context, pod *corev1.Pod, mongoCmd, user, pwd string) bool {
+func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Context, pod *corev1.Pod, mongoCmd, user, pwd string) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	var outb, errb bytes.Buffer
@@ -818,11 +826,23 @@ func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Con
 	}
 
 	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false); err != nil {
-		log.V(1).Info("userAdmin authentication check failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
-		return false
+		if isMongoAuthFailure(err, outb.String(), errb.String()) {
+			log.V(1).Info("userAdmin authentication failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
+			return false, nil
+		}
+
+		return false, fmt.Errorf("exec userAdmin authentication check: %v / %s / %s", err, outb.String(), errb.String())
 	}
 
-	return true
+	return true, nil
+}
+
+func isMongoAuthFailure(err error, stdout, stderr string) bool {
+	msg := strings.ToLower(strings.Join([]string{err.Error(), stdout, stderr}, " "))
+	return strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "auth failed") ||
+		strings.Contains(msg, "requires authentication") ||
+		strings.Contains(msg, "unauthorized")
 }
 
 func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {

@@ -367,4 +367,18 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		assert.Contains(t, err.Error(), "exec add admin user")
 		assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before createUser and before giving up")
 	})
+
+	t.Run("returns auth check exec error before createUser", func(t *testing.T) {
+		exec := &replsetInitExecRecorder{
+			authCheckErr: errors.New("exec failed"),
+		}
+		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
+
+		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
+		_, _, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exec userAdmin authentication check")
+		assert.Equal(t, int32(0), atomic.LoadInt32(&exec.createUserCalls), "createUser should not run when auth check itself fails")
+		assert.Equal(t, int32(1), atomic.LoadInt32(&exec.authCheckCalls))
+	})
 }
