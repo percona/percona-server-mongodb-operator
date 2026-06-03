@@ -70,7 +70,7 @@ wait_service_export() {
 
 desc "Register Kubernetes cluster"
 
-cat <<EOF | kubectl -n default apply -f -
+cat <<EOF | add_arch_to_podspecs - | kubectl_bin -n default apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -80,7 +80,7 @@ spec:
   terminationGracePeriodSeconds: 1
   containers:
     - name: curl
-      image: appropriate/curl
+      image: docker.io/alpine/curl:8.17.0
       imagePullPolicy: Always
       command: ["sh"]
       args:

@@ -99,6 +99,17 @@ Running all tests at once can be done with the following command:
 ./e2e-tests/run
 ```
 
+To schedule e2e workloads on nodes with a specific architecture, set `ARCH` when running the tests:
+
+```
+ARCH=arm64 ./e2e-tests/run
+ARCH=arm64 ./e2e-tests/init-deploy/run
+export ARCH=arm64
+./e2e-tests/init-deploy/run
+```
+
+For GKE Arm nodes, this adds `kubernetes.io/arch: arm64` node selectors and the matching `kubernetes.io/arch=arm64:NoSchedule` toleration to test workloads. On GKE clusters where all current nodes are `arm64`, the tests enable this automatically.
+
 (see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
 
 Tests can also be run one-by-one using the appropriate scripts (their names should be self-explanatory):
@@ -129,8 +140,8 @@ You can use environment variables to re-declare all default images used for test
 full list of variables is the following one:
 
 * `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:main` by default,
-* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod4.4` by default,
-* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
+* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod8.0` by default,
+* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:3-dev-latest` by default,
 * `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
 
 ### Using automatic clean-up after testing
