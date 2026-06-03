@@ -143,9 +143,10 @@ spec:
                     - backoffMax
                     - backoffMultiplier
                     type: object
+                  workloadIdentity:
+                    type: boolean
                 required:
                 - bucket
-                - credentialsSecret
                 type: object
               lastTransition:
                 format: date-time
@@ -390,9 +391,10 @@ spec:
                         - backoffMax
                         - backoffMultiplier
                         type: object
+                      workloadIdentity:
+                        type: boolean
                     required:
                     - bucket
-                    - credentialsSecret
                     type: object
                   lastTransition:
                     format: date-time
@@ -1305,9 +1307,10 @@ spec:
                               - backoffMax
                               - backoffMultiplier
                               type: object
+                            workloadIdentity:
+                              type: boolean
                           required:
                           - bucket
-                          - credentialsSecret
                           type: object
                         main:
                           type: boolean
@@ -26788,7 +26791,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:feat-gcs-workload-identity
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
