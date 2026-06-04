@@ -70,14 +70,12 @@ run_logrotate() {
 		done
 	fi
 
-
 	local logrotate_cmd="logrotate -s \"$logrotate_status_file\" \"$logrotate_conf_file\""
 	for additional_conf in "${logrotate_additional_conf_files[@]}"; do
 		logrotate_cmd="$logrotate_cmd \"$additional_conf\""
 	done
 
 	set -o xtrace
-
 	run_cron "$LOGROTATE_SCHEDULE" "$logrotate_cmd"
 }
 
