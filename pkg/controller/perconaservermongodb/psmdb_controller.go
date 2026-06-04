@@ -448,24 +448,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
+	err = r.ensureSecurityKeys(ctx, cr)
 	if err != nil {
-		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
 		return reconcile.Result{}, err
-	}
-	if ikCreated {
-		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
-	}
-
-	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
-		created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)
-		if err != nil {
-			err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.EncryptionKey)
-			return reconcile.Result{}, err
-		}
-		if created {
-			log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
-		}
 	}
 
 	err = r.reconcileBackups(ctx, cr)
@@ -945,6 +930,30 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 	for _, db := range list.DBs {
 		if _, ok := systemDBs[db.Name]; !ok {
 			return errors.Errorf("non system db found: %s", db.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) ensureSecurityKeys(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
+	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
+	if err != nil {
+		return errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
+	}
+	if ikCreated {
+		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
+	}
+
+	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
+		created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)
+		if err != nil {
+			return errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.EncryptionKey)
+		}
+		if created {
+			log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
 		}
 	}
 
