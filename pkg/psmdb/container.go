@@ -46,27 +46,22 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
-	}
-	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
-		volumes = append(volumes, corev1.VolumeMount{
+		{
 			Name:      ikeyName,
 			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
-		})
-	}
-	volumes = append(
-		volumes,
-		corev1.VolumeMount{
+		},
+		{
 			Name:      "ssl",
 			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
-		corev1.VolumeMount{
+		{
 			Name:      "ssl-internal",
 			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
-	)
+	}
 
 	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
@@ -107,8 +102,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 	}
 	if encryptionEnabled {
 		if len(cr.Spec.Secrets.Vault) != 0 {
-			volumes = append(
-				volumes,
+			volumes = append(volumes,
 				corev1.VolumeMount{
 					Name:      cr.Spec.Secrets.Vault,
 					MountPath: config.VaultDir,
@@ -116,8 +110,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 				},
 			)
 		} else {
-			volumes = append(
-				volumes,
+			volumes = append(volumes,
 				corev1.VolumeMount{
 					Name:      cr.Spec.Secrets.EncryptionKey,
 					MountPath: api.MongodRESTencryptDir,
@@ -236,8 +229,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 		replSetName = name
 	}
 
-	args = append(
-		args,
+	args = append(args,
 		"--dbpath="+config.MongodContainerDataDir,
 		"--port="+strconv.Itoa(int(replset.GetPort())),
 		"--replSet="+replSetName,
@@ -253,8 +245,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	// and for that reason clusterAuthMode should not be even configured.
 	if replset.Configuration.IsAuthorizationEnabled() {
 		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-			args = append(
-				args,
+			args = append(args,
 				"--clusterAuthMode=keyFile",
 				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
 			)
@@ -281,8 +272,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	}
 
 	if cr.CompareVersion("1.12.0") >= 0 && encryptionEnabled && !replset.Configuration.VaultEnabled() {
-		args = append(
-			args, "--enableEncryption",
+		args = append(args, "--enableEncryption",
 			"--encryptionKeyFile="+api.MongodRESTencryptDir+"/"+api.EncryptionKeyName,
 		)
 	}
@@ -299,16 +289,14 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 			}
 			if replset.Storage.WiredTiger.CollectionConfig != nil {
 				if replset.Storage.WiredTiger.CollectionConfig.BlockCompressor != nil {
-					args = append(
-						args,
+					args = append(args,
 						"--wiredTigerCollectionBlockCompressor="+string(*replset.Storage.WiredTiger.CollectionConfig.BlockCompressor),
 					)
 				}
 			}
 			if replset.Storage.WiredTiger.EngineConfig != nil {
 				if replset.Storage.WiredTiger.EngineConfig.JournalCompressor != nil {
-					args = append(
-						args,
+					args = append(args,
 						"--wiredTigerJournalCompressor="+string(*replset.Storage.WiredTiger.EngineConfig.JournalCompressor),
 					)
 				}

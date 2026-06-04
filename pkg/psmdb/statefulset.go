@@ -136,9 +136,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	fvar := false
 
-	volumes := []corev1.Volume{}
-	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
-		volumes = append(volumes, corev1.Volume{
+	volumes := []corev1.Volume{
+		{
 			Name: cr.Spec.Secrets.GetInternalKey(cr),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -147,17 +146,14 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 					Optional:    &fvar,
 				},
 			},
-		})
-	}
-	volumes = append(
-		volumes,
-		corev1.Volume{
+		},
+		{
 			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-	)
+	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
@@ -194,8 +190,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if encryptionEnabled {
 		if len(cr.Spec.Secrets.Vault) != 0 {
-			volumes = append(
-				volumes,
+			volumes = append(volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.Vault,
 					VolumeSource: corev1.VolumeSource{
@@ -208,8 +203,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			)
 		} else {
-			volumes = append(
-				volumes,
+			volumes = append(volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.EncryptionKey,
 					VolumeSource: corev1.VolumeSource{
@@ -274,8 +268,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	// add TLS/SSL Volume
 	t := true
-	volumes = append(
-		volumes,
+	volumes = append(volumes,
 		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
@@ -297,8 +290,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 	)
 	if cr.Spec.Secrets.LDAPSecret != "" {
-		volumes = append(
-			volumes,
+		volumes = append(volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
 				VolumeSource: corev1.VolumeSource{
@@ -319,8 +311,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
-		volumes = append(
-			volumes,
+		volumes = append(volumes,
 			[]corev1.Volume{
 				{
 					Name: config.MongodDataVolClaimName,
@@ -336,8 +327,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
-			volumes = append(
-				volumes,
+			volumes = append(volumes,
 				corev1.Volume{
 					Name: config.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
@@ -820,6 +810,7 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 }
 
 func GetCAVolumeMounts() []corev1.VolumeMount {
+
 	return []corev1.VolumeMount{
 		{
 			Name:      naming.BackupStorageCAInputVolumeName,

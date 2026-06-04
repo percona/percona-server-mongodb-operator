@@ -130,27 +130,22 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
-	}
-	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
-		volumes = append(volumes, corev1.VolumeMount{
+		{
 			Name:      cr.Spec.Secrets.GetInternalKey(cr),
 			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
-		})
-	}
-	volumes = append(
-		volumes,
-		corev1.VolumeMount{
+		},
+		{
 			Name:      "ssl",
 			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
-		corev1.VolumeMount{
+		{
 			Name:      "ssl-internal",
 			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
-	)
+	}
 
 	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
@@ -276,14 +271,12 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	// and for that reason clusterAuthMode should not be even configured.
 	if cfgRs.Configuration.IsAuthorizationEnabled() {
 		if cr.Spec.Secrets.InternalKey != "" || (cr.TLSEnabled() && cr.Spec.TLS.Mode == api.TLSModeAllow) || (!cr.TLSEnabled() && cr.UnsafeTLSDisabled()) {
-			args = append(
-				args,
+			args = append(args,
 				"--clusterAuthMode=keyFile",
 				"--keyFile="+config.MongodSecretsDir+"/mongodb-key",
 			)
 		} else if cr.TLSEnabled() {
-			args = append(
-				args,
+			args = append(args,
 				"--clusterAuthMode=x509",
 			)
 		}
@@ -295,8 +288,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 
 	if msSpec.SetParameter != nil {
 		if msSpec.SetParameter.CursorTimeoutMillis > 0 {
-			args = append(
-				args,
+			args = append(args,
 				"--setParameter",
 				"cursorTimeoutMillis="+strconv.Itoa(msSpec.SetParameter.CursorTimeoutMillis),
 			)
