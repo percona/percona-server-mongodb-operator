@@ -63,6 +63,10 @@ spec:
         annotations:
           test: monitoring-pmm3
 
+  logcollector:
+    enabled: true
+    image:
+
   pmm:
     enabled: true
     image:

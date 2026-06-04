@@ -280,6 +280,10 @@ func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
+	if cr.Spec.PMM.QuerySource != "" {
+		pmmServerArgs += " --query-source=" + cr.Spec.PMM.QuerySource
+	}
+
 	if cr.TLSEnabled() {
 		authMechanism := scramSHA256AuthMechanism
 		switch {

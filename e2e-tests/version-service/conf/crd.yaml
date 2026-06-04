@@ -1929,6 +1929,11 @@ spec:
                     type: string
                   mongosParams:
                     type: string
+                  querySource:
+                    enum:
+                    - profiler
+                    - mongolog
+                    type: string
                   resources:
                     properties:
                       claims:
