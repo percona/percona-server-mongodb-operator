@@ -26819,7 +26819,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:feat-gcs-workload-identity
+          image: perconalab/percona-server-mongodb-operator:main
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
