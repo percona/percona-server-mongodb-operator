@@ -105,22 +105,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		return status, nil
 	}
 
-	if cr.Status.State == psmdbv1.RestoreStateWaiting && sfsReady && cr.Spec.PITR != nil {
-		rsReady, err := r.checkIfReplsetsAreReadyForPhysicalRestore(ctx, cluster)
-		if err != nil {
-			return status, errors.Wrap(err, "check if replsets are ready for physical restore")
-		}
-
-		if !rsReady {
-			if err := r.prepareReplsetsForPhysicalRestore(ctx, cluster); err != nil {
-				return status, errors.Wrap(err, "prepare replsets for physical restore")
-			}
-
-			log.Info("Waiting for replsets to be ready before restore", "ready", rsReady)
-			return status, nil
-		}
-	}
-
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
@@ -156,6 +140,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				bcp.Status.PBMname,
 				"--out", "json",
 			}
+		}
+
+		if cmp, err := cluster.ComparePBMAgentVersion("2.14.0"); err == nil && cmp >= 0 {
+			restoreCommand = append(restoreCommand, "--yes")
 		}
 
 		if cr.Spec.RSMap != nil {
@@ -741,92 +729,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) makePrimary(ctx context.Context, 
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
-
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
-	for _, rs := range replsets {
-		log.Info("Preparing replset for physical restore", "replset", rs.Name)
-
-		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name)
-		if err != nil {
-			return errors.Wrapf(err, "get pods of replset %s", rs.Name)
-		}
-
-		for _, pod := range podList.Items {
-			isMaster, err := r.runIsMaster(ctx, cluster, &pod)
-			if err != nil {
-				log.V(1).Error(err, "failed to run db.hello()", "pod", pod.Name, "replset", rs.Name)
-				continue
-			}
-
-			if !isMaster {
-				log.V(1).Info("Skipping secondary pod", "pod", pod.Name, "replset", rs.Name)
-				continue
-			}
-
-			podZero := rs.PodName(cluster, 0)
-
-			if pod.Name == podZero {
-				log.Info(fmt.Sprintf("%s is already primary", podZero), "replset", rs.Name)
-				continue
-			}
-
-			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name, "replset", rs.Name)
-			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name, "replset", rs.Name)
-
-			if err = r.makePrimary(ctx, cluster, &pod, podZero); err != nil {
-				return errors.Wrapf(err, "make %s primary", podZero)
-			}
-
-			log.Info("Stepping down the current primary", "primary", pod.Name, "pod", pod.Name, "replset", rs.Name)
-			if err = r.stepDown(ctx, cluster, &pod); err != nil {
-				return errors.Wrap(err, "step down")
-			}
-		}
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
-	log := logf.FromContext(ctx)
-
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
-	for _, rs := range replsets {
-		log.Info("Checking if replset is ready for physical restore", "replset", rs.Name)
-
-		podZero := rs.PodName(cluster, 0)
-
-		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: podZero, Namespace: cluster.Namespace}, &pod); err != nil {
-			return false, errors.Wrapf(err, "get pod %s", podZero)
-		}
-
-		isMaster, err := r.runIsMaster(ctx, cluster, &pod)
-		if err != nil {
-			return false, errors.Wrap(err, "check if pod zero is primary")
-		}
-
-		if !isMaster {
-			log.Info(fmt.Sprintf("%s must be elected as primary before starting physical restore", pod.Name), "replset", rs.Name)
-			return false, nil
-		}
-
-		log.Info("Replset is ready for physical restore", "replset", rs.Name, "primary", pod.Name)
-	}
-
-	return true, nil
 }
 
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.

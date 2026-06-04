@@ -54,7 +54,7 @@ func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) 
 	return nil
 }
 
-func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelaySeconds int64) (_ *mongo.MemberState, err error) {
+func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.MemberState, err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongodLiveness")
 	ctx = logf.IntoContext(ctx, log)
 
@@ -107,7 +107,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config, startupDelay
 	}
 
 	log.V(1).Info("Checking state", "state", rsStatus.MyState, "storage size", storageSize)
-	if err := CheckState(rsStatus, startupDelaySeconds, storageSize); err != nil {
+	if err := CheckStateForLiveness(ctx, rsStatus, storageSize); err != nil {
 		return &rsStatus.MyState, err
 	}
 
@@ -119,27 +119,29 @@ type OplogRs struct {
 	StorageSize      int64 `bson:"storageSize" json:"storageSize"`
 }
 
-func CheckState(rs mongo.Status, startupDelaySeconds int64, oplogSize int64) error {
+func CheckStateForLiveness(ctx context.Context, rs mongo.Status, oplogSize int64) error {
 	self := rs.GetSelf()
 	if self == nil {
 		return errors.New("self member is not found")
 	}
-	uptime := self.Uptime
+
+	log := logf.FromContext(ctx)
 
 	switch rs.MyState {
 	case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 		return nil
 	case mongo.MemberStateStartup, mongo.MemberStateStartup2:
-		if (rs.InitialSyncStatus == nil && uptime > 30+oplogSize*60) || // give 60 seconds to each 1Gb of oplog
-			(rs.InitialSyncStatus != nil && uptime > startupDelaySeconds) {
-			return errors.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
+		// give 60 seconds to each 1Gb of oplog + 30 seconds
+		if rs.InitialSyncStatus == nil && self.Uptime > 30+oplogSize*60 {
+			return errors.Errorf("state is %s and uptime is %d", mongo.MemberStateStrings[rs.MyState], self.Uptime)
 		}
-	case mongo.MemberStateRecovering:
-		if uptime > startupDelaySeconds {
-			return errors.Errorf("state is %d and uptime is %d", rs.MyState, uptime)
+		if rs.InitialSyncStatus != nil {
+			log.Info("Initial sync is in progress")
 		}
-	case mongo.MemberStateUnknown, mongo.MemberStateDown, mongo.MemberStateRollback, mongo.MemberStateRemoved:
-		return errors.Errorf("invalid state %d", rs.MyState)
+	case mongo.MemberStateRollback, mongo.MemberStateRecovering:
+		log.Info("Member state is " + mongo.MemberStateStrings[rs.MyState])
+	case mongo.MemberStateUnknown, mongo.MemberStateDown, mongo.MemberStateRemoved:
+		return errors.Errorf("unhealthy state %s", mongo.MemberStateStrings[rs.MyState])
 	default:
 		return errors.Errorf("state is unknown %d", rs.MyState)
 	}
