@@ -2230,7 +2230,11 @@ function run_simple_cli_inside_image() {
 	local cli=${2}
 
 	local pod_name=${RANDOM}
-	kubectl_bin -n default run ${pod_name} --image=${image} --restart=Never --command -- sleep infinity >/dev/null
+	local run_args=()
+	if arch_scheduling_enabled; then
+		run_args+=(--overrides="$(arch_run_overrides)")
+	fi
+	kubectl_bin -n default run ${pod_name} --image=${image} "${run_args[@]}" --restart=Never --command -- sleep infinity >/dev/null
 	kubectl_bin -n default wait --for=condition=Ready pod/${pod_name} >/dev/null
 	local output=$(kubectl_bin -n default exec ${pod_name} -- bash -c "${cli} 2>&1")
 	kubectl_bin -n default delete pod/${pod_name} --grace-period=0 --force >/dev/null
