@@ -1106,8 +1106,6 @@ compare_kubectl() {
 			del(.. | select(has("dataSource")).dataSource) |
 			del(.. | select(has("procMount")).procMount) |
 			del(.. | select(has("storageClassName")).storageClassName) |
-			del(.. | select(has("nodeSelector")).nodeSelector."kubernetes.io/arch") |
-			del(.. | select(has("tolerations")).tolerations[] | select(.key == "kubernetes.io/arch" and .value == "'${ARCH}'")) |
 			del(.. | select(has("finalizers")).finalizers) |
 			del(.. | select(has("kubernetes.io/pvc-protection"))."kubernetes.io/pvc-protection") |
 			del(.. | select(has("volumeName")).volumeName) |
@@ -1132,8 +1130,12 @@ compare_kubectl() {
 			(.. | select(. == "batch/v1beta1")) = "batch/v1" ' - >${new_result}
 
 	yq -i eval 'del(.spec.persistentVolumeClaimRetentionPolicy)' ${new_result}
-	yq -i eval 'del(.. | select(key == "nodeSelector" and tag == "!!map" and length == 0))' ${new_result}
-	yq -i eval 'del(.. | select(key == "tolerations" and tag == "!!seq" and length == 0))' ${new_result}
+	if arch_scheduling_enabled; then
+		yq -i eval 'del(.. | select(has("nodeSelector")).nodeSelector."kubernetes.io/arch")' ${new_result}
+		ARCH="${ARCH}" yq -i eval 'del(.. | select(has("tolerations")).tolerations[] | select(.key == "kubernetes.io/arch" and .value == strenv(ARCH)))' ${new_result}
+		yq -i eval 'del(.. | select(key == "nodeSelector" and tag == "!!map" and length == 0))' ${new_result}
+		yq -i eval 'del(.. | select(key == "tolerations" and tag == "!!seq" and length == 0))' ${new_result}
+	fi
 
 	if version_gt "1.22"; then
 		yq -i eval 'del(.spec.internalTrafficPolicy)' ${new_result}
@@ -1725,7 +1727,7 @@ cat_config() {
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
-		| yq eval '(.spec | select(has("logcollector"))).logcollector.image = "'"$IMAGE_LOGCOLLECTOR"'"' \
+		| if [[ -n ${IMAGE_LOGCOLLECTOR} ]]; then IMAGE_LOGCOLLECTOR="${IMAGE_LOGCOLLECTOR}" yq eval '(.spec | select(has("logcollector"))).logcollector.image = strenv(IMAGE_LOGCOLLECTOR)'; else cat; fi \
 		| $sed -e "s/NAME_SPACE/${namespace}/g" \
 		| yq eval '.spec.upgradeOptions.apply="Never"' \
 		| add_arch_to_psmdb -
