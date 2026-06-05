@@ -36,6 +36,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	k8sutils "github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -538,10 +539,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-			return err
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete arbiter statefulset: %s", naming.ArbiterStatefulSetName(cr, replset))
 		}
 	}
 
@@ -553,10 +552,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
-			return err
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete non voting statefulset: %s", naming.NonVotingStatefulSetName(cr, replset))
 		}
 	}
 
@@ -1043,24 +1040,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, c
 
 	sfsName := cr.Name + "-" + api.ConfigReplSetName
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
-
-	if err := r.client.Delete(ctx, sfs); err != nil && !k8serrors.IsNotFound(err) {
+	if err := k8sutils.DeleteIfExists(ctx, r.client, sfs); err != nil {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
 	}
 
-	svc := corev1.Service{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &svc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to get config service")
+	svc := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-" + api.ConfigReplSetName,
+			Namespace: cr.Namespace,
+		},
 	}
-
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-
-	err = r.client.Delete(ctx, &svc)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete config service")
+	if err := k8sutils.DeleteIfExists(ctx, r.client, &svc); err != nil {
+		return errors.Wrapf(err, "failed to delete config service: %s", svc.Name)
 	}
 
 	return nil
@@ -1098,15 +1089,6 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 	return errors.Wrap(err, "failed to set FCV")
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	err := r.client.Delete(ctx, psmdb.MongosStatefulset(cr))
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to delete mongos statefulset")
-	}
-
-	return nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Sharding.Enabled {
 		return nil
@@ -1133,7 +1115,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 		}
 	}
 
-	return r.deleteMongos(ctx, cr)
+	return k8sutils.DeleteIfExists(ctx, r.client, psmdb.MongosStatefulset(cr))
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
