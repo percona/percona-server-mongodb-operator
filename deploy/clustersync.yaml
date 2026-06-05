@@ -1,0 +1,33 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBClusterSync
+metadata:
+  name: my-cluster-sync
+spec:
+  clusterName: target-cluster
+  image: percona/percona-clustersync-mongodb:0.9.0
+  mode: reset
+  source:
+    uri: mongodb://source-cluster-mongos.kech1.svc.cluster.local:27017
+    credentialsSecret: my-cluster-sync-source
+    # tls:
+    #   enabled: true
+    #   secret: my-cluster-sync-source-tls
+  excludeNamespaces:
+    - admin
+    - local
+  # resources:
+  #   requests:
+  #     cpu: 500m
+  #     memory: 512Mi
+  #   limits:
+  #     cpu: "2"
+  #     memory: 2Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cluster-sync-source
+type: Opaque
+stringData:
+  username: source
+  password: mys3cretpAss

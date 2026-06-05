@@ -1,0 +1,218 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+source_cluster="source-cluster"
+target_cluster="target-cluster"
+sync_cr="sync"
+
+clustersync_source_secret="clustersync-source-creds"
+
+mongosh_on_mongos() {
+	local cluster="$1"
+	local user="$2"
+	local pass="$3"
+	local script="$4"
+
+	kubectl_bin exec "${cluster}-mongos-0" -c mongos -- \
+		mongosh "mongodb://${user}:${pass}@%2Ftmp%2Fmongodb-27017.sock/admin" --quiet --eval "${script}"
+}
+
+wait_pcsm_state() {
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	local deploy="deploy/${sync_cr}-pcsm"
+	echo -n "waiting for pcsm state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin exec "${deploy}" -c pcsm -- pcsm status 2>/dev/null | jq -r '.state // empty' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok (state=${state})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for pcsm state=${expected}; last state=${state:-<none>}"
+			kubectl_bin describe "${deploy}" || true
+			kubectl_bin logs "${deploy}" -c pcsm --tail=200 || true
+			exit 1
+		fi
+	done
+}
+
+# wait_target_doc_count polls the target mongos until the document
+# count for myApp.test reaches at least the expected value.
+wait_target_doc_count() {
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	echo -n "waiting for target myApp.test count>=${expected}"
+	local elapsed=0
+	local count=""
+	while true; do
+		count=$(mongosh_on_mongos "${target_cluster}" "myApp" "myPass" \
+			'db.getSiblingDB("myApp").test.countDocuments({})' 2>/dev/null | tr -d '[:space:]' || true)
+		if [[ ${count} =~ ^[0-9]+$ ]] && [[ ${count} -ge ${expected} ]]; then
+			echo " ok (count=${count})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for target count>=${expected}; last count=${count:-<none>}"
+			exit 1
+		fi
+	done
+}
+
+wait_cr_status_state() {
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	echo -n "waiting for psmdb-clustersync/${sync_cr} status.state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin get psmdb-clustersync "${sync_cr}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for status.state=${expected}; last state=${state:-<none>}"
+			exit 1
+		fi
+	done
+}
+
+patch_sync_mode() {
+	local mode="$1"
+
+	desc "patch ${sync_cr} mode=${mode}"
+	kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p "{\"spec\":{\"mode\":\"${mode}\"}}"
+}
+
+desc 'create infra'
+create_infra "${namespace}"
+
+desc 'apply users secrets and start client'
+kubectl_bin apply \
+	-f "${test_dir}/conf/secrets.yml" \
+	-f "${conf_dir}/client.yml"
+
+desc "deploy ${source_cluster}"
+apply_cluster "${test_dir}/conf/source-cluster.yml"
+
+desc "deploy ${target_cluster}"
+apply_cluster "${test_dir}/conf/target-cluster.yml"
+
+desc "wait for ${source_cluster} ready"
+wait_for_running "${source_cluster}-rs0" 1
+wait_for_running "${source_cluster}-cfg" 1 "false"
+wait_for_running "${source_cluster}-mongos" 1 "false"
+wait_cluster_consistency "${source_cluster}"
+
+desc "wait for ${target_cluster} ready (which has 2 shards vs source's 1 shard)"
+wait_for_running "${target_cluster}-rs0" 1
+wait_for_running "${target_cluster}-rs1" 1 "false"
+wait_for_running "${target_cluster}-cfg" 1 "false"
+wait_for_running "${target_cluster}-mongos" 1 "false"
+wait_cluster_consistency "${target_cluster}"
+
+desc "read PCSM source credentials from secret/${clustersync_source_secret}"
+source_user=$(getSecretData "${clustersync_source_secret}" "username")
+source_pass=$(getSecretData "${clustersync_source_secret}" "password")
+
+desc "create '${source_user}' user on ${source_cluster} (for PCSM)"
+mongosh_on_mongos "${source_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'${source_user}',pwd:'${source_pass}',roles:[{role:'backup',db:'admin'},{role:'clusterMonitor',db:'admin'},{role:'readAnyDatabase',db:'admin'}]})"
+
+desc "verify '${source_user}' user authenticates"
+mongosh_on_mongos "${source_cluster}" "${source_user}" "${source_pass}" \
+	'db.runCommand({connectionStatus: 1}).authInfo'
+
+desc "create 'myApp' user on ${source_cluster} (workload writer/reader)"
+mongosh_on_mongos "${source_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]})"
+
+desc "create 'myApp' user on ${target_cluster} (verification reader)"
+mongosh_on_mongos "${target_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]})"
+
+desc "write initial data to ${source_cluster}"
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
+
+desc "apply ClusterSync CR with mode=running"
+cat "${test_dir}/conf/clustersync.yml" \
+	| $sed -e "s|CLUSTERSYNC_IMAGE|${IMAGE_CLUSTERSYNC}|g" -e "s|NAME_SPACE|${namespace}|g" \
+	| kubectl_bin apply -f -
+
+desc 'wait for PCSM deployment to become available'
+kubectl_bin wait --for=condition=Available --timeout=5m "deployment/${sync_cr}-pcsm"
+
+desc 'wait for PCSM state=running after initial sync'
+wait_pcsm_state "running" 600
+
+desc "verify initial data is replicated to ${target_cluster}"
+wait_target_doc_count 1 300
+
+desc 'write data to source, verify it replicates'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100501})'
+wait_target_doc_count 2 180
+
+desc 'write more data to source, verify it replicates'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100502})'
+wait_target_doc_count 3 180
+
+desc 'transition: running -> paused'
+patch_sync_mode "paused"
+wait_pcsm_state "paused" 180
+wait_cr_status_state "paused" 120
+
+desc 'write data while paused, verify that target still has old data count'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100503})'
+wait_target_doc_count 3 180
+
+desc 'transition: paused -> running'
+patch_sync_mode "running"
+wait_pcsm_state "running" 300
+wait_cr_status_state "running" 120
+
+desc 'write data while running, verify replication and existence of data written when sync was paused'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
+wait_target_doc_count 5 180
+
+desc 'transition: running -> finalized'
+patch_sync_mode "finalized"
+wait_pcsm_state "finalized" 300
+wait_cr_status_state "finalized" 120
+
+destroy "${namespace}"
+
+desc 'test passed'

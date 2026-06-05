@@ -1,0 +1,331 @@
+package perconaservermongodbclustersync
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+)
+
+func TestApplyObservedStatus(t *testing.T) {
+	tests := map[string]struct {
+		initial                psmdbv1.PerconaServerMongoDBClusterSyncStatus
+		observed               client.Status
+		wantState              psmdbv1.ClusterSyncState
+		wantLag                int64
+		wantError              string
+		wantStartedAtSet       bool
+		wantStartedAtUnchanged bool
+		wantConditions         []string
+	}{
+		"idle does not set startedAt": {
+			observed:  client.Status{State: "idle"},
+			wantState: psmdbv1.ClusterSyncStateIdle,
+		},
+		"paused does not set startedAt": {
+			observed:  client.Status{State: "paused"},
+			wantState: psmdbv1.ClusterSyncStatePaused,
+		},
+		"running sets startedAt and emits Running condition": {
+			observed:         client.Status{State: "running", LagTimeSeconds: 2},
+			wantState:        psmdbv1.ClusterSyncStateRunning,
+			wantLag:          2,
+			wantStartedAtSet: true,
+			wantConditions:   []string{psmdbv1.ConditionClusterSyncRunning},
+		},
+		"existing startedAt is preserved when state returns to idle": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Hour)},
+			},
+			observed:               client.Status{State: "idle"},
+			wantState:              psmdbv1.ClusterSyncStateIdle,
+			wantStartedAtUnchanged: true,
+		},
+		"finalizing does not emit Finalized condition": {
+			observed:  client.Status{State: "finalizing"},
+			wantState: psmdbv1.ClusterSyncStateFinalizing,
+		},
+		"finalized emits Finalized condition": {
+			observed:       client.Status{State: "finalized"},
+			wantState:      psmdbv1.ClusterSyncStateFinalized,
+			wantConditions: []string{psmdbv1.ConditionClusterSyncFinalized},
+		},
+		"failed propagates error message": {
+			observed:  client.Status{State: "failed", Error: "source unreachable"},
+			wantState: psmdbv1.ClusterSyncStateFailed,
+			wantError: "source unreachable",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := tc.initial.DeepCopy()
+			before := s.StartedAt
+
+			applyObservedStatus(s, tc.observed)
+
+			assert.Equal(t, tc.wantState, s.State)
+			assert.Equal(t, tc.wantLag, s.LagTimeSeconds)
+			assert.Equal(t, tc.wantError, s.Error)
+
+			switch {
+			case tc.wantStartedAtUnchanged:
+				assert.Equal(t, before, s.StartedAt)
+			case tc.wantStartedAtSet:
+				require.NotNil(t, s.StartedAt)
+			default:
+				assert.Nil(t, s.StartedAt)
+			}
+
+			for _, ct := range tc.wantConditions {
+				assert.True(t, meta.IsStatusConditionTrue(s.Conditions, ct), "expected condition %s=True", ct)
+			}
+		})
+	}
+}
+
+// fakePCSM records every call so InvokeAction tests can assert exactly
+// one verb fires per action with the expected arguments.
+type fakePCSM struct {
+	started    *client.StartOptions
+	paused     int
+	resumed    *bool
+	finalized  int
+	statusResp client.Status
+	statusErr  error
+	actionErr  error
+}
+
+func (f *fakePCSM) Status(_ context.Context) (client.Status, error) {
+	return f.statusResp, f.statusErr
+}
+func (f *fakePCSM) Start(_ context.Context, opts client.StartOptions) error {
+	f.started = &opts
+	return f.actionErr
+}
+func (f *fakePCSM) Pause(_ context.Context) error {
+	f.paused++
+	return f.actionErr
+}
+func (f *fakePCSM) Resume(_ context.Context, fromFailure bool) error {
+	f.resumed = &fromFailure
+	return f.actionErr
+}
+func (f *fakePCSM) Finalize(_ context.Context) error {
+	f.finalized++
+	return f.actionErr
+}
+
+func TestInvokeAction(t *testing.T) {
+	tests := map[string]struct {
+		action  modeAction
+		cr      *psmdbv1.PerconaServerMongoDBClusterSync
+		assert  func(t *testing.T, f *fakePCSM)
+		wantErr error
+	}{
+		"start passes excludeNamespaces from spec": {
+			action: actionStart,
+			cr: &psmdbv1.PerconaServerMongoDBClusterSync{
+				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+					ExcludeNamespaces: []string{"db.*", "tmp.coll"},
+				},
+			},
+			assert: func(t *testing.T, f *fakePCSM) {
+				require.NotNil(t, f.started)
+				assert.Equal(t, []string{"db.*", "tmp.coll"}, f.started.ExcludeNamespaces)
+			},
+		},
+		"resume passes fromFailure=true when last state was failed": {
+			action: actionResume,
+			cr: &psmdbv1.PerconaServerMongoDBClusterSync{
+				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+					State: psmdbv1.ClusterSyncStateFailed,
+				},
+			},
+			assert: func(t *testing.T, f *fakePCSM) {
+				require.NotNil(t, f.resumed)
+				assert.True(t, *f.resumed)
+			},
+		},
+		"resume passes fromFailure=false from clean paused": {
+			action: actionResume,
+			cr: &psmdbv1.PerconaServerMongoDBClusterSync{
+				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+					State: psmdbv1.ClusterSyncStatePaused,
+				},
+			},
+			assert: func(t *testing.T, f *fakePCSM) {
+				require.NotNil(t, f.resumed)
+				assert.False(t, *f.resumed)
+			},
+		},
+		"pause calls pause": {
+			action: actionPause,
+			cr:     &psmdbv1.PerconaServerMongoDBClusterSync{},
+			assert: func(t *testing.T, f *fakePCSM) { assert.Equal(t, 1, f.paused) },
+		},
+		"finalize calls finalize": {
+			action: actionFinalize,
+			cr:     &psmdbv1.PerconaServerMongoDBClusterSync{},
+			assert: func(t *testing.T, f *fakePCSM) { assert.Equal(t, 1, f.finalized) },
+		},
+		"none is a noop": {
+			action: actionNone,
+			cr:     &psmdbv1.PerconaServerMongoDBClusterSync{},
+			assert: func(t *testing.T, f *fakePCSM) {
+				assert.Nil(t, f.started)
+				assert.Nil(t, f.resumed)
+				assert.Zero(t, f.paused+f.finalized)
+			},
+		},
+		"propagates client error": {
+			action:  actionPause,
+			cr:      &psmdbv1.PerconaServerMongoDBClusterSync{},
+			wantErr: errors.New("some error"),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			f := &fakePCSM{}
+			if tc.wantErr != nil {
+				f.actionErr = tc.wantErr
+			}
+			err := invokeAction(t.Context(), f, tc.action, tc.cr)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tc.assert != nil {
+				tc.assert(t, f)
+			}
+		})
+	}
+}
+
+type recordingMongoClient struct {
+	mongo.Client
+
+	getUserInfoResp *mongo.User
+	getUserInfoErr  error
+
+	createUserErr     error
+	updateUserPassErr error
+	updateRolesErr    error
+
+	createUserCalls     int
+	updateUserPassCalls int
+	updateRolesCalls    int
+
+	lastCreatePass  string
+	lastUpdatePass  string
+	lastUpdateRoles []mongo.Role
+}
+
+func (m *recordingMongoClient) GetUserInfo(_ context.Context, _, _ string) (*mongo.User, error) {
+	return m.getUserInfoResp, m.getUserInfoErr
+}
+
+func (m *recordingMongoClient) CreateUser(_ context.Context, _, _, pwd string, _ ...mongo.Role) error {
+	m.createUserCalls++
+	m.lastCreatePass = pwd
+	return m.createUserErr
+}
+
+func (m *recordingMongoClient) UpdateUserPass(_ context.Context, _, _, pwd string) error {
+	m.updateUserPassCalls++
+	m.lastUpdatePass = pwd
+	return m.updateUserPassErr
+}
+
+func (m *recordingMongoClient) UpdateUserRoles(_ context.Context, _, _ string, roles []mongo.Role) error {
+	m.updateRolesCalls++
+	m.lastUpdateRoles = roles
+	return m.updateRolesErr
+}
+
+func TestEnsureTargetMongoUser(t *testing.T) {
+	creds := psmdb.Credentials{Username: "clustersync-cr", Password: "new-password"}
+
+	tests := map[string]struct {
+		mc      *recordingMongoClient
+		wantErr string
+		assert  func(t *testing.T, m *recordingMongoClient)
+	}{
+		"missing user is created with secret password": {
+			mc: &recordingMongoClient{getUserInfoResp: nil},
+			assert: func(t *testing.T, m *recordingMongoClient) {
+				assert.Equal(t, 1, m.createUserCalls)
+				assert.Equal(t, "new-password", m.lastCreatePass)
+				assert.Zero(t, m.updateUserPassCalls)
+				assert.Zero(t, m.updateRolesCalls)
+			},
+		},
+		"existing user has password and roles re-applied": {
+			mc: &recordingMongoClient{getUserInfoResp: &mongo.User{DB: "admin"}},
+			assert: func(t *testing.T, m *recordingMongoClient) {
+				assert.Zero(t, m.createUserCalls)
+				assert.Equal(t, 1, m.updateUserPassCalls)
+				assert.Equal(t, "new-password", m.lastUpdatePass)
+				assert.Equal(t, 1, m.updateRolesCalls)
+				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
+			},
+		},
+		"GetUserInfo error short-circuits with no writes": {
+			mc:      &recordingMongoClient{getUserInfoErr: errors.New("error")},
+			wantErr: "look up target user",
+			assert: func(t *testing.T, m *recordingMongoClient) {
+				assert.Zero(t, m.createUserCalls)
+				assert.Zero(t, m.updateUserPassCalls)
+				assert.Zero(t, m.updateRolesCalls)
+			},
+		},
+		"CreateUser error is wrapped": {
+			mc:      &recordingMongoClient{getUserInfoResp: nil, createUserErr: errors.New("error")},
+			wantErr: "create target user",
+		},
+		"UpdateUserPass error stops before UpdateUserRoles": {
+			mc: &recordingMongoClient{
+				getUserInfoResp:   &mongo.User{DB: "admin"},
+				updateUserPassErr: errors.New("error"),
+			},
+			wantErr: "sync target user password",
+			assert: func(t *testing.T, m *recordingMongoClient) {
+				assert.Zero(t, m.updateRolesCalls)
+			},
+		},
+		"UpdateUserRoles error is wrapped": {
+			mc: &recordingMongoClient{
+				getUserInfoResp: &mongo.User{DB: "admin"},
+				updateRolesErr:  errors.New("error"),
+			},
+			wantErr: "sync target user roles",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := ensureTargetMongoUser(t.Context(), tc.mc, creds)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.assert != nil {
+				tc.assert(t, tc.mc)
+			}
+		})
+	}
+}
