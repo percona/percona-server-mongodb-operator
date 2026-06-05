@@ -3,7 +3,7 @@ set -e
 
 export PATH="$PATH:/opt/fluent-bit/bin"
 
-LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 0 * * *}"
+LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 * * *}"
 
 run_cron() {
 	local schedule="$1"
