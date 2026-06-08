@@ -5,7 +5,7 @@
 | Author       | George Kechagias                         |
 | Status       | Draft                                    |
 | Created      | 2026-05-12                               |
-| Last Updated | 2026-06-04                               |
+| Last Updated | 2026-06-08                               |
 | Reviewers    |                                          |
 
 ---
@@ -17,7 +17,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 ### 1.1 Goals
 
 - Provide a fully declarative way to set up cross-cluster replication and migrations through a dedicated CRD
-- Manage PCSM lifecycle (start, pause, resume, finalize, failure recovery) within the operator reconciliation loop
+- Manage PCSM lifecycle (start, pause, resume, reset, finalize) within the operator reconciliation loop, driven exclusively by explicit user intent expressed on the CR — the controller never auto-recovers from failed states and never auto-restarts after a reset
 - Expose replication status and lag in the CR status for observability
 - Keep PCSM lifecycle independent of the target `PerconaServerMongoDB` CR — adding or removing replication does not require modifying the cluster CR
 
@@ -47,7 +47,7 @@ The operator will deploy and manage Percona ClusterSync for MongoDB (PCSM) decla
 - **Checkpoint:** A persisted position in the source's change stream that allows PCSM to resume real-time replication after a restart without re-running initial sync.
 - **Finalization:** A one-time operation that completes the migration. PCSM finalizes replication, creates required indexes on the target, and stops. After finalization, starting PCSM again begins a new initial sync from scratch.
 - **PCSM workflow:** `start` (begin replication) → initial sync → real-time replication → `pause`/`resume` (control replication) → `finalize` (complete migration) → cutover (switch clients to target).
-- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator uses `POST /start`, `POST /pause`, `POST /resume`, `POST /finalize`, `POST /reset`, and `GET /status` to control the PCSM lifecycle. `POST /finalize` is driven by the one-way `spec.finalize=true` switch (see §5.5 and §11 Q12). `POST /reset` is driven by the monotonic `spec.resetGeneration` counter: the controller calls `POST /reset` whenever `spec.resetGeneration > status.lastAppliedResetGeneration` and then writes the new value into status (spec is never mutated, so GitOps tools like Argo CD never see drift). The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
+- **PCSM HTTP API:** PCSM exposes an HTTP API on port 2242. The operator uses `POST /start`, `POST /pause`, `POST /resume`, `POST /finalize`, `POST /reset`, and `GET /status` to control the PCSM lifecycle. Every HTTP verb is driven by an explicit user-set value of `spec.mode` (see §4.2). The controller only issues a call when `spec.mode != status.mode`; after the call succeeds it mirrors the value into `status.mode` via the status subresource. The controller **never** writes back to spec, so re-applying the same manifest is idempotent and GitOps tools like Argo CD never see drift. The API does not require authentication; the operator communicates with PCSM via a ClusterIP Service within the Kubernetes network.
 
 ### 2.2 Key Constraints
 
@@ -130,26 +130,34 @@ PerconaServerMongoDB (target CR, unchanged)
    still stays on the target.
 
 2. **Lifecycle control via HTTP API:** After the Deployment is ready, the controller calls
-   `GET /status` to read the current PCSM state. It compares this against the desired state
-   from the CR spec and issues the appropriate HTTP call:
-   - PCSM not started → `POST /start`
-   - `spec.paused=true` and PCSM state is `running` → `POST /pause`
-   - `spec.paused=false` and PCSM state is `paused` → `POST /resume`
-   - `spec.finalize=true` and PCSM is caught up → `POST /finalize` (one-time, terminal)
-   - `spec.resetGeneration > status.lastAppliedResetGeneration` and `status.state ≠ finalized`
-     → `POST /reset`, then advance `status.lastAppliedResetGeneration` to match spec via
-     the status subresource (spec is never mutated; see §4.2 field notes for the GitOps
-     rationale).
+   `GET /status` to read the current PCSM state. It then compares `spec.mode` against
+   `status.mode` (the last user intent the controller has already acted on). When the two
+   are equal, the controller issues no HTTP calls — it only refreshes observed status. When
+   they differ, the controller issues exactly one transition call and, on success, mirrors
+   `spec.mode` into `status.mode` via the status subresource:
+
+   | Transition (`status.mode` → `spec.mode`) | HTTP call | Notes |
+   |------|------|------|
+   | `paused` → `running` | `POST /start` if PCSM has never started; otherwise `POST /resume` | Triggered explicitly by the user; CR creation alone never starts PCSM (default `mode=paused`). |
+   | `running` → `paused` | `POST /pause` | |
+   | (any non-finalized) → `reset` | `POST /reset` | Wipes the checkpoint. Controller does **not** auto-call `/start` after — `status.mode=reset` is a resting state until the user changes `spec.mode`. |
+   | `reset` → `running` | `POST /start` | Fresh initial sync. |
+   | `running` or `paused` → `finalized` | `POST /finalize` once PCSM reports caught up | Terminal. After success, controller proceeds with post-finalize cleanup per §5.5. |
+
+   No other transitions are valid (see §4.2 for the full matrix and admission rules). The
+   controller **never** writes back to `spec.mode`, so re-applying the same manifest is
+   idempotent and GitOps tools never see drift.
 
 3. **Status propagation:** The controller maps the `GET /status` response to CR status fields:
-   - `state` → `status.state`
+   - `state` → `status.state` (PCSM-reported: `pending`, `initialSync`, `replicating`, `paused`, `failed`, `finalized`). This reflects what PCSM is actually doing, independently of user intent in `spec.mode`.
    - `lagTimeSeconds` → `status.lagTimeSeconds`
    - `error` → `status.error`
    - `status.startedAt` is set once, the first time the controller observes PCSM transition
      out of `pending` (i.e., the first successful `POST /start`); it is not updated on
      subsequent restarts.
-   - `status.lastAppliedResetGeneration` is written by the controller after a successful
-     `POST /reset` (item 2 above); it is not derived from the `GET /status` payload.
+   - `status.mode` is written by the controller only after the corresponding HTTP call
+     succeeds (item 2 above); it represents the last user intent the controller has applied.
+     It is not derived from the `GET /status` payload.
    - State transitions also append/update entries in `status.conditions` (e.g., `InitialSyncComplete`, `Replicating`, `Finalized`) with their own `LastTransitionTime`, so transition history is captured in conditions rather than requiring dedicated timestamp fields for every state change.
 
 4. **Interaction with the PSMDB reconciler:** The two controllers coordinate through CR
@@ -172,11 +180,24 @@ PerconaServerMongoDB (target CR, unchanged)
 ### 3.3 Key Observations
 
 1. **PCSM is a standalone process:** It does not need to run on every replset member, making a separate Deployment the natural fit rather than a sidecar.
-2. **PCSM auto-recovers on restart:** The operator does not need to detect the replication phase and issue different commands. Simply restarting the process triggers recovery (restart initial sync or resume real-time replication from checkpoint).
+2. **PCSM auto-recovers on pod restart (PCSM-internal):** When the PCSM process restarts (pod crash + Kubernetes restart), PCSM itself recovers — it restarts initial sync from scratch or resumes real-time replication from its checkpoint. This is PCSM's internal behavior, not an operator action. The operator does **not** trigger restarts to recover from failures, and does **not** issue any HTTP calls just because PCSM came back up.
 3. **Connection strings require credential injection:** The operator reads credentials from `source.credentialsSecret` (source) and the operator-managed `syncTargetUser` Secret (target), then injects them into `PCSM_SOURCE_URI` and `PCSM_TARGET_URI` with percent-encoding per RFC 3986. Credentials are never stored in the CR spec.
 4. **Interaction with cluster pause:** If `spec.pause=true` scales down MongoDB, PCSM loses its connection. The operator must coordinate the pause/unpause sequence across the two controllers.
 5. **Interaction with backups and restores:** Both must be blocked for the entire ClusterSync lifecycle. PBM holds the backup cursor open while a backup runs; with PCSM continuously applying source writes onto the target, the cursor pins WiredTiger history and disk usage can grow unbounded, on top of the oplog contention between PBM and PCSM. Restores are similarly incompatible: they overwrite data while PCSM is still applying change-stream events from the source, with no safe interleave.
-6. **CR existence is the lifecycle signal:** A ClusterSync CR exists for the duration of a replication relationship. There is no `enabled` flag — creating the CR starts replication, deleting it tears everything down (Deployment, Service, syncTargetUser via ownerReferences).
+6. **CR existence is the deployment signal; `spec.mode` is the lifecycle signal.** A ClusterSync CR exists for the duration of a replication relationship. Creating the CR provisions PCSM resources (Deployment, Service, `syncTargetUser`) — but does **not** start replication. The user starts replication by setting `spec.mode: running`. Deleting the CR tears everything down via ownerReferences.
+
+### 3.4 No Automatic Actions Principle
+
+The controller takes lifecycle actions on PCSM (`POST /start`, `POST /pause`, `POST /resume`, `POST /reset`, `POST /finalize`) **only** in response to an explicit `spec.mode` change made by the user. The controller does not auto-recover, auto-restart, or auto-reset under any circumstance.
+
+Concrete consequences:
+
+- **No auto-start on CR creation.** A newly created CR defaults to `spec.mode=paused`. The Deployment is created so PCSM is ready, but the controller does not call `POST /start` until the user explicitly sets `spec.mode=running`.
+- **No auto-start after reset.** After applying `POST /reset`, the controller writes `status.mode=reset` and waits. To restart replication the user must explicitly set `spec.mode=running` — typically after first fixing whatever caused the previous run to fail (oplog retention on the source, network, etc.). This avoids the catch-22 of the operator looping reset → start → fail → reset against an unresolved root cause.
+- **No auto-recovery from `status.state=failed`.** When PCSM reports `failed` via `GET /status`, the controller populates `status.error`, emits `ClusterSyncFailed`, and stops issuing HTTP calls. It does not call `/reset`, does not scale the Deployment, does not delete the pod. Recovery is a user action: the user diagnoses the failure (often source-side: oplog retention, version mismatch, sharding admin commands per Constraint 3), takes corrective action on the source/target cluster, then either sets `spec.mode=running` to retry preserving the checkpoint or `spec.mode=reset` to wipe the checkpoint and start fresh.
+- **K8s-level pod restarts are still allowed.** `restartPolicy: Always` on the Deployment means Kubernetes restarts the PCSM container if it crashes. That is a Kubernetes guarantee, not an operator action, and combined with Observation 2 it gives PCSM a chance to self-recover from transient process-level failures without operator involvement. The operator's "no automatic actions" rule is about HTTP API calls and reconciler-driven workload mutations, not pod-level liveness.
+
+This is a deliberate posture for the first iteration: cluster sync has many failure modes the operator cannot diagnose or fix automatically (source-side configuration, version mismatches, MongoDB admin commands run outside the operator's view), so the safe default is to surface state and let the user drive recovery.
 
 ---
 
@@ -196,9 +217,12 @@ A new CRD in the `psmdb.percona.com/v1` group, modeled after the existing
 | Scope        | Namespaced                               |
 | Source file  | `pkg/apis/psmdb/v1/perconaservermongodbclustersync_types.go` |
 
-The CR existence is the lifecycle signal — creating the CR starts replication;
-deleting it tears down all managed resources via ownerReferences. There is no
-`enabled` field.
+CR existence provisions PCSM resources (Deployment, Service, `syncTargetUser`)
+but does not by itself start replication: a freshly created CR defaults to
+`spec.mode=paused`, and the controller only calls `POST /start` when the user
+flips it to `running`. Deleting the CR tears down all managed resources via
+ownerReferences. There is no `enabled` field — `spec.mode` is the lifecycle
+control surface (see §4.2 and §3.4).
 
 **Cardinality:** At most one non-finalized ClusterSync CR may target a given
 target cluster (namespace + `spec.clusterName`) at a time (PCSM Constraint 2 —
@@ -246,9 +270,12 @@ type PerconaServerMongoDBClusterSyncSpec struct {
 
     ExcludeNamespaces []string `json:"excludeNamespaces,omitempty"`
 
-    Paused          bool  `json:"paused,omitempty"`
-    Finalize        bool  `json:"finalize,omitempty"`
-    ResetGeneration int64 `json:"resetGeneration,omitempty"`
+    // Mode is the user intent for the PCSM lifecycle. It is the only field
+    // that drives /start, /pause, /resume, /reset, /finalize HTTP calls.
+    // Defaults to "paused" via CRD validation; the controller never auto-
+    // transitions and never writes back to spec.
+    // +kubebuilder:default=paused
+    Mode ClusterSyncMode `json:"mode,omitempty"`
 }
 
 type ClusterSyncSource struct {
@@ -261,6 +288,36 @@ type ClusterSyncTLS struct {
     Enabled bool   `json:"enabled,omitempty"`
     Secret  string `json:"secret,omitempty"`
 }
+
+// ClusterSyncMode is the user-controlled lifecycle intent for PCSM.
+// All transitions are explicit and user-driven; the controller never
+// auto-transitions between values.
+// +kubebuilder:validation:Enum=paused;running;reset;finalized
+type ClusterSyncMode string
+
+const (
+    // ClusterSyncModePaused is the default on new CRs. The controller
+    // does not call POST /start. For a previously-running PCSM, the
+    // controller calls POST /pause.
+    ClusterSyncModePaused ClusterSyncMode = "paused"
+
+    // ClusterSyncModeRunning asks the controller to bring PCSM into
+    // active replication. The controller calls POST /start the first
+    // time, POST /resume from paused, or POST /start (fresh initial
+    // sync) coming out of reset.
+    ClusterSyncModeRunning ClusterSyncMode = "running"
+
+    // ClusterSyncModeReset asks the controller to wipe PCSM's
+    // checkpoint via POST /reset. The controller does NOT auto-
+    // transition out of reset; the user must explicitly set mode
+    // back to "running" (or "paused") to take any further action.
+    ClusterSyncModeReset ClusterSyncMode = "reset"
+
+    // ClusterSyncModeFinalized asks the controller to call
+    // POST /finalize once PCSM is caught up. Terminal: admission
+    // webhook rejects any transition out of "finalized".
+    ClusterSyncModeFinalized ClusterSyncMode = "finalized"
+)
 ```
 
 **Field notes:**
@@ -272,9 +329,19 @@ type ClusterSyncTLS struct {
 - `source.tls`: when `source.tls.enabled=true`, `source.tls.secret` must point to a Secret containing the TLS certificates PCSM should use for the source connection. Target TLS is not user-configurable — the operator auto-derives it from the target PSMDB CR's existing TLS secrets (`spec.secrets.ssl` / `spec.secrets.sslInternal`).
 - `expose`: Service configuration for the PCSM HTTP API. Reuses the existing `Expose` struct from `psmdb_types.go` (type, loadBalancerSourceRanges, loadBalancerClass, annotations, labels, traffic policies). Defaults to ClusterIP (operator-only access). Set `expose.type=LoadBalancer` or `NodePort` to allow monitoring or interacting with PCSM from outside the cluster.
 - `excludeNamespaces`: list of **MongoDB namespaces** (NOT Kubernetes namespaces) to exclude from replication. A MongoDB namespace is `<database>.<collection>` (e.g., `db3.collection3`); a database-wide exclude is `<database>.*`. Passed through to PCSM verbatim as its `--exclude-namespaces` argument. The name is inherited from PCSM's CLI surface; see §11 for the rename discussion if the API is still under review.
-- `paused`: when `true` and PCSM is `running`, the controller calls `POST /pause`. Setting back to `false` calls `POST /resume`.
-- `finalize`: one-way switch. When set to `true`, the controller calls `POST /finalize` once PCSM is caught up, then transitions `status.state` to `finalized` (terminal). Once finalized, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the ClusterSync CR itself remains as a read-only historical record by default, or is auto-deleted if the user opted in via the `percona.com/delete-clustersync-after-finalize` finalizer string (see §4.2.1). Subsequent spec changes other than CR deletion are rejected (see §5.5).
-- `resetGeneration`: monotonic counter that requests a destructive reset. To trigger a reset, the user bumps `spec.resetGeneration` to a value greater than `status.lastAppliedResetGeneration` (typically `lastApplied + 1`). The controller observes the mismatch, calls `POST /reset` against PCSM (wiping checkpoint state and forcing a fresh initial sync), then writes the new value into `status.lastAppliedResetGeneration` via the status subresource. The controller **never** writes back to spec, so GitOps tools (Argo CD, Flux) do not see drift and re-applying the same manifest is idempotent. Rejected when `status.state=finalized`. The field defaults to `0`; setting it to `1` (or any positive value greater than the last applied) on a brand-new CR has no special semantic — PCSM will simply start fresh as it would have anyway. Operators should treat this as a destructive operation — initial sync starts over from scratch.
+- `mode`: single enum that expresses the user's intent for the PCSM lifecycle (`paused` | `running` | `reset` | `finalized`). Defaults to `paused` on new CRs via CRD validation. Every PCSM HTTP API call (`/start`, `/pause`, `/resume`, `/reset`, `/finalize`) is driven by transitions of this one field, never by the controller on its own initiative. The controller acts on a transition when `spec.mode != status.mode`, and after a successful HTTP call it mirrors `spec.mode` into `status.mode` via the status subresource. Re-applying the same manifest is therefore idempotent (no second HTTP call, no spec mutation, no GitOps drift). The full valid transition matrix:
+
+  | From (`status.mode`) | To (`spec.mode`) | Controller action |
+  |------|------|------|
+  | `paused` | `running` | `POST /start` if PCSM has never started; otherwise `POST /resume` |
+  | `running` | `paused` | `POST /pause` |
+  | `running` or `paused` | `reset` | `POST /reset` (wipes checkpoint) — does **not** auto-transition to `running` afterwards |
+  | `reset` | `running` | `POST /start` (fresh initial sync) |
+  | `reset` | `paused` | No HTTP call; just clears the "post-reset" intent so the user can decide later |
+  | `running` or `paused` | `finalized` | `POST /finalize` once PCSM reports caught up; terminal |
+  | `finalized` | (anything) | Rejected by the admission webhook |
+
+  Other transitions (e.g., `paused → finalized` with no prior `running`, or `running` → `running`) are rejected by the admission webhook (the latter cannot occur because no transition is requested). To repeat a reset, the user transitions through another mode (`reset → paused → reset`); each fire is a discrete spec change.
 
 ### 4.2.1 Finalizer Strings
 
@@ -299,16 +366,22 @@ The controller does not register a Kubernetes finalizer of its own — child res
 
 ```go
 type PerconaServerMongoDBClusterSyncStatus struct {
-    State          ClusterSyncState `json:"state,omitempty"`
-    LagTimeSeconds int64            `json:"lagTimeSeconds,omitempty"`
-    Error          string           `json:"error,omitempty"`
-    StartedAt      *metav1.Time     `json:"startedAt,omitempty"`
+    // Mode mirrors spec.mode once the corresponding HTTP call has succeeded.
+    // The controller compares spec.mode against this value to decide whether
+    // a transition is required. Empty until the controller has applied the
+    // first mode (a freshly created CR with default mode=paused starts with
+    // status.mode empty; once the controller observes the Deployment ready
+    // and no /start has been requested, it sets status.mode=paused).
+    Mode ClusterSyncMode `json:"mode,omitempty"`
 
-    // LastAppliedResetGeneration mirrors spec.resetGeneration once a reset has
-    // been applied. The controller calls POST /reset whenever spec is greater
-    // than this value, then advances this field via the status subresource.
-    // Used to make spec.resetGeneration idempotent under GitOps re-apply.
-    LastAppliedResetGeneration int64 `json:"lastAppliedResetGeneration,omitempty"`
+    // State is the PCSM-reported runtime state read from GET /status.
+    // Independent from spec.mode/status.mode: spec.mode is user intent,
+    // state is what PCSM is actually doing right now.
+    State ClusterSyncState `json:"state,omitempty"`
+
+    LagTimeSeconds int64        `json:"lagTimeSeconds,omitempty"`
+    Error          string       `json:"error,omitempty"`
+    StartedAt      *metav1.Time `json:"startedAt,omitempty"`
 
     Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -326,15 +399,22 @@ const (
 )
 ```
 
+**Why two fields (`status.mode` and `status.state`)?** They answer different questions:
+
+- `status.mode` answers "what user intent has the controller already acted on?" — drives idempotency for spec changes.
+- `status.state` answers "what is PCSM actually doing right now?" — read from PCSM's `GET /status`, drives observability and admission decisions in other controllers (e.g., the backup/restore admission policy in §8.4 keys on `status.state`, not `status.mode`).
+
+In a healthy run, the two evolve together (e.g., `spec.mode=running`, `status.mode=running`, `status.state=replicating`). On failure they diverge (`spec.mode=running`, `status.mode=running`, `status.state=failed`) — that divergence is the signal that the user needs to take corrective action.
+
 ### 4.4 Printer Columns
 
 ```
-NAME | CLUSTER | STATE | LAG(s) | AGE
+NAME | CLUSTER | MODE | STATE | LAG(s) | AGE
 ```
 
-Mapped from: `metadata.name`, `spec.clusterName`, `status.state`, `status.lagTimeSeconds`, `metadata.creationTimestamp`.
+Mapped from: `metadata.name`, `spec.clusterName`, `spec.mode`, `status.state`, `status.lagTimeSeconds`, `metadata.creationTimestamp`.
 
-`State=initialSync` already conveys "initial sync in progress"; `replicating`/`paused`/`finalized` already convey "initial sync done." A separate INITIAL-SYNC column would duplicate `state`.
+`State=initialSync` already conveys "initial sync in progress"; `replicating`/`paused`/`finalized` already convey "initial sync done." A separate INITIAL-SYNC column would duplicate `state`. The `MODE` column is the user-set intent (`spec.mode`), making it easy to spot when intent and reality diverge (e.g., `MODE=running`, `STATE=failed`).
 
 ### 4.5 Internal Contracts
 
@@ -351,12 +431,12 @@ Mapped from: `metadata.name`, `spec.clusterName`, `status.state`, `status.lagTim
 **PSMDB CR:** No fields added or modified. The PSMDB CR remains unchanged.
 
 **Kubernetes Events emitted by the controller (on the ClusterSync CR):**
-- `ClusterSyncStarted`: replication started via `POST /start`.
-- `ClusterSyncPaused`: replication paused via `POST /pause`.
-- `ClusterSyncResumed`: replication resumed via `POST /resume`.
-- `ClusterSyncFinalized`: migration finalized via `POST /finalize`.
-- `ClusterSyncReset`: destructive reset applied via `POST /reset`; emitted after `status.lastAppliedResetGeneration` is advanced to match `spec.resetGeneration`. The event message includes the generation value applied.
-- `ClusterSyncFailed`: PCSM entered a failed state; `error` field has details.
+- `ClusterSyncStarted`: emitted on a `paused → running` transition when the controller calls `POST /start`.
+- `ClusterSyncPaused`: emitted on a `running → paused` transition when the controller calls `POST /pause`.
+- `ClusterSyncResumed`: emitted on a `paused → running` transition when the controller calls `POST /resume` (PCSM had been started before).
+- `ClusterSyncFinalized`: emitted on a `→ finalized` transition when the controller calls `POST /finalize`.
+- `ClusterSyncReset`: emitted on a `→ reset` transition when the controller calls `POST /reset`. Event message includes the previous `status.state` for diagnostic context. Note: the controller does **not** auto-call `/start` after — the user must explicitly set `spec.mode=running` to restart.
+- `ClusterSyncFailed`: PCSM reported a failed state via `GET /status`; `error` field has details. No further HTTP calls are issued until the user changes `spec.mode`.
 - `InitialSyncComplete`: initial sync finished, PCSM switched to real-time replication.
 
 **Operator log messages:**
@@ -406,7 +486,7 @@ PCSM requires users on both the source and target clusters. The operator only ma
 
 User creation is idempotent — re-running the create flow against an existing `syncTargetUser` is a no-op. **Credentials are static for the user's lifetime** (decided 2026-06-04): the operator does not rotate the password on a schedule, does not regenerate it on K8s Secret recreation, and does not detect drift if a cluster admin changes the password out of band. Password reset is treated as a cluster-admin operation outside the operator's scope. If rotation is needed later, it will be a separate design.
 
-**Why:** Treating user creation as one-way matches the operator's broader posture on user management — once a user is created on a cluster, removing it is a cluster-admin decision rather than an operator action. It also avoids requiring the operator to hold `dropUser` privileges and removes a class of failure modes where a stuck `dropUser` call blocks CR deletion (no `dropUser` call → no Kubernetes finalizer needed; child resources GC via ownerReferences without a pre-hook). To suspend replication without removing PCSM, set `spec.paused=true` instead of deleting the CR.
+**Why:** Treating user creation as one-way matches the operator's broader posture on user management — once a user is created on a cluster, removing it is a cluster-admin decision rather than an operator action. It also avoids requiring the operator to hold `dropUser` privileges and removes a class of failure modes where a stuck `dropUser` call blocks CR deletion (no `dropUser` call → no Kubernetes finalizer needed; child resources GC via ownerReferences without a pre-hook). To suspend replication without removing PCSM, set `spec.mode=paused` instead of deleting the CR.
 
 The source cluster credentials are provided by the user via `spec.source.credentialsSecret`, a Kubernetes Secret with `username` and `password` keys. The operator reads the Secret and injects the credentials into `PCSM_SOURCE_URI` with percent-encoding per RFC 3986. Credentials are never stored in the CR spec.
 
@@ -419,9 +499,16 @@ The source cluster credentials are provided by the user via `spec.source.credent
 
 ### 5.4 Configuration Change Handling
 
-**Chosen approach:** Make `spec.source` (URI and credentialsSecret) immutable after CR creation; reject the update via an admission webhook. To change source, the user deletes and recreates the CR. Image updates, pod knobs, `spec.paused`, and `spec.expose` (including `expose.type`) remain mutable. Namespace filter changes are mutable but warn in status (PCSM does not re-evaluate filters retroactively). After `status.state=finalized`, all spec changes are rejected (the CR is effectively read-only).
+**Chosen approach:** Make `spec.source` (URI and credentialsSecret) immutable after CR creation; reject the update via an admission webhook. To change source, the user deletes and recreates the CR. Image updates, pod knobs, `spec.mode` (within the valid transition matrix in §4.2), and `spec.expose` (including `expose.type`) remain mutable. Namespace filter changes are mutable but warn in status (PCSM does not re-evaluate filters retroactively). Once `status.mode=finalized`, all spec changes are rejected (the CR is effectively read-only).
 
 **Why:** The checkpoint is tied to the original source's oplog (Constraint 4); a mid-flight source change has no safe semantics. Making the field immutable surfaces this at admission time with a clear error rather than later via a `failed` state; it's the same outcome (user has to recreate) without the half-broken intermediate state. Image updates remain safe due to PCSM's built-in recovery (Observation 2). `spec.expose` (including switching between ClusterIP / LoadBalancer / NodePort) is mutable: PCSM connects to MongoDB on the source and target — not through its own Service — so the brief connection drop a Service swap might cause clients of `GET /status` is contained to the operator's own monitoring path, and PCSM's checkpoint resume on reconnect makes it safe. Deleting and recreating the CR is acceptable because the CR lifecycle is already the unit of teardown (Deployment, Service, syncTargetUser all GC via ownerReferences), and the replacement CR triggers a fresh initial sync from the new source. Finalization is terminal for the CR; running PCSM again means creating a new ClusterSync CR (the finalized CR can stay as a record; §4.1 cardinality only counts non-finalized CRs).
+
+**Mode transition admission rules (enforced via webhook):**
+
+- Any transition out of `mode=finalized` is rejected. The CR is read-only at that point.
+- A transition to `mode=finalized` is only allowed from `running` or `paused`. From `reset`, the user must first set `mode=running` (so PCSM runs and catches up before finalize is meaningful).
+- A transition to `mode=reset` is allowed from `paused` and `running` (and is a no-op if PCSM is already in a post-reset state and the user is re-asserting intent — see §4.2 for the idempotency model).
+- A transition from `mode=paused` to `mode=running` is always allowed: on a fresh CR it triggers `POST /start`; on a post-reset CR it triggers `POST /start` (fresh initial sync); after a normal pause it triggers `POST /resume`.
 
 **Alternatives considered:**
 
@@ -430,10 +517,11 @@ The source cluster credentials are provided by the user via `spec.source.credent
 | Allow source updates freely | Silently restarting a multi-day initial sync against a different source is too expensive and surprising |
 | Accept update, transition to `failed`, require manual PCSM reset | Same end state as immutability (recreate), but leaves the CR in a confusing half-broken state and adds a manual reset step |
 | Block all updates during initial sync | Too restrictive for safe changes like image updates |
+| Separate `spec.paused`, `spec.finalize`, `spec.resetGeneration` fields (earlier ADR shape, dropped 2026-06-08) | Three independent fields meant the controller had to reason about combinations (`paused=true & finalize=true`?); auto-`/start` after `/reset` came "for free" from the per-field logic, which is the catch-22 §3.4 explicitly forbids. A single enum makes intent mutually exclusive by construction and makes "no automatic actions" enforceable: the controller can only act on a transition the user explicitly wrote into spec. |
 
 ### 5.5 Post-Finalize Resource Cleanup
 
-**Chosen approach:** Once `status.state=finalized`, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` K8s Secret. The `syncTargetUser` MongoDB user on the target is **not** dropped (see §5.3 — the operator never removes users it created). By default the ClusterSync CR itself stays as a read-only record until the user deletes it. Users who do not want the historical-record behavior add the `percona.com/delete-clustersync-after-finalize` string to `metadata.finalizers` (see §4.2.1); the controller then deletes the CR itself as the last step of post-finalize cleanup.
+**Chosen approach:** Once the controller successfully calls `POST /finalize` and sets `status.mode=finalized` (with `status.state=finalized` reported by PCSM), it deletes the PCSM Deployment, Service, and `syncTargetUser` K8s Secret. The `syncTargetUser` MongoDB user on the target is **not** dropped (see §5.3 — the operator never removes users it created). By default the ClusterSync CR itself stays as a read-only record until the user deletes it. Users who do not want the historical-record behavior add the `percona.com/delete-clustersync-after-finalize` string to `metadata.finalizers` (see §4.2.1); the controller then deletes the CR itself as the last step of post-finalize cleanup.
 
 **Why:** PCSM has stopped after finalize and restarting it would only trigger a fresh initial sync, so the Deployment serves no purpose. The `syncTargetUser` Secret on the K8s side is removed because its only consumer (the PCSM pod) is gone, but the MongoDB user on the target is left in place — consistent with the broader "operator does not drop users it created" posture in §5.3. The default of keeping the CR preserves an auditable record of the migration and keeps the backup/restore admission policy in §8.4 simple ("no CR or CR is `finalized`", both allowed). The finalizer-string opt-in covers GitOps workflows where leaving finalized CRs around in the cluster fights the Git-as-source-of-truth model, and reuses the existing PSMDB convention (`percona.com/delete-psmdb-pvc`, `percona.com/delete-pitr-chunks`) so the surface is familiar.
 
@@ -499,7 +587,9 @@ spec:
 
 ### 7.2 Enable Cross-Cluster Replication
 
-Create a `PerconaServerMongoDBClusterSync` CR alongside the target PSMDB CR:
+Creating a `PerconaServerMongoDBClusterSync` CR is a two-step exercise: first the user creates the CR (the controller provisions the Deployment, Service, and `syncTargetUser`), then the user explicitly starts replication by setting `spec.mode: running`. Creating the CR alone does **not** call `POST /start` — `spec.mode` defaults to `paused` for exactly this reason (§3.4).
+
+Step 1 — create the CR (PCSM ready but idle):
 
 ```yaml
 apiVersion: psmdb.percona.com/v1
@@ -517,18 +607,28 @@ spec:
       secret: pcsm-ssl
   excludeNamespaces:
     - db3.collection3
+  # mode: paused  (default — operator does NOT call /start)
 ```
+
+Step 2 — start replication when ready:
+
+```yaml
+spec:
+  mode: running   # controller calls POST /start; status.mode becomes "running"
+```
+
+If the user prefers a single-shot apply, both steps can be combined in the same manifest by setting `mode: running` at creation time. The two-step framing is the recommended workflow because it gives the user a deliberate moment to confirm the source/target setup before any replication actually begins.
 
 ### 7.3 Pause and Resume Replication
 
 ```yaml
-# Pause replication
+# Pause replication (running -> paused; controller calls POST /pause)
 spec:
-  paused: true    # Controller calls POST /pause
+  mode: paused
 
-# Resume replication
+# Resume replication (paused -> running; controller calls POST /resume)
 spec:
-  paused: false   # Controller calls POST /resume
+  mode: running
 ```
 
 ### 7.4 Sharded Cluster Replication
@@ -548,7 +648,7 @@ spec:
 
 ### 7.5 Finalize Migration
 
-After verifying lag is acceptable, set `finalize: true` to complete the migration. The controller calls `POST /finalize` once, creates required indexes on the target, transitions the CR to `status.state=finalized`, and then deletes the PCSM Deployment, Service, and `syncTargetUser` Secret (see §5.5). The CR itself stays as a read-only historical record until the user removes it. This is terminal for that CR; to run a new migration the user creates a new ClusterSync CR (any name); the finalized CR does not block it because the cardinality rule in §4.1 only counts non-finalized CRs.
+After verifying lag is acceptable, set `spec.mode: finalized` to complete the migration. The controller calls `POST /finalize` once PCSM reports caught up, creates required indexes on the target, sets `status.mode=finalized`, and then deletes the PCSM Deployment, Service, and `syncTargetUser` Secret (see §5.5). The CR itself stays as a read-only historical record until the user removes it. This is terminal for that CR; to run a new migration the user creates a new ClusterSync CR (any name); the finalized CR does not block it because the cardinality rule in §4.1 only counts non-finalized CRs.
 
 ```yaml
 metadata:
@@ -561,26 +661,44 @@ spec:
   source:
     uri: mongodb://host1:27017/admin?replicaSet=rs0
     credentialsSecret: pcsm-source-credentials
-  finalize: true   # one-way switch; controller calls POST /finalize
+  mode: finalized   # controller calls POST /finalize when caught up; terminal
 ```
+
+Allowed only from `mode=running` or `mode=paused` (see §5.4 admission rules); rejected from `mode=reset`. Once `status.mode=finalized`, any further spec change is rejected by the admission webhook.
 
 For GitOps workflows where finalized CRs piling up in the cluster fights Git as source of truth, include the `percona.com/delete-clustersync-after-finalize` finalizer in `metadata.finalizers`. The controller does its post-finalize cleanup as usual, then deletes the CR itself. Same convention as `delete-psmdb-pvc` / `delete-pitr-chunks` on the PSMDB CR.
 
-### 7.6 Restart Replication From Scratch (Reset)
+### 7.6 Recover from a Failure (Retry or Reset)
 
-If replication is broken in a way PCSM cannot auto-recover from and a fresh initial sync is needed, bump `spec.resetGeneration`:
+When `status.state=failed`, the controller stops issuing HTTP calls (§3.4). Recovery is always a user action; the user picks one of two paths.
+
+**Path A — non-destructive retry (preserve checkpoint).** Useful when the failure was transient and the user has fixed the underlying cause without losing the checkpoint position (e.g., a temporary source connectivity drop). The user flips `spec.mode` away and back:
 
 ```yaml
+# 1. Pause first, so the next transition is observable as paused -> running
 spec:
-  clusterName: cluster1
-  image: percona/percona-clustersync-mongodb:1.0.0
-  source:
-    uri: mongodb://host1:27017/admin?replicaSet=rs0
-    credentialsSecret: pcsm-source-credentials
-  resetGeneration: 1   # bump to any value greater than status.lastAppliedResetGeneration
+  mode: paused
+
+# 2. After fixing the root cause, ask the operator to restart
+spec:
+  mode: running   # controller calls POST /resume (PCSM resumes from its last checkpoint)
 ```
 
-The controller observes `spec.resetGeneration > status.lastAppliedResetGeneration`, calls `POST /reset` against PCSM (wiping checkpoint state), and advances `status.lastAppliedResetGeneration` to match. Subsequent resets bump the value again (`2`, `3`, …). The controller never writes back to spec, so re-applying the same manifest is a no-op and GitOps tools like Argo CD never see drift. This is destructive — initial sync restarts from scratch — and is rejected once `status.state=finalized`.
+**Path B — destructive reset (wipe checkpoint, fresh initial sync).** Required when the failure cannot be recovered from the checkpoint (e.g., source oplog rolled over past the checkpoint position because `replSetGetConfig` retention was too small; one of the disallowed sharding admin commands ran on the source — see Constraint 3). The user takes two explicit steps:
+
+```yaml
+# 1. Reset PCSM's checkpoint (controller calls POST /reset; PCSM ends idle)
+spec:
+  mode: reset
+
+# 2. After fixing the source-side configuration, start a fresh initial sync
+spec:
+  mode: running   # controller calls POST /start
+```
+
+The controller **never** auto-transitions from `reset` to `running` — that gap is intentional, so the user can fix the source-side cause (oplog retention, network, version mismatch) before paying for another full initial sync. To repeat a reset later (e.g., `reset` was applied but the user then noticed another issue), the user transitions through another mode first (`reset → paused → reset`); each fire is a discrete spec change. `mode: reset` is rejected once `status.mode=finalized`.
+
+This is destructive: bumping into `mode: reset` wipes the checkpoint and the next `mode: running` runs a fresh initial sync from scratch.
 
 ### 7.7 Disable Replication
 
@@ -594,36 +712,51 @@ kubectl delete psmdb-clustersync cluster1-sync
 
 ## 8. Error Handling and Edge Cases
 
+> **Guiding principle (§3.4):** the operator only acts on PCSM in response to an explicit `spec.mode` change. It never auto-restarts, auto-resets, or auto-recovers. The scenarios below describe what the controller observes and what the user must do.
+
 ### 8.1 PCSM Process Crash or Pod Restart
 
-**Scenario:** The PCSM pod crashes or is evicted during replication.
+**Scenario:** The PCSM pod crashes or is evicted while `spec.mode=running`.
 
 **Expected behavior:**
-- Kubernetes restarts the pod automatically (`restartPolicy: Always`).
-- If crash occurred during initial sync: PCSM restarts initial sync from scratch automatically.
-- If crash occurred during real-time replication: PCSM resumes from the last stored checkpoint automatically.
-- Controller updates the ClusterSync CR's `status` after restart to reflect current state.
-- No operator intervention needed beyond monitoring.
+- Kubernetes restarts the pod automatically (`restartPolicy: Always`). This is a pod-level guarantee, not an operator HTTP call.
+- PCSM's internal recovery (Observation 2) takes over: a crash during initial sync restarts initial sync from scratch; a crash during real-time replication resumes from the last stored checkpoint.
+- The controller does **not** issue a fresh `POST /start`. `spec.mode` is still `running`, `status.mode` is still `running`, so no transition is required — the controller just refreshes `status.state` from `GET /status`.
+- If PCSM ends up in `state=failed` after a crash loop (e.g., the underlying cause keeps triggering the crash), the controller stops there — §8.2 behavior.
 
-### 8.2 Source Cluster Unreachable
+### 8.2 PCSM Reports `failed` (Source Unreachable, Source Misconfiguration, etc.)
 
-**Scenario:** The source MongoDB cluster becomes unreachable (network partition, source cluster down).
+**Scenario:** PCSM reports `state=failed` via `GET /status` — for example because the source cluster is unreachable, the source oplog has rolled over past the checkpoint, the source/target major versions differ, or one of the disallowed sharding admin commands ran on the source (Constraint 3).
 
 **Expected behavior:**
-- PCSM enters a failed state.
-- Controller sets `status.state=failed` and populates `error` field.
-- Controller requeues reconciliation to monitor recovery.
-- When connectivity is restored, PCSM auto-recovers (resumes real-time replication from checkpoint or restarts initial sync).
+- Controller sets `status.state=failed`, populates `status.error` with PCSM's error message, and emits a `ClusterSyncFailed` event.
+- Controller does **not** call `POST /start`, `POST /reset`, or any other HTTP verb. `spec.mode` is unchanged; `status.mode` is unchanged; no transition is required from the controller's perspective.
+- Controller does **not** scale the Deployment down or delete the pod. The pod continues to run; PCSM may continue to report `failed` on subsequent `GET /status` calls.
+- Recovery is a user action (§7.6):
+  - **Retry preserving checkpoint:** transition `running → paused → running`. Useful for transient failures (source briefly unreachable, then back).
+  - **Reset and start fresh:** transition `running → reset` (controller calls `POST /reset`, wipes checkpoint), then fix the root cause on the source side, then `reset → running` (controller calls `POST /start`).
+- The deliberate gap between `reset` and `running` is what guards against the catch-22 loop where the operator keeps resetting and starting against an unresolved source-side issue.
+
+**Common source-side root causes the user is responsible for fixing:**
+
+| Symptom in `status.error` | Likely cause | User remediation (on source cluster) |
+|---------------------------|--------------|---------------------------------------|
+| Checkpoint position no longer available in oplog | Oplog retention window is shorter than the replication gap | Increase oplog size (`replSetResizeOplog`) or retention hours on the source replset; then `mode: reset` → fix → `mode: running` (full initial sync) |
+| `movePrimary` / `reshardCollection` / `unshardCollection` / `refineCollectionShardKey` ran on the source | Constraint 3: these break replication and force a full initial sync | Avoid running these on the source during replication; recover with `mode: reset` → `mode: running` |
+| Source MongoDB major version differs from target | Constraint 1: cross-major replication unsupported | Match major versions on both sides before retrying |
+| Network partition between PCSM and source | Source cluster unreachable | Restore network connectivity; transient failures often recover via §8.1 path; persistent ones require a user-driven retry per §7.6 Path A |
+
+The operator does not attempt to diagnose or auto-remediate any of these — they all require visibility into and changes on the source cluster, which is out of the operator's reach.
 
 ### 8.3 Cluster Pause While PCSM Is Running
 
 **Scenario:** User sets `spec.pause=true` on the PSMDB CR, which scales down MongoDB StatefulSets, causing PCSM to lose its target connection.
 
 **Expected behavior:**
-- PSMDB reconciler detects `spec.pause=true` and a matching ClusterSync CR in `replicating` state. It signals the ClusterSync controller (annotation or status condition on the ClusterSync CR) to pause PCSM.
-- The ClusterSync controller calls `POST /pause`. Once `status.state=paused`, the PSMDB reconciler proceeds with scale-down.
-- On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the pause signal. The ClusterSync controller resumes PCSM.
-- This prevents unnecessary failure/recovery cycles.
+- PSMDB reconciler detects `spec.pause=true` and a matching ClusterSync CR with `status.state ∈ {initialSync, replicating}`. It signals the ClusterSync controller via an annotation on the ClusterSync CR.
+- The ClusterSync controller treats the annotation as an external pause request: it calls `POST /pause` directly (without requiring the user to flip `spec.mode`), because the cluster being unavailable is an operator-coordinated event, not a user-driven lifecycle change. `spec.mode` is left untouched; `status.state` transitions to `paused`. Once observed, the PSMDB reconciler proceeds with scale-down.
+- On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the annotation. The ClusterSync controller resumes PCSM by calling `POST /resume` if `spec.mode=running` (the user's standing intent); if the user has since flipped `spec.mode` to `paused` (or another value), the controller honors that instead.
+- This is the single exception to §3.4: the cluster-pause coordination is operator-internal, not user-driven, but it remains observable in `status.state` and does not contradict `spec.mode`.
 
 ### 8.4 Backup or Restore While ClusterSync Is Active
 
@@ -686,18 +819,27 @@ kubectl delete psmdb-clustersync cluster1-sync
 
 | Scenario | Cluster Type | What It Validates |
 |----------|-------------|-------------------|
-| Create ClusterSync CR, verify data flows from source to target | Single replset | Basic PCSM lifecycle: start, initial sync, real-time replication, status updates |
-| Pause and resume replication | Single replset | `spec.paused=true` triggers pause; `spec.paused=false` triggers resume; data continues flowing |
+| Create ClusterSync CR with default `mode=paused` | Single replset | Deployment/Service/`syncTargetUser` Secret created; controller does **not** call `POST /start`; `status.state=pending`; no data flows until the user changes `spec.mode`. |
+| Create ClusterSync CR, set `mode: running`, verify data flows from source to target | Single replset | `paused → running` triggers `POST /start`; `status.mode=running`; `status.state` advances through `initialSync` → `replicating`; data appears on the target |
+| Pause and resume replication via `spec.mode` | Single replset | `running → paused` triggers `POST /pause` and `status.mode=paused`; `paused → running` triggers `POST /resume` and data continues flowing |
+| Re-apply same `mode: running` manifest | Single replset | No second `POST /start`/`POST /resume`; `status` unchanged; GitOps drift check stays clean |
 | Delete ClusterSync CR | Single replset | PCSM Deployment, Service, and `syncTargetUser` K8s Secret are GC'd via ownerReferences. The MongoDB `syncTargetUser` on the target cluster still exists after CR deletion (verified by querying the target's `system.users`). |
-| Finalize migration | Single replset | `spec.finalize=true` triggers `POST /finalize`; `status.state=finalized`; further spec changes rejected |
-| Finalize with `delete-clustersync-after-finalize` finalizer present | Single replset | With the `percona.com/delete-clustersync-after-finalize` string in `metadata.finalizers`, post-finalize cleanup (delete Deployment, Service, `syncTargetUser` K8s Secret) is followed by the controller deleting the ClusterSync CR itself; the CR is gone from the cluster on next reconcile. The MongoDB `syncTargetUser` on the target persists. Without the finalizer string, the CR also persists as a historical record. |
-| Reset replication via `spec.resetGeneration` | Single replset | Bumping `spec.resetGeneration` triggers `POST /reset`; `status.lastAppliedResetGeneration` advances to match; initial sync restarts; re-applying the same manifest is a no-op (no second `POST /reset`); reset is rejected when `status.state=finalized` |
-| PCSM pod crash during real-time replication | Single replset | Pod restarts; replication resumes from checkpoint; lag recovers |
-| Cluster pause while PCSM is running | Single replset | PSMDB reconciler signals ClusterSync controller; PCSM is paused before MongoDB scales down; PCSM resumes after unpause |
+| Finalize migration via `mode: finalized` | Single replset | `running → finalized` triggers `POST /finalize` when caught up; `status.mode=finalized`; further spec changes rejected by webhook |
+| Finalize from `mode=reset` is rejected | Single replset | Admission webhook rejects `reset → finalized`; user must first transition `reset → running` |
+| Finalize with `delete-clustersync-after-finalize` finalizer present | Single replset | With the `percona.com/delete-clustersync-after-finalize` string in `metadata.finalizers`, post-finalize cleanup is followed by the controller deleting the ClusterSync CR itself. Without the finalizer string, the CR persists as a historical record. The MongoDB `syncTargetUser` on the target persists in both cases. |
+| Reset replication via `mode: reset` | Single replset | `running → reset` triggers `POST /reset`; `status.mode=reset`; controller does **not** auto-call `POST /start` afterwards; PCSM ends idle |
+| No auto-start after reset | Single replset | After `mode: reset` is applied, controller stays quiet indefinitely while `spec.mode=reset`; only an explicit `reset → running` triggers `POST /start` |
+| Repeated reset | Single replset | Transitioning `reset → paused → reset` fires `POST /reset` twice; each time `status.mode` mirrors the spec value |
+| Reset rejected when finalized | Single replset | Admission webhook rejects any transition out of `mode=finalized`, including to `reset` |
+| PCSM pod crash during real-time replication | Single replset | Pod restarts via `restartPolicy: Always`; PCSM resumes from checkpoint (Observation 2); controller issues no HTTP calls; `status.state` recovers without user intervention |
+| PCSM reports `state=failed` (e.g., source unreachable) | Single replset | Controller sets `status.state=failed`, populates `status.error`, emits `ClusterSyncFailed`, and stops calling any HTTP verb; `spec.mode` and `status.mode` unchanged; Deployment not scaled down |
+| Recover from failed via retry (Path A) | Single replset | `running → paused → running` triggers `POST /pause` then `POST /resume`; replication resumes from checkpoint |
+| Recover from failed via reset (Path B) | Single replset | `running → reset` (POST /reset) → user fixes source-side cause → `reset → running` (POST /start, fresh initial sync) |
+| Cluster pause while PCSM is running | Single replset | PSMDB reconciler signals ClusterSync controller via annotation; controller calls `POST /pause` without mutating `spec.mode`; `status.state=paused`; on unpause, controller resumes per `spec.mode` |
 | Backup while ClusterSync is active is blocked | Single replset | Backup request is rejected while a matching ClusterSync CR is in `pending`, `initialSync`, `replicating`, or `paused`; allowed when CR is `finalized` or absent |
 | Restore while ClusterSync is active is blocked | Single replset | Restore request is rejected under the same conditions as backup |
 | `source.uri` change attempt during replication | Single replset | Admission webhook rejects the update; existing replication continues; user must delete and recreate the CR to change source |
-| Version mismatch detection | Single replset | PCSM start is blocked; error message in status |
+| Version mismatch detection | Single replset | PCSM start fails; controller surfaces error via `status.state=failed` and `status.error`; no HTTP retries from operator |
 | Two ClusterSync CRs targeting the same cluster | Single replset | Second CR fails to acquire the cardinality Lease and transitions to `status.state=failed` |
 | Sharded cluster replication | Sharded | Replication works via mongos; data and shard keys are replicated |
 | Namespace exclude filters | Single replset | Excluded collections are not replicated; all others are |
@@ -707,13 +849,13 @@ kubectl delete psmdb-clustersync cluster1-sync
 ## 11. Open Questions
 
 1. **Target user creation and deletion:** The operator only manages `syncTargetUser` on the local (target) cluster. The source user is the user's responsibility. When should `syncTargetUser` be created and deleted?
-   - *Resolution (revised 2026-06-04):* The operator creates `syncTargetUser` on the target cluster the first time it reconciles a ClusterSync CR for that cluster, and **never drops it** — neither at finalize-time nor on CR deletion. The K8s `syncTargetUser` Secret is still owned by the ClusterSync CR and GCs via ownerReferences (or proactively at finalize-time per §5.5); the MongoDB user persists on the target. This reverses the earlier decision (2026-05-21) which had the operator drop the user at finalize-time and use a `psmdb.percona.com/clustersync-cleanup` Kubernetes finalizer to drop it on CR delete. The reversal removes the operator's need to hold `dropUser` privileges, eliminates a stuck-deletion failure mode (`dropUser` against an unreachable target blocking `kubectl delete`), and matches the broader posture that user removal is a cluster-admin decision rather than an operator action. To suspend replication without removing PCSM, set `spec.paused=true` rather than deleting the CR.
+   - *Resolution (revised 2026-06-04):* The operator creates `syncTargetUser` on the target cluster the first time it reconciles a ClusterSync CR for that cluster, and **never drops it** — neither at finalize-time nor on CR deletion. The K8s `syncTargetUser` Secret is still owned by the ClusterSync CR and GCs via ownerReferences (or proactively at finalize-time per §5.5); the MongoDB user persists on the target. This reverses the earlier decision (2026-05-21) which had the operator drop the user at finalize-time and use a `psmdb.percona.com/clustersync-cleanup` Kubernetes finalizer to drop it on CR delete. The reversal removes the operator's need to hold `dropUser` privileges, eliminates a stuck-deletion failure mode (`dropUser` against an unreachable target blocking `kubectl delete`), and matches the broader posture that user removal is a cluster-admin decision rather than an operator action. To suspend replication without removing PCSM, set `spec.mode=paused` rather than deleting the CR.
 
 2. **Cluster-wide mode conflicts:** If two CRs each define `clusterSync` pointing at each other or at the same source, conflicting PCSM Deployments may be created. How should the operator handle this?
    - *Resolution (revised 2026-06-04):* The cardinality Lease (§4.1) is named `psmdb-clustersync-<clusterName>-lock` and lives **in the same namespace as the ClusterSync CR and the target PSMDB CR**, not in the operator's own namespace. Two PSMDB clusters sharing a name across different namespaces cannot collide because their Leases live in different namespaces; the namespace is implicit in the Lease's location. Same-namespace collisions still fail the second CR as intended. Earlier shape (2026-05-29) put the Lease in the operator's namespace with a `<targetNamespace>-` prefix in the name; that worked but required the operator to hold Lease RBAC in its own namespace and made the relationship between Lease and CR less direct. The revised shape co-locates the Lease with the resource it guards.
 
 3. **Cluster pause interaction:** When `spec.pause=true`, should the operator automatically pause PCSM first?
-   - *Resolution:* Decided A (auto-pause) on 2026-05-21. Before the PSMDB reconciler scales down the StatefulSets, it signals the ClusterSync controller (annotation or status condition on matching ClusterSync CRs) to call `POST /pause`. Once `status.state=paused`, the PSMDB reconciler proceeds with scale-down. On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the signal so the ClusterSync controller can resume PCSM. Avoids unnecessary failure/recovery cycles. See §8.3 for the full flow.
+   - *Resolution:* Decided A (auto-pause) on 2026-05-21. Before the PSMDB reconciler scales down the StatefulSets, it signals the ClusterSync controller (annotation on matching ClusterSync CRs) to call `POST /pause`. Once `status.state=paused`, the PSMDB reconciler proceeds with scale-down. On unpause, the PSMDB reconciler brings MongoDB back up, waits for readiness, then clears the signal so the ClusterSync controller can resume PCSM (per the user's standing `spec.mode` intent). This is the single operator-internal pause path; it does not contradict §3.4 because it does not change `spec.mode` — it transiently overrides PCSM's state for an event the user did not directly trigger on the ClusterSync CR. See §8.3 for the full flow.
 
 4. **Backup/restore and PCSM concurrency:** Should backups and restores be blocked on the target cluster while PCSM is active?
    - *Resolution:* Decided block both on the target cluster for the full ClusterSync lifecycle (`pending`, `initialSync`, `replicating`, `paused`). Allowed only when no ClusterSync CR targets the cluster or the CR is `finalized`.
@@ -721,7 +863,7 @@ kubectl delete psmdb-clustersync cluster1-sync
    - *Why restores:* A restore overwrites data PCSM is continuously replicating onto. No safe interleave.
 
 5. **Sync completion status:** How to expose "sync finished" in status?
-   - *Resolution:* Decided 2026-05-21. Initial-sync completion is conveyed by `status.state` transitioning out of `initialSync` (to `replicating`, `paused`, or `finalized`) and by an `InitialSyncComplete` condition in `status.conditions`. Steady-state "caught up" is `status.lagTimeSeconds=0`. A separate `initialSyncComplete` bool was dropped as redundant with `state`. A `readyToFinalize` field is not added in the first iteration; users can read `lagTimeSeconds` directly and set `spec.finalize=true` when it's acceptable.
+   - *Resolution:* Decided 2026-05-21. Initial-sync completion is conveyed by `status.state` transitioning out of `initialSync` (to `replicating`, `paused`, or `finalized`) and by an `InitialSyncComplete` condition in `status.conditions`. Steady-state "caught up" is `status.lagTimeSeconds=0`. A separate `initialSyncComplete` bool was dropped as redundant with `state`. A `readyToFinalize` field is not added in the first iteration; users can read `lagTimeSeconds` directly and set `spec.mode=finalized` when it's acceptable.
 
 6. **PCSM expose configuration:** Should PCSM be exposed via a Service with configurable `exposeType`?
    - *Resolution:* Decided 2026-05-21. External access is needed so users can monitor or interact with PCSM from outside the cluster. The ClusterSync CR exposes `spec.expose` (reuses the existing `Expose` struct in `psmdb_types.go`). Defaults to ClusterIP. Users who need external access set `expose.type=LoadBalancer` (or `NodePort`) and optionally `loadBalancerSourceRanges`, `loadBalancerClass`, annotations, labels, traffic policies, same surface as the PSMDB CR's expose. The `clusterServiceDNSMode` × source-URI interaction is not a question for the first iteration (source URI is user-supplied verbatim, so DNS mode does not apply); it is recorded in §1.3 as a constraint on the future `sourceCluster` work.
@@ -745,7 +887,7 @@ kubectl delete psmdb-clustersync cluster1-sync
     - *Resolution:* Decided **A** on 2026-06-04. Both controllers list `PerconaServerMongoDBClusterSync` CRs in the same namespace with `spec.clusterName` matching the cluster being backed up or restored. If any such CR has `status.state ∈ {pending, initialSync, replicating, paused}`, the request is rejected with a clear reason; admitted only when no matching CR exists or all matching CRs are `finalized`. Picked for simplicity and consistency with existing operator conventions for cross-CR admission. The eventual-consistency window (status may be a few seconds stale) is acceptable because the risks §8.4 guards against (backup-cursor disk growth, restore overwriting a target PCSM is still writing to) take minutes to materialize. Future improvements (e.g., a lease-based signal per Option C) can be evaluated if the window proves problematic in practice.
 
 12. **Finalization support:** PCSM only creates indexes on the target when `POST /finalize` is called. Without it, the target has data but incomplete indexes.
-    - *Resolution:* Decided B on 2026-05-21. `spec.finalize` is a one-way bool on the ClusterSync CR. When set to `true` and PCSM is caught up, the controller calls `POST /finalize` once and transitions `status.state` to `finalized` (terminal). After finalize, the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the CR stays as a read-only historical record (see §5.5). To run a new migration the user just creates a new ClusterSync CR; the finalized one doesn't block it (§4.1 cardinality rule only counts non-finalized CRs). Picked over the `mode` enum for simplicity; the state machine is one-way, so a bool reflects the actual semantics.
+    - *Resolution:* Decided B on 2026-05-21, revised 2026-06-08 to fold finalize into the `spec.mode` enum (Q15). User asks for finalization by setting `spec.mode=finalized`; the controller calls `POST /finalize` once PCSM is caught up and sets `status.mode=finalized` (terminal). After finalize the controller deletes the PCSM Deployment, Service, and `syncTargetUser` Secret; the CR stays as a read-only historical record (see §5.5). To run a new migration the user just creates a new ClusterSync CR; the finalized one doesn't block it (§4.1 cardinality rule only counts non-finalized CRs). Originally `spec.finalize` was a one-way bool; the new `spec.mode` enum subsumes it.
     - *Companion finalizer (added 2026-06-04):* `percona.com/delete-clustersync-after-finalize` — a user-supplied entry in `metadata.finalizers` (see §4.2.1). When present, the controller deletes the ClusterSync CR itself as the last step of post-finalize cleanup, after the MongoDB user has been dropped and the child K8s resources removed. Covers GitOps workflows where leaving finalized CRs around fights the Git-as-source-of-truth model; default behavior is unchanged. Chosen over a `spec.deleteAfterFinalize` bool to match the existing PSMDB CR convention for opt-in delete behavior (`percona.com/delete-psmdb-pvc`, `percona.com/delete-pitr-chunks`).
 
 13. **Sharded clusters with different topologies (asymmetric shard counts):** When replicating between sharded clusters whose shard counts differ (e.g., 3 shards on source → 7 on target), does the operator need to expose any mapping configuration?
@@ -753,6 +895,14 @@ kubectl delete psmdb-clustersync cluster1-sync
 
 14. **Source user reuse across multiple ClusterSync CRs:** When several ClusterSync CRs replicate from the same source cluster (each into a different target), must each CR have its own source user, or can they share one?
     - *Resolution:* Decided 2026-05-29: the same source user can be reused. `source.credentialsSecret` is user-managed and the operator does not enforce uniqueness across ClusterSync CRs, so a single source user with read access on the source can back any number of ClusterSync CRs that point at that source. Contrast with `syncTargetUser`, which the operator owns per-ClusterSync CR on the target (see §11 Q10) — that one is intentionally not shared, because its lifecycle is bound to the ClusterSync CR. Operationally this means users avoid having to provision N source users for N parallel migrations from the same source.
+
+15. **Lifecycle control surface — separate fields vs single enum:** The earlier ADR shape (through 2026-06-04) exposed three independent lifecycle fields: `spec.paused` (bool), `spec.finalize` (one-way bool), and `spec.resetGeneration` (monotonic counter). Each drove a different PCSM HTTP verb. Is that the right surface, or should they collapse into a single field?
+    - *Context (2026-06-08, from team discussion):* PCSM has many failure modes the operator cannot diagnose (source oplog retention, version mismatches, sharding admin commands run outside the operator's view). Auto-recovery is a catch-22 risk: the operator sees an error, calls `/reset`, calls `/start`, sees the same error, loops. The team agreed the operator should never auto-restart after a reset and should never auto-recover from a failed state — every PCSM lifecycle action must be a user-driven explicit signal. Some misconfigs require user action on the **source** cluster (e.g., increasing oplog retention) before any restart is safe.
+    - *Resolution:* Decided 2026-06-08 — collapse the three fields into a single `spec.mode` enum with values `paused | running | reset | finalized`. Default `paused` so creating the CR alone does not start replication. The controller acts on transitions (`spec.mode != status.mode`) and never auto-transitions on its own. The deliberate gap between `reset` and `running` is the structural guard against the catch-22 loop: after `POST /reset`, the controller sits until the user explicitly sets `mode: running`, giving them time to fix source-side configuration first. Finalize is folded in as a terminal enum value rather than a separate one-way bool. Reset is an enum value (not a separate counter) because every transition into `reset` is already a discrete spec change — Kubernetes' generation tracking + status-mirroring gives the same idempotency as the old counter did. `mode: stopped` was considered as a separate value (alongside `paused`) but dropped — PCSM has no `/stop` verb, so `stopped` and `paused` would map onto the same HTTP call for an active PCSM, making the distinction leaky.
+    - *Alternatives considered:*
+      - **Keep three separate fields (the previous shape):** Forces the controller to reason about combinations (`paused=true & finalize=true`?), and auto-`/start` after `/reset` came "for free" from the per-field logic — exactly the catch-22 the team is trying to avoid.
+      - **Imperative `spec.command` enum + `spec.commandGeneration` counter:** Two-field intent, awkward re-fire pattern, doesn't compose with GitOps cleanly. Declarative enum + status-mirroring is simpler.
+      - **Add `spec.retryGeneration` for non-destructive retry:** Redundant. `paused → running` already covers retry-preserving-checkpoint (controller calls `POST /resume`); `reset → running` covers fresh restart. No need for a third mechanism.
 
 ---
 
