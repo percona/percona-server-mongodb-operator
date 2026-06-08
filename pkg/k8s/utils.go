@@ -52,5 +52,5 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 	} else if err != nil {
 		return errors.Wrapf(err, "failed to get object: %s", obj.GetName())
 	}
-	return c.Delete(ctx, obj)
+	return client.IgnoreNotFound(c.Delete(ctx, obj))
 }
