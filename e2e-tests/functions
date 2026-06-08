@@ -243,6 +243,18 @@ arch_run_overrides() {
 	printf '{"spec":{"nodeSelector":{"kubernetes.io/arch":"%s"},"tolerations":[{"key":"kubernetes.io/arch","operator":"Equal","value":"%s","effect":"NoSchedule"}]}}' "${ARCH}" "${ARCH}"
 }
 
+arch_psmdb_scheduling_json() {
+	if ! arch_scheduling_enabled; then
+		printf '{}'
+		return
+	fi
+
+	jq -nc --arg arch "${ARCH}" '{
+		nodeSelector: {"kubernetes.io/arch": $arch},
+		tolerations: [{"key": "kubernetes.io/arch", "operator": "Equal", "value": $arch, "effect": "NoSchedule"}]
+	}'
+}
+
 arch_cronjob_patch() {
 	printf '{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/arch":"%s"},"tolerations":[{"key":"kubernetes.io/arch","operator":"Equal","value":"%s","effect":"NoSchedule"}]}}}}}}' "${ARCH}" "${ARCH}"
 }
