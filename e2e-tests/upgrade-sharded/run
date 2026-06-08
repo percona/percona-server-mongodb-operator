@@ -11,7 +11,7 @@ CLUSTER_SIZE=3
 TARGET_OPERATOR_VER="${OPERATOR_VERSION}"
 TARGET_IMAGE="${IMAGE}"
 TARGET_IMAGE_MONGOD="${IMAGE_MONGOD}"
-TARGET_IMAGE_PMM_CLIENT="${IMAGE_PMM_CLIENT}"
+TARGET_IMAGE_PMM_CLIENT="${IMAGE_PMM3_CLIENT}"
 TARGET_IMAGE_BACKUP="${IMAGE_BACKUP}"
 FULL_VER=$(get_mongod_ver_from_image ${TARGET_IMAGE_MONGOD})
 MONGO_VER=${FULL_VER:0:3}
@@ -45,12 +45,12 @@ if [[ ${TARGET_IMAGE} == perconalab/* || ${TARGET_IMAGE} == */perconalab/* ]]; t
 	IMAGE="${IMAGE/percona\//perconalab\/}"
 fi
 IMAGE_MONGOD=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.mongod[].imagePath')
-IMAGE_PMM_CLIENT=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
+IMAGE_PMM3_CLIENT=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.pmm[].imagePath')
 IMAGE_BACKUP=$(echo "${INIT_OPERATOR_IMAGES}" | jq -r '.versions[].matrix.backup[].imagePath')
 
 qualify_image_var IMAGE
 qualify_image_var IMAGE_MONGOD
-qualify_image_var IMAGE_PMM_CLIENT
+qualify_image_var IMAGE_PMM3_CLIENT
 qualify_image_var IMAGE_BACKUP
 
 if [[ ${TARGET_OPERATOR_VER} == "${INIT_OPERATOR_VER}" ]]; then
@@ -93,7 +93,7 @@ function check_applied_images() {
 		"operator")
 			if [[ ${TARGET_IMAGE} == $(kubectl_bin get pod ${OPERATOR_NS:+-n $OPERATOR_NS} --selector=name="${OPERATOR_NAME}" -o jsonpath='{.items[*].spec.containers[?(@.name == "'"${OPERATOR_NAME}"'")].image}') &&
 			${IMAGE_BACKUP} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.backup.image}') &&
-			${IMAGE_PMM_CLIENT} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
+			${IMAGE_PMM3_CLIENT} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.pmm.image}') &&
 			${IMAGE_MONGOD} == $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.image}') ]]; then
 				: Operator image has been updated correctly
 			else
