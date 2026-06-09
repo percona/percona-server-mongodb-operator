@@ -32,6 +32,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		actual            string
 		resizeInProgress  bool
 		volumeScaling     bool
+		orphanPVC         bool
 		expectSTSDeleted  bool
 		expectErrContains string
 		expectCRStorage   string
@@ -42,6 +43,15 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			configured:       "1200Mi",
 			actual:           "6G",
 			resizeInProgress: true,
+			expectSTSDeleted: true,
+		},
+		{
+			name:             "finishes resize when orphan pvc exceeds requested size",
+			requested:        "1200Mi",
+			configured:       "1200Mi",
+			actual:           "6G",
+			resizeInProgress: true,
+			orphanPVC:        true,
 			expectSTSDeleted: true,
 		},
 		{
@@ -117,13 +127,18 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 
 			pod := newPod(cr.Namespace, sts.Name+"-0", labels)
 			pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, actual, actual)
+			objects := []runtime.Object{cr, sts, pod, pvc}
+			if tt.orphanPVC {
+				orphanPVC := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+sts.Name+"-1", labels, actual, actual)
+				objects = append(objects, orphanPVC)
+			}
 
 			s := runtime.NewScheme()
 			require.NoError(t, clientgoscheme.AddToScheme(s))
 			require.NoError(t, apis.AddToScheme(s))
 
 			r := &ReconcilePerconaServerMongoDB{
-				client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+				client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
 				scheme: s,
 			}
 

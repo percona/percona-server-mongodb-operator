@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -134,7 +135,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 
 		updatedPVCs := 0
 		for _, pvc := range pvcList.Items {
-			if !validatePVCName(pvc, sts) {
+			if !slices.Contains(pvcsToUpdate, pvc.Name) {
 				continue
 			}
 
@@ -368,19 +369,13 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 		if pvc.Labels == nil {
 			pvc.Labels = make(map[string]string)
 		}
-		for k, v := range pvcSpec.Labels {
-			pvc.Labels[k] = v
-		}
-		for k, v := range sts.Labels {
-			pvc.Labels[k] = v
-		}
+		maps.Copy(pvc.Labels, pvcSpec.Labels)
+		maps.Copy(pvc.Labels, sts.Labels)
 
 		if pvc.Annotations == nil {
 			pvc.Annotations = make(map[string]string)
 		}
-		for k, v := range pvcSpec.Annotations {
-			pvc.Annotations[k] = v
-		}
+		maps.Copy(pvc.Annotations, pvcSpec.Annotations)
 
 		if util.MapEqual(orig.Labels, pvc.Labels) && util.MapEqual(orig.Annotations, pvc.Annotations) {
 			continue
