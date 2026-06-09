@@ -138,21 +138,26 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumes := []corev1.Volume{
 		{
-			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &secretFileMode,
-					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-					Optional:    &fvar,
-				},
-			},
-		},
-		{
 			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+	}
+
+	if cr.KeyFileAuthEnabled() {
+		volumes = append([]corev1.Volume{
+			{
+				Name: cr.Spec.Secrets.GetInternalKey(cr),
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
+						Optional:    &fvar,
+					},
+				},
+			},
+		}, volumes...)
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
@@ -222,6 +227,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		name:                     containerName,
 		resources:                resources,
 		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		mountKeyFile:             cr.KeyFileAuthEnabled(),
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,

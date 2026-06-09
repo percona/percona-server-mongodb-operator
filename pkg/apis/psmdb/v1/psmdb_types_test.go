@@ -6,6 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestMongoConfiguration_GetPort(t *testing.T) {
@@ -500,6 +502,81 @@ func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
 				require.NotNil(t, result)
 				assert.Equal(t, tt.expectValue, *result)
 			}
+		})
+	}
+}
+
+func TestKeyFileAuthEnabled(t *testing.T) {
+	tests := map[string]struct {
+		cr       *PerconaServerMongoDB
+		expected bool
+	}{
+		"crVersion < 1.23 always true regardless of TLS mode": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: "1.22.0",
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"preferTLS → false": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: false,
+		},
+		"requireTLS → false": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeRequire},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: false,
+		},
+		"allowTLS → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeAllow},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"TLS disabled + unsafe → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeDisabled},
+					Unsafe:    UnsafeFlags{TLS: true},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"InternalKey explicitly set → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{InternalKey: "my-custom-keyfile"},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.cr.KeyFileAuthEnabled())
 		})
 	}
 }

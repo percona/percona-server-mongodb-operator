@@ -18,6 +18,7 @@ type containerFnParams struct {
 	name                     string
 	resources                corev1.ResourceRequirements
 	ikeyName                 string
+	mountKeyFile             bool
 	useConfigFile            bool
 	livenessProbe            *api.LivenessProbeExtended
 	readinessProbe           *corev1.Probe
@@ -32,6 +33,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		name                     = params.name
 		resources                = params.resources
 		ikeyName                 = params.ikeyName
+		mountKeyFile             = params.mountKeyFile
 		useConfigFile            = params.useConfigFile
 		livenessProbe            = params.livenessProbe
 		readinessProbe           = params.readinessProbe
@@ -47,11 +49,6 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			MountPath: config.MongodContainerDataDir,
 		},
 		{
-			Name:      ikeyName,
-			MountPath: config.MongodSecretsDir,
-			ReadOnly:  true,
-		},
-		{
 			Name:      "ssl",
 			MountPath: config.SSLDir,
 			ReadOnly:  true,
@@ -61,6 +58,14 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
+	}
+
+	if mountKeyFile {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      ikeyName,
+			MountPath: config.MongodSecretsDir,
+			ReadOnly:  true,
+		})
 	}
 
 	if useConfigFile {

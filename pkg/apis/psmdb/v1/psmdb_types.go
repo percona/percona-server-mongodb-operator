@@ -1704,6 +1704,31 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
 }
 
+// KeyFileAuthEnabled reports whether MongoDB should use keyFile internal
+// cluster authentication (--clusterAuthMode=keyFile).
+//
+// keyFile auth is required when:
+//   - spec.secrets.keyFile is explicitly set (operator-managed override)
+//   - tls.mode is "allowTLS" – connections may be plain, x509 is unreliable
+//   - TLS is disabled (mode: disabled + unsafe.tls: true)
+//
+// For the default "preferTLS" and for "requireTLS", MongoDB uses
+// --clusterAuthMode=x509 and no keyfile is needed.
+
+func (cr *PerconaServerMongoDB) KeyFileAuthEnabled() bool {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return true
+	}
+	if cr.Spec.Secrets.InternalKey != "" {
+		return true
+	}
+	if cr.TLSEnabled() {
+		return cr.Spec.TLS != nil && cr.Spec.TLS.Mode == TLSModeAllow
+	}
+
+	return cr.UnsafeTLSDisabled()
+}
+
 const (
 	AnnotationResyncPBM                = "percona.com/resync-pbm"
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
