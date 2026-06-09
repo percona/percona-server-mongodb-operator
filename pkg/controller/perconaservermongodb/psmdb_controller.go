@@ -555,10 +555,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
-			return err
+
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete hidden statefulset: %s", naming.HiddenStatefulSetName(cr, replset))
 		}
 	}
 
