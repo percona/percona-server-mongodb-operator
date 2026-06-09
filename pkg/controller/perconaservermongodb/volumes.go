@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -26,11 +25,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-const (
-	GiB = int64(1024 * 1024 * 1024)
-)
-
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
 	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
@@ -46,7 +41,7 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 	return strings.HasPrefix(pvc.Name, config.MongodDataVolClaimName+"-"+sts.Name)
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
+func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
 	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		return nil
 	}
@@ -205,7 +200,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 				}
 			}
 
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil
 				}
@@ -225,7 +220,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if configured.Cmp(requested) < 0 {
 			log.Info("Deleting statefulset with stale volume claim template")
 
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil
 				}
@@ -244,7 +239,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if configured.Cmp(requested) != 0 {
 			log.Info("Deleting statefulset with stale volume claim template")
 
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil
 				}
