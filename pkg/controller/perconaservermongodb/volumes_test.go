@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -319,7 +318,7 @@ func newPVC(namespace, name string, labels map[string]string, requested, capacit
 }
 
 func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
-	err := apis.AddToScheme(scheme.Scheme)
+	err := apis.AddToScheme(clientgoscheme.Scheme)
 	require.NoError(t, err)
 
 	const (
@@ -442,7 +441,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 
 			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme.Scheme).
+				WithScheme(clientgoscheme.Scheme).
 				WithObjects(cr, sts, pvc, pod).
 				WithStatusSubresource(pvc).
 				Build()
@@ -457,7 +456,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				client: fakeClient,
-				scheme: scheme.Scheme,
+				scheme: clientgoscheme.Scheme,
 			}
 
 			volumeSpec := &api.VolumeSpec{
