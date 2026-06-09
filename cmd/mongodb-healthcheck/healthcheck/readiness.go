@@ -77,11 +77,29 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		return errors.Wrap(err, "failed to get rs status")
 	}
 
-	if err := CheckState(*s, 0, 0); err != nil {
+	if err := CheckStateForReadiness(*s); err != nil {
 		return errors.Wrap(err, "check state")
 	}
 
 	return nil
+}
+
+func CheckStateForReadiness(rs mongo.Status) error {
+	self := rs.GetSelf()
+	if self == nil {
+		return errors.New("self member is not found")
+	}
+
+	switch rs.MyState {
+	case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
+		return nil
+	case mongo.MemberStateStartup, mongo.MemberStateStartup2, mongo.MemberStateRollback, mongo.MemberStateRecovering:
+		return errors.Errorf("member state is %s", mongo.MemberStateStrings[rs.MyState])
+	case mongo.MemberStateUnknown, mongo.MemberStateDown, mongo.MemberStateRemoved:
+		return errors.Errorf("unhealthy state %s", mongo.MemberStateStrings[rs.MyState])
+	default:
+		return errors.Errorf("state is unknown %d", rs.MyState)
+	}
 }
 
 func MongosReadinessCheck(ctx context.Context, cnf *db.Config) (err error) {
