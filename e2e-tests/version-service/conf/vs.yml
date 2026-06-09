@@ -18,7 +18,7 @@ spec:
       - env:
         - name: SERVE_HTTP
           value: "true"
-        image: docker.io/perconalab/version-service:main
+        image: docker.io/perconalab/version-service:test-multi
         imagePullPolicy: IfNotPresent
         name: version-service
         ports:
