@@ -118,9 +118,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: liveness-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -167,11 +164,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: liveness-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: liveness-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}
