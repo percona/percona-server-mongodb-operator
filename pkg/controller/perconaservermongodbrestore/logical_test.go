@@ -24,8 +24,9 @@ func TestGetRestoreCmd(t *testing.T) {
 		backupName  = "my-backup"
 	)
 
+	ctx := t.Context()
+
 	t.Run("populates all fields from spec", func(t *testing.T) {
-		ctx := t.Context()
 		pbmc := NewMockPBM(gomock.NewController(t))
 
 		rsMap := map[string]string{"rs0": "rs0-new", "rs1": "rs1-new"}

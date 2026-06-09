@@ -562,7 +562,7 @@ func TestCanRestore(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &PerconaServerMongoDB{Spec: tc.spec}
-			err := cr.CanRestore(context.Background(), tc.restore)
+			err := cr.CanRestore(t.Context(), tc.restore)
 			if tc.expectErr == "" {
 				assert.NoError(t, err)
 				return
