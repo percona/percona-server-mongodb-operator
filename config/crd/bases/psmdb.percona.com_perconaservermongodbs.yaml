@@ -898,6 +898,11 @@ spec:
                 type: string
               pmm:
                 properties:
+                  authenticationMechanism:
+                    enum:
+                    - SCRAM-SHA-256
+                    - SCRAM-SHA-1
+                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -3987,6 +3992,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -14819,6 +14826,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
