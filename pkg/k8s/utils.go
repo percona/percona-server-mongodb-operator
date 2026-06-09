@@ -50,7 +50,7 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); k8serrors.IsNotFound(err) {
 		return nil
 	} else if err != nil {
-		return errors.Wrapf(err, "failed to get object: %s", obj.GetName())
+		return errors.Wrapf(err, "failed to get %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
 	}
 	return client.IgnoreNotFound(c.Delete(ctx, obj))
 }
