@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/percona/percona-backup-mongodb/pbm/errors"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
