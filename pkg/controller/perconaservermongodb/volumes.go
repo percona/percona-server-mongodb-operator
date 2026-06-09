@@ -195,17 +195,8 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if updatedPVCs == len(pvcsToUpdate) {
 			log.Info("Deleting statefulset")
 
-			if restartedAtValue, exists := sts.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]; exists {
-				if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
-					log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err, "sts", sts.Name)
-				}
-			}
-
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-				if k8serrors.IsNotFound(err) {
-					return nil
-				}
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
+				return err
 			}
 
 			log.Info("PVC resize completed")
@@ -221,11 +212,8 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if configured.Cmp(requested) < 0 {
 			log.Info("Deleting statefulset with stale volume claim template")
 
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-				if k8serrors.IsNotFound(err) {
-					return nil
-				}
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
+				return err
 			}
 			return nil
 		}
@@ -240,11 +228,8 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if configured.Cmp(requested) != 0 {
 			log.Info("Deleting statefulset with stale volume claim template")
 
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-				if k8serrors.IsNotFound(err) {
-					return nil
-				}
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -307,6 +292,29 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		}
 
 		log.Info("PVC resize started", "pvc", pvc.Name, "requested", requested)
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+) error {
+	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
+
+	if restartedAtValue, exists := sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; exists {
+		if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
+			log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err)
+		}
+	}
+
+	if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 	}
 
 	return nil

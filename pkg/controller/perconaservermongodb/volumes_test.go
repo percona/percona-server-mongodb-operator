@@ -34,6 +34,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		volumeScaling     bool
 		orphanPVC         bool
 		expectSTSDeleted  bool
+		expectRestartedAt bool
 		expectErrContains string
 		expectCRStorage   string
 	}{
@@ -55,18 +56,20 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			expectSTSDeleted: true,
 		},
 		{
-			name:             "deletes statefulset when requested matches actual but template differs",
-			requested:        "1200Mi",
-			configured:       "6G",
-			actual:           "1200Mi",
-			expectSTSDeleted: true,
+			name:              "deletes statefulset when requested matches actual but template differs",
+			requested:         "1200Mi",
+			configured:        "6G",
+			actual:            "1200Mi",
+			expectSTSDeleted:  true,
+			expectRestartedAt: true,
 		},
 		{
-			name:             "deletes statefulset when actual exceeds requested and template is lower",
-			requested:        "1200Mi",
-			configured:       "1Gi",
-			actual:           "6G",
-			expectSTSDeleted: true,
+			name:              "deletes statefulset when actual exceeds requested and template is lower",
+			requested:         "1200Mi",
+			configured:        "1Gi",
+			actual:            "6G",
+			expectSTSDeleted:  true,
+			expectRestartedAt: true,
 		},
 		{
 			name:       "does nothing when requested configured and actual sizes are aligned",
@@ -119,6 +122,12 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 
 			labels := naming.MongodLabels(cr, rs)
 			sts := newStatefulSet(cr.Namespace, naming.MongodStatefulSetName(cr, rs), labels, configured)
+			const restartedAt = "2026-01-01T00:00:00Z"
+			if tt.expectRestartedAt {
+				sts.Spec.Template.Annotations = map[string]string{
+					naming.AnnotationKubectlRestartedAt: restartedAt,
+				}
+			}
 			if tt.resizeInProgress {
 				sts.Annotations = map[string]string{
 					api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Minute).Format(time.RFC3339),
@@ -165,6 +174,9 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			if tt.expectCRStorage != "" {
 				expected := resource.MustParse(tt.expectCRStorage)
 				assert.Equal(t, expected, fetchedCR.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage])
+			}
+			if tt.expectRestartedAt {
+				assert.Equal(t, restartedAt, fetchedCR.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)])
 			}
 		})
 	}
