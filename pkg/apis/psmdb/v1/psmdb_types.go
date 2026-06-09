@@ -1479,7 +1479,7 @@ type Expose struct {
 type ExternalDNSConfig struct {
 	Prefix string `json:"prefix,omitempty"`
 	// +kubebuilder:validation:Required
-     // +kubebuilder:validation:XValidation:rule="format.qualifiedName().validate(self)",message="Not a valid domain name"
+     // +kubebuilder:validation:XValidation:rule="!format. dns1123Subdomain().validate(self).hasValue()",message="Not a valid domain name"
 	Domain string `json:"domain"`
 	// +kubebuilder:validation:Minimum=0
 	TTL int `json:"ttl,omitempty"`
