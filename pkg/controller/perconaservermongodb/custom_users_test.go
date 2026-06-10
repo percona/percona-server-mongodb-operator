@@ -15,6 +15,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // mockMongoClientForRoles is a minimal mock to test updateRoles behavior.
@@ -30,9 +31,9 @@ func (m *mockMongoClientForRoles) UpdateUserRoles(ctx context.Context, db, usern
 
 func TestUpdateRoles(t *testing.T) {
 	tests := []struct {
-		name              string
-		user              *api.User
-		userInfo          *mongo.User
+		name               string
+		user               *api.User
+		userInfo           *mongo.User
 		expectUpdateCalled bool
 	}{
 		{
@@ -100,7 +101,7 @@ func TestUpdateRoles(t *testing.T) {
 					{Name: "readWrite", DB: "db1"},
 				},
 			},
-			userInfo:          nil,
+			userInfo:           nil,
 			expectUpdateCalled: false,
 		},
 	}
@@ -516,86 +517,107 @@ func TestBuildAnnotationKey(t *testing.T) {
 	tests := []struct {
 		name      string
 		crName    string
+		crVersion *string
 		userName  string
 		want      string
-		wantLen   int
-		maxLength int
 	}{
 		{
-			name:      "short names within limit",
-			crName:    "my-cluster",
-			userName:  "user1",
-			want:      "percona.com/my-cluster-user1-hash",
-			wantLen:   33,
-			maxLength: maxAnnotationNameLength,
+			name:     "short names",
+			crName:   "my-cluster",
+			userName: "user1",
+			want:     "percona.com/jutnf2os64q2pc2xoctfhea46fv4prb3amrfpvxdoxayh3vul3gq",
 		},
 		{
-			name:      "exactly at limit",
-			crName:    "a",
-			userName:  strings.Repeat("x", 44), // 1 + 5 + 44 + 13 (percona.com/-) = 63, will not be truncated
-			want:      "percona.com/a-" + strings.Repeat("x", 44) + "-hash",
-			wantLen:   maxAnnotationNameLength,
-			maxLength: maxAnnotationNameLength,
+			name:     "user name fills the old limit",
+			crName:   "a",
+			userName: strings.Repeat("x", 44),
+			want:     "percona.com/g76mrdlwvbdpwmj3oocsvaxq2aqlfk4k5m2xj557vtrennb42pmq",
 		},
 		{
-			name:      "exceeds limit - truncates but keeps hash suffix",
-			crName:    "very-long-cluster-name-that-exceeds",
-			userName:  "very-long-user-name-that-also-exceeds",
-			want:      "percona.com/very-long-cluster-name-that-exceeds-very-long--hash",
-			wantLen:   maxAnnotationNameLength,
-			maxLength: maxAnnotationNameLength,
+			name:     "both names exceed the old limit",
+			crName:   "very-long-cluster-name-that-exceeds",
+			userName: "very-long-user-name-that-also-exceeds",
+			want:     "percona.com/7grtpeecp5s6efjbylgpwojvpr5hwo7np6c2ccj6jbpsbk3xw6gq",
 		},
 		{
-			name:      "very long cluster name",
-			crName:    strings.Repeat("a", 100),
-			userName:  "user",
-			want:      "percona.com/" + strings.Repeat("a", 46) + "-hash",
-			wantLen:   maxAnnotationNameLength,
-			maxLength: maxAnnotationNameLength,
+			name:     "very long cluster name",
+			crName:   strings.Repeat("a", 100),
+			userName: "user",
+			want:     "percona.com/vjvkygmvzldwvj6m3x4lzu7s3dvp5mwqstqbcxpooxudohhek5dq",
 		},
 		{
-			name:      "very long user name",
-			crName:    "cluster",
-			userName:  strings.Repeat("b", 100),
-			want:      "percona.com/cluster-" + strings.Repeat("b", 38) + "-hash",
-			wantLen:   maxAnnotationNameLength,
-			maxLength: maxAnnotationNameLength,
+			name:     "very long user name",
+			crName:   "cluster",
+			userName: strings.Repeat("b", 100),
+			want:     "percona.com/pfu7boshbs4o6gyzm3gf4vkt4mptio5uorthdt5qhu3su5dwiaeq",
 		},
 		{
-			name:      "both names very long",
-			crName:    strings.Repeat("c", 50),
-			userName:  strings.Repeat("d", 50),
-			want:      "percona.com/" + strings.Repeat("c", 46) + "-hash",
-			wantLen:   maxAnnotationNameLength,
-			maxLength: maxAnnotationNameLength,
+			name:     "both names very long",
+			crName:   strings.Repeat("c", 50),
+			userName: strings.Repeat("d", 50),
+			want:     "percona.com/4ztrxbkdt2ldokrlo6plgpp2vapvt66ivyvgdfuvixfk5zyofc3q",
+		},
+		{
+			name:      "v1.22.0 behavior",
+			crName:    "my-cluster-name",
+			crVersion: new("1.22.0"),
+			userName:  "my-custom-user",
+			want:      "percona.com/my-cluster-name-my-custom-user-hash",
 		},
 	}
+
+	const prefix = "percona.com/"
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAnnotationKey(tt.crName, tt.userName)
-
-			// Extract the name part (after "percona.com/")
-			prefix := "percona.com/"
-			assert.True(t, strings.HasPrefix(got, prefix), "buildAnnotationKey() = %v, should start with %v", got, prefix)
-
-			// Verify the annotation key name part is within Kubernetes limit
-			namePart := got[len(prefix):]
-			gotLen := len(got)
-			assert.True(t, len(namePart) <= tt.maxLength, "buildAnnotationKey() name part length = %v, should be <= %v. Got: %v", len(namePart), tt.maxLength, got)
-
-			// Verify it ends with "-hash"
-			assert.True(t, strings.HasSuffix(got, "-hash"), "buildAnnotationKey() = %v, should end with '-hash'", got)
-
-			// Verify exact match for non-truncated cases
-			if gotLen <= tt.maxLength && tt.want != "" {
-				assert.Equal(t, tt.want, got, "buildAnnotationKey() = %v, want %v", got, tt.want)
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.crName,
+					Namespace: "namespace",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+				},
+			}
+			if tt.crVersion != nil {
+				cr.Spec.CRVersion = *tt.crVersion
 			}
 
-			// Verify length matches expected for all cases
-			if tt.wantLen > 0 {
-				assert.Equal(t, tt.wantLen, gotLen, "buildAnnotationKey() length = %v, want %v", gotLen, tt.wantLen)
+			got := buildAnnotationKey(cr, tt.userName)
+
+			assert.Equal(t, tt.want, got, "buildAnnotationKey() = %v, want %v", got, tt.want)
+
+			assert.True(t, strings.HasPrefix(got, prefix), "buildAnnotationKey() = %v, should start with %v", got, prefix)
+
+			if tt.crVersion == nil {
+				namePart := got[len(prefix):]
+				assert.Len(t, namePart, 52, "buildAnnotationKey() name part should be a fixed-length hash. Got: %v", got)
+				assert.True(t, len(namePart) <= maxAnnotationNameLength, "buildAnnotationKey() name part length = %v, should be <= %v. Got: %v", len(namePart), maxAnnotationNameLength, got)
 			}
 		})
 	}
+}
+
+// TestBuildAnnotationKeyNoCollision ensures that two distinct users do not produce
+// the same annotation key, even when their cluster/user names share a long common
+// prefix that would have been truncated to an identical value by the old logic.
+func TestBuildAnnotationKeyNoCollision(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      strings.Repeat("c", 20),
+			Namespace: "namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+	}
+
+	longPrefix := strings.Repeat("p", 42)
+	userNameA := longPrefix + strings.Repeat("a", 21)
+	userNameB := longPrefix + strings.Repeat("b", 21)
+
+	keyA := buildAnnotationKey(cr, userNameA)
+	keyB := buildAnnotationKey(cr, userNameB)
+
+	assert.NotEqual(t, keyA, keyB, "buildAnnotationKey() should produce distinct keys for distinct users, got %q for both", keyA)
 }
