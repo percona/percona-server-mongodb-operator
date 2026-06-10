@@ -26381,6 +26381,9 @@ spec:
                         type: string
                       kind:
                         default: Issuer
+                        enum:
+                        - Issuer
+                        - ClusterIssuer
                         type: string
                       name:
                         type: string
