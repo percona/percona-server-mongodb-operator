@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
