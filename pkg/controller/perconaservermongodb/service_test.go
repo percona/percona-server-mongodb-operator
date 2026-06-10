@@ -15,6 +15,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReconcileReplsetServices(t *testing.T) {
@@ -37,9 +38,8 @@ func TestReconcileReplsetServices(t *testing.T) {
 		t.Helper()
 
 		svcList := new(corev1.ServiceList)
-		if err := cl.List(ctx, svcList, client.InNamespace(cr.Namespace)); err != nil {
-			t.Fatal(err)
-		}
+		err := cl.List(ctx, svcList, client.InNamespace(cr.Namespace))
+		require.NoError(t, err)
 
 		for i := range svcList.Items {
 			svcList.Items[i].APIVersion = "v1"
@@ -69,74 +69,49 @@ func TestReconcileReplsetServices(t *testing.T) {
 
 	t.Run("expose toggle: not sharded cluster", func(t *testing.T) {
 		cr, err := readDefaultCR(crName, ns)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
 		cr.Spec.Replsets[0].Expose.Enabled = false
 		cr.Spec.Sharding.Enabled = false
-		if err := cr.CheckNSetDefaults(ctx, ""); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
+
 		r := buildFakeClient(prepareObjects(t, cr)...)
 
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_expose_off.yaml")
 
 		cr.Spec.Replsets[0].Expose.Enabled = true
-		if err := r.client.Update(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.client.Update(ctx, cr))
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_expose_on.yaml")
 
 		cr.Spec.Replsets[0].Expose.Enabled = false
-		if err := r.client.Update(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.client.Update(ctx, cr))
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_expose_off.yaml")
 	})
 
 	t.Run("expose toggle: sharded cluster", func(t *testing.T) {
 		cr, err := readDefaultCR(crName, ns)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
 		cr.Spec.Replsets[0].Expose.Enabled = false
 		cr.Spec.Sharding.Enabled = true
-		if err := cr.CheckNSetDefaults(ctx, ""); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
 
 		r := buildFakeClient(prepareObjects(t, cr)...)
 
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_sharded_expose_off.yaml")
 
 		cr.Spec.Replsets[0].Expose.Enabled = true
-		if err := r.client.Update(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.client.Update(ctx, cr))
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_sharded_expose_on.yaml")
 
 		cr.Spec.Replsets[0].Expose.Enabled = false
-		if err := r.client.Update(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
-		if err := r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, r.client.Update(ctx, cr))
+		require.NoError(t, r.reconcileReplsetServices(ctx, cr, getReplsets(t, cr)))
 		compareSvcList(t, r.client, cr, "svc_list_sharded_expose_off.yaml")
 	})
 }
@@ -275,13 +250,10 @@ func TestRemoveOutdatedServices(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr, err := readDefaultCR(crName, ns)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			cr.Spec.Sharding.Enabled = false
-			if err := cr.CheckNSetDefaults(ctx, ""); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
 
 			rs := cr.Spec.Replsets[0]
 			rs.Size = 3
@@ -291,9 +263,7 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			objs := append([]client.Object{cr}, seedServices(cr, rs)...)
 			r := buildFakeClient(objs...)
 
-			if err := r.removeOutdatedServices(ctx, cr, rs); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, r.removeOutdatedServices(ctx, cr, rs))
 
 			got := remainingServices(t, r.client)
 			want := tt.want
