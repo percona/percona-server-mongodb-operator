@@ -44,9 +44,8 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		return rsPods, errors.Wrapf(err, "failed to get statefulset list related to replset %s", rsName)
 	}
 
-	// `client.List` doesn't guarantee ordering (the cache-backed client returns
-	// items in map iteration order). Sort statefulsets by name so the resulting
-	// pod list - and the replset member order derived from it - is deterministic.
+	// `client.List` doesn't guarantee ordering (the cache-backed client returns items
+	// in map iteration order). Sort StatefulSets by name so iteration order is deterministic.
 	sort.Slice(stsList.Items, func(i, j int) bool {
 		return stsList.Items[i].Name < stsList.Items[j].Name
 	})
