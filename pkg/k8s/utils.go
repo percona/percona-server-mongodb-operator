@@ -52,5 +52,9 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 	} else if err != nil {
 		return errors.Wrapf(err, "failed to get %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
 	}
-	return client.IgnoreNotFound(c.Delete(ctx, obj))
+
+	if err := c.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "failed to delete %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
+	}
+	return nil
 }
