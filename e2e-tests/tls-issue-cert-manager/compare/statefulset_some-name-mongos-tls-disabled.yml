@@ -119,6 +119,9 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-secrets
+              name: some-name-mongodb-keyfile
+              readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
               readOnly: true
@@ -163,6 +166,11 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: some-name-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
   updateStrategy:
