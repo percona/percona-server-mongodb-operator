@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
@@ -354,6 +355,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
 			if dns.Domain == "" {
 				return errors.New("externalDNS requires domain for mongos")
+			}
+			if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+				return fmt.Errorf("externalDNS domain %q for mongos is not a valid domain name: %s", dns.Domain, strings.Join(errs, "; "))
 			}
 			if dns.Prefix == "" {
 				dns.Prefix = cr.Name
@@ -732,6 +736,9 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 	if dns := rs.Expose.ExternalDNS; dns != nil {
 		if dns.Domain == "" {
 			return fmt.Errorf("externalDNS requires domain for replset %s", rs.Name)
+		}
+		if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+			return fmt.Errorf("externalDNS domain %q for replset %s is not a valid domain name: %s", dns.Domain, rs.Name, strings.Join(errs, "; "))
 		}
 		if dns.Prefix == "" {
 			dns.Prefix = cr.Name
