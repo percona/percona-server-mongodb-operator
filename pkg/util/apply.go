@@ -67,6 +67,7 @@ func Apply(ctx context.Context, cl client.Client, obj client.Object) (ApplyStatu
 		switch object := obj.(type) {
 		case *corev1.Service:
 			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
+			object.Finalizers = oldObject.GetFinalizers()
 		}
 
 		return ApplyStatusUpdated, cl.Update(ctx, obj)
