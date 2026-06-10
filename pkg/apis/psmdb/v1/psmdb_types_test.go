@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pkg/errors"
