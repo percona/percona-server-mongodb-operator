@@ -28,6 +28,7 @@ spec:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    allowInvalidCertificates: true
+#    certManagementPolicy: auto
 #    issuerConf:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
@@ -968,4 +969,4 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 0 * * *"
+#      schedule: "0 0 * * *"

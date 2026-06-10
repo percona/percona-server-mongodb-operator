@@ -2,6 +2,8 @@ package perconaservermongodb
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base32"
 	"fmt"
 	"strings"
 
@@ -107,7 +109,7 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			continue
 		}
 
-		annotationKey := buildAnnotationKey(cr.Name, user.Name)
+		annotationKey := buildAnnotationKey(cr, user.Name)
 
 		if userInfo == nil && !user.IsExternalDB() {
 			err = createUser(ctx, client, mongoCli, &user, sec, annotationKey, userSecretPassKey)
@@ -431,18 +433,19 @@ func createUser(
 }
 
 // buildAnnotationKey creates a Kubernetes annotation key for tracking user password hashes.
-// Kubernetes annotation keys have a limit of 63 characters for the name part.
-// Format: "percona.com/<name>" where it must be less than or equal to 63 characters.
-// We need to keep the "-hash" suffix (5 chars), so we have 58 chars for the prefix.
-func buildAnnotationKey(crName, userName string) string {
-	annotationKeyBase := fmt.Sprintf("percona.com/%s-%s", crName, userName)
-	const hashSuffix = "-hash"
-	const maxPrefixLength = maxAnnotationNameLength - len(hashSuffix)
-
-	if len(annotationKeyBase) > maxPrefixLength {
-		annotationKeyBase = annotationKeyBase[:maxPrefixLength]
+// Format: "percona.com/<name>" where <name> must be less than or equal to 63 characters.
+// To ensure we are always under the limit while not being prone to collision errors,
+// we first calculate sha256 of <crName>-<userName> and then encode it with base32.
+// This ensures that <name> is always 52 characters.
+func buildAnnotationKey(cr *api.PerconaServerMongoDB, userName string) string {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, userName)
 	}
-	return fmt.Sprintf("%s%s", annotationKeyBase, hashSuffix)
+
+	key := sha256.Sum256(fmt.Appendf([]byte{}, "%s-%s", cr.Name, userName))
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding)
+	annotationKey := strings.ToLower(enc.EncodeToString(key[:]))
+	return fmt.Sprintf("percona.com/%s", annotationKey)
 }
 
 // getCustomUserSecret gets secret by name defined by `user.PasswordSecretRef.Name` or returns a secret
