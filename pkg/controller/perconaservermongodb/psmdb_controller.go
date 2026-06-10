@@ -1104,7 +1104,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 		}
 	}
 
-	return k8sutils.DeleteIfExists(ctx, r.client, psmdb.MongosStatefulset(cr))
+	if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.MongosStatefulset(cr)); err != nil {
+		return errors.Wrap(err, "failed to delete mongos statefulset")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
