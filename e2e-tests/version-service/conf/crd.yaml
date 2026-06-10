@@ -1930,6 +1930,7 @@ spec:
                   mongosParams:
                     type: string
                   querySource:
+                    default: profiler
                     enum:
                     - profiler
                     - mongolog

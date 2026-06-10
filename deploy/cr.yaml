@@ -82,7 +82,7 @@ spec:
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
-#    querySource: mongolog
+#    querySource: profiler
 #    resources:
 #      requests:
 #        memory: 150M

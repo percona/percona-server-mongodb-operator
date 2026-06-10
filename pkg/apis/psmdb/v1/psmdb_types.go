@@ -453,6 +453,7 @@ type PMMSpec struct {
 	// or "mongolog" to collect queries from mongod log files (requires PMM >= 3.3.0
 	// and mongod configured to write logs to /data/db/logs/).
 	// +kubebuilder:validation:Enum=profiler;mongolog
+	// +kubebuilder:default=profiler
 	QuerySource string `json:"querySource,omitempty"`
 }
 
