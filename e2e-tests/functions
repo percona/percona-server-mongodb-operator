@@ -17,7 +17,75 @@ IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-CERT_MANAGER_VER="1.19.1"
+
+REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
+REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
+
+detect_k8s_env() {
+	local provider="unknown"
+	if kubectl_bin api-resources | grep -q 'openshift.io' 2>/dev/null; then
+		provider="openshift"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+		provider="eks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
+		provider="gke"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
+		provider="aks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
+		provider="kind"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
+		provider="minikube"
+	fi
+
+	echo "$provider"
+}
+
+qualify_image_ref() {
+	local ref="$1"
+	local first="${ref%%/*}"
+
+	if [[ $first == *.* || $first == *:* || $first == "localhost" ]]; then
+		printf '%s' "$ref"
+		return 0
+	fi
+
+	if [[ $ref == percona/* || $ref == perconalab/* ]]; then
+		printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
+		return 0
+	fi
+
+	printf '%s' "$ref"
+}
+
+qualify_image_var() {
+	local var="$1"
+	local val="${!var}"
+	local out=""
+	local ref
+
+	[[ -z $val ]] && return 0
+
+	if [[ $val == *$'\n'* ]]; then
+		while IFS= read -r ref; do
+			[[ -z $ref ]] && continue
+			out+=$(qualify_image_ref "$ref")
+			out+=$'\n'
+		done <<<"$val"
+		out="${out%$'\n'}"
+		printf -v "$var" '%s' "$out"
+		return 0
+	fi
+
+	printf -v "$var" '%s' "$(qualify_image_ref "$val")"
+}
+
+for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
+		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
+		IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
+	qualify_image_var "$var"
+done
+CERT_MANAGER_VER="1.19.3"
 MINIO_VER="5.4.0"
 CHAOS_MESH_VER="2.7.1"
 UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
@@ -619,7 +687,7 @@ create_minio_bucket() {
 	local bucket=$1
 	local endpoint=$2
 
-	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
 		AWS_SECRET_ACCESS_KEY=some-secret-key \
 		AWS_DEFAULT_REGION=us-east-1 \
@@ -1137,7 +1205,7 @@ compare_mongo_cmd() {
 	fi
 
 	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
-		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|"c":"NETWORK"|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -2476,7 +2544,7 @@ check_backup_in_storage() {
 			;;
 		minio)
 			endpoint="minio-service"
-			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			until kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
 				/usr/bin/aws --no-verify-ssl --endpoint-url "${protocol}://${endpoint}:9000" s3 ls "s3://${backup_dest}/${replset}/${file}" \
 				| grep "${file}"; do
@@ -2530,4 +2598,23 @@ function wait_pvc_resize() {
 	echo
 	echo "${pvc} was resized"
 	return 0
+}
+
+deploy_volume_snapshot_class() {
+	local snapshot_class_file
+	local k8s_env
+	k8s_env=$(detect_k8s_env)
+
+	case "$k8s_env" in
+		gke)
+			snapshot_class_file="${conf_dir}/gke-volume-snapshot-class.yaml"
+			;;
+		*)
+			echo "Unsupported Kubernetes environment for volume snapshot class: $k8s_env" >&2
+			return 1
+			;;
+	esac
+
+	kubectl_bin apply -f "${snapshot_class_file}" >&2
+	yq eval '.metadata.name' "${snapshot_class_file}"
 }

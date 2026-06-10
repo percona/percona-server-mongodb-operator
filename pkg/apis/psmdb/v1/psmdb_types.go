@@ -85,6 +85,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                          PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	RevisionHistoryLimit         *int32                               `json:"revisionHistoryLimit,omitempty"`
 	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName                string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
@@ -454,6 +455,11 @@ type PMMSpec struct {
 
 	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
 	CustomClusterName string `json:"customClusterName,omitempty"`
+
+	// AuthenticationMechanism is the SASL mechanism the PMM client uses to
+	// authenticate the clusterMonitor user against mongod/mongos.
+	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
+	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -586,10 +592,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
@@ -683,8 +690,9 @@ func (conf MongoConfiguration) GetTLSMode() (string, error) {
 	return mode, nil
 }
 
-// isEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
-func (conf MongoConfiguration) isEncryptionEnabled() (*bool, error) {
+// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field.
+// Nil value means that encryption was not specified and is enabled by default.
+func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
 		return nil, err
@@ -957,7 +965,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 
@@ -1183,7 +1192,12 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base,external}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -1756,4 +1770,13 @@ type LogRotateSpec struct {
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, len(cr.Spec.Replsets))
+	copy(replsets, cr.Spec.Replsets)
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
 }

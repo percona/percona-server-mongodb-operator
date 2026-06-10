@@ -20,7 +20,9 @@ eks_cluster=$(kubectl config view --minify -o jsonpath='{.contexts[0].context.cl
 IFS='.' read -r eks_cluster_name eks_cluster_region _ <<<"$eks_cluster"
 
 eks_cluster_oidc=$(aws eks describe-cluster --name $eks_cluster_name --region=$eks_cluster_region --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
-policy_arn="arn:aws:iam::119175775298:policy/operator-testing-access-s3"
+
+account_id=$(aws sts get-caller-identity --query Account --output text)
+policy_arn="arn:aws:iam::${account_id}:policy/operator-testing-access-s3"
 role_name="$cluster-psmdb-access-s3-bucket"
 
 desc "delete role"
@@ -34,7 +36,8 @@ aws iam delete-role --role-name "$role_name" || true
 
 desc "create role"
 jq --arg eks_cluster_oidc "$eks_cluster_oidc" \
-	'.Statement[0].Principal.Federated = "arn:aws:iam::119175775298:oidc-provider/\($eks_cluster_oidc)" |
+	--arg account_id "$account_id" \
+	'.Statement[0].Principal.Federated = "arn:aws:iam::\($account_id):oidc-provider/\($eks_cluster_oidc)" |
     .Statement[0].Condition.StringEquals[($eks_cluster_oidc + ":aud")] = "sts.amazonaws.com"' \
 	$test_dir/conf/template.json >$test_dir/conf/role-trust-policy.json
 
@@ -50,23 +53,17 @@ aws iam attach-role-policy --role-name "$role_name" --policy-arn $policy_arn
 
 create_infra "$namespace"
 
-desc "create secrets and start client"
-kubectl_bin apply \
-	-f "$conf_dir/secrets.yml" \
-	-f "$conf_dir/client.yml"
+# Storage setup MUST happen before apply_cluster.
+# Since K8SPSMDB-1527 the operator gates cluster .status.state=ready on pbm-agent's
+# storage health check. If pbm-agent starts before the default SA is annotated
+# with the IRSA role-arn, the EKS pod-identity-webhook does not inject AWS_* env
+# vars into the backup-agent container, pbm-agent's HeadObject on .pbm.init returns
+# 403, and the cluster never reaches ready.
+# Annotating both SAs and restarting the operator BEFORE apply_cluster ensures the
+# first pbm-agent process already has working IRSA credentials.
+desc "annotate service accounts with IRSA role before creating the cluster"
 
-desc "create PSMDB cluster $cluster"
-apply_cluster $test_dir/conf/$cluster.yml
-
-desc 'check if all 3 Pods started'
-wait_for_running $cluster-rs0 3
-
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster-rs0
-
-desc "update service accounts for operator and default (our cluster uses this one)"
-
-kubectl_bin annotate serviceaccount default  \
+kubectl_bin annotate serviceaccount default \
 	eks.amazonaws.com/role-arn="$role_arn" \
 	--overwrite
 
@@ -74,16 +71,27 @@ kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} annotate serviceaccount percona-serv
 	eks.amazonaws.com/role-arn="$role_arn" \
 	--overwrite
 
-desc "restart operator and cluster"
-operator_pod=$(get_operator_pod)
-kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} delete pod $operator_pod
+desc "restart operator so the pod picks up IRSA env vars"
 
-kubectl_bin delete pod "$cluster-rs0-0"
-kubectl_bin delete pod "$cluster-rs0-1"
-kubectl_bin delete pod "$cluster-rs0-2"
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout restart deployment/percona-server-mongodb-operator
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout status deployment/percona-server-mongodb-operator --timeout=300s
 
+desc "create secrets and start client"
+kubectl_bin apply \
+	-f "$conf_dir/secrets.yml" \
+	-f "$conf_dir/client.yml" \
+	-f "$conf_dir/cloud-secret.yml"
+
+desc "create PSMDB cluster $cluster"
+apply_cluster $test_dir/conf/$cluster.yml
+
+desc 'check if all 3 Pods started and cluster is ready'
 wait_for_running $cluster-rs0 3
 
+desc 'check if service and statefulset created with expected config'
+compare_kubectl statefulset/$cluster-rs0
+
+desc 'verify IRSA env was injected into the backup-agent container'
 kubectl exec $cluster-rs0-0 -c backup-agent -- sh -c 'if [ -z "$AWS_ROLE_ARN" ]; then echo "Variable AWS_ROLE_ARN not set" && exit 1; else echo "Variable AWS_ROLE_ARN is set"; fi'
 
 desc 'create user'
@@ -118,6 +126,7 @@ desc 'check backup and restore -- aws-s3'
 backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 setup_aws_credentials
 check_backup_existence_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
+
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster-rs0.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-0.$cluster-rs0.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-1.$cluster-rs0.$namespace" "-2nd"
@@ -148,6 +157,125 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.$cluster-rs0.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.$cluster-rs0.$namespace" "-3nd"
 
 run_pitr_check "${backup_name_aws}" "${cluster}" "-3nd"
+
+# =============================================================================
+# PHASE B — migration from secret-based S3 credentials to IRSA
+#
+# Goal: prove that an existing cluster using credentialsSecret can be migrated
+# to IRSA with minimal disruption — and quantify "minimal" as exactly ONE
+# rolling restart of the mongod StatefulSet (which is the irreducible cost of
+# the EKS pod-identity-webhook only injecting AWS_* env vars at pod CREATE).
+# =============================================================================
+
+desc 'PHASE B — preparing for secret→IRSA migration test'
+
+desc 'B.0 — tear down Phase A cluster and revert SA annotations'
+kubectl_bin delete psmdb-backup --all --ignore-not-found=true
+kubectl_bin delete psmdb "$cluster" --ignore-not-found=true
+kubectl_bin wait --for=delete pod -l "app.kubernetes.io/instance=$cluster" --timeout=300s || true
+kubectl_bin delete pvc -l "app.kubernetes.io/instance=$cluster" --ignore-not-found=true
+
+# Strip IRSA annotations so Phase B starts as a "pre-IRSA" world
+kubectl_bin annotate serviceaccount default \
+	eks.amazonaws.com/role-arn- --overwrite || true
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} annotate serviceaccount percona-server-mongodb-operator \
+	eks.amazonaws.com/role-arn- --overwrite || true
+
+# Restart operator so it loses the previously-injected AWS_* env vars
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout restart deployment/percona-server-mongodb-operator
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout status deployment/percona-server-mongodb-operator --timeout=300s
+
+desc 'B.1 — bring up cluster, then patch in credentialsSecret-based S3 backup'
+apply_cluster "$test_dir/conf/some-name.yml"
+kubectl_bin patch psmdb "$cluster" --type=merge -p \
+	'{"spec":{"backup":{"storages":{"aws-s3":{"s3":{"credentialsSecret":"aws-s3-secret"}}}}}}'
+wait_for_running "$cluster-rs0" 3
+
+desc 'verify backup-agent does NOT have AWS_ROLE_ARN (pre-IRSA state)'
+if kubectl exec "$cluster-rs0-0" -c backup-agent -- sh -c '[ -n "$AWS_ROLE_ARN" ]' 2>/dev/null; then
+	echo "FAIL: AWS_ROLE_ARN is set in backup-agent before IRSA migration step — SA annotation was not stripped"
+	exit 1
+fi
+echo "OK: backup-agent has no AWS_* env vars yet"
+
+desc 'B.1a — recreate the myApp application user on the new cluster'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@$cluster-rs0.$namespace"
+sleep 2
+
+desc 'B.2 — write data and run an on-demand backup using the secret'
+run_mongo \
+	'use myApp\n db.test.insert({ x: 200001 })' \
+	"myApp:myPass@$cluster-rs0.$namespace"
+
+backup_name_secret="backup-aws-s3-secret"
+run_backup aws-s3 "$backup_name_secret"
+wait_backup "$backup_name_secret"
+sleep 5
+backup_dest_secret=$(get_backup_dest "$backup_name_secret")
+setup_aws_credentials
+check_backup_existence_aws "$backup_dest_secret" "/rs0/myApp.test.gz"
+
+echo "OK: backup via credentialsSecret works"
+
+desc 'B.3 — annotate SAs with IAM role-arn (expected: 0 restarts)'
+kubectl_bin annotate serviceaccount default \
+	eks.amazonaws.com/role-arn="$role_arn" --overwrite
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} annotate serviceaccount percona-server-mongodb-operator \
+	eks.amazonaws.com/role-arn="$role_arn" --overwrite
+
+sleep 10
+
+desc 'B.4 — rolling restart mongod and operator so the pod-identity-webhook injects AWS_* env vars'
+
+for i in 0 1 2; do
+	desc "B.4.$i — restart $cluster-rs0-$i to pick up AWS_* env vars"
+	kubectl_bin delete pod "$cluster-rs0-$i"
+	wait_for_running "$cluster-rs0" 3
+done
+
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout restart deployment/percona-server-mongodb-operator
+kubectl_bin ${OPERATOR_NS:+-n $OPERATOR_NS} rollout status deployment/percona-server-mongodb-operator --timeout=300s
+
+desc 'verify backup-agent now has AWS_ROLE_ARN'
+kubectl exec "$cluster-rs0-0" -c backup-agent -- sh -c '
+	if [ -z "$AWS_ROLE_ARN" ]; then
+		echo "FAIL: AWS_ROLE_ARN not injected after rolling restart"
+		exit 1
+	fi
+	echo "OK: AWS_ROLE_ARN=$AWS_ROLE_ARN"
+'
+
+desc 'B.5 — verify backup still works (PBM config still references the secret, IRSA is just a fallback)'
+backup_name_during_mig="backup-aws-s3-during-mig"
+run_backup aws-s3 "$backup_name_during_mig"
+wait_backup "$backup_name_during_mig"
+echo "OK: backup with secret still works after rolling restart"
+
+desc 'B.6 — patch CR to remove credentialsSecret, switching PBM to IRSA chain (expected: 0 additional restarts)'
+kubectl_bin patch psmdb "$cluster" --type=json \
+	-p '[{"op":"remove","path":"/spec/backup/storages/aws-s3/s3/credentialsSecret"}]'
+sleep 30
+
+desc 'B.7 — verify backup now works through IRSA only'
+backup_name_irsa="backup-aws-s3-irsa-only"
+run_backup aws-s3 "$backup_name_irsa"
+wait_backup "$backup_name_irsa"
+backup_dest_irsa=$(get_backup_dest "$backup_name_irsa")
+setup_aws_credentials
+check_backup_existence_aws "$backup_dest_irsa" "/rs0/myApp.test.gz"
+
+echo "OK: backup via IRSA works (credentialsSecret no longer in CR)"
+
+desc 'B.8 — delete the unused aws-s3-secret and run one more backup to prove IRSA-only operation'
+kubectl_bin delete secret aws-s3-secret --ignore-not-found=true
+backup_name_post_secret="backup-aws-s3-after-secret-delete"
+run_backup aws-s3 "$backup_name_post_secret"
+wait_backup "$backup_name_post_secret"
+echo "OK: backup works after deleting aws-s3-secret (definitive proof of IRSA-only operation)"
+
+kubectl_bin delete psmdb-backup --all --ignore-not-found=true
 
 destroy $namespace
 

@@ -2,8 +2,9 @@ package perconaservermongodb
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base32"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -20,6 +21,9 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	s "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
+
+// maxAnnotationNameLength is the maximum length for Kubernetes annotation key names (63 characters).
+const maxAnnotationNameLength = 63
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Users == nil && len(cr.Spec.Users) == 0 && cr.Spec.Roles == nil && len(cr.Spec.Roles) == 0 {
@@ -105,7 +109,7 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			continue
 		}
 
-		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
+		annotationKey := buildAnnotationKey(cr, user.Name)
 
 		if userInfo == nil && !user.IsExternalDB() {
 			err = createUser(ctx, client, mongoCli, &user, sec, annotationKey, userSecretPassKey)
@@ -357,7 +361,13 @@ func updateRoles(ctx context.Context, mongoCli mongo.Client, user *api.User, use
 		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
 	}
 
-	if reflect.DeepEqual(userInfo.Roles, roles) {
+	sortRoles := cmpopts.SortSlices(func(a, b mongo.Role) bool {
+		if a.DB != b.DB {
+			return a.DB < b.DB
+		}
+		return a.Role < b.Role
+	})
+	if cmp.Equal(userInfo.Roles, roles, sortRoles) {
 		return nil
 	}
 
@@ -420,6 +430,22 @@ func createUser(
 
 	log.Info("User created", "user", user.UserID())
 	return nil
+}
+
+// buildAnnotationKey creates a Kubernetes annotation key for tracking user password hashes.
+// Format: "percona.com/<name>" where <name> must be less than or equal to 63 characters.
+// To ensure we are always under the limit while not being prone to collision errors,
+// we first calculate sha256 of <crName>-<userName> and then encode it with base32.
+// This ensures that <name> is always 52 characters.
+func buildAnnotationKey(cr *api.PerconaServerMongoDB, userName string) string {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, userName)
+	}
+
+	key := sha256.Sum256(fmt.Appendf([]byte{}, "%s-%s", cr.Name, userName))
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding)
+	annotationKey := strings.ToLower(enc.EncodeToString(key[:]))
+	return fmt.Sprintf("percona.com/%s", annotationKey)
 }
 
 // getCustomUserSecret gets secret by name defined by `user.PasswordSecretRef.Name` or returns a secret

@@ -20,7 +20,7 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
-  crVersion: 1.22.0
+  crVersion: 1.23.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -43,6 +43,7 @@ spec:
 #    terminationGracePeriod: false
 #    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
+#  revisionHistoryLimit: 10
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -76,6 +77,7 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
@@ -914,6 +916,15 @@ spec:
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+#      - name: daily-snapshot
+#        enabled: false
+#        schedule: "0 0 * * *"
+#        retention:
+#          count: 1
+#          type: count
+#          deleteFromStorage: true
+#        type: external
+#        volumeSnapshotClass: YOUR-VOLUME-SNAPSHOT-CLASS
   logcollector:
     enabled: true
     image: perconalab/fluentbit:main-logcollector
@@ -945,4 +956,4 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 0 * * *"
+#      schedule: "0 0 * * *"
