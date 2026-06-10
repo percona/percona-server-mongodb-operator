@@ -44,6 +44,7 @@ function main() {
 	cluster="some-name"
 	desc 'Starting the cluster with IMAGE_MONGOD '$(echo ${version_matrix} | jq '.[0] | keys | .[0]')''
 	export IMAGE_MONGOD=$(echo ${version_matrix} | jq -r 'to_entries | .[0].value | .[].image_path')
+	qualify_image_var IMAGE_MONGOD
 	apply_cluster "${test_dir}/conf/${cluster}.yml"
 
 	desc 'check if all 3 Pods started'
@@ -107,6 +108,8 @@ function main() {
 	done
 
 	destroy ${namespace}
+
+	desc 'test passed'
 }
 
 main

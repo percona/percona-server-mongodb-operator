@@ -53,7 +53,7 @@ func (app *App) Run(ctx context.Context) error {
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
 	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
 	readinessCmd := k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
-	startupDelaySeconds := livenessCmd.Flag("startupDelaySeconds", "").Default("7200").Uint64()
+	_ = livenessCmd.Flag("startupDelaySeconds", "Deprecated").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
 	_, err := os.Stat("/opt/percona/restore-in-progress")
@@ -92,7 +92,7 @@ func (app *App) Run(ctx context.Context) error {
 		switch *component {
 
 		case "mongod":
-			memberState, err := healthcheck.HealthCheckMongodLiveness(ctx, cnf, int64(*startupDelaySeconds))
+			memberState, err := healthcheck.HealthCheckMongodLiveness(ctx, cnf)
 			if err != nil {
 				return errors.Wrap(err, "member failed Kubernetes liveness check")
 			}
@@ -111,7 +111,7 @@ func (app *App) Run(ctx context.Context) error {
 		switch *component {
 
 		case "mongod":
-			err := healthcheck.MongodReadinessCheck(ctx, cnf.Hosts[0])
+			err := healthcheck.MongodReadinessCheck(ctx, cnf)
 			if err != nil {
 				return errors.Wrap(err, "member failed Kubernetes readiness check")
 			}

@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -69,37 +70,41 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 type PerconaServerMongoDBSpec struct {
-	Pause                           bool                                 `json:"pause,omitempty"`
-	Unmanaged                       bool                                 `json:"unmanaged,omitempty"`
-	CRVersion                       string                               `json:"crVersion,omitempty"`
-	Platform                        *version.Platform                    `json:"platform,omitempty"`
-	Image                           string                               `json:"image"`
-	ImagePullSecrets                []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf                      bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	Unsafe                          UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreLabels                    []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations               []string                             `json:"ignoreAnnotations,omitempty"`
-	Replsets                        []*ReplsetSpec                       `json:"replsets,omitempty"`
-	Secrets                         *SecretsSpec                         `json:"secrets,omitempty"`
-	Backup                          BackupSpec                           `json:"backup,omitempty"`
-	ImagePullPolicy                 corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
-	PMM                             PMMSpec                              `json:"pmm,omitempty"`
-	UpdateStrategy                  appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
-	UpgradeOptions                  UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	SchedulerName                   string                               `json:"schedulerName,omitempty"`
-	ClusterServiceDNSSuffix         string                               `json:"clusterServiceDNSSuffix,omitempty"`
-	ClusterServiceDNSMode           DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
-	Sharding                        Sharding                             `json:"sharding,omitempty"`
-	InitImage                       string                               `json:"initImage,omitempty"`
-	InitContainerSecurityContext    *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
-	MultiCluster                    MultiCluster                         `json:"multiCluster,omitempty"`
-	TLS                             *TLSSpec                             `json:"tls,omitempty"`
-	Users                           []User                               `json:"users,omitempty"`
-	Roles                           []Role                               `json:"roles,omitempty"`
-	VolumeExpansionEnabled          bool                                 `json:"enableVolumeExpansion,omitempty"`
-	LogCollector                    *LogCollectorSpec                    `json:"logcollector,omitempty"`
-	EnableExternalVolumeAutoscaling bool                                 `json:"enableExternalVolumeAutoscaling,omitempty"`
-	VaultSpec                       *VaultSpec                           `json:"vault,omitempty"`
+	Pause                        bool                                 `json:"pause,omitempty"`
+	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
+	CRVersion                    string                               `json:"crVersion,omitempty"`
+	Platform                     *version.Platform                    `json:"platform,omitempty"`
+	Image                        string                               `json:"image"`
+	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
+	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
+	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
+	Backup                       BackupSpec                           `json:"backup,omitempty"`
+	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
+	PMM                          PMMSpec                              `json:"pmm,omitempty"`
+	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	RevisionHistoryLimit         *int32                               `json:"revisionHistoryLimit,omitempty"`
+	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	SchedulerName                string                               `json:"schedulerName,omitempty"`
+	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
+	ClusterServiceDNSMode        DNSMode                              `json:"clusterServiceDNSMode,omitempty"`
+	Sharding                     Sharding                             `json:"sharding,omitempty"`
+	InitImage                    string                               `json:"initImage,omitempty"`
+	InitContainerSecurityContext *corev1.SecurityContext              `json:"initContainerSecurityContext,omitempty"`
+	MultiCluster                 MultiCluster                         `json:"multiCluster,omitempty"`
+	TLS                          *TLSSpec                             `json:"tls,omitempty"`
+	Users                        []User                               `json:"users,omitempty"`
+	Roles                        []Role                               `json:"roles,omitempty"`
+	// Deprecated: Use StorageScaling.EnableVolumeScaling instead
+	VolumeExpansionEnabled bool              `json:"enableVolumeExpansion,omitempty"`
+	LogCollector           *LogCollectorSpec `json:"logcollector,omitempty"`
+	// Deprecated: Use StorageScaling.EnableExternalAutoscaling instead
+	EnableExternalVolumeAutoscaling bool                `json:"enableExternalVolumeAutoscaling,omitempty"`
+	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
+	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
 }
 
 type UserRole struct {
@@ -193,6 +198,30 @@ func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
 		}
 	}
 	return nil
+}
+
+// IsExternalVolumeAutoscalingEnabled returns whether external volume autoscaling is enabled.
+func (spec *PerconaServerMongoDBSpec) IsExternalVolumeAutoscalingEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableExternalAutoscaling
+	}
+	return spec.EnableExternalVolumeAutoscaling
+}
+
+// IsVolumeExpansionEnabled returns whether volume expansion is enabled.
+func (spec *PerconaServerMongoDBSpec) IsVolumeExpansionEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeScaling
+	}
+	return spec.VolumeExpansionEnabled
+}
+
+// StorageAutoscaling returns the storage autoscaling configuration.
+func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
+	if spec.StorageScaling == nil {
+		return nil
+	}
+	return spec.StorageScaling.Autoscaling
 }
 
 const (
@@ -314,35 +343,39 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                 `json:"state,omitempty"`
-	MongoVersion       string                   `json:"mongoVersion,omitempty"`
-	MongoImage         string                   `json:"mongoImage,omitempty"`
-	Message            string                   `json:"message,omitempty"`
-	Conditions         []ClusterCondition       `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus `json:"replsets,omitempty"`
-	Mongos             *MongosStatus            `json:"mongos,omitempty"`
-	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
-	BackupVersion      string                   `json:"backupVersion,omitempty"`
-	BackupImage        string                   `json:"backupImage,omitempty"`
-	BackupConfigHash   string                   `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                 `json:"pmmStatus,omitempty"`
-	PMMVersion         string                   `json:"pmmVersion,omitempty"`
-	Host               string                   `json:"host,omitempty"`
-	Size               int32                    `json:"size"`
-	Ready              int32                    `json:"ready"`
+	State              AppState                            `json:"state,omitempty"`
+	MongoVersion       string                              `json:"mongoVersion,omitempty"`
+	MongoImage         string                              `json:"mongoImage,omitempty"`
+	Message            string                              `json:"message,omitempty"`
+	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion      string                              `json:"backupVersion,omitempty"`
+	BackupImage        string                              `json:"backupImage,omitempty"`
+	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion         string                              `json:"pmmVersion,omitempty"`
+	Host               string                              `json:"host,omitempty"`
+	Size               int32                               `json:"size"`
+	Ready              int32                               `json:"ready"`
+	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
 type ConditionStatus string
 
 const (
-	ConditionTrue    ConditionStatus = "True"
-	ConditionFalse   ConditionStatus = "False"
-	ConditionUnknown ConditionStatus = "Unknown"
+	ConditionTrue  ConditionStatus = "True"
+	ConditionFalse ConditionStatus = "False"
 )
 
-// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
-// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
-const ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+const (
+	// ConditionTypePendingSmartUpdate is a condition type set on PSMDBCluster when a smart update is required
+	// but has not yet started. For e.g., if a backup/restore is running at the same time as a smart update is triggered.
+	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
+
+	ConditionTypePBMReady AppState = "PBMReady"
+)
 
 type ClusterCondition struct {
 	Status             ConditionStatus `json:"status"`
@@ -370,6 +403,33 @@ func (s *PerconaServerMongoDBStatus) IsStatusConditionTrue(conditionType AppStat
 	return cond.Status == ConditionTrue
 }
 
+func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
+	existingCondition := s.FindCondition(c.Type)
+	if existingCondition == nil {
+		if c.LastTransitionTime.IsZero() {
+			c.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+		s.Conditions = append(s.Conditions, c)
+		return
+	}
+
+	if existingCondition.Status != c.Status {
+		existingCondition.Status = c.Status
+		if !c.LastTransitionTime.IsZero() {
+			existingCondition.LastTransitionTime = c.LastTransitionTime
+		} else {
+			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
+		}
+	}
+
+	if existingCondition.Reason != c.Reason {
+		existingCondition.Reason = c.Reason
+	}
+	if existingCondition.Message != c.Message {
+		existingCondition.Message = c.Message
+	}
+}
+
 type PMMSpec struct {
 	Enabled                  bool                    `json:"enabled,omitempty"`
 	ServerHost               string                  `json:"serverHost,omitempty"`
@@ -382,6 +442,11 @@ type PMMSpec struct {
 
 	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
 	CustomClusterName string `json:"customClusterName,omitempty"`
+
+	// AuthenticationMechanism is the SASL mechanism the PMM client uses to
+	// authenticate the clusterMonitor user against mongod/mongos.
+	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
+	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -420,6 +485,7 @@ type MultiAZ struct {
 	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
+	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
 
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -485,6 +551,23 @@ func (m *MultiAZ) WithSidecarPVCs(log logr.Logger, pvcs []corev1.PersistentVolum
 	return rv
 }
 
+type HookScriptSpec struct {
+	Script       string             `json:"script,omitempty"`
+	ConfigMapRef ConfigMapReference `json:"configMapRef,omitempty"`
+}
+
+func (s HookScriptSpec) Specified() bool {
+	return s.Script != "" || s.ConfigMapRef.Name != ""
+}
+
+// ConfigMapReference references a ConfigMap.
+// Usage of corev1.LocalObjectReference is discouraged; prefer this type instead.
+type ConfigMapReference struct {
+	// Name is the name of the referenced ConfigMap.
+	// +optional
+	Name string `json:"name,omitempty"`
+}
+
 type PodDisruptionBudgetSpec struct {
 	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
@@ -496,10 +579,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
@@ -593,8 +677,9 @@ func (conf MongoConfiguration) GetTLSMode() (string, error) {
 	return mode, nil
 }
 
-// isEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field
-func (conf MongoConfiguration) isEncryptionEnabled() (*bool, error) {
+// IsEncryptionEnabled returns nil if "enableEncryption" field is not specified or the pointer to the value of this field.
+// Nil value means that encryption was not specified and is enabled by default.
+func (conf MongoConfiguration) IsEncryptionEnabled() (*bool, error) {
 	m, err := conf.GetOptions("security")
 	if err != nil || m == nil {
 		return nil, err
@@ -639,6 +724,25 @@ func (conf MongoConfiguration) QuietEnabled() bool {
 	}
 
 	return b
+}
+
+// IsAuthorizationEnabled returns whether mongo config has `authorization` enabled under `security` section.
+// https://www.mongodb.com/docs/manual/reference/configuration-options/#mongodb-setting-security.authorization
+func (conf MongoConfiguration) IsAuthorizationEnabled() bool {
+	m, err := conf.GetOptions("security")
+	if err != nil || m == nil {
+		return true
+	}
+	v, ok := m["authorization"]
+	if !ok {
+		return true
+	}
+
+	if str, ok := v.(string); ok {
+		return str != "disabled"
+	}
+
+	return true
 }
 
 // GetPort returns the net.port of the mongo configuration.
@@ -767,6 +871,16 @@ type ReplsetSpec struct {
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
+	fixDomain := func(domain string) string {
+		idx := strings.IndexRune(domain, ':')
+		if withPorts && idx == -1 {
+			domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
+		} else if !withPorts && idx != -1 {
+			domain = domain[:idx]
+		}
+		return domain
+	}
+
 	horizons := make(map[string]map[string]string)
 	for podName, m := range r.Horizons {
 		overrides, ok := r.ReplsetOverrides[podName]
@@ -779,19 +893,27 @@ func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 				}
 			}
 
-			idx := strings.IndexRune(domain, ':')
-			if withPorts && idx == -1 {
-				domain = fmt.Sprintf("%s:%d", domain, r.GetPort())
-			} else if !withPorts && idx != -1 {
-				domain = domain[:idx]
-			}
-
 			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
 				horizons[podName] = make(map[string]string)
 			}
-			horizons[podName][h] = domain
+			horizons[podName][h] = fixDomain(domain)
+		}
+
+	}
+
+	for podName, m := range r.ReplsetOverrides {
+		for h, domain := range m.Horizons {
+			if podHorizons, ok := horizons[podName]; !ok || podHorizons == nil {
+				horizons[podName] = make(map[string]string)
+			}
+			if _, ok := horizons[podName][h]; ok {
+				continue
+			}
+
+			horizons[podName][h] = fixDomain(domain)
 		}
 	}
+
 	return horizons
 }
 
@@ -830,7 +952,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 
@@ -867,6 +990,50 @@ type PVCSpec struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 
 	*corev1.PersistentVolumeClaimSpec `json:",inline"`
+}
+
+// AutoscalingSpec defines the configuration for automatic storage expansion
+type AutoscalingSpec struct {
+	// Enabled enables storage autoscaling for all replica sets
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TriggerThresholdPercent is the percentage of disk usage that triggers automatic storage expansion
+	// +kubebuilder:validation:Minimum=50
+	// +kubebuilder:validation:Maximum=95
+	// +kubebuilder:default=80
+	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
+
+	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:default="2Gi"
+	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
+
+	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
+	// If set, autoscaling will not increase storage beyond this limit
+	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+}
+
+// StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
+type StorageAutoscalingStatus struct {
+	CurrentSize    string      `json:"currentSize,omitempty"`
+	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
+	ResizeCount    int32       `json:"resizeCount,omitempty"`
+	LastError      string      `json:"lastError,omitempty"`
+}
+
+// StorageScalingSpec defines the configuration for storage scaling behavior
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || self.enableVolumeScaling",message="autoscaling cannot be enabled when enableVolumeScaling is disabled"
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || !has(self.enableExternalAutoscaling) || !self.enableExternalAutoscaling",message="autoscaling cannot be enabled when enableExternalAutoscaling is enabled"
+type StorageScalingSpec struct {
+	// EnableExternalAutoscaling delegates volume autoscaling to an external system (e.g., Kubernetes VPA)
+	// When enabled, the operator skips internal autoscaling and resize operations
+	EnableExternalAutoscaling bool `json:"enableExternalAutoscaling,omitempty"`
+
+	// EnableVolumeScaling allows volume expansion/resizing operations
+	// When disabled, PVC sizes will not be modified even if storage changes in the spec
+	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
+
+	// Autoscaling configures automatic storage expansion based on disk usage
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -972,12 +1139,6 @@ type MongodSpecMMAPv1 struct {
 
 type WiredTigerCompressor string
 
-var (
-	WiredTigerCompressorNone   WiredTigerCompressor = "none"
-	WiredTigerCompressorSnappy WiredTigerCompressor = "snappy"
-	WiredTigerCompressorZlib   WiredTigerCompressor = "zlib"
-)
-
 type MongodSpecWiredTigerEngineConfig struct {
 	CacheSizeRatio      numstr.NumberString   `json:"cacheSizeRatio,omitempty"`
 	DirectoryForIndexes bool                  `json:"directoryForIndexes,omitempty"`
@@ -1018,7 +1179,12 @@ type BackupTaskSpec struct {
 	CompressionType  compress.CompressionType `json:"compressionType,omitempty"`
 	CompressionLevel *int                     `json:"compressionLevel,omitempty"`
 
-	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base}
+	// VolumeSnapshotClass is the name of the VolumeSnapshotClass to use for snapshot based backups.
+	// This may be specified only when type is `external`.
+	// +kubebuilder:validation:Optional
+	VolumeSnapshotClass *string `json:"volumeSnapshotClass,omitempty"`
+
+	// +kubebuilder:validation:Enum={logical,physical,incremental,incremental-base,external}
 	Type defs.BackupType `json:"type,omitempty"`
 }
 
@@ -1093,17 +1259,18 @@ type BackupStorageS3Spec struct {
 }
 
 type BackupStorageMinioSpec struct {
-	Bucket                string        `json:"bucket,omitempty"`
-	Prefix                string        `json:"prefix,omitempty"`
-	Region                string        `json:"region,omitempty"`
-	EndpointURL           string        `json:"endpointUrl,omitempty"`
-	CredentialsSecret     string        `json:"credentialsSecret,omitempty"`
-	PartSize              int64         `json:"partSize,omitempty"`
-	InsecureSkipTLSVerify bool          `json:"insecureSkipTLSVerify,omitempty"`
-	ForcePathStyle        *bool         `json:"forcePathStyle,omitempty"`
-	DebugTrace            bool          `json:"debugTrace,omitempty"`
-	Retryer               *MinioRetryer `json:"retryer,omitempty"`
-	Secure                bool          `json:"secure,omitempty"`
+	Bucket                string                    `json:"bucket,omitempty"`
+	Prefix                string                    `json:"prefix,omitempty"`
+	Region                string                    `json:"region,omitempty"`
+	EndpointURL           string                    `json:"endpointUrl,omitempty"`
+	CredentialsSecret     string                    `json:"credentialsSecret,omitempty"`
+	PartSize              int64                     `json:"partSize,omitempty"`
+	InsecureSkipTLSVerify bool                      `json:"insecureSkipTLSVerify,omitempty"`
+	CABundle              *corev1.SecretKeySelector `json:"caBundle,omitempty"`
+	ForcePathStyle        *bool                     `json:"forcePathStyle,omitempty"`
+	DebugTrace            bool                      `json:"debugTrace,omitempty"`
+	Retryer               *MinioRetryer             `json:"retryer,omitempty"`
+	Secure                bool                      `json:"secure,omitempty"`
 }
 
 func (spec BackupStorageMinioSpec) Validate() error {
@@ -1222,7 +1389,10 @@ type BackupSpec struct {
 	PITR                     PITRSpec                     `json:"pitr,omitempty"`
 	Configuration            BackupConfig                 `json:"configuration,omitempty"`
 	VolumeMounts             []corev1.VolumeMount         `json:"volumeMounts,omitempty"`
-	StartingDeadlineSeconds  *int64                       `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=120
+	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
+	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1440,6 +1610,15 @@ func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
+func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, 0)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
+}
+
 func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if backup is allowed")
@@ -1489,33 +1668,6 @@ func (s *PerconaServerMongoDBStatus) RemoveCondition(conditionType AppState) {
 	}
 }
 
-func (s *PerconaServerMongoDBStatus) AddCondition(c ClusterCondition) {
-	existingCondition := s.FindCondition(c.Type)
-	if existingCondition == nil {
-		if c.LastTransitionTime.IsZero() {
-			c.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-		s.Conditions = append(s.Conditions, c)
-		return
-	}
-
-	if existingCondition.Status != c.Status {
-		existingCondition.Status = c.Status
-		if !c.LastTransitionTime.IsZero() {
-			existingCondition.LastTransitionTime = c.LastTransitionTime
-		} else {
-			existingCondition.LastTransitionTime = metav1.NewTime(time.Now())
-		}
-	}
-
-	if existingCondition.Reason != c.Reason {
-		existingCondition.Reason = c.Reason
-	}
-	if existingCondition.Message != c.Message {
-		existingCondition.Message = c.Message
-	}
-}
-
 // GetExternalNodes returns all external nodes for all replsets
 func (cr *PerconaServerMongoDB) GetExternalNodes() []*ExternalNode {
 	extNodes := make([]*ExternalNode, 0)
@@ -1553,10 +1705,15 @@ func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 }
 
 const (
-	AnnotationResyncPBM           = "percona.com/resync-pbm"
-	AnnotationResyncInProgress    = "percona.com/resync-in-progress"
-	AnnotationPVCResizeInProgress = "percona.com/pvc-resize-in-progress"
+	AnnotationResyncPBM                = "percona.com/resync-pbm"
+	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
+	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
+
+func AnnotationPreservedRestartedAt(stsName string) string {
+	return annotationPreservedRestartedAtBase + "." + stsName
+}
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 	v, ok := cr.Annotations[AnnotationResyncPBM]
@@ -1579,8 +1736,34 @@ type LogCollectorSpec struct {
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
+	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+}
+
+// LogRotateSpec defines the configuration for the logrotate container.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	Configuration string `json:"configuration,omitempty"`
+	// ExtraConfig allows specifying logrotate configuration file in addition to the main configuration file.
+	// This should be a reference to a ConfigMap or a Secret in the same namespace.
+	// Key must contain the .conf extension to be processed correctly.
+	//
+	// NOTE: mongodb.conf is reserved for the default configuration specified by .configuration field.
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+	// Schedule allows specifying the schedule for logrotate.
+	// This should be a valid cron expression.
+	//+kubebuilder:default:="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
+	replsets := make([]*ReplsetSpec, len(cr.Spec.Replsets))
+	copy(replsets, cr.Spec.Replsets)
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	return replsets
 }

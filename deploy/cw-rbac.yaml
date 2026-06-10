@@ -122,6 +122,13 @@ rules:
   - create
   - patch
 - apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - certmanager.k8s.io
   - cert-manager.io
   resources:
@@ -152,6 +159,16 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
 ---
 apiVersion: v1
 kind: ServiceAccount

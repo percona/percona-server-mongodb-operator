@@ -57,7 +57,7 @@ echo "Drop collection"
 run_mongos_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
 echo 'Check backup and restore -- minio'
 backup_dest_minio=$(get_backup_dest "${backup_name_minio}")
-run_restore ${backup_name_minio} "_restore_sharded"
+run_restore ${backup_name_minio}
 run_recovery_check ${backup_name_minio} "_restore_sharded" "sharded" "true"
 
 destroy "$namespace"

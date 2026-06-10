@@ -68,9 +68,9 @@ _mongod_hack_have_arg() {
 	local arg
 	for arg; do
 		case "$arg" in
-		"$checkArg" | "$checkArg"=*)
-			return 0
-			;;
+			"$checkArg" | "$checkArg"=*)
+				return 0
+				;;
 		esac
 	done
 	return 1
@@ -83,14 +83,14 @@ _mongod_hack_get_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-		"$checkArg")
-			echo "$1"
-			return 0
-			;;
-		"$checkArg"=*)
-			echo "${arg#"$checkArg"=}"
-			return 0
-			;;
+			"$checkArg")
+				echo "$1"
+				return 0
+				;;
+			"$checkArg"=*)
+				echo "${arg#"$checkArg"=}"
+				return 0
+				;;
 		esac
 	done
 	return 1
@@ -131,14 +131,14 @@ _mongod_hack_ensure_no_arg_val() {
 		local arg="$1"
 		shift
 		case "$arg" in
-		"$ensureNoArg")
-			shift # also skip the value
-			continue
-			;;
-		"$ensureNoArg"=*)
-			# value is already included
-			continue
-			;;
+			"$ensureNoArg")
+				shift # also skip the value
+				continue
+				;;
+			"$ensureNoArg"=*)
+				# value is already included
+				continue
+				;;
 		esac
 		mongodHackedArgs+=("$arg")
 	done
@@ -174,7 +174,7 @@ _mongod_hack_rename_arg_save_val() {
 			val="$1"
 			shift
 			continue
-		elif [[ $arg =~ "$oldArg"=(.*) ]]; then
+		elif [[ $arg =~ ^${oldArg}=(.*)$ ]]; then
 			val=${BASH_REMATCH[1]}
 			continue
 		fi
@@ -245,11 +245,26 @@ _dbPath() {
 	echo "$dbPath"
 }
 
+# generate_pem_files concatenates the TLS key and cert into the .pem files
+generate_pem_files() {
+	MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
+	if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
+		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
+	fi
+	MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
+	if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
+		cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
+	fi
+}
+
 is_manual_recovery() {
 	recovery_file='/data/db/sleep-forever'
 	if [ -f "${recovery_file}" ]; then
 		echo "The $recovery_file file is detected, node is going to infinity loop"
 		echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+		# Generate the .pem files so a user who execs into the container during
+		# sleep-forever mode can start mongod manually without recreating them.
+		generate_pem_files
 		while [ -f "${recovery_file}" ]; do
 			sleep 1
 		done
@@ -282,10 +297,10 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		# if we've got any /docker-entrypoint-initdb.d/* files to parse later, we should initdb
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-			*.sh | *.js) # this should match the set of files we check for below
-				shouldPerformInitdb="$f"
-				break
-				;;
+				*.sh | *.js) # this should match the set of files we check for below
+					shouldPerformInitdb="$f"
+					break
+					;;
 			esac
 		done
 	fi
@@ -387,17 +402,17 @@ if [ "$originalArgOne" = 'mongod' ]; then
 		echo
 		for f in /docker-entrypoint-initdb.d/*; do
 			case "$f" in
-			*.sh)
-				echo "$0: running $f"
-				# shellcheck source=/dev/null
-				. "$f"
-				;;
-			*.js)
-				echo "$0: running $f"
-				"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
-				echo
-				;;
-			*) echo "$0: ignoring $f" ;;
+				*.sh)
+					echo "$0: running $f"
+					# shellcheck source=/dev/null
+					. "$f"
+					;;
+				*.js)
+					echo "$0: running $f"
+					"${mongo[@]}" "$MONGO_INITDB_DATABASE" "$f"
+					echo
+					;;
+				*) echo "$0: ignoring $f" ;;
 			esac
 			echo
 		done
@@ -440,16 +455,17 @@ if [[ $originalArgOne == mongo* ]]; then
 		if [ -f "${MONGO_SSL_DIR}/ca.crt" ]; then
 			CA="${MONGO_SSL_DIR}/ca.crt"
 		fi
+
+		generate_pem_files
+
+		MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
 		if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
-			cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
 			_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
 			if [ -f "${CA}" ]; then
 				_mongod_hack_ensure_arg_val --sslCAFile "${CA}" "${mongodHackedArgs[@]}"
 			fi
 		fi
-		MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
 		if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
-			cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
 			_mongod_hack_ensure_arg_val --sslClusterFile /tmp/tls-internal.pem "${mongodHackedArgs[@]}"
 			if [ -f "${MONGO_SSL_INTERNAL_DIR}/ca.crt" ]; then
 				_mongod_hack_ensure_arg_val --sslClusterCAFile "${MONGO_SSL_INTERNAL_DIR}/ca.crt" "${mongodHackedArgs[@]}"
@@ -508,6 +524,9 @@ if [[ $originalArgOne == mongo* ]]; then
 fi
 
 rm -f "$jsonConfigFile" "$tempConfigFile"
+
+# shellcheck disable=SC1091
+test -e /opt/percona/hookscript/hook.sh && source /opt/percona/hookscript/hook.sh
 
 set -o xtrace
 exec "$@"

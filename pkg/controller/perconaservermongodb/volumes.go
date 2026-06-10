@@ -48,7 +48,7 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) 
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
-	if cr.Spec.EnableExternalVolumeAutoscaling {
+	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		return nil
 	}
 
@@ -130,6 +130,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
+	originalRequested := requested.DeepCopy()
 	gib, err := RoundUpGiB(requested.Value())
 	if err != nil {
 		return errors.Wrap(err, "round GiB value")
@@ -206,6 +207,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		if updatedPVCs == len(pvcsToUpdate) {
 			log.Info("Deleting statefulset")
 
+			if restartedAtValue, exists := sts.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]; exists {
+				if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
+					log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err, "sts", sts.Name)
+				}
+			}
+
 			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil
@@ -223,11 +230,11 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
 
-	if requested.Cmp(actual) == 0 {
+	if actual.Cmp(originalRequested) >= 0 {
 		return nil
 	}
 
-	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.VolumeExpansionEnabled {
+	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.IsVolumeExpansionEnabled() {
 		// If expansion is disabled we should keep the old value
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil
@@ -243,6 +250,13 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	for _, pvc := range pvcList.Items {
 		if !slices.Contains(pvcsToUpdate, pvc.Name) {
 			continue
+		}
+
+		// Re-read the PVC to get the latest resourceVersion before updating,
+		// as it may have been modified since the initial list (e.g. by fixVolumeLabels
+		// or by the Kubernetes PVC controller).
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(&pvc), &pvc); err != nil {
+			return errors.Wrapf(err, "get persistentvolumeclaim/%s", pvc.Name)
 		}
 
 		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {

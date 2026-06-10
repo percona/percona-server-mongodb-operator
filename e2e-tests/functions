@@ -17,7 +17,75 @@ IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-CERT_MANAGER_VER="1.19.1"
+
+REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
+REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
+
+detect_k8s_env() {
+	local provider="unknown"
+	if kubectl_bin api-resources | grep -q 'openshift.io' 2>/dev/null; then
+		provider="openshift"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+		provider="eks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
+		provider="gke"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
+		provider="aks"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
+		provider="kind"
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
+		provider="minikube"
+	fi
+
+	echo "$provider"
+}
+
+qualify_image_ref() {
+	local ref="$1"
+	local first="${ref%%/*}"
+
+	if [[ $first == *.* || $first == *:* || $first == "localhost" ]]; then
+		printf '%s' "$ref"
+		return 0
+	fi
+
+	if [[ $ref == percona/* || $ref == perconalab/* ]]; then
+		printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
+		return 0
+	fi
+
+	printf '%s' "$ref"
+}
+
+qualify_image_var() {
+	local var="$1"
+	local val="${!var}"
+	local out=""
+	local ref
+
+	[[ -z $val ]] && return 0
+
+	if [[ $val == *$'\n'* ]]; then
+		while IFS= read -r ref; do
+			[[ -z $ref ]] && continue
+			out+=$(qualify_image_ref "$ref")
+			out+=$'\n'
+		done <<<"$val"
+		out="${out%$'\n'}"
+		printf -v "$var" '%s' "$out"
+		return 0
+	fi
+
+	printf -v "$var" '%s' "$(qualify_image_ref "$val")"
+}
+
+for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
+		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
+		IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
+	qualify_image_var "$var"
+done
+CERT_MANAGER_VER="1.19.3"
 MINIO_VER="5.4.0"
 CHAOS_MESH_VER="2.7.1"
 UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
@@ -61,7 +129,7 @@ minikube_sleep() {
 	fi
 }
 
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "-eks-") ]; then
 	EKS=1
 else
 	EKS=0
@@ -131,7 +199,7 @@ create_namespace() {
 		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
 		kubectl_bin get ns \
-			| egrep -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
+			| grep -E -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -307,10 +375,11 @@ wait_for_pbm_operations() {
 
 run_restore() {
 	local backup_name=$1
+	local restore_file=${2:-$test_dir/conf/restore.yml}
 
 	log "running restore restore-$backup_name"
 
-	cat $test_dir/conf/restore.yml \
+	cat ${restore_file} \
 		| $sed -e "s/name:/name: restore-$backup_name/" \
 		| $sed -e "s/backupName:/backupName: $backup_name/" \
 		| kubectl_bin apply -f -
@@ -562,44 +631,67 @@ deploy_operator_gh_release() {
 }
 
 deploy_minio() {
-	desc 'install Minio'
-	helm uninstall minio-service || :
-	helm repo remove minio || :
-	helm repo add minio https://charts.min.io/
-	# kubectl_bin delete pvc minio-service --force
-	retry 10 60 helm install minio-service \
-		--version $MINIO_VER \
-		--set replicas=1 \
-		--set mode=standalone \
-		--set resources.requests.memory=256Mi \
-		--set rootUser=rootuser \
-		--set rootPassword=rootpass123 \
-		--set "users[0].accessKey=some-access-key" \
-		--set "users[0].secretKey=some-secret-key" \
-		--set "users[0].policy=consoleAdmin" \
-		--set service.type=ClusterIP \
-		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size=2G \
-		--set securityContext.enabled=false \
-		minio/minio
-	MINIO_POD=$(kubectl_bin get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-	wait_pod $MINIO_POD
+  local cert_secret="$1"
+  local service_name="${2:-minio-service}"
 
-	if [ -n "$OPERATOR_NS" ]; then
-		kubectl_bin create svc -n ${OPERATOR_NS} externalname minio-service --external-name="minio-service.${namespace}.svc.cluster.local" --tcp="9000"
-	fi
+  desc "install MinIO: ${service_name}"
 
-	create_minio_bucket operator-testing
+  # Cleanup old installation
+  helm uninstall "${service_name}" 2>/dev/null || :
+  helm repo remove minio 2>/dev/null || :
+  helm repo add minio https://charts.min.io/
+
+  local endpoint="http://${service_name}:9000"
+  local minio_args=(
+    --version $MINIO_VER
+    --set replicas=1
+    --set mode=standalone
+    --set resources.requests.memory=256Mi
+    --set rootUser=rootuser
+    --set rootPassword=rootpass123
+    --set "users[0].accessKey=some-access-key"
+    --set "users[0].secretKey=some-secret-key"
+    --set "users[0].policy=consoleAdmin"
+    --set service.type=ClusterIP
+    --set configPathmc=/tmp/
+    --set securityContext.enabled=false
+    --set persistence.size=2G
+    --set fullnameOverride="${service_name}"
+    --set serviceAccount.create=true
+    --set serviceAccount.name="${service_name}-sa"
+  )
+
+  if [[ -n $cert_secret ]]; then
+    endpoint="https://${service_name}:9000"
+    minio_args+=(
+      --set tls.enabled=true
+      --set tls.certSecret="$cert_secret"
+    )
+  fi
+
+  retry 10 60 helm install "${service_name}" "${minio_args[@]}" minio/minio
+
+  local MINIO_POD=$(kubectl_bin get pods --selector=release="${service_name}" -o 'jsonpath={.items[].metadata.name}')
+  wait_pod $MINIO_POD
+
+  if [ -n "$OPERATOR_NS" ]; then
+    kubectl_bin create svc -n ${OPERATOR_NS} externalname "${service_name}" \
+      --external-name="${service_name}.${namespace}.svc.cluster.local" \
+      --tcp="9000" 2>/dev/null || :
+  fi
+
+  create_minio_bucket operator-testing $endpoint
 }
 
 create_minio_bucket() {
 	local bucket=$1
+	local endpoint=$2
 
-	kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID=some-access-key \
 		AWS_SECRET_ACCESS_KEY=some-secret-key \
 		AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://${bucket}"
+        /usr/bin/aws --no-verify-ssl --endpoint-url ${endpoint} s3 mb s3://${bucket}"
 }
 
 deploy_vault() {
@@ -1058,7 +1150,7 @@ get_pmm_service_ip() {
 	while (kubectl_bin get service/$service -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1081,7 +1173,7 @@ get_service_ip() {
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1113,7 +1205,7 @@ compare_mongo_cmd() {
 	fi
 
 	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
-		| egrep -v 'I NETWORK|W NETWORK|F NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|"c":"NETWORK"|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -1143,7 +1235,7 @@ compare_mongos_cmd() {
 	log "running db.${collection}.command() in ${database}"
 
 	$mongos_command "use ${database}\n db.${collection}.${command}()" "$uri" "mongodb" "$suffix" "" "$port" \
-		| egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
 		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
 			>$tmp_dir/${command}${postfix}
 
@@ -1158,7 +1250,7 @@ get_mongo_primary_endpoint() {
 	local uri="$1"
 
 	run_mongo 'db.hello().me' "$uri" "mongodb" ":27017" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| grep -E -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| grep ":27017$"
 }
@@ -1216,7 +1308,7 @@ compare_mongo_user() {
 	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
-		| egrep -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
+		| grep -E -v "Time|Percona Server for MongoDB|bye|BinData|NumberLong|connecting to|Error saving history file|I NETWORK|W NETWORK|Implicit session:|versions do not match" \
 		| sed -e 's^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]+[0-9][0-9][0-9][0-9]^^' \
 		| $sed -e '/"ok" : 1/,+4d' \
 		| sed -e '$s/,$/}/' \
@@ -1251,6 +1343,10 @@ deploy_cert_manager() {
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl_bin apply -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --validate=false || : 2>/dev/null
+	for arg in "$@"; do
+		kubectl_bin patch deployment cert-manager -n cert-manager --type='json' \
+			-p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"'"$arg"'"}]'
+	done
 	kubectl_bin -n cert-manager wait pod -l app.kubernetes.io/instance=cert-manager --for=condition=ready
 	sleep 120
 }
@@ -1550,7 +1646,7 @@ getSecretData() {
 check_mongo_auth() {
 	local uri="$1"
 
-	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | egrep -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
+	ping=$(run_mongo "db.runCommand({ ping: 1 }).ok" "$uri" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
 	desc "ping return"
 	if [ "${ping}" != "1" ]; then
 		return 1
@@ -2163,7 +2259,7 @@ wait_for_cluster_state() {
 		echo -n '.'
 		if [[ ${timeout} -gt 1500 ]]; then
 			echo
-			echo "Waiting timeout has been reached. Exiting..."
+			log "Waiting timeout has been reached. Exiting..."
 			exit 1
 		fi
 	done
@@ -2424,6 +2520,7 @@ check_backup_in_storage() {
 	local storage_type=$2
 	local replset=$3
 	local file=${4:-"filelist.pbm"}
+	local protocol=${5:-"http"}
 
 	local endpoint
 	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
@@ -2445,9 +2542,9 @@ check_backup_in_storage() {
 			;;
 		minio)
 			endpoint="minio-service"
-			until kubectl_bin run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+			until kubectl_bin run -i --rm aws-cli --image=docker.io/perconalab/awscli --restart=Never -- \
 				/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-				/usr/bin/aws --endpoint-url http://${endpoint}:9000 s3 ls "s3://${backup_dest}/${replset}/${file}" \
+				/usr/bin/aws --no-verify-ssl --endpoint-url "${protocol}://${endpoint}:9000" s3 ls "s3://${backup_dest}/${replset}/${file}" \
 				| grep "${file}"; do
 				sleep 1
 				let retry+=1
@@ -2499,4 +2596,23 @@ function wait_pvc_resize() {
 	echo
 	echo "${pvc} was resized"
 	return 0
+}
+
+deploy_volume_snapshot_class() {
+	local snapshot_class_file
+	local k8s_env
+	k8s_env=$(detect_k8s_env)
+
+	case "$k8s_env" in
+		gke)
+			snapshot_class_file="${conf_dir}/gke-volume-snapshot-class.yaml"
+			;;
+		*)
+			echo "Unsupported Kubernetes environment for volume snapshot class: $k8s_env" >&2
+			return 1
+			;;
+	esac
+
+	kubectl_bin apply -f "${snapshot_class_file}" >&2
+	yq eval '.metadata.name' "${snapshot_class_file}"
 }

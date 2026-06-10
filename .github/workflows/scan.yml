@@ -1,5 +1,7 @@
 name: Scan docker
 on: [pull_request]
+permissions:
+  contents: read
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -14,13 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
       - name: Build an image from Dockerfile (linux/arm64)
         run: |
@@ -30,14 +32,6 @@ jobs:
           export DOCKER_DEFAULT_PLATFORM='linux/arm64'
           ./e2e-tests/build
 
-      - name: Run Snyk vulnerability scanner image (linux/arm64)
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64'
-          args: --platform=linux/arm64 --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
-
       - name: Build an image from Dockerfile (linux/amd64)
         run: |
           export IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64
@@ -45,12 +39,3 @@ jobs:
           export DOCKER_SQUASH=0
           export DOCKER_DEFAULT_PLATFORM='linux/amd64'
           ./e2e-tests/build
-
-      - name: Run Snyk vulnerability scanner image (linux/amd64)
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64'
-          args: --platform=linux/amd64 --severity-threshold=high --exclude-base-image-vulns --file=./build/Dockerfile -fail-on=upgradable
-

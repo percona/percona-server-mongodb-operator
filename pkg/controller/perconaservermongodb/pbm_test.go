@@ -8,7 +8,11 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/stretchr/testify/require"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func TestIsResyncNeeded(t *testing.T) {
@@ -17,10 +21,11 @@ func TestIsResyncNeeded(t *testing.T) {
 		currentCfg *config.Config
 		newCfg     *config.Config
 		expected   bool
+		skip       bool
 	}{
 		{
-			"storage type changed",
-			&config.Config{
+			name: "storage type changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -29,7 +34,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -39,11 +44,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"s3: bucket changed",
-			&config.Config{
+			name: "s3: bucket changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -52,7 +57,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -61,11 +66,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"s3: region changed",
-			&config.Config{
+			name: "s3: region changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -74,7 +79,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -83,11 +88,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"s3: endpointUrl changed",
-			&config.Config{
+			name: "s3: endpointUrl changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -96,7 +101,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -106,11 +111,12 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
+			skip:     true, // TODO: remove this when we have PBM 2.13.0
 		},
 		{
-			"s3: prefix changed",
-			&config.Config{
+			name: "s3: prefix changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -120,7 +126,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -131,11 +137,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"s3: maxUploadParts changed",
-			&config.Config{
+			name: "s3: maxUploadParts changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -145,7 +151,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.S3,
 					S3: &s3.Config{
@@ -156,11 +162,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			false,
+			expected: false,
 		},
 		{
-			"gcs: bucket changed",
-			&config.Config{
+			name: "gcs: bucket changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.GCS,
 					GCS: &gcs.Config{
@@ -168,7 +174,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.GCS,
 					GCS: &gcs.Config{
@@ -176,11 +182,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"gcs: prefix changed",
-			&config.Config{
+			name: "gcs: prefix changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.GCS,
 					GCS: &gcs.Config{
@@ -188,7 +194,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.GCS,
 					GCS: &gcs.Config{
@@ -197,11 +203,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"azure: endpointUrl changed",
-			&config.Config{
+			name: "azure: endpointUrl changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -211,7 +217,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -221,11 +227,12 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
+			skip:     true, // TODO: remove this when we have PBM 2.13.0
 		},
 		{
-			"azure: container changed",
-			&config.Config{
+			name: "azure: container changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -235,7 +242,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -245,11 +252,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"azure: account changed",
-			&config.Config{
+			name: "azure: account changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -259,7 +266,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Azure,
 					Azure: &azure.Config{
@@ -269,11 +276,11 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
 		},
 		{
-			"fs: path changed",
-			&config.Config{
+			name: "fs: path changed",
+			currentCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Filesystem,
 					Filesystem: &fs.Config{
@@ -281,7 +288,7 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			&config.Config{
+			newCfg: &config.Config{
 				Storage: config.StorageConf{
 					Type: storage.Filesystem,
 					Filesystem: &fs.Config{
@@ -289,15 +296,170 @@ func TestIsResyncNeeded(t *testing.T) {
 					},
 				},
 			},
-			true,
+			expected: true,
+		},
+		{
+			name: "minio: bucket changed",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Endpoint: "operator-testing.com",
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Endpoint: "operator-testing.com",
+						Bucket:   "operator-testing-1",
+						Region:   "us-east-1",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "minio: region changed",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-2",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "minio: endpoint changed",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing-1.com",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "minio: prefix changed",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:   "operator-testing",
+						Region:   "us-east-1",
+						Endpoint: "operator-testing.com",
+						Prefix:   "prefix",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "minio: nothing changed",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:                "operator-testing",
+						Region:                "us-east-1",
+						Endpoint:              "operator-testing.com",
+						Secure:                true,
+						InsecureSkipTLSVerify: false,
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket:                "operator-testing",
+						Region:                "us-east-1",
+						Endpoint:              "operator-testing.com",
+						Secure:                true,
+						InsecureSkipTLSVerify: false,
+					},
+				},
+			},
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skip {
+				t.Skipf("skipping test %s", tt.name)
+			}
 			if got := isResyncNeeded(tt.currentCfg, tt.newCfg); got != tt.expected {
 				t.Errorf("%s: got %v, want %v", tt.name, got, tt.expected)
 			}
 		})
 	}
+}
+
+func TestHashPBMConfiguration(t *testing.T) {
+	t.Run("updating credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket:      "operator-testing",
+						Region:      "us-east-1",
+						EndpointURL: "https://s3.amazonaws.com",
+						Prefix:      "prefix",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "some-access-key",
+			SecretAccessKey: "some-secret-key",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
 }

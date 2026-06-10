@@ -12,9 +12,15 @@ spec:
 #  clusterServiceDNSMode: "Internal"
 #  pause: true
 #  unmanaged: false
-#  enableVolumeExpansion: false
-#  enableExternalVolumeAutoscaling: false
-  crVersion: 1.22.0
+#  storageScaling:
+#   enableExternalAutoscaling: false
+#   enableVolumeScaling: false
+#   autoscaling:
+#     enabled: false
+#     triggerThresholdPercent: 80
+#     growthStep: 2Gi
+#     maxSize: "10Gi"
+  crVersion: 1.23.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -37,6 +43,7 @@ spec:
 #    terminationGracePeriod: false
 #    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
+#  revisionHistoryLimit: 10
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -70,6 +77,7 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
@@ -191,6 +199,12 @@ spec:
 #      runAsGroup: 1001
 #      supplementalGroups: [1001]
 #    runtimeClassName: image-rc
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    sidecars:
 #    - image: busybox
 #      command: ["/bin/sh"]
@@ -303,6 +317,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -364,6 +384,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -416,6 +442,12 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      priorityClassName: high-priority
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      annotations:
 #        iam.amazonaws.com/role: role-arn
 #      labels:
@@ -512,6 +544,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      env:
 #      - name: KEY
 #        value: VALUE
@@ -623,6 +661,12 @@ spec:
 #        runAsGroup: 1001
 #        supplementalGroups: [1001]
 #      runtimeClassName: image-rc
+#      hookScript:
+#        configMapRef:
+#          name: hookscript-configmap
+#        script: |
+#          #!/usr/bin/env bash
+#          echo "Hookscript started"
 #      env:
 #      - name: KEY
 #        value: VALUE
@@ -719,6 +763,12 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
 #    startingDeadlineSeconds: 300
+#    hookScript:
+#      configMapRef:
+#        name: hookscript-configmap
+#      script: |
+#        #!/usr/bin/env bash
+#        echo "Hookscript started"
 #    annotations:
 #      iam.amazonaws.com/role: role-arn
 #    resources:
@@ -731,7 +781,7 @@ spec:
 #    containerSecurityContext:
 #      privileged: false
 #    storages:
-#      s3-us-west:
+#      s3-us-east:
 #        main: true
 #        type: s3
 #        s3:
@@ -746,7 +796,7 @@ spec:
 #            numMaxRetries: 3
 #            minRetryDelay: 30ms
 #            maxRetryDelay: 5m
-#          region: us-west-2
+#          region: us-east-1
 #          prefix: ""
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
@@ -763,15 +813,6 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
-#      minio-s3:
-#        type: s3
-#        s3:
-#          bucket: MINIO-BACKUP-BUCKET-NAME-HERE
-#          region: us-east-1
-#          credentialsSecret: my-cluster-name-backup-minio
-#          endpointUrl: http://minio.psmdb.svc.cluster.local:9000/minio/
-#          insecureSkipTLSVerify: false
-#          prefix: ""
 #      minio:
 #        type: minio
 #        minio:
@@ -780,6 +821,9 @@ spec:
 #          credentialsSecret: my-cluster-name-backup-minio
 #          endpointUrl: minio.psmdb.svc.cluster.local:9000/minio/
 #          insecureSkipTLSVerify: false
+#          caBundle:
+#           name: minio-ca-bundle
+#           key: ca.crt
 #          prefix: ""
 #          secure: false
 #      azure-blob:
@@ -872,6 +916,15 @@ spec:
 #        storageName: s3-us-west
 #        compressionType: gzip
 #        compressionLevel: 6
+#      - name: daily-snapshot
+#        enabled: false
+#        schedule: "0 0 * * *"
+#        retention:
+#          count: 1
+#          type: count
+#          deleteFromStorage: true
+#        type: external
+#        volumeSnapshotClass: YOUR-VOLUME-SNAPSHOT-CLASS
   logcollector:
     enabled: true
     image: perconalab/fluentbit:main-logcollector
@@ -884,3 +937,23 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    logrotate:
+#      configuration: |
+#        /data/db/logs/mongod.full.log {
+#           daily
+#           maxsize 100M
+#           rotate 7
+#           missingok
+#           nocompress
+#           notifempty
+#           copytruncate
+#           prerotate
+#               # rotate mongod.log using 'db.adminCommand({ logRotate: 1 })'
+#               mongosh "mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOST}:${MONGODB_PORT}/admin" \
+#                 --eval 'db.adminCommand({ logRotate: 1 })'
+#               find /data/db/logs/ -type f -name 'mongod.log.*' -mtime +7 -delete
+#           endscript
+#        }
+#      extraConfig:
+#        name: logrotate-config
+#      schedule: "0 0 * * *"

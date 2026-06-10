@@ -134,12 +134,12 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, cr *psmdbv1
 		switch pitr.Type {
 		case psmdbv1.PITRestoreTypeDate:
 			ts := pitr.Date.Unix()
-			if _, err := pbmc.GetPITRChunkContains(ctx, ts); err != nil {
+			if _, err := pbmc.GetPITRChunkContains(ctx, ts, cr.Spec.RSMap); err != nil {
 				return "", err
 			}
 			cmd.Restore.OplogTS = primitive.Timestamp{T: uint32(ts)}
 		case psmdbv1.PITRestoreTypeLatest:
-			tl, err := pbmc.GetLatestTimelinePITR(ctx)
+			tl, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
 			if err != nil {
 				return "", err
 			}

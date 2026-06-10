@@ -15,6 +15,7 @@
 package db
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"os"
@@ -40,8 +41,8 @@ func (sc *SSLConfig) loadCaCertificate() (*x509.CertPool, error) {
 	return certificates, nil
 }
 
-func (cnf *Config) configureTLS() error {
-	log := logf.Log
+func (cnf *Config) configureTLS(ctx context.Context) error {
+	log := logf.FromContext(ctx).WithName("configureTLS")
 
 	if !cnf.SSL.Enabled {
 		return nil
@@ -72,7 +73,7 @@ func (cnf *Config) configureTLS() error {
 			return errors.Wrapf(err, "check if file with name %s exists", cnf.SSL.CAFile)
 		}
 
-		log.V(1).Info("Loading SSL/TLS Certificate Authority: %s", "ca", cnf.SSL.CAFile)
+		log.V(1).Info("Loading SSL/TLS Certificate Authority", "ca", cnf.SSL.CAFile)
 		ca, err := cnf.SSL.loadCaCertificate()
 		if err != nil {
 			return errors.Wrapf(err, "load client CAs from %s", cnf.SSL.CAFile)

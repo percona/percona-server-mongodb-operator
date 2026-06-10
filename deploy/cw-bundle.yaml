@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbbackups.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -72,7 +72,9 @@ spec:
               compressionType:
                 type: string
               startingDeadlineSeconds:
+                default: 120
                 format: int64
+                minimum: 1
                 type: integer
               storageName:
                 type: string
@@ -80,8 +82,11 @@ spec:
                 enum:
                 - logical
                 - physical
+                - external
                 - incremental
                 - incremental-base
+                type: string
+              volumeSnapshotClass:
                 type: string
             type: object
           status:
@@ -155,6 +160,19 @@ spec:
                 properties:
                   bucket:
                     type: string
+                  caBundle:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   credentialsSecret:
                     type: string
                   debugTrace:
@@ -244,6 +262,15 @@ spec:
                 type: object
               size:
                 type: string
+              snapshots:
+                items:
+                  properties:
+                    replsetName:
+                      type: string
+                    snapshotName:
+                      type: string
+                  type: object
+                type: array
               start:
                 format: date-time
                 type: string
@@ -269,7 +296,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbrestores.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -380,6 +407,19 @@ spec:
                     properties:
                       bucket:
                         type: string
+                      caBundle:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       credentialsSecret:
                         type: string
                       debugTrace:
@@ -469,6 +509,15 @@ spec:
                     type: object
                   size:
                     type: string
+                  snapshots:
+                    items:
+                      properties:
+                        replsetName:
+                          type: string
+                        snapshotName:
+                          type: string
+                      type: object
+                    type: array
                   start:
                     format: date-time
                     type: string
@@ -516,6 +565,42 @@ spec:
               completed:
                 format: date-time
                 type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
               error:
                 type: string
               lastTransition:
@@ -543,7 +628,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb-operator
-    app.kubernetes.io/version: v1.22.0
+    app.kubernetes.io/version: v1.23.0
   name: perconaservermongodbs.psmdb.percona.com
 spec:
   group: psmdb.percona.com
@@ -1022,6 +1107,16 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  hookScript:
+                    properties:
+                      configMapRef:
+                        properties:
+                          name:
+                            type: string
+                        type: object
+                      script:
+                        type: string
+                    type: object
                   image:
                     type: string
                   labels:
@@ -1158,7 +1253,9 @@ spec:
                   serviceAccountName:
                     type: string
                   startingDeadlineSeconds:
+                    default: 120
                     format: int64
+                    minimum: 1
                     type: integer
                   storages:
                     additionalProperties:
@@ -1218,6 +1315,19 @@ spec:
                           properties:
                             bucket:
                               type: string
+                            caBundle:
+                              properties:
+                                key:
+                                  type: string
+                                name:
+                                  default: ""
+                                  type: string
+                                optional:
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
                             credentialsSecret:
                               type: string
                             debugTrace:
@@ -1338,6 +1448,9 @@ spec:
                           - physical
                           - incremental
                           - incremental-base
+                          - external
+                          type: string
+                        volumeSnapshotClass:
                           type: string
                       required:
                       - enabled
@@ -1665,6 +1778,21 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  logrotate:
+                    properties:
+                      configuration:
+                        type: string
+                      extraConfig:
+                        properties:
+                          name:
+                            default: ""
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      schedule:
+                        default: 0 0 * * *
+                        type: string
+                    type: object
                   resources:
                     properties:
                       claims:
@@ -1714,6 +1842,11 @@ spec:
                 type: string
               pmm:
                 properties:
+                  authenticationMechanism:
+                    enum:
+                    - SCRAM-SHA-256
+                    - SCRAM-SHA-1
+                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -2737,6 +2870,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -4793,6 +4936,8 @@ spec:
                     externalNodes:
                       items:
                         properties:
+                          arbiterOnly:
+                            type: boolean
                           horizons:
                             additionalProperties:
                               type: string
@@ -5341,6 +5486,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -7535,6 +7690,16 @@ spec:
                       - enabled
                       - size
                       type: object
+                    hookScript:
+                      properties:
+                        configMapRef:
+                          properties:
+                            name:
+                              type: string
+                          type: object
+                        script:
+                          type: string
+                      type: object
                     hostAliases:
                       items:
                         properties:
@@ -8168,6 +8333,16 @@ spec:
                           type: object
                         enabled:
                           type: boolean
+                        hookScript:
+                          properties:
+                            configMapRef:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            script:
+                              type: string
+                          type: object
                         labels:
                           additionalProperties:
                             type: string
@@ -12538,6 +12713,9 @@ spec:
                   - size
                   type: object
                 type: array
+              revisionHistoryLimit:
+                format: int32
+                type: integer
               roles:
                 items:
                   properties:
@@ -13526,6 +13704,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -15582,6 +15770,8 @@ spec:
                       externalNodes:
                         items:
                           properties:
+                            arbiterOnly:
+                              type: boolean
                             horizons:
                               additionalProperties:
                                 type: string
@@ -16130,6 +16320,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -18324,6 +18524,16 @@ spec:
                         - enabled
                         - size
                         type: object
+                      hookScript:
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
+                            type: string
+                        type: object
                       hostAliases:
                         items:
                           properties:
@@ -18957,6 +19167,16 @@ spec:
                             type: object
                           enabled:
                             type: boolean
+                          hookScript:
+                            properties:
+                              configMapRef:
+                                properties:
+                                  name:
+                                    type: string
+                                type: object
+                              script:
+                                type: string
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -23998,6 +24218,16 @@ spec:
                           type:
                             type: string
                         type: object
+                      hookScript:
+                        properties:
+                          configMapRef:
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                          script:
+                            type: string
+                        type: object
                       hostAliases:
                         items:
                           properties:
@@ -26098,6 +26328,46 @@ spec:
                 required:
                 - enabled
                 type: object
+              storageScaling:
+                properties:
+                  autoscaling:
+                    properties:
+                      enabled:
+                        type: boolean
+                      growthStep:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 2Gi
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      maxSize:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      triggerThresholdPercent:
+                        default: 80
+                        maximum: 95
+                        minimum: 50
+                        type: integer
+                    type: object
+                  enableExternalAutoscaling:
+                    type: boolean
+                  enableVolumeScaling:
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: autoscaling cannot be enabled when enableVolumeScaling
+                    is disabled
+                  rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
+                    || !self.autoscaling.enabled || self.enableVolumeScaling'
+                - message: autoscaling cannot be enabled when enableExternalAutoscaling
+                    is enabled
+                  rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
+                    || !self.autoscaling.enabled || !has(self.enableExternalAutoscaling)
+                    || !self.enableExternalAutoscaling'
               tls:
                 properties:
                   allowInvalidCertificates:
@@ -26304,6 +26574,21 @@ spec:
                 type: integer
               state:
                 type: string
+              storageAutoscaling:
+                additionalProperties:
+                  properties:
+                    currentSize:
+                      type: string
+                    lastError:
+                      type: string
+                    lastResizeTime:
+                      format: date-time
+                      type: string
+                    resizeCount:
+                      format: int32
+                      type: integer
+                  type: object
+                type: object
             required:
             - ready
             - size
@@ -26438,6 +26723,13 @@ rules:
   - create
   - patch
 - apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - certmanager.k8s.io
   - cert-manager.io
   resources:
@@ -26468,6 +26760,16 @@ rules:
   - patch
   - delete
   - deletecollection
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -26542,6 +26844,8 @@ spec:
             - name: OPERATOR_NAME
               value: percona-server-mongodb-operator
             - name: RESYNC_PERIOD
+              value: 5s
+            - name: RECONCILE_INTERVAL
               value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"

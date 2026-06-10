@@ -59,7 +59,7 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 		conf.TLSConf = &tlsCfg
 	}
 
-	return mongo.Dial(conf)
+	return mongo.Dial(ctx, conf)
 }
 
 func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
@@ -82,7 +82,7 @@ func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaS
 		conf.TLSConf = &tlsCfg
 	}
 
-	return mongo.Dial(&conf)
+	return mongo.Dial(ctx, &conf)
 }
 
 func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
@@ -102,5 +102,5 @@ func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.Perc
 		conf.TLSConf = &tlsCfg
 	}
 
-	return mongo.Dial(&conf)
+	return mongo.Dial(ctx, &conf)
 }

@@ -78,4 +78,4 @@ spec:
     users: some-users
   logcollector:
     enabled: true
-    image: perconalab/fluentbit:main-logcollector
+    image: docker.io/perconalab/fluentbit:main-logcollector

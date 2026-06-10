@@ -1,0 +1,129 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+spec:
+  image:
+  imagePullPolicy: Always
+  updateStrategy: SmartUpdate
+  secrets:
+    users: some-users
+  tls:
+    mode: disabled
+  unsafeFlags:
+    tls: true
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      configuration: |
+        net:
+          port: 27018
+        security:
+          authorization: disabled
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+      expose:
+        enabled: true
+        type: ClusterIP
+
+    mongos:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      configuration: |
+        net:
+          port: 27019
+      expose:
+        type: ClusterIP
+
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: true
+      type: ClusterIP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      net:
+        port: 27016
+      security:
+        authorization: disabled
+  - name: rs1
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: true
+      type: ClusterIP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      net:
+        port: 27016
+      security:
+        authorization: disabled
+  - name: rs2
+    affinity:
+      antiAffinityTopologyKey: none
+    expose:
+      enabled: true
+      type: ClusterIP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      net:
+        port: 27016
+      security:
+        authorization: disabled

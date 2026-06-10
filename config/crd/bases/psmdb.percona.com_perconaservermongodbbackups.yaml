@@ -68,7 +68,9 @@ spec:
               compressionType:
                 type: string
               startingDeadlineSeconds:
+                default: 120
                 format: int64
+                minimum: 1
                 type: integer
               storageName:
                 type: string
@@ -76,8 +78,11 @@ spec:
                 enum:
                 - logical
                 - physical
+                - external
                 - incremental
                 - incremental-base
+                type: string
+              volumeSnapshotClass:
                 type: string
             type: object
           status:
@@ -151,6 +156,19 @@ spec:
                 properties:
                   bucket:
                     type: string
+                  caBundle:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   credentialsSecret:
                     type: string
                   debugTrace:
@@ -240,6 +258,15 @@ spec:
                 type: object
               size:
                 type: string
+              snapshots:
+                items:
+                  properties:
+                    replsetName:
+                      type: string
+                    snapshotName:
+                      type: string
+                  type: object
+                type: array
               start:
                 format: date-time
                 type: string

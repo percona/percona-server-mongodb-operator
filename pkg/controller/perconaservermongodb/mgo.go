@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -333,7 +334,11 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 		Votes:        extNode.Votes,
 		Priority:     extNode.Priority,
 		BuildIndexes: true,
-		Tags:         mongo.ReplsetTags{"external": "true"},
+		ArbiterOnly:  extNode.ArbiterOnly,
+	}
+
+	if !extNode.ArbiterOnly {
+		member.Tags = mongo.ReplsetTags{"external": "true"}
 	}
 
 	if strings.Contains(extNode.Host, ":") {
@@ -343,6 +348,9 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	}
 
 	for k, v := range extNode.Tags {
+		if member.Tags == nil {
+			member.Tags = make(mongo.ReplsetTags)
+		}
 		member.Tags[k] = v
 	}
 
@@ -448,6 +456,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
+			if strings.Contains(err.Error(), "NodeNotFound") {
+				log.V(1).Info("NodeNotFound error during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
+				return rsMembers, 0, nil
+			}
 			return rsMembers, 0, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
@@ -641,7 +653,7 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 }
 
 // handleReplsetInit initializes the replset within the first running pod's mongod container.
-// This must be ran from within the running container to utilize the MongoDB Localhost Exception.
+// This must be run from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
 func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
@@ -743,20 +755,9 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
 
-		log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
-		userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to get userAdmin credentials")
+		if err := r.createUserAdminIfNeeded(ctx, cr, &pod, replsetName, mongoCmd); err != nil {
+			return nil, nil, err
 		}
-
-		cmd[2] = fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password))
-		errb.Reset()
-		outb.Reset()
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
-		}
-		log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 
 		return &pod, &api.ReplsetMemberStatus{
 			Name:     member.Host,
@@ -766,6 +767,82 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 	}
 
 	return nil, nil, errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, pod *corev1.Pod, replsetName, mongoCmd string) error {
+	log := logf.FromContext(ctx)
+
+	userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get userAdmin credentials")
+	}
+
+	canAuth, err := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+	if err != nil {
+		return err
+	}
+	if canAuth {
+		log.Info("user admin already exists and can authenticate, skipping creation", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+		return nil
+	}
+
+	log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+
+	var outb, errb bytes.Buffer
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password)),
+	}
+
+	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false)
+	if err != nil {
+		canAuth, authErr := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+		if authErr != nil {
+			return fmt.Errorf("exec add admin user: %v / %s / %s; check userAdmin authentication: %v", err, outb.String(), errb.String(), authErr)
+		}
+		if !canAuth {
+			return fmt.Errorf("exec add admin user: %v / %s / %s", err, outb.String(), errb.String())
+		}
+		log.Info("user admin can authenticate after createUser error, continuing", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+		return nil
+	}
+
+	log.Info("user admin created", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Context, pod *corev1.Pod, mongoCmd, user, pwd string) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	var outb, errb bytes.Buffer
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(
+			`%s --quiet -u '%s' -p '%s' --authenticationDatabase admin --eval 'quit(db.adminCommand({connectionStatus: 1}).authInfo.authenticatedUsers.length > 0 ? 0 : 1)'`,
+			mongoCmd,
+			strings.ReplaceAll(user, "'", `'"'"'`),
+			strings.ReplaceAll(pwd, "'", `'"'"'`),
+		),
+	}
+
+	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false); err != nil {
+		if isMongoAuthFailure(err, outb.String(), errb.String()) {
+			log.V(1).Info("userAdmin authentication failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
+			return false, nil
+		}
+
+		return false, fmt.Errorf("exec userAdmin authentication check: %v / %s / %s", err, outb.String(), errb.String())
+	}
+
+	return true, nil
+}
+
+func isMongoAuthFailure(err error, stdout, stderr string) bool {
+	msg := strings.ToLower(strings.Join([]string{err.Error(), stdout, stderr}, " "))
+	return strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "auth failed") ||
+		strings.Contains(msg, "requires authentication") ||
+		strings.Contains(msg, "unauthorized")
 }
 
 func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
@@ -1027,10 +1104,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		return errors.Wrap(err, "create or update system role")
 	}
 
-	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup}
-	if cr.CompareVersion("1.13.0") >= 0 {
-		users = append(users, api.RoleDatabaseAdmin)
-	}
+	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
 
 	for _, role := range users {
 		creds, err := getInternalCredentials(ctx, r.client, cr, role)
@@ -1066,6 +1140,9 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	stsName := cr.Name + "-" + replset.Name
 	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
 	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, errors.Wrapf(err, "get statefulset %s", stsName)
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]

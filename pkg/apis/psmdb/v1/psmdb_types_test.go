@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMongoConfiguration_GetPort(t *testing.T) {
@@ -158,7 +159,8 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 		ReplsetOverrides: map[string]ReplsetOverride{
 			"pod-0": {
 				Horizons: map[string]string{
-					"ext": "override.example.com",
+					"ext":      "override.example.com",
+					"external": "override.example.com:10000",
 				},
 			},
 		},
@@ -171,8 +173,9 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 
 		expected := map[string]map[string]string{
 			"pod-0": {
-				"ext": "override.example.com:27017",
-				"int": "a.internal:27018",
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+				"int":      "a.internal:27018",
 			},
 			"pod-1": {
 				"ext": "b.example.com:27019",
@@ -187,8 +190,9 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 
 		expected := map[string]map[string]string{
 			"pod-0": {
-				"ext": "override.example.com",
-				"int": "a.internal",
+				"ext":      "override.example.com",
+				"external": "override.example.com",
+				"int":      "a.internal",
 			},
 			"pod-1": {
 				"ext": "b.example.com",
@@ -197,6 +201,201 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 
 		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
 	})
+
+	t.Run("withPorts=true only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(true)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com:27017",
+				"external": "override.example.com:10000",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(true) mismatch")
+	})
+
+	t.Run("withPorts=false only ReplsetOverrides", func(t *testing.T) {
+		r := r.DeepCopy()
+		r.Horizons = nil
+
+		actual := r.GetHorizons(false)
+
+		expected := map[string]map[string]string{
+			"pod-0": {
+				"ext":      "override.example.com",
+				"external": "override.example.com",
+			},
+		}
+
+		assert.Equal(t, expected, actual, "GetHorizons(false) mismatch")
+	})
+}
+
+func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
+	tests := map[string]struct {
+		conf     MongoConfiguration
+		expected bool
+	}{
+		"no security section": {
+			conf: `systemLog:
+  verbosity: 1`,
+			expected: true,
+		},
+		"empty config": {
+			conf:     MongoConfiguration(""),
+			expected: true,
+		},
+		"security section without authorization": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile`,
+			expected: true,
+		},
+		"authorization explicitly enabled": {
+			conf: `security:
+  authorization: enabled`,
+			expected: true,
+		},
+		"authorization explicitly disabled": {
+			conf: `security:
+  authorization: disabled`,
+			expected: false,
+		},
+		"authorization with other string value": {
+			conf: `security:
+  authorization: someOtherValue`,
+			expected: true,
+		},
+		"authorization with empty string": {
+			conf: `security:
+  authorization: ""`,
+			expected: true,
+		},
+		"complete security config with authorization enabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: enabled
+  clusterAuthMode: keyFile`,
+			expected: true,
+		},
+		"complete security config with authorization disabled": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile
+  authorization: disabled
+  clusterAuthMode: keyFile`,
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.conf.IsAuthorizationEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsExternalVolumeAutoscalingEnabled(t *testing.T) {
+	tests := map[string]struct {
+		spec     PerconaServerMongoDBSpec
+		expected bool
+	}{
+		"StorageScaling nil, deprecated field false": {
+			spec:     PerconaServerMongoDBSpec{},
+			expected: false,
+		},
+		"StorageScaling nil, deprecated field true": {
+			spec: PerconaServerMongoDBSpec{
+				EnableExternalVolumeAutoscaling: true,
+			},
+			expected: true,
+		},
+		"StorageScaling set with EnableExternalAutoscaling false": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: false,
+				},
+			},
+			expected: false,
+		},
+		"StorageScaling set with EnableExternalAutoscaling true": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: true,
+				},
+			},
+			expected: true,
+		},
+		"StorageScaling takes precedence over deprecated field": {
+			spec: PerconaServerMongoDBSpec{
+				EnableExternalVolumeAutoscaling: true,
+				StorageScaling: &StorageScalingSpec{
+					EnableExternalAutoscaling: false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.spec.IsExternalVolumeAutoscalingEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsVolumeExpansionEnabled(t *testing.T) {
+	tests := map[string]struct {
+		spec     PerconaServerMongoDBSpec
+		expected bool
+	}{
+		"StorageScaling nil, deprecated field false": {
+			spec:     PerconaServerMongoDBSpec{},
+			expected: false,
+		},
+		"StorageScaling nil, deprecated field true": {
+			spec: PerconaServerMongoDBSpec{
+				VolumeExpansionEnabled: true,
+			},
+			expected: true,
+		},
+		"StorageScaling set with EnableVolumeScaling false": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: false,
+				},
+			},
+			expected: false,
+		},
+		"StorageScaling set with EnableVolumeScaling true": {
+			spec: PerconaServerMongoDBSpec{
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: true,
+				},
+			},
+			expected: true,
+		},
+		"StorageScaling takes precedence over deprecated field": {
+			spec: PerconaServerMongoDBSpec{
+				VolumeExpansionEnabled: true,
+				StorageScaling: &StorageScalingSpec{
+					EnableVolumeScaling: false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.spec.IsVolumeExpansionEnabled()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestBackupSpec_MainStorage(t *testing.T) {
@@ -250,6 +449,57 @@ func TestBackupSpec_MainStorage(t *testing.T) {
 			stgName, _, err := tt.spec.MainStorage()
 			assert.Equal(t, tt.expected, stgName)
 			assert.Equal(t, tt.expectedErr, err)
+		})
+	}
+}
+
+func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
+	tests := map[string]struct {
+		conf        MongoConfiguration
+		expectNil   bool
+		expectValue bool
+		expectError bool
+	}{
+		"empty config": {
+			conf:      MongoConfiguration(""),
+			expectNil: true,
+		},
+		"security section without enableEncryption": {
+			conf: `security:
+  keyFile: /etc/mongodb-keyfile`,
+			expectNil: true,
+		},
+		"explicitly true": {
+			conf: `security:
+  enableEncryption: true`,
+			expectValue: true,
+		},
+		"explicitly false": {
+			conf: `security:
+  enableEncryption: false`,
+			expectValue: false,
+		},
+		"invalid value": {
+			conf: `security:
+  enableEncryption: notabool`,
+			expectError: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, err := tt.conf.IsEncryptionEnabled()
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, tt.expectValue, *result)
+			}
 		})
 	}
 }

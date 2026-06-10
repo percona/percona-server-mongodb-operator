@@ -28,6 +28,9 @@ spec:
     expose:
       enabled: false
       exposeType: ClusterIP
+    configuration: |
+      security:
+        enableEncryption: false
     resources:
       limits:
         cpu: 300m

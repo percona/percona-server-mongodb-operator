@@ -16,6 +16,7 @@ import (
 	oplog "github.com/percona/percona-backup-mongodb/pbm/oplog"
 	restore "github.com/percona/percona-backup-mongodb/pbm/restore"
 	storage "github.com/percona/percona-backup-mongodb/pbm/storage"
+	topo "github.com/percona/percona-backup-mongodb/pbm/topo"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	backup0 "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	primitive "go.mongodb.org/mongo-driver/bson/primitive"
@@ -60,6 +61,21 @@ func (mr *MockPBMMockRecorder) AddProfile(ctx, k8sclient, cluster, name, stg int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddProfile", reflect.TypeOf((*MockPBM)(nil).AddProfile), ctx, k8sclient, cluster, name, stg)
 }
 
+// AgentStatuses mocks base method.
+func (m *MockPBM) AgentStatuses(ctx context.Context, hosts []string) ([]topo.AgentStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AgentStatuses", ctx, hosts)
+	ret0, _ := ret[0].([]topo.AgentStat)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AgentStatuses indicates an expected call of AgentStatuses.
+func (mr *MockPBMMockRecorder) AgentStatuses(ctx, hosts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentStatuses", reflect.TypeOf((*MockPBM)(nil).AgentStatuses), ctx, hosts)
+}
+
 // Close mocks base method.
 func (m *MockPBM) Close(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -102,6 +118,20 @@ func (mr *MockPBMMockRecorder) DeleteBackup(ctx, name interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackup", reflect.TypeOf((*MockPBM)(nil).DeleteBackup), ctx, name)
 }
 
+// DeleteBackupMeta mocks base method.
+func (m *MockPBM) DeleteBackupMeta(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteBackupMeta", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteBackupMeta indicates an expected call of DeleteBackupMeta.
+func (mr *MockPBMMockRecorder) DeleteBackupMeta(ctx, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackupMeta", reflect.TypeOf((*MockPBM)(nil).DeleteBackupMeta), ctx, name)
+}
+
 // DeletePITRChunks mocks base method.
 func (m *MockPBM) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
 	m.ctrl.T.Helper()
@@ -114,6 +144,20 @@ func (m *MockPBM) DeletePITRChunks(ctx context.Context, until primitive.Timestam
 func (mr *MockPBMMockRecorder) DeletePITRChunks(ctx, until interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePITRChunks", reflect.TypeOf((*MockPBM)(nil).DeletePITRChunks), ctx, until)
+}
+
+// FinishBackup mocks base method.
+func (m *MockPBM) FinishBackup(ctx context.Context, bcpName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FinishBackup", ctx, bcpName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FinishBackup indicates an expected call of FinishBackup.
+func (mr *MockPBMMockRecorder) FinishBackup(ctx, bcpName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishBackup", reflect.TypeOf((*MockPBM)(nil).FinishBackup), ctx, bcpName)
 }
 
 // GetBackupMeta mocks base method.
@@ -162,18 +206,18 @@ func (mr *MockPBMMockRecorder) GetConfigVar(ctx, key interface{}) *gomock.Call {
 }
 
 // GetLatestTimelinePITR mocks base method.
-func (m *MockPBM) GetLatestTimelinePITR(ctx context.Context) (oplog.Timeline, error) {
+func (m *MockPBM) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLatestTimelinePITR", ctx)
+	ret := m.ctrl.Call(m, "GetLatestTimelinePITR", ctx, rsMap)
 	ret0, _ := ret[0].(oplog.Timeline)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLatestTimelinePITR indicates an expected call of GetLatestTimelinePITR.
-func (mr *MockPBMMockRecorder) GetLatestTimelinePITR(ctx interface{}) *gomock.Call {
+func (mr *MockPBMMockRecorder) GetLatestTimelinePITR(ctx, rsMap interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestTimelinePITR", reflect.TypeOf((*MockPBM)(nil).GetLatestTimelinePITR), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestTimelinePITR", reflect.TypeOf((*MockPBM)(nil).GetLatestTimelinePITR), ctx, rsMap)
 }
 
 // GetNSetConfig mocks base method.
@@ -205,18 +249,18 @@ func (mr *MockPBMMockRecorder) GetNSetConfigLegacy(ctx, k8sclient, cluster, stg 
 }
 
 // GetPITRChunkContains mocks base method.
-func (m *MockPBM) GetPITRChunkContains(ctx context.Context, unixTS int64) (*oplog.OplogChunk, error) {
+func (m *MockPBM) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPITRChunkContains", ctx, unixTS)
+	ret := m.ctrl.Call(m, "GetPITRChunkContains", ctx, unixTS, rsMap)
 	ret0, _ := ret[0].(*oplog.OplogChunk)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPITRChunkContains indicates an expected call of GetPITRChunkContains.
-func (mr *MockPBMMockRecorder) GetPITRChunkContains(ctx, unixTS interface{}) *gomock.Call {
+func (mr *MockPBMMockRecorder) GetPITRChunkContains(ctx, unixTS, rsMap interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPITRChunkContains", reflect.TypeOf((*MockPBM)(nil).GetPITRChunkContains), ctx, unixTS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPITRChunkContains", reflect.TypeOf((*MockPBM)(nil).GetPITRChunkContains), ctx, unixTS, rsMap)
 }
 
 // GetProfile mocks base method.

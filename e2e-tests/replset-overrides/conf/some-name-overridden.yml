@@ -24,7 +24,7 @@ spec:
     size: 3
     expose:
       enabled: false
-      exposeType: ClusterIP
+      type: ClusterIP
     replsetOverrides:
       some-name-rs0-0:
         host: external-rs0-0.NAMESPACE.svc:27017
@@ -58,7 +58,7 @@ spec:
         antiAffinityTopologyKey: none
       expose:
         enabled: false
-        exposeType: ClusterIP
+        type: ClusterIP
       podDisruptionBudget:
         maxUnavailable: 1
       resources:
@@ -79,7 +79,7 @@ spec:
       affinity:
         antiAffinityTopologyKey: none
       expose:
-        exposeType: ClusterIP
+        type: ClusterIP
       podDisruptionBudget:
         maxUnavailable: 1
       resources:

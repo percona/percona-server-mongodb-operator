@@ -104,6 +104,12 @@ spec:
                 - readiness
                 - --component
                 - mongod
+                - --ssl
+                - --sslInsecure
+                - --sslCAFile
+                - /etc/mongodb-ssl/ca.crt
+                - --sslPEMKeyFile
+                - /tmp/tls.pem
             failureThreshold: 8
             initialDelaySeconds: 10
             periodSeconds: 3
@@ -143,6 +149,8 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /opt/percona/hookscript
+              name: hookscript
           workingDir: /data/db
         - args:
             - pbm-agent-entrypoint
@@ -193,9 +201,10 @@ spec:
               readOnly: true
             - mountPath: /opt/percona
               name: bin
-              readOnly: true
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /opt/percona/pbm-hookscript
+              name: pbm-hookscript
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -256,6 +265,16 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - configMap:
+            defaultMode: 420
+            name: some-name-pbm-hookscript
+            optional: true
+          name: pbm-hookscript
+        - configMap:
+            defaultMode: 420
+            name: some-name-rs1-mongod-hookscript
+            optional: true
+          name: hookscript
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
