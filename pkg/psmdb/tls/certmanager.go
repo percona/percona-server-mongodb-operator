@@ -142,8 +142,12 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 			SelfSigned: &cm.SelfSignedIssuer{},
 		},
 	}
+	kind := cr.Spec.TLS.IssuerConf.Kind
+	if cr.CompareVersion("1.22.0") < 0 {
+		kind = cm.IssuerKind
+	}
 
-	switch cr.Spec.TLS.IssuerConf.Kind {
+	switch kind {
 	case cm.IssuerKind:
 		issuer = &cm.Issuer{
 			ObjectMeta: meta,
