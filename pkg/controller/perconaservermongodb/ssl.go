@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"slices"
 	"sort"
 
@@ -66,6 +67,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 
 	// If certManagementPolicy is userProvidedOnly, the operator should not create any certificates automatically.
 	if cr.Spec.TLS != nil && cr.Spec.TLS.CertManagementPolicy == api.CertManagementUserProvidedOnly {
+		if k8serr.IsNotFound(errSecret) {
+			// The user opted to manage TLS secrets themselves but hasn't created them yet
+			// (e.g. during initial cluster creation). Don't bring up the cluster without TLS:
+			// wait in init state until the user provides the secret.
+			logf.FromContext(ctx).Info("waiting for user-provided TLS secret, certManagementPolicy is userProvidedOnly", "secret", api.SSLSecretName(cr))
+			cr.Status.AddCondition(api.ClusterCondition{
+				Status:  api.ConditionFalse,
+				Type:    api.ConditionTypeTLSSecretsReady,
+				Reason:  "TLSSecretNotFound",
+				Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLSecretName(cr)),
+			})
+			return errTLSNotReady
+		}
 		logf.FromContext(ctx).Info("certManagementPolicy is userProvidedOnly, skipping automatic certificate management")
 		return nil
 	}

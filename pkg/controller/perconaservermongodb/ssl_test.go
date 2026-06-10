@@ -49,7 +49,7 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						naming.AnnotationSSLHash:          "abc123",
+						naming.AnnotationSSLHash:         "abc123",
 						naming.AnnotationSSLInternalHash: "def456",
 					},
 				},
@@ -104,7 +104,7 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						naming.AnnotationSSLHash:          "existing-hash",
+						naming.AnnotationSSLHash:         "existing-hash",
 						naming.AnnotationSSLInternalHash: "existing-internal-hash",
 					},
 				},
@@ -226,6 +226,7 @@ func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
 	r := buildFakeClient(cr)
 	err := r.reconcileSSL(t.Context(), cr)
 
-	// Should return nil (no error) without attempting to create certificates
-	assert.NoError(t, err)
+	// With certManagementPolicy userProvidedOnly and no TLS secret yet, the operator
+	// must not create certificates and should wait for the user to provide them.
+	assert.ErrorIs(t, err, errTLSNotReady)
 }

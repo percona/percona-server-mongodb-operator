@@ -444,6 +444,13 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	err = r.reconcileSSL(ctx, cr)
 	if err != nil {
+		if errors.Is(err, errTLSNotReady) {
+			// certManagementPolicy is userProvidedOnly and the TLS secret isn't there yet.
+			// Stay in init state and wait for the user to create it instead of erroring out.
+			log.Info("waiting for user-provided TLS secret before continuing reconciliation", "secret", api.SSLSecretName(cr))
+			err = nil
+			return rr, nil
+		}
 		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+api.SSLSecretName(cr)+` manually or setup cert-manager correctly`, err)
 		return reconcile.Result{}, err
 	}
@@ -1594,7 +1601,7 @@ var errTLSNotReady = errors.New("waiting for TLS secret")
 // to preserve them when the TLS secret is missing.
 func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := map[string]string{
-		naming.AnnotationSSLHash:          "",
+		naming.AnnotationSSLHash:         "",
 		naming.AnnotationSSLInternalHash: "",
 	}
 
