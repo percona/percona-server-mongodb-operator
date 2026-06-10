@@ -1,5 +1,6 @@
 arbiter
 balancer
+cert-management-policy
 cross-site-sharded
 custom-replset-name
 custom-tls
@@ -78,6 +79,7 @@ service-per-pod
 serviceless-external-nodes
 smart-update
 split-horizon
+split-horizon-manual-tls
 stable-resource-version
 storage
 tls-issue-cert-manager
