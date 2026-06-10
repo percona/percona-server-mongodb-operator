@@ -133,10 +133,6 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.TLS.AllowInvalidCertificates = &t
 	}
 
-	if cr.Spec.TLS.IssuerConf.Kind == "" {
-		cr.Spec.TLS.IssuerConf.Kind = cm.IssuerKind
-	}
-
 	if cr.Spec.UnsafeConf {
 		cr.Spec.Unsafe = UnsafeFlags{
 			TLS:                    true,
@@ -262,7 +258,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -458,7 +455,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				replset.LivenessProbe.Exec.Command = append(
 					replset.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -864,7 +862,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
 			nv.LivenessProbe.ProbeHandler.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 
 	if nv.ReadinessProbe == nil {
@@ -965,7 +964,8 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		h.LivenessProbe.Exec.Command = append(
 			h.LivenessProbe.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 }
 

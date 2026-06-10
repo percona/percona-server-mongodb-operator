@@ -191,10 +191,12 @@ type IssuerConfReference struct {
 	// Kind of the issuer being referred to.
 	// Defaults to 'Issuer'.
 	// +optional
+	// +kubebuilder:default=Issuer
 	Kind string `json:"kind,omitempty"`
 	// Group of the issuer being referred to.
 	// Defaults to 'cert-manager.io'.
 	// +optional
+	// +kubebuilder:default="cert-manager.io"
 	Group string `json:"group,omitempty"`
 }
 
