@@ -30,6 +30,11 @@ const (
 )
 
 const (
+	EventExceededQuota                = "ExceededQuota"
+	EventStorageClassNotSupportResize = "StorageClassNotSupportResize"
+)
+
+const (
 	ContainerBackupAgent = "backup-agent"
 	ContainerMongod      = ComponentMongod
 	ContainerMongos      = ComponentMongos

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -96,6 +97,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		restConfig:             mgr.GetConfig(),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
+		recorder:               mgr.GetEventRecorder("psmdb-controller"),
 
 		initImage: initImage,
 
@@ -222,6 +224,8 @@ type ReconcilePerconaServerMongoDB struct {
 	initImage string
 
 	lockers lockStore
+
+	recorder events.EventRecorder
 }
 
 type lockStore struct {

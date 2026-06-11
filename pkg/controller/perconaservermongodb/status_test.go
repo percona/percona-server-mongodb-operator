@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 	mcs "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
@@ -47,6 +48,7 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		lockers:                newLockStore(),
 		newPBM:                 fakeBackup.NewPBM,
 		newCertManagerCtrlFunc: faketls.NewCertManagerController,
+		recorder:               events.NewFakeRecorder(100),
 	}
 }
 

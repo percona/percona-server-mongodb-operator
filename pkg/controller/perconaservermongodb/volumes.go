@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	stderrors "errors"
 	"math"
 	"slices"
 	"strings"
@@ -146,12 +147,14 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		}
 
 		updatedPVCs := 0
+		var resizeErrors []error
+		pendingResize := false
 		for _, pvc := range pvcList.Items {
 			if !validatePVCName(pvc, sts) {
 				continue
 			}
 
-			if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
+			if pvc.Status.Capacity.Storage().Cmp(requested) >= 0 {
 				updatedPVCs++
 				log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
 				continue
@@ -180,7 +183,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			for _, event := range events.Items {
 				eventTime := event.EventTime.Time
 				if event.EventTime.IsZero() {
-					eventTime = event.DeprecatedFirstTimestamp.Time
+					// recorder-deduplicated events keep their original
+					// firstTimestamp; lastTimestamp reflects the latest occurrence
+					eventTime = event.DeprecatedLastTimestamp.Time
+					if eventTime.IsZero() {
+						eventTime = event.DeprecatedFirstTimestamp.Time
+					}
 				}
 
 				if eventTime.Before(resizeStartedAt) {
@@ -190,18 +198,29 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 				switch event.Reason {
 				case "Resizing", "ExternalExpanding", "FileSystemResizeRequired":
 					log.Info("PVC resize in progress", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
+					pendingResize = true
 				case "FileSystemResizeSuccessful":
 					log.Info("PVC resize completed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
-				case "VolumeResizeFailed":
+				case "VolumeResizeFailed", naming.EventExceededQuota, naming.EventStorageClassNotSupportResize:
 					log.Error(nil, "PVC resize failed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 
-					if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-						return err
-					}
-
-					return errors.Errorf("volume resize failed: %s", event.Note)
+					resizeErrors = append(resizeErrors, errors.Errorf("%s pvc resize failed: %s: %s", pvc.Name, event.Reason, event.Note))
 				}
 			}
+		}
+
+		if len(resizeErrors) > 0 {
+			// as long as some PVC is still being expanded by the storage
+			// layer, the failure may yet resolve; keep waiting
+			if pendingResize {
+				return nil
+			}
+
+			if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
+				return err
+			}
+
+			return stderrors.Join(resizeErrors...)
 		}
 
 		if updatedPVCs == len(pvcsToUpdate) {
@@ -227,7 +246,29 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 	}
 
 	if requested.Cmp(actual) < 0 {
-		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+		// PVCs are larger than the requested size. They can never shrink, so
+		// the only way forward is reconciling everything else towards them.
+		// The volume claim template is compared against the unrounded spec
+		// value: it is created from the spec verbatim, so a decimal-unit spec
+		// (e.g. 1G) must not be treated as a mismatch with its own template.
+		switch {
+		case configured.Cmp(originalRequested) == 0:
+			// the template agrees with the spec; nothing to reconcile
+			return nil
+		case configured.Cmp(originalRequested) < 0:
+			log.Info("Deleting statefulset to reconcile volume claim template",
+				"configured", configured.String(), "requested", requested.String(), "actual", actual.String())
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			}
+			return nil
+		default:
+			// the spec was decreased below the template: a downsize attempt
+			if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+				return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
+			}
+			return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+		}
 	}
 
 	if actual.Cmp(originalRequested) >= 0 {
@@ -259,8 +300,14 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			return errors.Wrapf(err, "get persistentvolumeclaim/%s", pvc.Name)
 		}
 
-		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
+		if pvc.Status.Capacity.Storage().Cmp(requested) >= 0 {
 			log.Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
+			continue
+		}
+
+		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+		if pvcRequested.Cmp(requested) == 0 {
+			log.Info("Waiting for PVC to resize", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 			continue
 		}
 
@@ -268,23 +315,21 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 
 		if err := r.client.Update(ctx, &pvc); err != nil {
+			// transient failures: the quota may be raised or the storageclass
+			// fixed, so keep the resize in progress and retry on the next
+			// reconcile instead of reverting; reverting would re-arm the
+			// autoscaler and oscillate the CR spec
 			switch {
 			case strings.Contains(err.Error(), "exceeded quota"):
-				log.Error(err, "PVC resize failed", "reason", "ExceededQuota", "message", err.Error())
+				log.Error(err, "PVC resize failed", "reason", naming.EventExceededQuota)
+				r.recorder.Eventf(&pvc, nil, corev1.EventTypeWarning, naming.EventExceededQuota, "Resizing", "PVC resize failed: %v", err)
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-					return err
-				}
-
-				return nil
+				continue
 			case strings.Contains(err.Error(), "the storageclass that provisions the pvc must support resize"):
-				log.Error(err, "PVC resize failed", "reason", "StorageClassNotSupportResize", "message", err.Error())
+				log.Error(err, "PVC resize failed", "reason", naming.EventStorageClassNotSupportResize)
+				r.recorder.Eventf(&pvc, nil, corev1.EventTypeWarning, naming.EventStorageClassNotSupportResize, "Resizing", "PVC resize failed: %v", err)
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-					return err
-				}
-
-				return nil
+				continue
 			default:
 				return errors.Wrapf(err, "update persistentvolumeclaim/%s", pvc.Name)
 			}
