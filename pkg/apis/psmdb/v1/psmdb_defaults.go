@@ -251,8 +251,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 			}
 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -295,8 +295,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -459,8 +459,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
 					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 			}
 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -502,8 +502,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 			}
 
 			if cr.CompareVersion("1.15.0") < 0 {
@@ -873,7 +873,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() {
 			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
 				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
-				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt", "--sslPEMKeyFile", "/tmp/tls-internal.pem",
 			)
 		}
 
@@ -902,8 +902,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
 				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem")
+				"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 		}
 
 		if cr.CompareVersion("1.15.0") < 0 {
@@ -977,7 +977,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 		if cr.TLSEnabled() {
 			h.LivenessProbe.Exec.Command = append(
 				h.LivenessProbe.Exec.Command,
-				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
+				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt", "--sslPEMKeyFile", "/tmp/tls-internal.pem",
 			)
 		}
 	}
@@ -1005,8 +1005,8 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 		if cr.CompareVersion("1.22.0") >= 0 && cr.TLSEnabled() {
 			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
 				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem")
+				"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls-internal.pem")
 		}
 	}
 	if h.ReadinessProbe.InitialDelaySeconds < 1 {
