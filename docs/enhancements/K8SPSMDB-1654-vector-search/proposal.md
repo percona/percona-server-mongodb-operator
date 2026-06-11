@@ -5,7 +5,7 @@
 | Author       | Ege Güneş                                   |
 | Status       | In Review                                   |
 | Created      | 2026-05-11                                  |
-| Last Updated | 2026-05-26                                  |
+| Last Updated | 2026-06-11                                  |
 | Reviewers    | Ivan Groenewold, Slava Sarzhan, Mayank Shah |
 
 ---
@@ -101,8 +101,7 @@ already have.
   group per shard). `mongot` chooses which `mongod` to read from
   (usually a secondary).
 - **Change-stream sourcing** — `mongot` keeps indexes up to date by
-  reading change streams from `mongod`. Restarting `mongot` triggers
-  an initial sync; restarting `mongod` does not.
+  reading change streams from `mongod`.
 
 ### 2.2 Key Constraints
 
@@ -784,8 +783,10 @@ Implementation:
   through operator-managed `setParameter` entries in `mongos.conf`,
   so `createSearchIndex` / `dropSearchIndex` /
   `listSearchIndexes` calls routed through `mongos`.
-- Each shard's `mongot.conf` is supposed to set its sync source to
-  the shard's mongod replset through `syncSource.router`.
+- Each shard's `mongot.conf` must set its sync source to the
+  shard's `mongod` replset via `syncSource.replicaSet.*`.
+  `syncSource.router` refers to the `mongos` endpoint (as described
+  in §4.3).
 - `$vectorSearch` queries against `mongos` scatter-gather across
   shards and merge by `$searchScore`. This is built-in MongoDB
   behavior; the operator is not involved at query time.
@@ -847,7 +848,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: cluster1
 spec:
-  crVersion: 1.22.0
+  crVersion: 1.23.0
   image: percona/percona-server-mongodb:<vector-capable-tag>   # ≥ vector-search-capable PSMDB
   replsets:
     - name: rs0
@@ -1226,7 +1227,8 @@ To resolve before implementation begins.
 
 5. **PBM coordination on `mongot` reindex after restore.** Should operator
    handle reindexing after restore somehow?
-     - *Resolution:* TBD.
+     - *Resolution:* `mongot` handles reindexing itself, it only requires
+        restarting after physical restore.
 
 6. **Cert-manager `Certificate` template extension.** Adding the
    per-replset / per-shard search SANs to the cluster cert template
@@ -1312,7 +1314,7 @@ To resolve before implementation begins.
 | `mongot` | The separate Java process that serves search/vector-search queries; sources data from `mongod` via change streams. |
 | `$vectorSearch` | Aggregation stage that runs an ANN/ENN query against a vector-search index served by `mongot`. |
 | `$search` | Aggregation stage for full-text search against a `mongot`-served Lucene index. |
-| `searchCoordinator` | Built-in MongoDB role (8.2+) granting the permissions `mongot` needs against `mongod`. |
+| `searchCoordinator` | Built-in MongoDB role (8.3+) granting the permissions `mongot` needs against `mongod`. |
 | `mongotHost` | `setParameter` on `mongod`: data-plane endpoint where `$search`/`$vectorSearch` are forwarded. |
 | `searchIndexManagementHostAndPort` | `setParameter` on `mongod`: control-plane endpoint for index-management RPCs. |
 | ANN / ENN | Approximate Nearest Neighbor (HNSW) / Exact Nearest Neighbor — vector search algorithms supported by `mongot`. |
