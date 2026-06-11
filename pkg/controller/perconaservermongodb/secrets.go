@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -26,35 +28,21 @@ func getUserSecret(ctx context.Context, cl client.Reader, cr *api.PerconaServerM
 }
 
 func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (psmdb.Credentials, error) {
-	return getCredentials(ctx, cl, cr, api.UserSecretName(cr), role)
+	usersSecret, err := getUserSecret(ctx, cl, cr, api.UserSecretName(cr))
+	if err != nil {
+		return psmdb.Credentials{}, errors.Wrap(err, "failed to get user secret")
+	}
+	return getCredentials(&usersSecret, role)
 }
 
-func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServerMongoDB, name string, role api.SystemUserRole) (psmdb.Credentials, error) {
+func getCredentials(secret *corev1.Secret, role api.SystemUserRole) (psmdb.Credentials, error) {
 	creds := psmdb.Credentials{}
-	usersSecret, err := getUserSecret(ctx, cl, cr, name)
-	if err != nil {
-		return creds, errors.Wrap(err, "failed to get user secret")
+	envKeyUser, envKeyPass := role.EnvKeyUsername(), role.EnvKeyPassword()
+	if envKeyUser == "" || envKeyPass == "" {
+		return creds, errors.Errorf("invalid role %s", string(role))
 	}
-
-	switch role {
-	case api.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBDatabaseAdminPassword])
-	case api.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterAdminPassword])
-	case api.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBUserAdminPassword])
-	case api.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBClusterMonitorPassword])
-	case api.RoleBackup:
-		creds.Username = string(usersSecret.Data[api.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[api.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
+	creds.Username = string(secret.Data[envKeyUser])
+	creds.Password = string(secret.Data[envKeyPass])
 
 	if creds.Username == "" || creds.Password == "" {
 		return creds, errors.Errorf("can't find credentials for role %s", role)
@@ -63,9 +51,80 @@ func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServer
 	return creds, nil
 }
 
+func ensureConnectionStringSecret(
+	ctx context.Context,
+	cl client.Client,
+	cr *api.PerconaServerMongoDB,
+	secretName, keyPrefix string,
+	cred psmdb.Credentials,
+	owner metav1.Object,
+	includeReplsets bool,
+) error {
+	connStrSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: cr.Namespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
+		connStrSecret.Data = make(map[string][]byte)
+		if includeReplsets {
+			for _, rs := range cr.GetAllReplsets() {
+				cfg, err := psmdb.MongoConfig(ctx, cl, cr, rs, cred, false)
+				if err != nil {
+					return errors.Wrap(err, "mongo config")
+				}
+
+				connStr := cfg.URI()
+				key := keyPrefix + "_" + rs.Name
+				connStrSecret.Data[key+"_connectionString"] = []byte(connStr)
+				connStrSecret.Data[key+"_connectionStringSrv"] = []byte(cfg.SRVURI(strings.Join([]string{
+					naming.ServiceName(cr, rs),
+					cr.Namespace,
+					cr.Spec.ClusterServiceDNSSuffix,
+				}, ".")))
+
+				if rs.Expose.Enabled {
+					cfg, err := psmdb.MongoConfig(ctx, cl, cr, rs, cred, true)
+					if err != nil {
+						return errors.Wrap(err, "mongo config")
+					}
+					if exposedConnStr := cfg.URI(); exposedConnStr != connStr {
+						connStrSecret.Data[key+"_connectionStringExposed"] = []byte(exposedConnStr)
+					}
+				}
+			}
+		}
+
+		if cr.Spec.Sharding.Enabled {
+			servicePerPod := cr.Spec.Sharding.Mongos.Expose.ServicePerPod
+			mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, true, servicePerPod)
+			if err != nil {
+				return errors.Wrap(err, "mongos config")
+			}
+			connStrSecret.Data[keyPrefix+"_mongos_connectionString"] = []byte(mongosCfg.URI())
+
+			if servicePerPod {
+				mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, false, true)
+				if err != nil {
+					return errors.Wrap(err, "mongos config")
+				}
+				connStrSecret.Data[keyPrefix+"_mongos_connectionStringExposed"] = []byte(mongosCfg.URI())
+			}
+		}
+		if err := controllerutil.SetOwnerReference(owner, connStrSecret, cl.Scheme()); err != nil {
+			return errors.Wrap(err, "set owner reference")
+		}
+		return nil
+	})
+	return errors.Wrap(err, "create or update")
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	secretObj := corev1.Secret{}
-	err := r.client.Get(ctx,
+	err := r.client.Get(
+		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.Users,

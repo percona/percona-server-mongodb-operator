@@ -12,12 +12,22 @@ import (
 )
 
 type Credentials struct {
-	Username string
-	Password string
+	Username   string
+	Password   string
+	AuthSource string
 }
 
 func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials) (mongo.Client, error) {
-	pods, err := GetRSPods(ctx, k8sClient, cr, rs.Name)
+	conf, err := MongoConfig(ctx, k8sClient, cr, rs, c, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "mongo config")
+	}
+
+	return mongo.Dial(ctx, conf)
+}
+
+func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials, rsExposed bool) (*mongo.Config, error) {
+	pods, err := GetRSPods(ctx, cl, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
 	}
@@ -26,13 +36,13 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 	// If `rs.Size` is 0 or replicaset doesn't exist in the cr the list of pods will be empty.
 	// If there is empty pod list we should use `GetOutdatedRSPods` which returns list of pods without truncating it.
 	if len(pods.Items) == 0 {
-		pods, err = GetOutdatedRSPods(ctx, k8sClient, cr, rs.Name)
+		pods, err = GetOutdatedRSPods(ctx, cl, cr, rs.Name)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get outdated pods list for replset %s", rs.Name)
 		}
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, k8sClient, cr, cr.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, cl, cr, cr.Spec.ClusterServiceDNSMode, rs, rsExposed, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
@@ -48,10 +58,11 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 		Hosts:       rsAddrs,
 		Username:    c.Username,
 		Password:    c.Password,
+		AuthSource:  c.AuthSource,
 	}
 
 	if cr.TLSEnabled() {
-		tlsCfg, err := tls.Config(ctx, k8sClient, cr)
+		tlsCfg, err := tls.Config(ctx, cl, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
@@ -59,38 +70,47 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 		conf.TLSConf = &tlsCfg
 	}
 
-	return mongo.Dial(ctx, conf)
+	return conf, nil
 }
 
 func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
-	hosts, err := GetMongosAddrs(ctx, k8sclient, cr, true)
+	conf, err := MongosConfig(ctx, k8sclient, cr, c, true, cr.Spec.Sharding.Mongos.Expose.ServicePerPod)
+	if err != nil {
+		return nil, errors.Wrap(err, "get mongos config")
+	}
+	return mongo.Dial(ctx, conf)
+}
+
+func MongosConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, c Credentials, useInternalAddr, servicePerPod bool) (*mongo.Config, error) {
+	hosts, err := GetMongosAddrs(ctx, cl, cr, useInternalAddr, servicePerPod)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos addrs")
 	}
 	conf := mongo.Config{
-		Hosts:    hosts,
-		Username: c.Username,
-		Password: c.Password,
+		Hosts:      hosts,
+		Username:   c.Username,
+		Password:   c.Password,
+		AuthSource: c.AuthSource,
 	}
 
 	if cr.TLSEnabled() {
-		tlsCfg, err := tls.Config(ctx, k8sclient, cr)
+		tlsCfg, err := tls.Config(ctx, cl, cr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
 
 		conf.TLSConf = &tlsCfg
 	}
-
-	return mongo.Dial(ctx, &conf)
+	return &conf, nil
 }
 
 func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
 	conf := mongo.Config{
-		Hosts:    []string{host},
-		Username: c.Username,
-		Password: c.Password,
-		Direct:   true,
+		Hosts:      []string{host},
+		Username:   c.Username,
+		Password:   c.Password,
+		AuthSource: c.AuthSource,
+		Direct:     true,
 	}
 
 	if tlsEnabled {

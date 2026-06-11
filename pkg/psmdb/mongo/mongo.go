@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/url"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/connstring"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -23,9 +26,83 @@ type Config struct {
 	ReplSetName string
 	Username    string
 	Password    string
+	AuthSource  string
 	TLSConf     *tls.Config
 	Direct      bool
 	Timeout     time.Duration
+}
+
+func (conf *Config) URI() string {
+	return conf.uri(connstring.SchemeMongoDB, "")
+}
+
+func (conf *Config) SRVURI(hostname string) string {
+	return conf.uri(connstring.SchemeMongoDBSRV, hostname)
+}
+
+func (conf *Config) uri(scheme, hostname string) string {
+	u := url.URL{
+		Scheme: scheme,
+		Host:   strings.Join(conf.Hosts, ","),
+	}
+	if hostname != "" {
+		u.Host = hostname
+	}
+
+	if conf.Username != "" || conf.Password != "" {
+		u.User = url.UserPassword(conf.Username, conf.Password)
+	}
+
+	q := url.Values{}
+	if conf.ReplSetName != "" {
+		q.Set("replicaSet", conf.ReplSetName)
+	}
+	if conf.AuthSource != "" {
+		q.Set("authSource", conf.AuthSource)
+	}
+	if conf.TLSConf != nil {
+		q.Set("tls", "true")
+	}
+	if conf.Direct {
+		q.Set("directConnection", "true")
+	}
+	u.RawQuery = q.Encode()
+	if u.RawQuery != "" {
+		u.Path = "/"
+	}
+
+	return u.String()
+}
+
+func (conf *Config) Options() *options.ClientOptions {
+	timeout := 10 * time.Second
+	if conf.Timeout != 0 {
+		timeout = conf.Timeout
+	}
+
+	journal := true
+	wc := writeconcern.Majority()
+	wc.Journal = &journal
+	opts := options.Client().
+		SetHosts(conf.Hosts).
+		SetWriteConcern(wc).
+		SetReadPreference(readpref.Primary()).
+		SetTLSConfig(conf.TLSConf).
+		SetDirect(conf.Direct).
+		SetConnectTimeout(timeout).
+		SetServerSelectionTimeout(timeout)
+
+	if conf.ReplSetName != "" {
+		opts.SetReplicaSet(conf.ReplSetName)
+	}
+	if conf.Username != "" || conf.Password != "" {
+		opts.SetAuth(options.Credential{
+			Password:   conf.Password,
+			Username:   conf.Username,
+			AuthSource: conf.AuthSource,
+		})
+	}
+	return opts
 }
 
 type Client interface {
@@ -77,34 +154,9 @@ func ToInterface(client *mongo.Client) Client {
 }
 
 func Dial(ctx context.Context, conf *Config) (Client, error) {
-	timeout := 10 * time.Second
-	if conf.Timeout != 0 {
-		timeout = conf.Timeout
-	}
+	opts := conf.Options()
 
-	journal := true
-	wc := writeconcern.Majority()
-	wc.Journal = &journal
-	opts := options.Client().
-		SetHosts(conf.Hosts).
-		SetWriteConcern(wc).
-		SetReadPreference(readpref.Primary()).
-		SetTLSConfig(conf.TLSConf).
-		SetDirect(conf.Direct).
-		SetConnectTimeout(timeout).
-		SetServerSelectionTimeout(timeout)
-
-	if conf.ReplSetName != "" {
-		opts.SetReplicaSet(conf.ReplSetName)
-	}
-	if conf.Username != "" || conf.Password != "" {
-		opts.SetAuth(options.Credential{
-			Password: conf.Password,
-			Username: conf.Username,
-		})
-	}
-
-	tCtx, cancel := context.WithTimeout(ctx, timeout)
+	tCtx, cancel := context.WithTimeout(ctx, *opts.ConnectTimeout)
 	defer cancel()
 	client, err := mongo.Connect(tCtx, opts)
 	if err != nil {
@@ -119,7 +171,7 @@ func Dial(ctx context.Context, conf *Config) (Client, error) {
 		}
 	}()
 
-	tCtx, cancel = context.WithTimeout(ctx, timeout)
+	tCtx, cancel = context.WithTimeout(ctx, *opts.ConnectTimeout)
 	defer cancel()
 	err = client.Ping(tCtx, readpref.Primary())
 	if err != nil {

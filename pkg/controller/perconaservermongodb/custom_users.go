@@ -18,6 +18,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	s "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
@@ -107,6 +109,26 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 		if err != nil {
 			log.Error(err, "failed to get user secret", "user", user)
 			continue
+		}
+
+		if !user.IsExternalDB() {
+			cred := psmdb.Credentials{
+				Username:   user.Name,
+				Password:   string(sec.Data[userSecretPassKey]),
+				AuthSource: user.DB,
+			}
+			if err := ensureConnectionStringSecret(
+				ctx,
+				client,
+				cr,
+				naming.SecretCustomUserConnStrName(cr, &user),
+				user.Name,
+				cred,
+				sec,
+				!cr.Spec.Sharding.Enabled,
+			); err != nil {
+				return errors.Wrapf(err, "ensure user conn string secret %s", user.Name)
+			}
 		}
 
 		annotationKey := buildAnnotationKey(cr, user.Name)
@@ -314,7 +336,8 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil || user.IsExternalDB() {
@@ -405,7 +428,8 @@ func createUser(
 	mongoCli mongo.Client,
 	user *api.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	roles := make([]mongo.Role, 0)

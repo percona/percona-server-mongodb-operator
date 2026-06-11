@@ -1597,6 +1597,38 @@ const (
 	RoleBackup SystemUserRole = "backup"
 )
 
+func (role SystemUserRole) EnvKeyUsername() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminUser
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminUser
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminUser
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorUser
+	case RoleBackup:
+		return EnvMongoDBBackupUser
+	}
+	return ""
+}
+
+func (role SystemUserRole) EnvKeyPassword() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminPassword
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminPassword
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminPassword
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorPassword
+	case RoleBackup:
+		return EnvMongoDBBackupPassword
+	}
+	return ""
+}
+
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
 	return internalPrefix + cr.Name + userPostfix
 }
