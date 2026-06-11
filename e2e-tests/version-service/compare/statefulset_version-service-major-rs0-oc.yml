@@ -128,6 +128,9 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /etc/mongodb-secrets
+              name: version-service-major-mongodb-keyfile
+              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -173,6 +176,11 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
+        - name: version-service-major-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: version-service-major-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}
