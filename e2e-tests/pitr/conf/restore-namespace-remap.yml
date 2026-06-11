@@ -1,0 +1,14 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  name:
+spec:
+  clusterName:
+  backupName:
+  storageName: minio
+  pitr:
+    type:
+    date:
+  selective:
+    nsFrom:
+    nsTo:
