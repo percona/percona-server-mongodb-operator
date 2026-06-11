@@ -946,14 +946,6 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 func (r *ReconcilePerconaServerMongoDB) ensureSecurityKeys(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
-	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
-	if err != nil {
-		return errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
-	}
-	if ikCreated {
-		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
-	}
-
 	if cr.KeyFileAuthEnabled() {
 		ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
 		if err != nil {
