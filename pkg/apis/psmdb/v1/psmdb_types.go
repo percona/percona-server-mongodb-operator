@@ -1487,6 +1487,16 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
+
+	ExternalDNS *ExternalDNSConfig `json:"externalDNS,omitempty"`
+}
+
+type ExternalDNSConfig struct {
+	Prefix string `json:"prefix,omitempty"`
+	// +kubebuilder:validation:Required
+	Domain string `json:"domain"`
+	// +kubebuilder:validation:Minimum=0
+	TTL int `json:"ttl,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
@@ -1659,12 +1669,16 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	return nil
 }
 
-func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
+func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context, restore *PerconaServerMongoDBRestore) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if restore is allowed")
 
 	if cr.Spec.Unmanaged {
 		return errors.New("can't run restore in an unmanaged cluster")
+	}
+
+	if cr.Spec.Sharding.Enabled && restore.IsCloningNamespace() {
+		return errors.New("namespace cloning is not supported in sharded clusters")
 	}
 
 	return nil

@@ -266,6 +266,10 @@ spec:
 #        rack: rack-22
 #      internalTrafficPolicy: Local
 #      externalTrafficPolicy: Local
+#      externalDNS:
+#        prefix: "service-name"
+#        domain: "mongo.example.com"
+#        ttl: 300
     resources:
       limits:
         cpu: "600m"
@@ -588,6 +592,10 @@ spec:
 #          rack: rack-22
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
       resources:
         limits:
           cpu: "600m"
@@ -713,6 +721,10 @@ spec:
 #        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
