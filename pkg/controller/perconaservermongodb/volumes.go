@@ -32,6 +32,16 @@ const (
 	GiB = int64(1024 * 1024 * 1024)
 )
 
+// eventRegardingNameIndex is the cache index used to list events by the name
+// of the object they regard. The cached client cannot use field selectors
+// unless the field is explicitly indexed (the manager registers this index in
+// Add).
+const eventRegardingNameIndex = "regarding.name"
+
+func eventRegardingNameIndexer(o client.Object) []string {
+	return []string{o.(*eventsv1.Event).Regarding.Name}
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *api.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *api.VolumeSpec) error {
 	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
@@ -175,7 +185,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 			events := &eventsv1.EventList{}
 			if err := r.client.List(ctx, events, &client.ListOptions{
 				Namespace:     sts.Namespace,
-				FieldSelector: fields.SelectorFromSet(map[string]string{"regarding.name": pvc.Name}),
+				FieldSelector: fields.SelectorFromSet(map[string]string{eventRegardingNameIndex: pvc.Name}),
 			}); err != nil {
 				return errors.Wrapf(err, "list events for pvc/%s", pvc.Name)
 			}

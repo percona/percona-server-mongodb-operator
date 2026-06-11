@@ -18,6 +18,7 @@ import (
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,6 +59,13 @@ func Add(mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
+	}
+
+	// the volume resize logic lists PVC events through the cached client,
+	// which requires the field to be indexed
+	err = mgr.GetFieldIndexer().IndexField(context.TODO(), &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
+	if err != nil {
+		return errors.Wrapf(err, "index events by %s", eventRegardingNameIndex)
 	}
 
 	return add(mgr, r)
