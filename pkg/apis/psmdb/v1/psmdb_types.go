@@ -1735,9 +1735,8 @@ func (cr *PerconaServerMongoDB) KeyFileAuthEnabled() bool {
 		return true
 	}
 	if cr.TLSEnabled() {
-		return cr.Spec.TLS != nil && cr.Spec.TLS.Mode == TLSModeAllow
+		return cr.Spec.TLS == nil || cr.Spec.TLS.Mode == TLSModeAllow
 	}
-
 	return cr.UnsafeTLSDisabled()
 }
 
