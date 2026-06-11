@@ -112,6 +112,46 @@ run_recovery_check_selective() {
 	fi
 }
 
+run_recovery_check_namespace_remap() {
+	local backup=$1
+	local cluster=$2
+	local database=$3
+	local src_collection=$4
+	local dst_collection=$5
+
+	restore_name="restore-$backup-remapped"
+
+	run_mongo \
+		"use $database\n db.$dst_collection.drop()" \
+		"myApp:myPass@$cluster.$namespace"
+
+	if [[ $(collection_exists "$dst_collection") == "true" ]]; then
+		echo "Collection $dst_collection exists before restore"
+		exit 1
+	fi
+
+	yq "$test_dir/conf/restore.yml" \
+		| yq ".metadata.name=\"$restore_name\"" \
+		| yq ".spec.backupName=\"$backup\"" \
+		| yq ".spec.selective.nsFrom=\"$database.$src_collection\"" \
+		| yq ".spec.selective.nsTo=\"$database.$dst_collection\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "$backup-remapped" "${cluster/-rs0/}"
+
+	if [[ $(collection_exists "$dst_collection") == "false" ]]; then
+		echo "Collection $dst_collection doesn't exist after restore"
+		exit 1
+	fi
+
+	if [[ $(collection_exists "$src_collection") == "false" ]]; then
+		echo "Collection $src_collection missing after remap restore"
+		exit 1
+	fi
+
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-remapped" ".svc.cluster.local" "$database" "$dst_collection"
+}
+
 compare_pbm_profile_setup() {
 	local cluster=$1
 	local profile=$2
@@ -267,6 +307,9 @@ run_mongo \
 
 desc 'selective restore with users and roles -- minio'
 run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "true" "$custom_user_name" "$custom_role_name"
+
+desc 'selective restore with namespace remap -- minio'
+run_recovery_check_namespace_remap "$backup_name_minio" "$cluster" "myApp" "test" "test_remapped"
 
 desc 'restore from backup source, with storageName -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
