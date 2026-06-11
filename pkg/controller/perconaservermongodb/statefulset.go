@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"maps"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -183,12 +184,10 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
-	for k, v := range sslAnn {
-		sfsSpec.Template.Annotations[k] = v
-	}
+	maps.Copy(sfsSpec.Template.Annotations, sslAnn)
 
 	if preservedValue, exists := cr.Annotations[api.AnnotationPreservedRestartedAt(sfs.Name)]; exists {
-		sfsSpec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = preservedValue
+		sfsSpec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = preservedValue
 	}
 
 	return sfs, nil

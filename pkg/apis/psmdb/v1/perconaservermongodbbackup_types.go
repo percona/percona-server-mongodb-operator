@@ -148,6 +148,9 @@ func (p *PerconaServerMongoDBBackup) PBMBackupType() defs.BackupType {
 	if p.Spec.Type == BackupTypeIncrementalBase {
 		return defs.IncrementalBackup
 	}
+	if p.Spec.Type == "" {
+		return defs.LogicalBackup
+	}
 	return p.Spec.Type
 }
 
