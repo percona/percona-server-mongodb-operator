@@ -291,6 +291,114 @@ func TestExternalService(t *testing.T) {
 				},
 			},
 		},
+		"LoadBalancer with externalDNS": {
+			replset: &api.ReplsetSpec{
+				Name: "rs0",
+				Expose: api.ExposeTogglable{
+					Enabled: true,
+					Expose: api.Expose{
+						ServiceAnnotations: map[string]string{
+							"percona.com/test": "annotation",
+						},
+						ExposeType: corev1.ServiceTypeLoadBalancer,
+						ExternalDNS: &api.ExternalDNSConfig{
+							Prefix: "prod",
+							Domain: "mongo.example.com",
+							TTL:    300,
+						},
+					},
+				},
+			},
+			podName: "test-cr-rs0-0",
+			expectedSvc: &corev1.Service{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Service",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr-rs0-0",
+					Namespace: "test-ns",
+					Labels: map[string]string{
+						"app.kubernetes.io/component":  "external-service",
+						"app.kubernetes.io/instance":   "test-cr",
+						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+						"app.kubernetes.io/name":       "percona-server-mongodb",
+						"app.kubernetes.io/part-of":    "percona-server-mongodb",
+						"app.kubernetes.io/replset":    "rs0",
+					},
+					Annotations: map[string]string{
+						"percona.com/test":                          "annotation",
+						"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+						"external-dns.alpha.kubernetes.io/ttl":      "300",
+					},
+				},
+				Spec: corev1.ServiceSpec{
+					PublishNotReadyAddresses: true,
+					Ports: []corev1.ServicePort{
+						{
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: ptr.To("mongo"),
+						},
+					},
+					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
+					Type:                  corev1.ServiceTypeLoadBalancer,
+					ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+				},
+			},
+		},
+		"LoadBalancer with externalDNS no TTL": {
+			replset: &api.ReplsetSpec{
+				Name: "rs0",
+				Expose: api.ExposeTogglable{
+					Enabled: true,
+					Expose: api.Expose{
+						ExposeType: corev1.ServiceTypeLoadBalancer,
+						ExternalDNS: &api.ExternalDNSConfig{
+							Prefix: "staging",
+							Domain: "db.example.com",
+						},
+					},
+				},
+			},
+			podName: "test-cr-rs0-2",
+			expectedSvc: &corev1.Service{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Service",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr-rs0-2",
+					Namespace: "test-ns",
+					Labels: map[string]string{
+						"app.kubernetes.io/component":  "external-service",
+						"app.kubernetes.io/instance":   "test-cr",
+						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+						"app.kubernetes.io/name":       "percona-server-mongodb",
+						"app.kubernetes.io/part-of":    "percona-server-mongodb",
+						"app.kubernetes.io/replset":    "rs0",
+					},
+					Annotations: map[string]string{
+						"external-dns.alpha.kubernetes.io/hostname": "staging-rs0-2.db.example.com",
+					},
+				},
+				Spec: corev1.ServiceSpec{
+					PublishNotReadyAddresses: true,
+					Ports: []corev1.ServicePort{
+						{
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: ptr.To("mongo"),
+						},
+					},
+					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-2"},
+					Type:                  corev1.ServiceTypeLoadBalancer,
+					ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -305,6 +413,60 @@ func TestExternalService(t *testing.T) {
 			}
 			svc := ExternalService(cr, tt.replset, tt.podName)
 			assert.Equal(t, tt.expectedSvc, svc)
+		})
+	}
+}
+
+func TestBuildDNSHostname(t *testing.T) {
+	tests := map[string]struct {
+		dns       *api.ExternalDNSConfig
+		component string
+		podName   string
+		expected  string
+	}{
+		"replset pod 0": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "rs0",
+			podName:   "my-cluster-rs0-0",
+			expected:  "prod-rs0-0.mongo.example.com",
+		},
+		"replset pod 2": {
+			dns:       &api.ExternalDNSConfig{Prefix: "staging", Domain: "db.example.com"},
+			component: "rs0",
+			podName:   "my-cluster-rs0-2",
+			expected:  "staging-rs0-2.db.example.com",
+		},
+		"mongos pod": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "mongos",
+			podName:   "my-cluster-mongos-1",
+			expected:  "prod-mongos-1.mongo.example.com",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := BuildDNSHostname(tt.dns, tt.component, tt.podName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildDNSHostnameWithoutIndex(t *testing.T) {
+	tests := map[string]struct {
+		dns       *api.ExternalDNSConfig
+		component string
+		expected  string
+	}{
+		"mongos": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "mongos",
+			expected:  "prod-mongos.mongo.example.com",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := BuildDNSHostnameWithoutIndex(tt.dns, tt.component)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

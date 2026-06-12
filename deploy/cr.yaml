@@ -28,6 +28,7 @@ spec:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    allowInvalidCertificates: true
+#    certManagementPolicy: auto
 #    issuerConf:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
@@ -265,6 +266,10 @@ spec:
 #        rack: rack-22
 #      internalTrafficPolicy: Local
 #      externalTrafficPolicy: Local
+#      externalDNS:
+#        prefix: "service-name"
+#        domain: "mongo.example.com"
+#        ttl: 300
     resources:
       limits:
         cpu: "600m"
@@ -575,6 +580,10 @@ spec:
 #          rack: rack-22
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
       resources:
         limits:
           cpu: "600m"
@@ -700,6 +709,10 @@ spec:
 #        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
