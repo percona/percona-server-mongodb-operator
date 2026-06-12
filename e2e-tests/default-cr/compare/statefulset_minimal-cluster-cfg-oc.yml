@@ -91,9 +91,9 @@ spec:
                 - --ssl
                 - --sslInsecure
                 - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
+                - /etc/mongodb-ssl-internal/ca.crt
                 - --sslPEMKeyFile
-                - /tmp/tls.pem
+                - /tmp/tls-internal.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -117,9 +117,9 @@ spec:
                 - --ssl
                 - --sslInsecure
                 - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
+                - /etc/mongodb-ssl-internal/ca.crt
                 - --sslPEMKeyFile
-                - /tmp/tls.pem
+                - /tmp/tls-internal.pem
             failureThreshold: 3
             initialDelaySeconds: 10
             periodSeconds: 3
