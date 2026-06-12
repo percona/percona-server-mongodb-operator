@@ -132,6 +132,18 @@ func (u *User) IsExternalDB() bool {
 	return u.DB == "$external"
 }
 
+func (u *User) DefaultSecretName(cr *PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-custom-user-secret", cr.Name)
+}
+
+func (u *User) SecretName(cr *PerconaServerMongoDB) string {
+	if u.PasswordSecretRef != nil {
+		return u.PasswordSecretRef.Name
+	}
+
+	return u.DefaultSecretName(cr)
+}
+
 type RoleAuthenticationRestriction struct {
 	ClientSource  []string `json:"clientSource,omitempty"`
 	ServerAddress []string `json:"serverAddress,omitempty"`

@@ -11,5 +11,5 @@ func SecretDatabaseAdminConnStrName(cr *api.PerconaServerMongoDB) string {
 }
 
 func SecretCustomUserConnStrName(cr *api.PerconaServerMongoDB, user *api.User) string {
-	return strings.ToLower(cr.Name + "-" + user.Name + "-conn-str")
+	return user.SecretName(cr) + "-conn-str"
 }

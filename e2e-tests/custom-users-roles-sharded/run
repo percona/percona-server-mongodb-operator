@@ -186,13 +186,13 @@ userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
 compare 'admin' "$(get_user_cmd \"user-one\")" "$mongosUri" "user-one"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
-retry 60 2 check_connection_strings "$cluster-user-one-conn-str"
+retry 60 2 check_connection_strings "user-one-conn-str"
 
 generatedUserSecret="$cluster-custom-user-secret"
 generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
 compare 'admin' "$(get_user_cmd \"user-gen\")" "$mongosUri" "user-gen"
 check_auth "user-gen:$generatedPass@$cluster-mongos.$namespace"
-retry 60 2 check_connection_strings "$cluster-user-gen-conn-str"
+retry 60 2 check_connection_strings "$generatedUserSecret-conn-str"
 
 # Only check if $external.user-external user exists, as the password is not known
 # since we don't have a external provider set in this test
@@ -225,7 +225,7 @@ userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
 # Both users should be in the DB, the operator should not delete the user removed from the CR
 check_auth "$userTwo:$userTwoPass@$cluster-mongos.$namespace"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
-retry 60 2 check_connection_strings "$cluster-user-two-conn-str"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check password change'
 userTwoNewPass="new-user-two-password"
@@ -233,7 +233,7 @@ patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
 sleep 20
 
 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
-retry 60 2 check_connection_strings "$cluster-user-two-conn-str"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check user roles update from CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -294,7 +294,7 @@ compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-rol
 # user-three and user-two should be in the DB
 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
 check_auth "user-three:$userTwoNewPass@$cluster-mongos.$namespace"
-retry 60 2 check_connection_strings "$cluster-user-three-conn-str"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check new user created after updated user db via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -316,7 +316,7 @@ wait_for_running $cluster-rs0 3
 
 compare 'newDb' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-newDb-db"
 compare 'admin' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-admin-db"
-retry 60 2 check_connection_strings "$cluster-user-three-conn-str"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -335,7 +335,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 wait_for_running $cluster-rs0 3
 
 compare 'admin' "$(get_user_cmd \"user-four\")" "$mongosUri" "user-four"
-retry 60 2 check_connection_strings "$cluster-user-four-conn-str"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 # ======================== Roles ========================
 
@@ -555,8 +555,7 @@ compare 'testAdmin1' "$(get_role_cmd \"role-four\" )" "$mongosUri" "role-four"
 compare 'testAdmin2' "$(get_role_cmd \"role-five\" )" "$mongosUri" "role-five"
 compare 'testAdmin' "$(get_user_cmd \"user-five\")" "$mongosUri" "user-five"
 compare 'testAdmin' "$(get_user_cmd \"user-six\")" "$mongosUri" "user-six"
-retry 60 2 check_connection_strings "$cluster-user-five-conn-str"
-retry 60 2 check_connection_strings "$cluster-user-six-conn-str"
+retry 60 2 check_connection_strings "user-one-conn-str"
 
 destroy $namespace
 

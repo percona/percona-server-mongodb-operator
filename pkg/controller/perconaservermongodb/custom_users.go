@@ -481,21 +481,16 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 		return nil, nil
 	}
 
-	defaultSecretName := fmt.Sprintf("%s-custom-user-secret", cr.Name)
-
-	secretName := defaultSecretName
-	if user.PasswordSecretRef != nil {
-		secretName = user.PasswordSecretRef.Name
-	}
+	secretName := user.SecretName(cr)
 
 	secret := &corev1.Secret{}
 	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
 
-	if err != nil && secretName != defaultSecretName {
+	if err != nil && secretName != user.DefaultSecretName(cr) {
 		return nil, errors.Wrap(err, "failed to get user secret")
 	}
 
-	if err != nil && !k8serrors.IsNotFound(err) && secretName == defaultSecretName {
+	if err != nil && !k8serrors.IsNotFound(err) && secretName == user.DefaultSecretName(cr) {
 		return nil, errors.Wrap(err, "failed to get user secret")
 	}
 
@@ -526,7 +521,7 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 	}
 
 	_, hasPass := secret.Data[passKey]
-	if !hasPass && secretName == defaultSecretName {
+	if !hasPass && secretName == user.DefaultSecretName(cr) {
 		pass, err := s.GeneratePassword()
 		if err != nil {
 			return nil, errors.Wrap(err, "generate custom user password")
