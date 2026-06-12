@@ -89,6 +89,24 @@ func TestContainer(t *testing.T) {
 			},
 			assert: assertNoAuthMechanism(),
 		},
+		"pmm enabled - query-source=mongolog is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "mongolog"
+			},
+			assert: assertQuerySource("mongolog"),
+		},
+		"pmm enabled - query-source=profiler is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "profiler"
+			},
+			assert: assertQuerySource("profiler"),
+		},
+		"pmm enabled - query-source not set omits flag": {
+			secret: tokenSecret,
+			assert: assertNoQuerySource(),
+		},
 	}
 
 	for name, tt := range tests {
@@ -149,6 +167,38 @@ func assertAuthMechanism(want string) func(t *testing.T, container *corev1.Conta
 			}
 		}
 		assert.Contains(t, prerun, "--authentication-mechanism="+want)
+	}
+}
+
+func assertQuerySource(want string) func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.Contains(t, prerun, "--query-source="+want)
+	}
+}
+
+func assertNoQuerySource() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.NotContains(t, prerun, "--query-source")
 	}
 }
 
