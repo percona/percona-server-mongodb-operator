@@ -46,7 +46,6 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 		"exposed replset": {
 			includeReplsets: true,
 			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
-				cr.Spec.ClusterServiceDNSMode = api.DNSModeExternal
 				rs := cr.Spec.Replsets[0]
 				rs.Expose.Enabled = true
 				pod := fakePodsForRS(cr, rs)[0]
@@ -59,10 +58,16 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 							Namespace: cr.Namespace,
 						},
 						Spec: corev1.ServiceSpec{
-							Type:      corev1.ServiceTypeClusterIP,
-							ClusterIP: "10.0.0.10",
+							Type: corev1.ServiceTypeLoadBalancer,
 							Ports: []corev1.ServicePort{
 								{Name: "mongodb", Port: 27017},
+							},
+						},
+						Status: corev1.ServiceStatus{
+							LoadBalancer: corev1.LoadBalancerStatus{
+								Ingress: []corev1.LoadBalancerIngress{
+									{Hostname: "rs0.example.com"},
+								},
 							},
 						},
 					},
@@ -71,7 +76,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 			expected: map[string][]byte{
 				"app_user_rs0_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
 				"app_user_rs0_connectionStringSrv":     []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
-				"app_user_rs0_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.10:27017/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@rs0.example.com:27017/?authSource=application&replicaSet=rs0"),
 			},
 		},
 		"mongos without replsets": {

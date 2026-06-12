@@ -82,7 +82,7 @@ func ensureConnectionStringSecret(
 		connStrSecret.Labels = naming.ClusterLabels(cr)
 		if includeReplsets {
 			for _, rs := range cr.GetAllReplsets() {
-				cfg, err := psmdb.MongoConfig(ctx, cl, cr, rs, cred, false)
+				cfg, err := psmdb.MongoConfig(ctx, cl, cr, cr.Spec.ClusterServiceDNSMode, rs, cred, false)
 				if err != nil {
 					return errors.Wrap(err, "mongo config")
 				}
@@ -97,7 +97,7 @@ func ensureConnectionStringSecret(
 				}, ".")))
 
 				if rs.Expose.Enabled {
-					cfg, err := psmdb.MongoConfig(ctx, cl, cr, rs, cred, true)
+					cfg, err := psmdb.MongoConfig(ctx, cl, cr, api.DNSModeExternal, rs, cred, true)
 					if err != nil {
 						return errors.Wrap(err, "mongo config")
 					}

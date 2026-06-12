@@ -18,7 +18,7 @@ type Credentials struct {
 }
 
 func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials) (mongo.Client, error) {
-	conf, err := MongoConfig(ctx, k8sClient, cr, rs, c, false)
+	conf, err := MongoConfig(ctx, k8sClient, cr, cr.Spec.ClusterServiceDNSMode, rs, c, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "mongo config")
 	}
@@ -26,7 +26,7 @@ func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaSe
 	return mongo.Dial(ctx, conf)
 }
 
-func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials, rsExposed bool) (*mongo.Config, error) {
+func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rs *api.ReplsetSpec, c Credentials, rsExposed bool) (*mongo.Config, error) {
 	pods, err := GetRSPods(ctx, cl, cr, rs.Name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get pods list for replset %s", rs.Name)
@@ -42,7 +42,7 @@ func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMon
 		}
 	}
 
-	rsAddrs, err := GetReplsetAddrs(ctx, cl, cr, cr.Spec.ClusterServiceDNSMode, rs, rsExposed, pods.Items)
+	rsAddrs, err := GetReplsetAddrs(ctx, cl, cr, dnsMode, rs, rsExposed, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addr")
 	}
