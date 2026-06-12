@@ -60,6 +60,16 @@ func ensureConnectionStringSecret(
 	owner metav1.Object,
 	includeReplsets bool,
 ) error {
+	keyPrefix = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' ||
+			r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' ||
+			r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, keyPrefix)
+
 	connStrSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,

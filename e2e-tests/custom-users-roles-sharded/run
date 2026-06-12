@@ -322,7 +322,7 @@ desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 		"spec": {"users":[
 			{
-				"name":"user-four",
+				"name":"user/four",
 				"passwordSecretRef": {
 					"name": "user-two"
 				},
@@ -334,7 +334,7 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' "$(get_user_cmd \"user-four\")" "$mongosUri" "user-four"
+compare 'admin' "$(get_user_cmd \"user/four\")" "$mongosUri" "user-four"
 retry 60 2 check_connection_strings "user-two-conn-str"
 
 # ======================== Roles ========================

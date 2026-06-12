@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -38,8 +39,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app-user_rs0_connectionString":    []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
-				"app-user_rs0_connectionStringSrv": []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionString":    []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionStringSrv": []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
 			},
 		},
 		"exposed replset": {
@@ -68,9 +69,9 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app-user_rs0_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
-				"app-user_rs0_connectionStringSrv":     []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
-				"app-user_rs0_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.10:27017/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionStringSrv":     []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
+				"app_user_rs0_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.10:27017/?authSource=application&replicaSet=rs0"),
 			},
 		},
 		"mongos without replsets": {
@@ -94,7 +95,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app-user_mongos_connectionString": []byte("mongodb://app-user:p%40ss%2Fword@cluster-mongos.database.svc.cluster.local:27017/?authSource=application"),
+				"app_user_mongos_connectionString": []byte("mongodb://app-user:p%40ss%2Fword@cluster-mongos.database.svc.cluster.local:27017/?authSource=application"),
 			},
 		},
 		"exposed mongos": {
@@ -137,8 +138,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app-user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.20/?authSource=application"),
-				"app-user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com/?authSource=application"),
+				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.20/?authSource=application"),
+				"app_user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com/?authSource=application"),
 			},
 		},
 	}
@@ -161,7 +162,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				r.client,
 				cr,
 				"app-user-conn-str",
-				"app-user",
+				"app/user",
 				psmdb.Credentials{
 					Username:   "app-user",
 					Password:   "p@ss/word",
@@ -178,6 +179,9 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				Namespace: cr.Namespace,
 			}, actual))
 			assert.Equal(t, tt.expected, actual.Data)
+			for key := range actual.Data {
+				assert.Empty(t, validation.IsConfigMapKey(key))
+			}
 			require.Len(t, actual.OwnerReferences, 1)
 			assert.Equal(t, owner.UID, actual.OwnerReferences[0].UID)
 			assert.Equal(t, "Secret", actual.OwnerReferences[0].Kind)
