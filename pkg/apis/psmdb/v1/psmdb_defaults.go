@@ -251,7 +251,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -309,7 +309,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -483,11 +483,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
 
-			replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+			replset.LivenessProbe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -502,7 +502,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					}
 				}
 
-				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command, tlsArgs...)
+				replset.LivenessProbe.Exec.Command = append(replset.LivenessProbe.Exec.Command, tlsArgs...)
 			}
 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -544,7 +544,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -929,7 +929,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -944,11 +944,11 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				}
 			}
 
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(nv.LivenessProbe.Probe.ProbeHandler.Exec.Command, tlsArgs...)
+			nv.LivenessProbe.Exec.Command = append(nv.LivenessProbe.Exec.Command, tlsArgs...)
 		}
 
 		if cr.CompareVersion("1.14.0") >= 0 {
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			nv.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -972,7 +972,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -1061,7 +1061,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -1103,7 +1103,7 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
