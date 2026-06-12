@@ -554,9 +554,19 @@ spec:
                     items:
                       type: string
                     type: array
+                  nsFrom:
+                    type: string
+                  nsTo:
+                    type: string
                   withUsersAndRoles:
                     type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: nsFrom and nsTo need to be set together
+                  rule: (!has(self.nsFrom) && !has(self.nsTo)) || (has(self.nsFrom)
+                    && has(self.nsTo))
+                - message: nsFrom and nsTo can't be the same
+                  rule: (!has(self.nsFrom) && !has(self.nsTo)) || self.nsFrom != self.nsTo
               storageName:
                 type: string
             type: object
@@ -4912,6 +4922,18 @@ spec:
                           type: boolean
                         exposeType:
                           type: string
+                        externalDNS:
+                          properties:
+                            domain:
+                              type: string
+                            prefix:
+                              type: string
+                            ttl:
+                              minimum: 0
+                              type: integer
+                          required:
+                          - domain
+                          type: object
                         externalTrafficPolicy:
                           type: string
                         internalTrafficPolicy:
@@ -15746,6 +15768,18 @@ spec:
                             type: boolean
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:
@@ -24194,6 +24228,18 @@ spec:
                             type: object
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:

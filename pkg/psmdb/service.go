@@ -63,6 +63,19 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 
 // ExternalService returns a Service object needs to serve external connections
 func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podName string) *corev1.Service {
+	annotations := make(map[string]string)
+	for k, v := range replset.Expose.ServiceAnnotations {
+		annotations[k] = v
+	}
+
+	if dns := replset.Expose.ExternalDNS; dns != nil {
+		hostname := BuildDNSHostname(dns, replset.Name, podName)
+		annotations["external-dns.alpha.kubernetes.io/hostname"] = hostname
+		if dns.TTL > 0 {
+			annotations["external-dns.alpha.kubernetes.io/ttl"] = strconv.Itoa(dns.TTL)
+		}
+	}
+
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -71,7 +84,7 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        podName,
 			Namespace:   cr.Namespace,
-			Annotations: replset.Expose.ServiceAnnotations,
+			Annotations: annotations,
 		},
 	}
 
@@ -438,4 +451,16 @@ func IsServiceImported(ctx context.Context, k8sclient client.Client, cr *api.Per
 		return false, client.IgnoreNotFound(err)
 	}
 	return true, nil
+}
+
+// BuildDNSHostname builds a DNS hostname in the format: prefix-component-podIndex.domain
+func BuildDNSHostname(dns *api.ExternalDNSConfig, component, podName string) string {
+	parts := strings.Split(podName, "-")
+	podIndex := parts[len(parts)-1]
+	return fmt.Sprintf("%s-%s-%s.%s", dns.Prefix, component, podIndex, dns.Domain)
+}
+
+// BuildDNSHostnameWithoutIndex builds a DNS hostname in the format: prefix-component.domain
+func BuildDNSHostnameWithoutIndex(dns *api.ExternalDNSConfig, component string) string {
+	return fmt.Sprintf("%s-%s.%s", dns.Prefix, component, dns.Domain)
 }

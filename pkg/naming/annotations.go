@@ -5,3 +5,5 @@ const (
 	AnnotationSSLHash         = perconaPrefix + "ssl-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"
 )
+
+const AnnotationKubectlRestartedAt = "kubectl.kubernetes.io/restartedAt"

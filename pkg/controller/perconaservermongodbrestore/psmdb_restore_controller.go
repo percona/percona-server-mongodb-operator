@@ -159,7 +159,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
-	if err = cluster.CanRestore(ctx); err != nil {
+	if err = cluster.CanRestore(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "can cluster restore")
 	}
 
