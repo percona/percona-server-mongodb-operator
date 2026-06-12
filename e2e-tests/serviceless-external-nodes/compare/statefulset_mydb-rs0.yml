@@ -130,14 +130,14 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: mydb-custom-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
+              readOnly: true
+            - mountPath: /etc/mongodb-secrets
+              name: mydb-custom-mongodb-keyfile
               readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
