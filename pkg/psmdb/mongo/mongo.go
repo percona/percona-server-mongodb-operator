@@ -60,7 +60,7 @@ func (conf *Config) uri(scheme, hostname string) string {
 	if conf.AuthSource != "" {
 		q.Set("authSource", conf.AuthSource)
 	}
-	if conf.TLSConf != nil {
+	if scheme != connstring.SchemeMongoDBSRV && conf.TLSConf != nil {
 		q.Set("tls", "true")
 	}
 	if conf.Direct {

@@ -69,6 +69,7 @@ func ensureConnectionStringSecret(
 
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
 		connStrSecret.Data = make(map[string][]byte)
+		connStrSecret.Labels = naming.ClusterLabels(cr)
 		if includeReplsets {
 			for _, rs := range cr.GetAllReplsets() {
 				cfg, err := psmdb.MongoConfig(ctx, cl, cr, rs, cred, false)
