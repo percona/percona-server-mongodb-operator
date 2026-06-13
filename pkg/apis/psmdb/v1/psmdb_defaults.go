@@ -251,7 +251,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -309,7 +309,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -487,7 +487,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -544,7 +544,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
-				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 					tlsArgs = []string{
 						"--ssl", "--sslInsecure",
 						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -929,7 +929,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -972,7 +972,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -1061,7 +1061,7 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
@@ -1103,7 +1103,7 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
-			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" {
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
 				tlsArgs = []string{
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
