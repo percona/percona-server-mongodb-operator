@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +26,8 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -52,6 +55,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		clientcmd:            cli,
+		recorder:             mgr.GetEventRecorderFor("psmdbclustersync-controller"),
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {
@@ -83,6 +87,7 @@ type ReconcilePerconaServerMongoDBClusterSync struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+	recorder  record.EventRecorder
 
 	newPCSMClientFor     func(*psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient
 	newTargetMongoClient targetMongoClientFn
@@ -100,7 +105,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	}
 
 	if !cr.DeletionTimestamp.IsZero() {
-		return reconcile.Result{}, nil
+		return r.handleDeletion(ctx, cr)
 	}
 
 	target := &psmdbv1.PerconaServerMongoDB{}
@@ -111,6 +116,19 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 			return r.requeueWithStatusError(ctx, cr, errors.Wrapf(err, "target cluster %s not found", targetNN))
 		}
 		return reconcile.Result{}, errors.Wrapf(err, "get target cluster %s", targetNN)
+	}
+
+	// Announce ownership of the target cluster before the PCSM
+	// deployment exists. Backups/restores in the same namespace will
+	// see this lease and stay in Waiting. The finalizer guarantees the
+	// lease is released even if the CR is force-deleted.
+	if err := r.ensureReleaseLockFinalizer(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "ensure %s finalizer", naming.FinalizerReleaseLock)
+	}
+	if _, err := k8s.AcquireLease(ctx, r.client,
+		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
+		naming.ClusterSyncHolderId(cr)); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "acquire clustersync lease")
 	}
 
 	svr, err := version.Server(r.clientcmd)
@@ -163,8 +181,133 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mode")
 	}
 
+	// PCSM has stopped replicating; the cluster is free again. We keep
+	// the finalizer (released on CR delete) but drop the lease so
+	// backups/restores can proceed without waiting for the user to
+	// delete the CR.
+	if cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
+		if err := r.releaseClusterSyncLease(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "release clustersync lease after finalize")
+		}
+	}
+
 	log.V(1).Info("Reconciled ClusterSync", "clusterName", cr.Spec.ClusterName, "mode", cr.Spec.Mode, "state", cr.Status.State)
 	return reconcile.Result{RequeueAfter: requeueInterval}, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) handleDeletion(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (reconcile.Result, error) {
+	log := logf.FromContext(ctx)
+
+	hasFinalizer := false
+	for _, f := range cr.GetFinalizers() {
+		if f == naming.FinalizerReleaseLock {
+			hasFinalizer = true
+			break
+		}
+	}
+	if !hasFinalizer {
+		return reconcile.Result{}, nil
+	}
+
+	if err := r.releaseClusterSyncLease(ctx, cr); err != nil {
+		log.Error(err, "release clustersync lease on delete")
+		return reconcile.Result{RequeueAfter: requeueInterval}, nil
+	}
+
+	orig := cr.DeepCopy()
+	finalizers := make([]string, 0, len(cr.GetFinalizers()))
+	for _, f := range cr.GetFinalizers() {
+		if f == naming.FinalizerReleaseLock {
+			continue
+		}
+		finalizers = append(finalizers, f)
+	}
+	cr.SetFinalizers(finalizers)
+	if err := r.client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "remove release-lock finalizer")
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) ensureReleaseLockFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
+	for _, f := range cr.GetFinalizers() {
+		if f == naming.FinalizerReleaseLock {
+			return nil
+		}
+	}
+	orig := cr.DeepCopy()
+	cr.SetFinalizers(append(cr.GetFinalizers(), naming.FinalizerReleaseLock))
+	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch finalizers")
+	}
+	logf.FromContext(ctx).V(1).Info("Added finalizer", "finalizer", naming.FinalizerReleaseLock)
+	return nil
+}
+
+// writeAction reports whether the given mode action causes PCSM to
+// write to the target cluster. Start kicks off the initial sync;
+// Resume restarts change-stream application. Pause and Finalize stop
+// or drain PCSM and are always safe to run during a backup.
+func writeAction(a modeAction) bool {
+	return a == actionStart || a == actionResume
+}
+
+// clusterBusyByBackupOrRestore returns true if a backup or restore is
+// currently in-flight against the target cluster. Reads cover both
+// signals because they live in different places: backups acquire the
+// backup lease (so we check that), restores do not (they coordinate
+// through PBM's internal locks), so we list PerconaServerMongoDBRestore
+// CRs in the namespace and look for non-terminal states.
+func (r *ReconcilePerconaServerMongoDBClusterSync) clusterBusyByBackupOrRestore(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (bool, string, error) {
+	backupLease := naming.BackupLeaseName(cr.Spec.ClusterName)
+	active, err := k8s.IsLeaseActive(ctx, r.client, backupLease, cr.Namespace)
+	if err != nil {
+		return false, "", errors.Wrap(err, "check backup lease")
+	}
+	if active {
+		return true, fmt.Sprintf("backup is in progress on cluster %q (lease %s)", cr.Spec.ClusterName, backupLease), nil
+	}
+
+	restores := &psmdbv1.PerconaServerMongoDBRestoreList{}
+	if err := r.client.List(ctx, restores, client.InNamespace(cr.Namespace)); err != nil {
+		return false, "", errors.Wrap(err, "list restores")
+	}
+	for i := range restores.Items {
+		rst := &restores.Items[i]
+		if rst.Spec.ClusterName != cr.Spec.ClusterName {
+			continue
+		}
+		if restoreInFlight(rst.Status.State) {
+			return true, fmt.Sprintf("restore %q is in progress on cluster %q (state=%s)",
+				rst.Name, cr.Spec.ClusterName, rst.Status.State), nil
+		}
+	}
+	return false, "", nil
+}
+
+func restoreInFlight(s psmdbv1.RestoreState) bool {
+	switch s {
+	case psmdbv1.RestoreStateReady, psmdbv1.RestoreStateError, psmdbv1.RestoreStateRejected:
+		return false
+	}
+	return true
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
+	err := k8s.ReleaseLease(ctx, r.client,
+		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
+		naming.ClusterSyncHolderId(cr))
+	if k8serrors.IsNotFound(errors.Cause(err)) {
+		return nil
+	}
+	// ErrNotTheHolder means the lease exists but belongs to a different
+	// ClusterSync CR (e.g., a previous one with the same clusterName
+	// was deleted and a new one was created before the lease GC ran).
+	// Treat as success — we don't own it, nothing to release.
+	if stderrors.Is(err, k8s.ErrNotTheHolder) {
+		return nil
+	}
+	return err
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
@@ -247,17 +390,35 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		if skipAction(action, newStatus.State) {
 			log.Info("PCSM already in matching state, skipping transition",
 				"action", action, "state", newStatus.State, "to", cr.Spec.Mode)
-		} else if err := invokeAction(ctx, pcsm, action, cr, newStatus.State); err != nil {
-			newStatus.Error = err.Error()
-			if isPCSMUnreachable(err) {
-				log.V(1).Info("PCSM CLI not reachable during transition", "action", action, "err", err.Error())
-			} else {
-				log.Error(err, "PCSM transition failed", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
+		} else {
+			// Block actions that cause PCSM to write to the target while
+			// a backup/restore is in flight on that cluster: their cursors
+			// pin WiredTiger history and PCSM writes would race with PBM.
+			if writeAction(action) {
+				busy, reason, err := r.clusterBusyByBackupOrRestore(ctx, cr)
+				if err != nil {
+					return errors.Wrap(err, "check cluster busy by backup or restore")
+				}
+				if busy {
+					newStatus.Error = reason
+					log.Info("Holding PCSM transition: cluster busy with backup or restore",
+						"action", action, "reason", reason)
+					r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterBusy",
+						"Holding PCSM %q: %s", action, reason)
+					return r.writeStatus(ctx, cr, *newStatus)
+				}
 			}
-			return r.writeStatus(ctx, cr, *newStatus)
+			if err := invokeAction(ctx, pcsm, action, cr, newStatus.State); err != nil {
+				newStatus.Error = err.Error()
+				if isPCSMUnreachable(err) {
+					log.V(1).Info("PCSM CLI not reachable during transition", "action", action, "err", err.Error())
+				} else {
+					log.Error(err, "PCSM transition failed", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
+				}
+				return r.writeStatus(ctx, cr, *newStatus)
+			}
+			log.Info("PCSM transition applied", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 		}
-
-		log.Info("PCSM transition applied", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 	}
 	if mirror {
 		newStatus.Mode = cr.Spec.Mode
