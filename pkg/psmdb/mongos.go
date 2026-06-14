@@ -131,16 +131,6 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
-		{
-			Name:      "ssl",
-			MountPath: config.SSLDir,
-			ReadOnly:  true,
-		},
-		{
-			Name:      "ssl-internal",
-			MountPath: config.SSLInternalDir,
-			ReadOnly:  true,
-		},
 	}
 
 	if mountKeyFile {
@@ -150,6 +140,19 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			ReadOnly:  true,
 		})
 	}
+
+	volumes = append(volumes,
+		corev1.VolumeMount{
+			Name:      "ssl",
+			MountPath: config.SSLDir,
+			ReadOnly:  true,
+		},
+		corev1.VolumeMount{
+			Name:      "ssl-internal",
+			MountPath: config.SSLInternalDir,
+			ReadOnly:  true,
+		},
+	)
 
 	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{

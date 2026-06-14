@@ -158,8 +158,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
-	keyfileSecret := new(corev1.Secret)
-	keyfileSecretErr := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, keyfileSecret)
+	keyfileSecretErr := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, &corev1.Secret{})
 	if client.IgnoreNotFound(keyfileSecretErr) != nil {
 		return nil, errors.Wrap(keyfileSecretErr, "check keyfile secret")
 	}
