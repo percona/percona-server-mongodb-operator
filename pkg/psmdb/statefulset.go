@@ -41,8 +41,9 @@ var secretFileMode int32 = 288
 
 // StatefulSpecSecretParams contains secrets params for the StatefulSpec.
 type StatefulSpecSecretParams struct {
-	UsersSecret *corev1.Secret
-	SSLSecret   *corev1.Secret
+	UsersSecret   *corev1.Secret
+	SSLSecret     *corev1.Secret
+	KeyfileExists bool
 }
 
 type StatefulConfigParams struct {
@@ -145,7 +146,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 	}
 
-	if cr.KeyFileAuthEnabled() {
+	if cr.KeyFileAuthEnabled() || secrets.KeyfileExists {
 		volumes = append([]corev1.Volume{
 			{
 				Name: cr.Spec.Secrets.GetInternalKey(cr),
@@ -227,7 +228,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		name:                     containerName,
 		resources:                resources,
 		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
-		mountKeyFile:             cr.KeyFileAuthEnabled(),
+		mountKeyFile:             cr.KeyFileAuthEnabled() || secrets.KeyfileExists,
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,

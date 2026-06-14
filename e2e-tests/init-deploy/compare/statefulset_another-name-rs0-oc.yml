@@ -125,6 +125,9 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-secrets
+              name: another-name-mongodb-keyfile
+              readOnly: true
             - mountPath: /etc/mongodb-config
               name: config
             - mountPath: /opt/percona
@@ -242,6 +245,11 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 300
       volumes:
+        - name: another-name-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: another-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}

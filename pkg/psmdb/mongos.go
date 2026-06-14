@@ -63,7 +63,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	return spec
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -72,7 +72,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		}
 	}
 
-	mountKeyFile := cr.KeyFileAuthEnabled()
+	mountKeyFile := cr.KeyFileAuthEnabled() || keyfileExists
 	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances, mountKeyFile)
 	if err != nil {
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
