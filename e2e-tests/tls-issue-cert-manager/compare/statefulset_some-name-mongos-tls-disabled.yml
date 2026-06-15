@@ -150,6 +150,11 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
+        - name: some-name-mongodb-keyfile
+          secret:
+            defaultMode: 288
+            optional: false
+            secretName: some-name-mongodb-keyfile
         - name: ssl
           secret:
             defaultMode: 288
@@ -166,11 +171,6 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
-        - name: some-name-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
   updateStrategy:
