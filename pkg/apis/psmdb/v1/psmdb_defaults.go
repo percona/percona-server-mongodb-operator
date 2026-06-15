@@ -306,7 +306,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				},
 			}
 
-			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
 				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
@@ -541,7 +541,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 					"--component", "mongod",
 				},
 			}
-			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			if cr.TLSEnabled() {
 				var tlsArgs []string
 				// Prioritize internal certificates if configured
 				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
@@ -969,7 +969,7 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 				"--component", "mongod",
 			},
 		}
-		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
 			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
@@ -1100,7 +1100,7 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 				"--component", "mongod",
 			},
 		}
-		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+		if cr.TLSEnabled() {
 			var tlsArgs []string
 			// Prioritize internal certificates if configured
 			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
