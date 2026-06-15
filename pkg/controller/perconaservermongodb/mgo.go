@@ -32,6 +32,19 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
+func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string) {
+	readConcern, writeConcern := mongo.DefaultReadConcern, mongo.DefaultWriteConcern
+	if c := cr.Spec.DefaultRWConcern; c != nil {
+		if c.ReadConcern != "" {
+			readConcern = c.ReadConcern
+		}
+		if c.WriteConcern != "" {
+			writeConcern = c.WriteConcern
+		}
+	}
+	return readConcern, writeConcern
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -205,7 +218,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 				}
 			}()
 
-			err = mongosSession.SetDefaultRWConcern(ctx, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+			readConcern, writeConcern := defaultRWConcern(cr)
+			err = mongosSession.SetDefaultRWConcern(ctx, readConcern, writeConcern)
 			// SetDefaultRWConcern introduced in MongoDB 4.4
 			if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 				return api.AppStateError, nil, errors.Wrap(err, "set default RW concern")
@@ -240,7 +254,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
-		err := cli.SetDefaultRWConcern(ctx, mongo.DefaultReadConcern, mongo.DefaultWriteConcern)
+		readConcern, writeConcern := defaultRWConcern(cr)
+		err := cli.SetDefaultRWConcern(ctx, readConcern, writeConcern)
 		// SetDefaultRWConcern introduced in MongoDB 4.4
 		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, nil, errors.Wrap(err, "set default RW concern")

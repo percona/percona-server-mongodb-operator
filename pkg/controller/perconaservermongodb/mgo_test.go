@@ -59,6 +59,53 @@ func TestCompareTags(t *testing.T) {
 	}
 }
 
+func TestDefaultRWConcern(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		spec              *api.DefaultRWConcern
+		wantReadConcern   string
+		wantWriteConcern  string
+	}{
+		"nil spec falls back to majority": {
+			spec:             nil,
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"empty fields fall back to majority": {
+			spec:             &api.DefaultRWConcern{},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"only read overridden": {
+			spec:             &api.DefaultRWConcern{ReadConcern: "local"},
+			wantReadConcern:  "local",
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"only write overridden": {
+			spec:             &api.DefaultRWConcern{WriteConcern: "1"},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: "1",
+		},
+		"both overridden": {
+			spec:             &api.DefaultRWConcern{ReadConcern: "local", WriteConcern: "1"},
+			wantReadConcern:  "local",
+			wantWriteConcern: "1",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{DefaultRWConcern: tt.spec},
+			}
+			gotRead, gotWrite := defaultRWConcern(cr)
+			assert.Equal(t, tt.wantReadConcern, gotRead)
+			assert.Equal(t, tt.wantWriteConcern, gotWrite)
+		})
+	}
+}
+
 func TestGetRoles(t *testing.T) {
 	tests := map[string]struct {
 		crVersion string
