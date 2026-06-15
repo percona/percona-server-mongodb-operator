@@ -80,7 +80,7 @@ spec:
   terminationGracePeriodSeconds: 1
   containers:
     - name: curl
-      image: docker.io/alpine/curl:8.17.0
+      image: docker.io/alpine/curl:latest
       imagePullPolicy: Always
       command: ["sh"]
       args:

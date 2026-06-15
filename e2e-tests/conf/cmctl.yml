@@ -15,7 +15,7 @@ spec:
       serviceAccountName: cmctl
       containers:
         - name: cmctl
-          image: docker.io/alpine/curl:8.17.0
+          image: docker.io/alpine/curl:latest
           imagePullPolicy: Always
           command:
           - /bin/sh
