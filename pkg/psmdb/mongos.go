@@ -352,7 +352,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 	}
 
 	if mountKeyFile {
-		volumes = append(volumes, corev1.Volume{
+		volumes = append([]corev1.Volume{{
 			Name: cr.Spec.Secrets.GetInternalKey(cr),
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -361,7 +361,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 					Optional:    &fvar,
 				},
 			},
-		})
+		}}, volumes...)
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {
