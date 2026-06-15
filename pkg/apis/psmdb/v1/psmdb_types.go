@@ -475,6 +475,14 @@ type PMMSpec struct {
 	// authenticate the clusterMonitor user against mongod/mongos.
 	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
 	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
+
+	// QuerySource defines the source for Query Analytics (QAN) data collection.
+	// Use "profiler" to collect queries via the MongoDB profiler (default),
+	// or "mongolog" to collect queries from mongod log files (requires PMM >= 3.3.0
+	// and mongod configured to write logs to /data/db/logs/).
+	// +kubebuilder:validation:Enum=profiler;mongolog
+	// +kubebuilder:default=profiler
+	QuerySource string `json:"querySource,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.

@@ -350,6 +350,7 @@ custom_cluster_name="super-custom"
 yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' "$test_dir/conf/$cluster-rs0.yml" \
 	| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM3_CLIENT"'"' - \
 	| yq eval '(.spec | select(has("pmm"))).pmm.customClusterName = "'"$custom_cluster_name"'"' - \
+	| yq eval '(.spec | select(has("logcollector"))).logcollector.image = "'"$IMAGE_LOGCOLLECTOR"'"' - \
 	| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' - \
 	| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' - \
 	| yq eval '.spec.upgradeOptions.apply = "Never"' - \
@@ -441,6 +442,19 @@ for node_id in "${nodeList_from_pmm[@]}"; do
 		exit 1
 	fi
 done
+
+desc 'patch cluster to switch QAN source to mongolog'
+kubectl_bin patch psmdb $cluster --type=json -p='[
+  {"op":"add","path":"/spec/pmm/querySource","value":"mongolog"},
+  {"op":"replace","path":"/spec/pmm/mongodParams","value":"--enable-all-collectors --environment=dev-mongod-mongolog"}
+]'
+
+wait_for_running $cluster-rs0 3
+# wait for QAN data to be collected and pushed from mongolog
+sleep 90
+
+desc 'check mongolog QAN data'
+get_qan_values mongodb "dev-mongod-mongolog" $NEW_TOKEN
 
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
 wait_for_delete "pod/${cluster}-mongos-0"
