@@ -56,7 +56,14 @@ import (
 const eventRegardingNameIndex = "regarding.name"
 
 func eventRegardingNameIndexer(o client.Object) []string {
-	return []string{o.(*eventsv1.Event).Regarding.Name}
+	evt, ok := o.(*eventsv1.Event)
+	if !ok {
+		return nil
+	}
+	if evt.Regarding.Name == "" {
+		return nil
+	}
+	return []string{evt.Regarding.Name}
 }
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
