@@ -24,7 +24,7 @@ import (
 // search disabled the function deletes any previously created objects
 // and returns.
 func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
-	if !cr.IsSearchEnabled() || rs.ClusterRole == api.ClusterRoleConfigSvr {
+	if !cr.IsSearchEnabled() {
 		return r.deleteSearch(ctx, cr, rs)
 	}
 
@@ -48,7 +48,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr 
 		return errors.Wrapf(err, "reconcile mongot Service %s", svc.Name)
 	}
 
-	sts := vectorsearch.StatefulSet(cr, rs, r.initImage, configHash)
+	sslAnnotations, err := r.sslAnnotation(ctx, cr.DeepCopy() /* sslAnnotation mutates status conditions */)
+	if err != nil {
+		return errors.Wrap(err, "get ssl annotations")
+	}
+
+	sts := vectorsearch.StatefulSet(cr, rs, r.initImage, configHash, sslAnnotations)
 
 	s := new(appsv1.StatefulSet)
 	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), s); err == nil {

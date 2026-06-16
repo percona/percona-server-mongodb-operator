@@ -278,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			if rs.Arbiter.Enabled {
 				toDelete = append(toDelete, naming.ArbiterStatefulSetName(cluster, rs))
 			}
-			if cluster.IsSearchEnabled() {
+			if cluster.IsSearchEnabled() && rs.ClusterRole != api.ClusterRoleConfigSvr {
 				toDelete = append(toDelete, naming.SearchStatefulSetName(cluster, rs))
 			}
 

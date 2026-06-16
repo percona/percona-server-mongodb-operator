@@ -159,10 +159,10 @@ func mongosHostAndPort(cr *api.PerconaServerMongoDB) []string {
 		naming.MongosServiceName(cr), cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, cr.Spec.Sharding.Mongos.GetPort())}
 }
 
-// SearchHost returns the fully qualified address mongod uses to reach
+// searchHost returns the fully qualified address mongod uses to reach
 // this replset's mongot —
 // `<cluster>-<rs>-search-0.<cluster>-<rs>-search.<ns>.<dnsSuffix>:27028`.
-func SearchHost(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
+func searchHost(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
 	return fmt.Sprintf("%s-0.%s.%s.%s:%d",
 		naming.SearchStatefulSetName(cr, rs), naming.SearchServiceName(cr, rs), cr.Namespace,
 		cr.Spec.ClusterServiceDNSSuffix, GRPCPort)
@@ -222,7 +222,7 @@ func InjectMongodConfig(userConfig string, cr *api.PerconaServerMongoDB, rs *api
 		return "", errors.Wrap(err, "get mongot.conf")
 	}
 
-	host := SearchHost(cr, rs)
+	host := searchHost(cr, rs)
 	tlsMode := searchTLSMode(mongotCfg)
 
 	for k, v := range buildSearchSetParameters(host, tlsMode) {
@@ -268,7 +268,7 @@ func InjectMongosConfig(userConfig string, cr *api.PerconaServerMongoDB) (string
 		return "", errors.Wrap(err, "get mongot.conf")
 	}
 
-	host := SearchHost(cr, cr.Spec.Replsets[0])
+	host := searchHost(cr, cr.Spec.Replsets[0])
 	tlsMode := searchTLSMode(mongotCfg)
 
 	for k, v := range buildSearchSetParameters(host, tlsMode) {

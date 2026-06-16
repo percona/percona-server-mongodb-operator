@@ -251,7 +251,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if hash := configs.HashHex(cr); hash != "" {
-		annotations["percona.com/configuration-hash"] = hash
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}

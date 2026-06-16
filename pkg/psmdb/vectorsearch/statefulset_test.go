@@ -5,13 +5,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
-
-func int32Ptr(i int32) *int32 { return &i }
 
 func TestGetSearchSpec_NilClusterSpec_ReturnsDisabled(t *testing.T) {
 	cr := newTestCR()
@@ -32,7 +33,8 @@ func TestGetSearchSpec_NilReplset_ReturnsClusterSpec(t *testing.T) {
 	}
 
 	got := getSearchSpec(cr, nil)
-	assert.Same(t, cr.Spec.Search, got, "must return the cluster spec when rs is nil")
+	assert.NotSame(t, cr.Spec.Search, got, "must return a copy, not the cluster spec itself")
+	assert.Equal(t, cr.Spec.Search, got, "the copy must equal the cluster spec when rs is nil")
 }
 
 func TestGetSearchSpec_NoReplsetOverride_ReturnsClusterSpec(t *testing.T) {
@@ -46,7 +48,8 @@ func TestGetSearchSpec_NoReplsetOverride_ReturnsClusterSpec(t *testing.T) {
 	// rs.Search is nil
 
 	got := getSearchSpec(cr, rs)
-	assert.Same(t, cr.Spec.Search, got, "must return the cluster spec when rs has no override")
+	assert.NotSame(t, cr.Spec.Search, got, "must return a copy, not the cluster spec itself")
+	assert.Equal(t, cr.Spec.Search, got, "the copy must equal the cluster spec when rs has no override")
 }
 
 func TestGetSearchSpec_AppliesEachOverride(t *testing.T) {
@@ -59,21 +62,21 @@ func TestGetSearchSpec_AppliesEachOverride(t *testing.T) {
 		},
 	}
 	affinity := &api.PodAffinity{
-		TopologyKey: ptr("kubernetes.io/hostname"),
+		TopologyKey: new("kubernetes.io/hostname"),
 	}
 	nodeSelector := map[string]string{"disktype": "ssd"}
 	tolerations := []corev1.Toleration{{Key: "search", Operator: corev1.TolerationOpExists}}
 	annotations := map[string]string{"team": "search"}
 	labels := map[string]string{"tier": "mongot"}
-	csc := &corev1.SecurityContext{RunAsUser: int64Ptr(1001)}
-	psc := &corev1.PodSecurityContext{RunAsUser: int64Ptr(1002)}
+	csc := &corev1.SecurityContext{RunAsUser: new(int64(1001))}
+	psc := &corev1.PodSecurityContext{RunAsUser: new(int64(1002))}
 
 	tests := map[string]struct {
 		override *api.SearchReplsetOverride
 		check    func(t *testing.T, got *api.SearchSpec)
 	}{
 		"size override": {
-			override: &api.SearchReplsetOverride{Size: int32Ptr(2)},
+			override: &api.SearchReplsetOverride{Size: new(int32(2))},
 			check: func(t *testing.T, got *api.SearchSpec) {
 				assert.Equal(t, int32(2), got.Size)
 			},
@@ -176,7 +179,7 @@ func TestGetSearchSpec_DoesNotMutateClusterSpec(t *testing.T) {
 	rs1 := newTestRS()
 	rs1.Name = "rs0"
 	rs1.Search = &api.SearchReplsetOverride{
-		Size:         int32Ptr(3),
+		Size:         new(int32(3)),
 		JVMFlags:     []string{"-Xmx4g"},
 		NodeSelector: map[string]string{"disktype": "nvme"},
 	}
@@ -210,7 +213,7 @@ func TestGetSearchSpec_CombinedOverrides(t *testing.T) {
 	}
 	rs := newTestRS()
 	rs.Search = &api.SearchReplsetOverride{
-		Size:         int32Ptr(3),
+		Size:         new(int32(3)),
 		NodeSelector: map[string]string{"disktype": "ssd"},
 		Annotations:  map[string]string{"team": "search"},
 	}
@@ -224,9 +227,6 @@ func TestGetSearchSpec_CombinedOverrides(t *testing.T) {
 	assert.True(t, got.Enabled)
 	assert.Equal(t, "percona/mongot:latest", got.Image)
 }
-
-func ptr[T any](v T) *T       { return &v }
-func int64Ptr(i int64) *int64 { return &i }
 
 func TestJVMFlags_DefaultsHalfOfMemoryRequest(t *testing.T) {
 	tests := map[string]struct {
@@ -347,7 +347,7 @@ func TestMongotContainer_JVMFlagsArg(t *testing.T) {
 	cr := newTestCR()
 	// TLSEnabled() walks through CompareVersion → semver parse,
 	// which panics on an empty CRVersion.
-	cr.Spec.CRVersion = "1.22.0"
+	cr.Spec.CRVersion = version.Version()
 
 	tests := map[string]struct {
 		search      *api.SearchSpec
@@ -428,4 +428,298 @@ func TestMongotContainer_JVMFlagsArg(t *testing.T) {
 			assert.Equal(t, wantArgs, c.Args)
 		})
 	}
+}
+
+func searchCR(search *api.SearchSpec) *api.PerconaServerMongoDB {
+	cr := newTestCR()
+	cr.Spec.CRVersion = version.Version()
+	cr.Spec.Secrets = &api.SecretsSpec{}
+	cr.Spec.Search = search
+	return cr
+}
+
+func volumeByName(volumes []corev1.Volume, name string) *corev1.Volume {
+	for i := range volumes {
+		if volumes[i].Name == name {
+			return &volumes[i]
+		}
+	}
+	return nil
+}
+
+func mountByName(mounts []corev1.VolumeMount, name string) *corev1.VolumeMount {
+	for i := range mounts {
+		if mounts[i].Name == name {
+			return &mounts[i]
+		}
+	}
+	return nil
+}
+
+func TestStatefulSet_Metadata(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled: true,
+		Image:   "percona/mongot:latest",
+		Size:    3,
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+	assert.Equal(t, "apps/v1", sts.APIVersion)
+	assert.Equal(t, "StatefulSet", sts.Kind)
+	assert.Equal(t, naming.SearchStatefulSetName(cr, rs), sts.Name)
+	assert.Equal(t, "psmdb-rs0-search", sts.Name)
+	assert.Equal(t, "default", sts.Namespace)
+	assert.Equal(t, naming.SearchLabels(cr, rs), sts.Labels)
+
+	assert.Equal(t, naming.SearchServiceName(cr, rs), sts.Spec.ServiceName)
+	require.NotNil(t, sts.Spec.Replicas)
+	assert.Equal(t, int32(3), *sts.Spec.Replicas)
+
+	require.NotNil(t, sts.Spec.Selector)
+	assert.Equal(t, naming.SearchLabels(cr, rs), sts.Spec.Selector.MatchLabels)
+
+	assert.Equal(t, appsv1.RollingUpdateStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
+}
+
+func TestStatefulSet_ReplicasFollowSpecSize(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+	rs := newTestRS()
+	rs.Search = &api.SearchReplsetOverride{Size: new(int32(5))}
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+	require.NotNil(t, sts.Spec.Replicas)
+	assert.Equal(t, int32(5), *sts.Spec.Replicas,
+		"replicas must follow the effective (replset-overridden) spec size")
+}
+
+func TestStatefulSet_PodTemplate(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled:            true,
+		Image:              "percona/mongot:latest",
+		Size:               1,
+		NodeSelector:       map[string]string{"disktype": "ssd"},
+		Tolerations:        []corev1.Toleration{{Key: "search", Operator: corev1.TolerationOpExists}},
+		PodSecurityContext: &corev1.PodSecurityContext{RunAsUser: new(int64(1002))},
+	})
+	cr.Spec.SchedulerName = "custom-scheduler"
+	cr.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "pull-secret"}}
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+	podSpec := sts.Spec.Template.Spec
+
+	assert.Equal(t, map[string]string{"disktype": "ssd"}, podSpec.NodeSelector)
+	assert.Equal(t, []corev1.Toleration{{Key: "search", Operator: corev1.TolerationOpExists}}, podSpec.Tolerations)
+	assert.Equal(t, "custom-scheduler", podSpec.SchedulerName)
+	assert.Equal(t, []corev1.LocalObjectReference{{Name: "pull-secret"}}, podSpec.ImagePullSecrets)
+	assert.Equal(t, &corev1.PodSecurityContext{RunAsUser: new(int64(1002))}, podSpec.SecurityContext)
+
+	require.Len(t, podSpec.InitContainers, 1)
+	require.Len(t, podSpec.Containers, 1)
+	assert.Equal(t, naming.ContainerMongot, podSpec.Containers[0].Name)
+}
+
+func TestStatefulSet_PodLabelsMergeSpecLabels(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled: true,
+		Size:    1,
+		Labels:  map[string]string{"tier": "mongot"},
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+	podLabels := sts.Spec.Template.ObjectMeta.Labels
+
+	// object labels must be present
+	for k, v := range naming.SearchLabels(cr, rs) {
+		assert.Equal(t, v, podLabels[k], "object label %q must be on the pod", k)
+	}
+	// custom spec label must be merged in
+	assert.Equal(t, "mongot", podLabels["tier"])
+}
+
+func TestStatefulSet_ObjectLabelsWinOverSpecLabels(t *testing.T) {
+	objectLabels := naming.SearchLabels(newTestCR(), newTestRS())
+	require.Contains(t, objectLabels, naming.LabelKubernetesComponent)
+
+	cr := searchCR(&api.SearchSpec{
+		Enabled: true,
+		Size:    1,
+		// try to clobber an operator-managed label
+		Labels: map[string]string{naming.LabelKubernetesComponent: "hijacked"},
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+	podLabels := sts.Spec.Template.ObjectMeta.Labels
+
+	assert.Equal(t, naming.ComponentSearch, podLabels[naming.LabelKubernetesComponent],
+		"operator-managed labels must not be overridden by user-provided spec labels")
+}
+
+func TestStatefulSet_ConfigHashAnnotation(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+	rs := newTestRS()
+
+	t.Run("set when configHash provided", func(t *testing.T) {
+		sts := StatefulSet(cr, rs, "percona/init:latest", "abc123", nil)
+		assert.Equal(t, "abc123", sts.Spec.Template.ObjectMeta.Annotations[naming.AnnotationConfigHash])
+	})
+
+	t.Run("absent when configHash empty", func(t *testing.T) {
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+		_, ok := sts.Spec.Template.ObjectMeta.Annotations[naming.AnnotationConfigHash]
+		assert.False(t, ok, "configuration-hash annotation must be absent when configHash is empty")
+	})
+}
+
+func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+	rs := newTestRS()
+
+	t.Run("set when sslHashes provided", func(t *testing.T) {
+		sslHashes := map[string]string{
+			naming.AnnotationSSLHash:         "ssl-hash-value",
+			naming.AnnotationSSLInternalHash: "ssl-internal-hash-value",
+		}
+
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
+		annotations := sts.Spec.Template.ObjectMeta.Annotations
+
+		assert.Equal(t, "ssl-hash-value", annotations[naming.AnnotationSSLHash])
+		assert.Equal(t, "ssl-internal-hash-value", annotations[naming.AnnotationSSLInternalHash])
+	})
+
+	t.Run("absent when sslHashes nil", func(t *testing.T) {
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+		annotations := sts.Spec.Template.ObjectMeta.Annotations
+
+		_, ok := annotations[naming.AnnotationSSLHash]
+		assert.False(t, ok, "ssl-hash annotation must be absent when sslHashes is nil")
+		_, ok = annotations[naming.AnnotationSSLInternalHash]
+		assert.False(t, ok, "ssl-internal-hash annotation must be absent when sslHashes is nil")
+	})
+
+	t.Run("absent when key missing from sslHashes", func(t *testing.T) {
+		sslHashes := map[string]string{
+			naming.AnnotationSSLHash: "ssl-hash-value",
+		}
+
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
+		annotations := sts.Spec.Template.ObjectMeta.Annotations
+
+		assert.Equal(t, "ssl-hash-value", annotations[naming.AnnotationSSLHash])
+		_, ok := annotations[naming.AnnotationSSLInternalHash]
+		assert.False(t, ok, "ssl-internal-hash annotation must be absent when missing from sslHashes")
+	})
+
+	t.Run("absent when sslHash value empty", func(t *testing.T) {
+		sslHashes := map[string]string{
+			naming.AnnotationSSLHash:         "",
+			naming.AnnotationSSLInternalHash: "ssl-internal-hash-value",
+		}
+
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
+		annotations := sts.Spec.Template.ObjectMeta.Annotations
+
+		_, ok := annotations[naming.AnnotationSSLHash]
+		assert.False(t, ok, "ssl-hash annotation must be absent when its value is empty")
+		assert.Equal(t, "ssl-internal-hash-value", annotations[naming.AnnotationSSLInternalHash])
+	})
+}
+
+func TestStatefulSet_Volumes_PVCTemplate(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled: true,
+		Size:    1,
+		Storage: &api.VolumeSpec{
+			PersistentVolumeClaim: api.PVCSpec{
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("10Gi"),
+						},
+					},
+				},
+			},
+		},
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+	require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
+	pvc := sts.Spec.VolumeClaimTemplates[0]
+	assert.Equal(t, DataVolumeName, pvc.Name)
+	assert.Equal(t, "default", pvc.Namespace)
+	assert.Equal(t, resource.MustParse("10Gi"), pvc.Spec.Resources.Requests[corev1.ResourceStorage])
+
+	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, DataVolumeName),
+		"data volume must be a PVC template, not an inline pod volume")
+}
+
+func TestStatefulSet_TLSEnabled_AddsSSLVolumeAndMount(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+	require.True(t, cr.TLSEnabled())
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+	ssl := volumeByName(sts.Spec.Template.Spec.Volumes, "ssl")
+	require.NotNil(t, ssl, "ssl volume must be present when TLS is enabled")
+	require.NotNil(t, ssl.Secret)
+	assert.Equal(t, api.SSLInternalSecretName(cr), ssl.Secret.SecretName)
+
+	mount := mountByName(sts.Spec.Template.Spec.Containers[0].VolumeMounts, "ssl")
+	require.NotNil(t, mount, "ssl mount must be present when TLS is enabled")
+	assert.True(t, mount.ReadOnly)
+}
+
+func TestStatefulSet_TLSDisabled_NoSSLVolumeOrMount(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+	cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+	require.False(t, cr.TLSEnabled())
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, "ssl"),
+		"ssl volume must be absent when TLS is disabled")
+	assert.Nil(t, mountByName(sts.Spec.Template.Spec.Containers[0].VolumeMounts, "ssl"),
+		"ssl mount must be absent when TLS is disabled")
+}
+
+func TestStatefulSet_Affinity_TopologyKey(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled:  true,
+		Size:     1,
+		Affinity: &api.PodAffinity{TopologyKey: new("kubernetes.io/hostname")},
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+	aff := sts.Spec.Template.Spec.Affinity
+
+	require.NotNil(t, aff)
+	require.NotNil(t, aff.PodAntiAffinity)
+	terms := aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	require.Len(t, terms, 1)
+	assert.Equal(t, "kubernetes.io/hostname", terms[0].TopologyKey)
+	assert.Equal(t, sts.Spec.Template.ObjectMeta.Labels, terms[0].LabelSelector.MatchLabels)
+}
+
+func TestStatefulSet_Affinity_Off(t *testing.T) {
+	cr := searchCR(&api.SearchSpec{
+		Enabled:  true,
+		Size:     1,
+		Affinity: &api.PodAffinity{TopologyKey: new(api.AffinityOff)},
+	})
+	rs := newTestRS()
+
+	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+	assert.Nil(t, sts.Spec.Template.Spec.Affinity,
+		"affinity must be nil when the topology key is the off sentinel")
 }

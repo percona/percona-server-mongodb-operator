@@ -64,7 +64,7 @@ func TestSearchHost(t *testing.T) {
 
 	assert.Equal(t,
 		"psmdb-rs0-search-0.psmdb-rs0-search.default.svc.cluster.local:27028",
-		SearchHost(cr, rs),
+		searchHost(cr, rs),
 	)
 }
 
@@ -78,7 +78,7 @@ func TestSearchHost_OtherClusterAndNamespace(t *testing.T) {
 
 	assert.Equal(t,
 		"my-cluster-shard-1-search-0.my-cluster-shard-1-search.my-ns.svc.example.test:27028",
-		SearchHost(cr, rs),
+		searchHost(cr, rs),
 	)
 }
 

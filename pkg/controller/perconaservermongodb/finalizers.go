@@ -114,7 +114,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 
-	if cr.Spec.Search != nil && cr.Spec.Search.Enabled {
+	if cr.IsSearchEnabled() {
 		cr.Spec.Search.Size = 0
 		for _, rs := range cr.Spec.Replsets {
 			if rs.Search != nil {

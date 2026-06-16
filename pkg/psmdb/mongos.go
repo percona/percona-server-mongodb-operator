@@ -94,7 +94,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = customConf.HashHex
+		annotations[naming.AnnotationConfigHash] = customConf.HashHex
 	}
 
 	return corev1.PodTemplateSpec{

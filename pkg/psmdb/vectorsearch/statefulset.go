@@ -22,7 +22,7 @@ const secretFileMode int32 = 0400
 // StatefulSet returns the StatefulSet object that runs the mongot
 // group for the given replset. configHash is set as a pod-template
 // annotation so a ConfigMap content change rolls the pods.
-func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, configHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, configHash string, sslHashes map[string]string) *appsv1.StatefulSet {
 	objectLabels := naming.SearchLabels(cr, rs)
 	spec := getSearchSpec(cr, rs)
 
@@ -41,7 +41,13 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 		annotations = map[string]string{}
 	}
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[naming.AnnotationConfigHash] = configHash
+	}
+	if hash := sslHashes[naming.AnnotationSSLHash]; hash != "" {
+		annotations[naming.AnnotationSSLHash] = hash
+	}
+	if hash := sslHashes[naming.AnnotationSSLInternalHash]; hash != "" {
+		annotations[naming.AnnotationSSLInternalHash] = hash
 	}
 
 	volumes, claimTemplates := podVolumes(cr, rs, spec)
@@ -93,13 +99,13 @@ func getSearchSpec(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) *api.Searc
 		return &api.SearchSpec{Enabled: false}
 	}
 
-	if rs == nil || rs.Search == nil {
-		return cr.Spec.Search
-	}
-
 	// Deep-copy before applying overrides so per-replset values don't leak
 	// into cr.Spec.Search and get picked up by other replsets.
 	spec := cr.Spec.Search.DeepCopy()
+
+	if rs == nil || rs.Search == nil {
+		return spec
+	}
 
 	overrides := rs.Search
 	if overrides.Size != nil {
