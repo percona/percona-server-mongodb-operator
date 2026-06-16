@@ -51,20 +51,19 @@ wait_pcsm_state() {
 	done
 }
 
-# wait_target_doc_count polls the target mongos until the document
-# count for myApp.test reaches at least the expected value.
 wait_target_doc_count() {
+	sleep 10
 	local expected="$1"
 	local timeout="${2:-300}"
 
 	set +o xtrace
-	echo -n "waiting for target myApp.test count>=${expected}"
+	echo -n "waiting for target myApp.test count=${expected}"
 	local elapsed=0
 	local count=""
 	while true; do
 		count=$(mongosh_on_mongos "${target_cluster}" "myApp" "myPass" \
 			'db.getSiblingDB("myApp").test.countDocuments({})' 2>/dev/null | tr -d '[:space:]' || true)
-		if [[ ${count} =~ ^[0-9]+$ ]] && [[ ${count} -ge ${expected} ]]; then
+		if [[ ${count} =~ ^[0-9]+$ ]] && [[ ${count} -eq ${expected} ]]; then
 			echo " ok (count=${count})"
 			set_debug
 			return 0
@@ -74,7 +73,7 @@ wait_target_doc_count() {
 		elapsed=$((elapsed + 5))
 		if [[ ${elapsed} -ge ${timeout} ]]; then
 			echo
-			echo "timed out waiting for target count>=${expected}; last count=${count:-<none>}"
+			echo "timed out waiting for target count=${expected}; last count=${count:-<none>}"
 			exit 1
 		fi
 	done
@@ -212,6 +211,11 @@ desc 'transition: running -> finalized'
 patch_sync_mode "finalized"
 wait_pcsm_state "finalized" 300
 wait_cr_status_state "finalized" 120
+
+desc 'write data after finalize, verify target count does not increase'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
+wait_target_doc_count 5 10
 
 destroy "${namespace}"
 
