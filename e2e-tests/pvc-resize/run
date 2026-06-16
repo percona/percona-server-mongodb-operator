@@ -68,6 +68,28 @@ function wait_cluster_status() {
 	echo "psmdb/${cluster} status is ${expected}"
 }
 
+function wait_pvc_request_revert() {
+	local cluster=$1
+	local expected=$2
+	local retry=0
+
+	echo -n "Waiting for psmdb/${cluster} storage request to revert to ${expected}"
+	until [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.replsets[0].volumeSpec.persistentVolumeClaim.resources.requests.storage}') == "${expected}" ]]; do
+		if [[ $retry -ge 60 ]]; then
+			echo
+			echo "psmdb/${cluster} storage request did not revert to ${expected}, max retries exceeded"
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+
+		retry=$((retry + 1))
+	done
+
+	echo
+	echo "psmdb/${cluster} storage request reverted to ${expected}"
+}
+
 set_debug
 
 if [ "$EKS" == 1 ]; then
@@ -152,12 +174,10 @@ wait_all_pvc_resize "3Gi"
 
 desc "test downscale"
 
-# operator shouldn't try to downscale the PVCs and set status to error
+# operator shouldn't downscale the PVCs. instead it reverts the storage request
+# in the spec back to the configured size and keeps the cluster ready
 patch_pvc_request "${cluster}" "1G"
-wait_cluster_status ${cluster} "error"
-
-# user should be able to restore to the previous size and make the cluster ready
-patch_pvc_request "${cluster}" "3G"
+wait_pvc_request_revert "${cluster}" "3G"
 wait_cluster_status ${cluster} "ready"
 
 if [[ $EKS == 1 || -n ${OPENSHIFT} ]]; then

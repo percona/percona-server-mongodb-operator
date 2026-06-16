@@ -986,6 +986,12 @@ spec:
                     type: string
                   mongosParams:
                     type: string
+                  querySource:
+                    default: profiler
+                    enum:
+                    - profiler
+                    - mongolog
+                    type: string
                   resources:
                     properties:
                       claims:
@@ -3963,6 +3969,18 @@ spec:
                           type: boolean
                         exposeType:
                           type: string
+                        externalDNS:
+                          properties:
+                            domain:
+                              type: string
+                            prefix:
+                              type: string
+                            ttl:
+                              minimum: 0
+                              type: integer
+                          required:
+                          - domain
+                          type: object
                         externalTrafficPolicy:
                           type: string
                         internalTrafficPolicy:
@@ -14797,6 +14815,18 @@ spec:
                             type: boolean
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:
@@ -23245,6 +23275,18 @@ spec:
                             type: object
                           exposeType:
                             type: string
+                          externalDNS:
+                            properties:
+                              domain:
+                                type: string
+                              prefix:
+                                type: string
+                              ttl:
+                                minimum: 0
+                                type: integer
+                            required:
+                            - domain
+                            type: object
                           externalTrafficPolicy:
                             type: string
                           internalTrafficPolicy:
@@ -25429,6 +25471,12 @@ spec:
                 properties:
                   allowInvalidCertificates:
                     type: boolean
+                  certManagementPolicy:
+                    default: auto
+                    enum:
+                    - auto
+                    - userProvidedOnly
+                    type: string
                   certValidityDuration:
                     type: string
                   issuerConf:
