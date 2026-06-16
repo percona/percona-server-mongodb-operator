@@ -40,15 +40,15 @@ func TestService(t *testing.T) {
 
 	expectedPorts := []corev1.ServicePort{
 		{
-			Name:       GRPCPortName,
-			Port:       GRPCPort,
-			TargetPort: intstr.FromInt32(GRPCPort),
+			Name:       grpcPortName,
+			Port:       grpcPort,
+			TargetPort: intstr.FromInt32(grpcPort),
 			Protocol:   corev1.ProtocolTCP,
 		},
 		{
-			Name:       MetricsPortName,
-			Port:       MetricsPort,
-			TargetPort: intstr.FromInt32(MetricsPort),
+			Name:       metricsPortName,
+			Port:       metricsPort,
+			TargetPort: intstr.FromInt32(metricsPort),
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}

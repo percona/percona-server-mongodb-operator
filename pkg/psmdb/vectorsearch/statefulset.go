@@ -82,7 +82,6 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 					InitContainers:   psmdbInit.Containers(cr, initImage),
 					Containers:       []corev1.Container{mongotContainer(cr, spec)},
 					Volumes:          volumes,
-					RestartPolicy:    corev1.RestartPolicyAlways,
 					SchedulerName:    cr.Spec.SchedulerName,
 				},
 			},
@@ -187,8 +186,8 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 			MountPath: config.BinMountPath,
 		},
 		{
-			Name:      DataVolumeName,
-			MountPath: DataMountPath,
+			Name:      dataVolumeName,
+			MountPath: dataMountPath,
 		},
 		{
 			Name:      cr.Spec.Secrets.GetInternalKey(cr),
@@ -196,13 +195,13 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 			ReadOnly:  true,
 		},
 		{
-			Name:      ConfigVolumeName,
-			MountPath: ConfigMountPath,
+			Name:      configVolumeName,
+			MountPath: configMountPath,
 			ReadOnly:  true,
 		},
 		{
-			Name:      UsersSecretVolumeName,
-			MountPath: UsersSecretMountPath,
+			Name:      usersSecretVolumeName,
+			MountPath: usersSecretMountPath,
 			ReadOnly:  true,
 		},
 	}
@@ -217,7 +216,7 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 
 	mongotCmd := []string{
 		"mongot-community/mongot",
-		"--config=" + ConfigMountPath + "/" + ConfigFileName,
+		"--config=" + configMountPath + "/" + configFileName,
 	}
 
 	if flags := jvmFlags(search); len(flags) > 0 {
@@ -231,8 +230,8 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 		ImagePullPolicy: search.ImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          GRPCPortName,
-				ContainerPort: GRPCPort,
+				Name:          grpcPortName,
+				ContainerPort: grpcPort,
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
@@ -241,23 +240,36 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 		Resources:       search.Resources,
 		SecurityContext: search.ContainerSecurityContext,
 		VolumeMounts:    mounts,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health",
-					Port: intstr.FromInt32(HealthCheckPort),
-				},
-			},
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health",
-					Port: intstr.FromInt32(HealthCheckPort),
-				},
+		LivenessProbe:   mongotProbe(search.LivenessProbe),
+		ReadinessProbe:  mongotProbe(search.ReadinessProbe),
+	}
+}
+
+// mongotProbe returns the mongot health probe. It starts from the
+// operator default — an HTTP GET against /health on the health-check
+// port — and overlays the user-supplied probe from spec.search. Timing
+// fields are taken as set; the default handler is preserved only when
+// the override specifies no handler of its own.
+func mongotProbe(override *corev1.Probe) *corev1.Probe {
+	probe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/health",
+				Port: intstr.FromInt32(healthCheckPort),
 			},
 		},
 	}
+
+	if override == nil {
+		return probe
+	}
+
+	out := override.DeepCopy()
+	if out.Exec == nil && out.HTTPGet == nil && out.TCPSocket == nil && out.GRPC == nil {
+		out.ProbeHandler = probe.ProbeHandler
+	}
+
+	return out
 }
 
 // podVolumes returns the pod-level Volumes and the StatefulSet's
@@ -286,7 +298,7 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 			},
 		},
 		{
-			Name: ConfigVolumeName,
+			Name: configVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -296,7 +308,7 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 			},
 		},
 		{
-			Name: UsersSecretVolumeName,
+			Name: usersSecretVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  api.InternalUserSecretName(cr),
@@ -323,11 +335,11 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 	switch {
 	case search.Storage != nil && search.Storage.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil:
 		claims = []corev1.PersistentVolumeClaim{
-			persistentVolumeClaim(DataVolumeName, cr.Namespace, search.Storage),
+			persistentVolumeClaim(dataVolumeName, cr.Namespace, search.Storage),
 		}
 	case search.Storage != nil && (search.Storage.HostPath != nil || search.Storage.EmptyDir != nil):
 		volumes = append(volumes, corev1.Volume{
-			Name: DataVolumeName,
+			Name: dataVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: search.Storage.HostPath,
 				EmptyDir: search.Storage.EmptyDir,
@@ -335,7 +347,7 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 		})
 	default:
 		volumes = append(volumes, corev1.Volume{
-			Name: DataVolumeName,
+			Name: dataVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},

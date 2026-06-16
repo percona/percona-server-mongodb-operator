@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -421,13 +422,112 @@ func TestMongotContainer_JVMFlagsArg(t *testing.T) {
 			wantArgs := append(
 				[]string{
 					"mongot-community/mongot",
-					"--config=" + ConfigMountPath + "/" + ConfigFileName,
+					"--config=" + configMountPath + "/" + configFileName,
 				},
 				tt.wantJVMArgs...,
 			)
 			assert.Equal(t, wantArgs, c.Args)
 		})
 	}
+}
+
+func defaultHealthHandler() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: "/health",
+			Port: intstr.FromInt32(healthCheckPort),
+		},
+	}
+}
+
+func TestMongotContainer_DefaultProbes(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.CRVersion = version.Version()
+
+	c := mongotContainer(cr, &api.SearchSpec{})
+
+	want := &corev1.Probe{ProbeHandler: defaultHealthHandler()}
+	assert.Equal(t, want, c.LivenessProbe)
+	assert.Equal(t, want, c.ReadinessProbe)
+}
+
+func TestMongotContainer_ProbeTimingOverridesKeepDefaultHandler(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.CRVersion = version.Version()
+
+	search := &api.SearchSpec{
+		LivenessProbe: &corev1.Probe{
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
+			FailureThreshold:    6,
+		},
+		ReadinessProbe: &corev1.Probe{
+			TimeoutSeconds:   5,
+			SuccessThreshold: 2,
+		},
+	}
+
+	c := mongotContainer(cr, search)
+
+	assert.Equal(t, defaultHealthHandler(), c.LivenessProbe.ProbeHandler,
+		"operator must keep its /health handler when the override sets no handler")
+	assert.Equal(t, int32(30), c.LivenessProbe.InitialDelaySeconds)
+	assert.Equal(t, int32(15), c.LivenessProbe.PeriodSeconds)
+	assert.Equal(t, int32(6), c.LivenessProbe.FailureThreshold)
+
+	assert.Equal(t, defaultHealthHandler(), c.ReadinessProbe.ProbeHandler)
+	assert.Equal(t, int32(5), c.ReadinessProbe.TimeoutSeconds)
+	assert.Equal(t, int32(2), c.ReadinessProbe.SuccessThreshold)
+}
+
+func TestMongotContainer_ProbeHandlerOverrideWins(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.CRVersion = version.Version()
+
+	exec := &corev1.ExecAction{Command: []string{"/bin/true"}}
+	search := &api.SearchSpec{
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler:  corev1.ProbeHandler{Exec: exec},
+			PeriodSeconds: 20,
+		},
+	}
+
+	c := mongotContainer(cr, search)
+
+	assert.Equal(t, exec, c.LivenessProbe.Exec)
+	assert.Nil(t, c.LivenessProbe.HTTPGet, "user-supplied handler must replace the default")
+	assert.Equal(t, int32(20), c.LivenessProbe.PeriodSeconds)
+}
+
+func TestMongotProbe_PreservesEachOverrideHandler(t *testing.T) {
+	tests := map[string]corev1.ProbeHandler{
+		"exec": {Exec: &corev1.ExecAction{Command: []string{"/bin/true"}}},
+		"httpGet": {HTTPGet: &corev1.HTTPGetAction{
+			Path: "/custom",
+			Port: intstr.FromInt32(1234),
+		}},
+		"tcpSocket": {TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(5678)}},
+		"grpc":      {GRPC: &corev1.GRPCAction{Port: 9012}},
+	}
+
+	for name, handler := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := mongotProbe(&corev1.Probe{ProbeHandler: handler})
+
+			// Equality of the whole handler proves the user's handler is
+			// kept verbatim and no default /health probe was grafted on.
+			assert.Equal(t, handler, got.ProbeHandler, "user-supplied handler must be preserved as-is")
+		})
+	}
+}
+
+func TestMongotProbe_DoesNotMutateOverride(t *testing.T) {
+	override := &corev1.Probe{InitialDelaySeconds: 7}
+
+	got := mongotProbe(override)
+
+	assert.NotNil(t, got.HTTPGet)
+	assert.Nil(t, override.HTTPGet, "mongotProbe must not write the default handler back into the caller's probe")
 }
 
 func searchCR(search *api.SearchSpec) *api.PerconaServerMongoDB {
@@ -653,11 +753,11 @@ func TestStatefulSet_Volumes_PVCTemplate(t *testing.T) {
 
 	require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
 	pvc := sts.Spec.VolumeClaimTemplates[0]
-	assert.Equal(t, DataVolumeName, pvc.Name)
+	assert.Equal(t, dataVolumeName, pvc.Name)
 	assert.Equal(t, "default", pvc.Namespace)
 	assert.Equal(t, resource.MustParse("10Gi"), pvc.Spec.Resources.Requests[corev1.ResourceStorage])
 
-	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, DataVolumeName),
+	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, dataVolumeName),
 		"data volume must be a PVC template, not an inline pod volume")
 }
 

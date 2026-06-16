@@ -41,7 +41,7 @@ func ConfigMap(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (*corev1.Confi
 			Labels:    naming.SearchLabels(cr, rs),
 		},
 		Data: map[string]string{
-			ConfigFileName: data,
+			configFileName: data,
 		},
 	}, nil
 }
@@ -86,28 +86,28 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 		SyncSource: mongot.ConfigSyncSource{
 			ReplicaSet: mongot.ConfigReplicaSet{
 				Username:     string(api.RoleSearch),
-				PasswordFile: UsersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
+				PasswordFile: usersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
 			},
 		},
 		Logging: mongot.ConfigLogging{
 			Verbosity: "INFO",
 		},
 		Storage: mongot.ConfigStorage{
-			DataPath: DataMountPath,
+			DataPath: dataMountPath,
 		},
 		Server: mongot.ConfigServer{
 			Grpc: &mongot.ConfigGrpc{
 				TLS: &mongot.ConfigGrpcTLS{
 					Mode: mongot.ConfigTLSModeDisabled,
 				},
-				Address: fmt.Sprintf("0.0.0.0:%d", GRPCPort),
+				Address: fmt.Sprintf("0.0.0.0:%d", grpcPort),
 			},
 		},
 		HealthCheck: mongot.ConfigHealthCheck{
-			Address: fmt.Sprintf("0.0.0.0:%d", HealthCheckPort),
+			Address: fmt.Sprintf("0.0.0.0:%d", healthCheckPort),
 		},
 		Metrics: mongot.ConfigMetrics{
-			Address: fmt.Sprintf("0.0.0.0:%d", MetricsPort),
+			Address: fmt.Sprintf("0.0.0.0:%d", metricsPort),
 		},
 	}
 
@@ -129,7 +129,7 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 		cfg.SyncSource.Router = &mongot.ConfigRouter{
 			HostAndPort:  mongosHostAndPort(cr),
 			Username:     string(api.RoleSearch),
-			PasswordFile: UsersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
+			PasswordFile: usersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
 		}
 	}
 
@@ -165,7 +165,7 @@ func mongosHostAndPort(cr *api.PerconaServerMongoDB) []string {
 func searchHost(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
 	return fmt.Sprintf("%s-0.%s.%s.%s:%d",
 		naming.SearchStatefulSetName(cr, rs), naming.SearchServiceName(cr, rs), cr.Namespace,
-		cr.Spec.ClusterServiceDNSSuffix, GRPCPort)
+		cr.Spec.ClusterServiceDNSSuffix, grpcPort)
 }
 
 func buildSearchSetParameters(mongotEndpoint string, tlsMode api.TLSMode) map[string]any {

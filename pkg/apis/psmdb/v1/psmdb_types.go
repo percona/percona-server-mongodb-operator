@@ -1817,6 +1817,20 @@ type SearchSpec struct {
 	// PodSecurityContext is the cluster-wide default. Per-replset
 	// override replaces the cluster-wide value.
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+
+	// LivenessProbe overrides the mongot container liveness probe. Timing
+	// fields (initialDelaySeconds, periodSeconds, timeoutSeconds,
+	// successThreshold, failureThreshold) are applied as set. When no
+	// probe handler (httpGet/exec/tcpSocket/grpc) is specified, the
+	// operator keeps its default HTTP /health check. Applies to every
+	// mongot pod in the cluster.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe overrides the mongot container readiness probe. It
+	// behaves like LivenessProbe: timing fields are applied as set, and
+	// the operator's default HTTP /health check is kept when no handler
+	// is specified. Applies to every mongot pod in the cluster.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // SearchReplsetOverride is an optional per-replset override for the

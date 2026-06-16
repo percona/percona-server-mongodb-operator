@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch/mongot"
 )
 
@@ -56,6 +57,77 @@ server:
       mode: Disabled
 `,
 	}
+}
+
+func TestConfigMap_Metadata(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.Search = &api.SearchSpec{Enabled: true}
+	rs := newTestRS()
+
+	cm, err := ConfigMap(cr, rs)
+	require.NoError(t, err)
+
+	assert.Equal(t, "v1", cm.TypeMeta.APIVersion)
+	assert.Equal(t, "ConfigMap", cm.TypeMeta.Kind)
+	assert.Equal(t, naming.SearchConfigMapName(cr, rs), cm.Name)
+	assert.Equal(t, "psmdb-rs0-search-config", cm.Name)
+	assert.Equal(t, cr.Namespace, cm.Namespace)
+	assert.Equal(t, naming.SearchLabels(cr, rs), cm.Labels)
+
+	require.Len(t, cm.Data, 1)
+	_, ok := cm.Data[configFileName]
+	assert.True(t, ok, "ConfigMap must hold a %q data key", configFileName)
+}
+
+func TestConfigMap_DataRendersDefaultConfig(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.Search = &api.SearchSpec{Enabled: true}
+	rs := newTestRS()
+
+	cm, err := ConfigMap(cr, rs)
+	require.NoError(t, err)
+
+	got := mongot.Config{}
+	require.NoError(t, yaml.Unmarshal([]byte(cm.Data[configFileName]), &got))
+	assert.Equal(t, newDefaultExpectedConfig(), got)
+}
+
+func TestConfigMap_DataAppliesUserConfiguration(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.Search = &api.SearchSpec{
+		Enabled: true,
+		Configuration: `
+logging:
+  verbosity: DEBUG
+`,
+	}
+	rs := newTestRS()
+
+	cm, err := ConfigMap(cr, rs)
+	require.NoError(t, err)
+
+	got := mongot.Config{}
+	require.NoError(t, yaml.Unmarshal([]byte(cm.Data[configFileName]), &got))
+
+	expected := newDefaultExpectedConfig()
+	expected.Logging.Verbosity = "DEBUG"
+	assert.Equal(t, expected, got)
+}
+
+func TestConfigMap_InvalidUserConfigurationReturnsError(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.Search = &api.SearchSpec{
+		Enabled: true,
+		Configuration: `
+logging:
+ verbosity: [unterminated
+`,
+	}
+	rs := newTestRS()
+
+	_, err := ConfigMap(cr, rs)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "render mongot.conf")
 }
 
 func TestSearchHost(t *testing.T) {
