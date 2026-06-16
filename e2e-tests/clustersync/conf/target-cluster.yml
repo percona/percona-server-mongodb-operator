@@ -10,6 +10,19 @@ spec:
     mongosSize: true
   secrets:
     users: target-users
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    storages:
+      minio:
+        type: minio
+        minio:
+          credentialsSecret: minio-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: minio-service:9000
+          insecureSkipTLSVerify: false
+          secure: false
   sharding:
     enabled: true
     configsvrReplSet:

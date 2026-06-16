@@ -25,12 +25,7 @@ func restoreScheme(t *testing.T) *runtime.Scheme {
 	return s
 }
 
-// TestCheckRestoreLocks_ClusterSyncBlocks isolates the new ClusterSync
-// branch. The backup-lease branch and the PBM branch are unchanged and
-// already covered by the existing suite; we only need to assert that
-// the clustersync lease (a) gates the restore before PBM is consulted
-// and (b) surfaces a ClusterSyncActive event with the cluster name.
-func TestCheckRestoreLocks_ClusterSyncBlocks(t *testing.T) {
+func TestCheckClusterSyncLease(t *testing.T) {
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -53,19 +48,52 @@ func TestCheckRestoreLocks_ClusterSyncBlocks(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: ns},
 	}
 
-	cl := fake.NewClientBuilder().WithScheme(restoreScheme(t)).WithRuntimeObjects(csLease).Build()
-	recorder := record.NewFakeRecorder(4)
-	r := &ReconcilePerconaServerMongoDBRestore{client: cl, recorder: recorder}
+	tests := map[string]struct {
+		seedLease   bool
+		wantBlocked bool
+		wantEvent   bool
+	}{
+		"clustersync lease active: blocked, event emitted": {
+			seedLease:   true,
+			wantBlocked: true,
+			wantEvent:   true,
+		},
+		"no clustersync lease: not blocked, no event": {
+			seedLease:   false,
+			wantBlocked: false,
+			wantEvent:   false,
+		},
+	}
 
-	locked, err := r.checkRestoreLocks(context.Background(), cr, cluster)
-	require.NoError(t, err)
-	assert.True(t, locked, "clustersync lease must lock restores")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			objs := []runtime.Object{}
+			if tc.seedLease {
+				objs = append(objs, csLease)
+			}
+			cl := fake.NewClientBuilder().WithScheme(restoreScheme(t)).WithRuntimeObjects(objs...).Build()
+			recorder := record.NewFakeRecorder(4)
+			r := &ReconcilePerconaServerMongoDBRestore{client: cl, recorder: recorder}
 
-	select {
-	case ev := <-recorder.Events:
-		assert.Contains(t, ev, "ClusterSyncActive")
-		assert.Contains(t, ev, clusterName)
-	default:
-		t.Fatal("expected ClusterSyncActive event, none emitted")
+			blocked, err := r.checkClusterSyncLease(context.Background(), cr, cluster)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantBlocked, blocked)
+
+			if tc.wantEvent {
+				select {
+				case ev := <-recorder.Events:
+					assert.Contains(t, ev, "ClusterSyncActive")
+					assert.Contains(t, ev, clusterName)
+				default:
+					t.Fatal("expected ClusterSyncActive event, none emitted")
+				}
+				return
+			}
+			select {
+			case ev := <-recorder.Events:
+				t.Fatalf("unexpected event emitted: %s", ev)
+			default:
+			}
+		})
 	}
 }

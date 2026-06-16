@@ -107,6 +107,13 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, cr)
 	}
+	
+	if cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
+		if err := r.releaseClusterSyncLease(ctx, cr); err != nil {
+			return reconcile.Result{}, errors.Wrap(err, "release clustersync lease after finalize")
+		}
+		return reconcile.Result{}, nil
+	}
 
 	target := &psmdbv1.PerconaServerMongoDB{}
 	targetNN := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}

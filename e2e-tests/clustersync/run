@@ -112,12 +112,108 @@ patch_sync_mode() {
 	kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p "{\"spec\":{\"mode\":\"${mode}\"}}"
 }
 
+wait_kind_state() {
+	local kind="$1"
+	local name="$2"
+	local expected="$3"
+	local timeout="${4:-300}"
+
+	set +o xtrace
+	echo -n "waiting for ${kind}/${name} state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		if [[ ${state} == "error" ]]; then
+			echo
+			echo "${kind}/${name} reached state=error: $(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.error}' 2>/dev/null || true)"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for ${kind}/${name} state=${expected}; last state=${state:-<none>}"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+	done
+}
+
+assert_state_stable() {
+	local kind="$1"
+	local name="$2"
+	local expected="$3"
+	local duration="${4:-30}"
+
+	set +o xtrace
+	echo -n "asserting ${kind}/${name} stays in state=${expected} for ${duration}s"
+	local elapsed=0
+	while [[ ${elapsed} -lt ${duration} ]]; do
+		local state
+		state=$(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} != "${expected}" ]]; then
+			echo
+			echo "${kind}/${name} unexpectedly transitioned to state=${state:-<none>} (expected ${expected})"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+	echo " ok"
+	set_debug
+}
+
+assert_event_present() {
+	local name="$1"
+	local reason="$2"
+
+	set +o xtrace
+	local count
+	count=$(kubectl_bin get events \
+		--field-selector "involvedObject.name=${name},reason=${reason}" \
+		-o jsonpath='{.items[*].reason}' 2>/dev/null | tr ' ' '\n' | grep -c "^${reason}$" || true)
+	if [[ ${count} -eq 0 ]]; then
+		echo "expected event reason=${reason} on ${name}, none found"
+		kubectl_bin get events --field-selector "involvedObject.name=${name}" || true
+		exit 1
+	fi
+	echo "event reason=${reason} present on ${name} (count=${count})"
+	set_debug
+}
+
+apply_backup_named() {
+	local name="$1"
+	yq eval ".metadata.name = \"${name}\"" "${test_dir}/conf/backup-minio.yml" \
+		| kubectl_bin apply -f -
+}
+
+apply_restore_named() {
+	local name="$1"
+	local backup="$2"
+	yq eval ".metadata.name = \"${name}\" | .spec.backupName = \"${backup}\"" "${test_dir}/conf/restore.yml" \
+		| kubectl_bin apply -f -
+}
+
 desc 'create infra'
 create_infra "${namespace}"
 
-desc 'apply users secrets and start client'
+desc 'deploy minio (storage for target-cluster backups)'
+deploy_minio
+
+desc 'apply users secrets, minio secret and start client'
 kubectl_bin apply \
 	-f "${test_dir}/conf/secrets.yml" \
+	-f "${conf_dir}/minio-secret.yml" \
 	-f "${conf_dir}/client.yml"
 
 desc "deploy ${source_cluster}"
@@ -163,6 +259,15 @@ desc "write initial data to ${source_cluster}"
 mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 	'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
 
+desc "wait for backup-agent on ${target_cluster}"
+wait_backup_agent "${target_cluster}-rs0-0"
+wait_backup_agent "${target_cluster}-rs1-0"
+wait_backup_agent "${target_cluster}-cfg-0"
+
+desc 'take a backup of target before clustersync starts (used for restore lease tests)'
+apply_backup_named "initial-backup"
+wait_backup "initial-backup" "ready"
+
 desc "apply ClusterSync CR with mode=running"
 cat "${test_dir}/conf/clustersync.yml" \
 	| $sed -e "s|CLUSTERSYNC_IMAGE|${IMAGE_CLUSTERSYNC}|g" -e "s|NAME_SPACE|${namespace}|g" \
@@ -207,6 +312,15 @@ mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 	'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
 wait_target_doc_count 5 180
 
+desc 'lease test: backup CR applied while clustersync is running should stay in waiting'
+apply_backup_named "backup-during-sync"
+wait_kind_state "psmdb-backup" "backup-during-sync" "waiting" 120
+assert_state_stable "psmdb-backup" "backup-during-sync" "waiting" 30
+assert_event_present "backup-during-sync" "ClusterSyncActive"
+
+desc 'delete during-sync CRs so they do not race with post-finalize checks'
+kubectl_bin delete psmdb-backup backup-during-sync --ignore-not-found --wait=true
+
 desc 'transition: running -> finalized'
 patch_sync_mode "finalized"
 wait_pcsm_state "finalized" 300
@@ -216,6 +330,14 @@ desc 'write data after finalize, verify target count does not increase'
 mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 	'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
 wait_target_doc_count 5 10
+
+desc 'lease test: backup CR applied after finalize should complete (clustersync lease released)'
+apply_backup_named "backup-after-finalize"
+wait_backup "backup-after-finalize" "ready"
+
+desc 'lease test: restore CR applied after finalize should complete (clustersync lease released)'
+apply_restore_named "restore-after-finalize" "initial-backup"
+wait_kind_state "psmdb-restore" "restore-after-finalize" "ready" 1800
 
 destroy "${namespace}"
 
