@@ -985,6 +985,12 @@ spec:
                     type: string
                   mongosParams:
                     type: string
+                  querySource:
+                    default: profiler
+                    enum:
+                    - profiler
+                    - mongolog
+                    type: string
                   resources:
                     properties:
                       claims:

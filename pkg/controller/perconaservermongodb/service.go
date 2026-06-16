@@ -191,17 +191,23 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 		for i := 0; i < int(replset.Size); i++ {
 			svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
 		}
-	}
 
-	if replset.NonVoting.Enabled {
-		for i := 0; i < int(replset.NonVoting.Size); i++ {
-			svcNames[service.Name+"-nv-"+strconv.Itoa(i)] = struct{}{}
+		if replset.NonVoting.Enabled {
+			for i := 0; i < int(replset.NonVoting.Size); i++ {
+				svcNames[service.Name+"-"+naming.ComponentNonVotingShort+"-"+strconv.Itoa(i)] = struct{}{}
+			}
 		}
-	}
 
-	if replset.Arbiter.Enabled {
-		for i := 0; i < int(replset.Arbiter.Size); i++ {
-			svcNames[service.Name+"-arbiter-"+strconv.Itoa(i)] = struct{}{}
+		if replset.Hidden.Enabled {
+			for i := 0; i < int(replset.Hidden.Size); i++ {
+				svcNames[service.Name+"-"+naming.ComponentHidden+"-"+strconv.Itoa(i)] = struct{}{}
+			}
+		}
+
+		if replset.Arbiter.Enabled {
+			for i := 0; i < int(replset.Arbiter.Size); i++ {
+				svcNames[service.Name+"-"+naming.ComponentArbiter+"-"+strconv.Itoa(i)] = struct{}{}
+			}
 		}
 	}
 

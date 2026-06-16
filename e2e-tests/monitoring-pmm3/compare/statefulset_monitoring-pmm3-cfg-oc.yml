@@ -78,6 +78,8 @@ spec:
               value: "27019"
             - name: MONGODB_REPLSET
               value: cfg
+            - name: LOGCOLLECTOR_ENABLED
+              value: "true"
           envFrom:
             - secretRef:
                 name: internal-monitoring-pmm3-users
@@ -229,7 +231,7 @@ spec:
               value: |-
                 cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
                 pmm-admin status --wait=10s;
-                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-256 --authentication-database=admin;
+                pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --query-source=profiler --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-256 --authentication-database=admin;
                 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'
           imagePullPolicy: Always
           lifecycle:
@@ -275,6 +277,64 @@ spec:
             - mountPath: /data/db
               name: mongod-data
               readOnly: true
+        - args:
+            - fluent-bit
+          command:
+            - /opt/percona/logcollector/entrypoint.sh
+          env:
+            - name: LOG_DATA_DIR
+              value: /data/db/logs
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+          imagePullPolicy: IfNotPresent
+          name: logs
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
+        - args:
+            - logrotate
+          command:
+            - /opt/percona/logcollector/entrypoint.sh
+          env:
+            - name: MONGODB_HOST
+              value: localhost
+            - name: MONGODB_PORT
+              value: "27019"
+            - name: MONGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+                  name: internal-monitoring-pmm3-users
+                  optional: false
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+                  name: internal-monitoring-pmm3-users
+                  optional: false
+          imagePullPolicy: IfNotPresent
+          name: logrotate
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data/db
+              name: mongod-data
+            - mountPath: /opt/percona
+              name: bin
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
