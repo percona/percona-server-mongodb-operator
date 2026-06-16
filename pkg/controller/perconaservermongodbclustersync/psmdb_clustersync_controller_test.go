@@ -26,22 +26,24 @@ func TestApplyObservedStatus(t *testing.T) {
 		wantError              string
 		wantStartedAtSet       bool
 		wantStartedAtUnchanged bool
-		wantConditions         []string
+		wantConditions         map[string]metav1.ConditionStatus
 	}{
 		"idle does not set startedAt": {
-			observed:  client.Status{State: "idle"},
-			wantState: psmdbv1.ClusterSyncStateIdle,
+			observed:       client.Status{State: "idle"},
+			wantState:      psmdbv1.ClusterSyncStateIdle,
+			wantConditions: map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
 		"paused does not set startedAt": {
-			observed:  client.Status{State: "paused"},
-			wantState: psmdbv1.ClusterSyncStatePaused,
+			observed:       client.Status{State: "paused"},
+			wantState:      psmdbv1.ClusterSyncStatePaused,
+			wantConditions: map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
 		"running sets startedAt and emits Running condition": {
 			observed:         client.Status{State: "running", LagTimeSeconds: 2},
 			wantState:        psmdbv1.ClusterSyncStateRunning,
 			wantLag:          2,
 			wantStartedAtSet: true,
-			wantConditions:   []string{psmdbv1.ConditionClusterSyncRunning},
+			wantConditions:   map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionTrue},
 		},
 		"existing startedAt is preserved when state returns to idle": {
 			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
@@ -50,20 +52,42 @@ func TestApplyObservedStatus(t *testing.T) {
 			observed:               client.Status{State: "idle"},
 			wantState:              psmdbv1.ClusterSyncStateIdle,
 			wantStartedAtUnchanged: true,
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
 		"finalizing does not emit Finalized condition": {
-			observed:  client.Status{State: "finalizing"},
-			wantState: psmdbv1.ClusterSyncStateFinalizing,
+			observed:       client.Status{State: "finalizing"},
+			wantState:      psmdbv1.ClusterSyncStateFinalizing,
+			wantConditions: map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
 		"finalized emits Finalized condition": {
-			observed:       client.Status{State: "finalized"},
-			wantState:      psmdbv1.ClusterSyncStateFinalized,
-			wantConditions: []string{psmdbv1.ConditionClusterSyncFinalized},
+			observed:  client.Status{State: "finalized"},
+			wantState: psmdbv1.ClusterSyncStateFinalized,
+			wantConditions: map[string]metav1.ConditionStatus{
+				psmdbv1.ConditionClusterSyncRunning:   metav1.ConditionFalse,
+				psmdbv1.ConditionClusterSyncFinalized: metav1.ConditionTrue,
+			},
 		},
 		"failed propagates error message": {
-			observed:  client.Status{State: "failed", Error: "source unreachable"},
-			wantState: psmdbv1.ClusterSyncStateFailed,
-			wantError: "source unreachable",
+			observed:       client.Status{State: "failed", Error: "source unreachable"},
+			wantState:      psmdbv1.ClusterSyncStateFailed,
+			wantError:      "source unreachable",
+			wantConditions: map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
+		},
+		"running to failed flips Running condition to False": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				State: psmdbv1.ClusterSyncStateRunning,
+				Conditions: []metav1.Condition{{
+					Type:   psmdbv1.ConditionClusterSyncRunning,
+					Status: metav1.ConditionTrue,
+					Reason: "PCSMRunning",
+				}},
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Minute)},
+			},
+			observed:               client.Status{State: "failed", Error: "source unreachable"},
+			wantState:              psmdbv1.ClusterSyncStateFailed,
+			wantError:              "source unreachable",
+			wantStartedAtUnchanged: true,
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
 	}
 
@@ -87,8 +111,10 @@ func TestApplyObservedStatus(t *testing.T) {
 				assert.Nil(t, s.StartedAt)
 			}
 
-			for _, ct := range tc.wantConditions {
-				assert.True(t, meta.IsStatusConditionTrue(s.Conditions, ct), "expected condition %s=True", ct)
+			for ct, want := range tc.wantConditions {
+				got := meta.FindStatusCondition(s.Conditions, ct)
+				require.NotNil(t, got, "expected condition %s to be set", ct)
+				assert.Equal(t, want, got.Status, "condition %s status mismatch", ct)
 			}
 		})
 	}
@@ -130,6 +156,7 @@ func TestInvokeAction(t *testing.T) {
 	tests := map[string]struct {
 		action  modeAction
 		cr      *psmdbv1.PerconaServerMongoDBClusterSync
+		state   psmdbv1.ClusterSyncState
 		assert  func(t *testing.T, f *fakePCSM)
 		wantErr error
 	}{
@@ -147,11 +174,8 @@ func TestInvokeAction(t *testing.T) {
 		},
 		"resume passes fromFailure=true when last state was failed": {
 			action: actionResume,
-			cr: &psmdbv1.PerconaServerMongoDBClusterSync{
-				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-					State: psmdbv1.ClusterSyncStateFailed,
-				},
-			},
+			cr:     &psmdbv1.PerconaServerMongoDBClusterSync{},
+			state:  psmdbv1.ClusterSyncStateFailed,
 			assert: func(t *testing.T, f *fakePCSM) {
 				require.NotNil(t, f.resumed)
 				assert.True(t, *f.resumed)
@@ -159,11 +183,8 @@ func TestInvokeAction(t *testing.T) {
 		},
 		"resume passes fromFailure=false from clean paused": {
 			action: actionResume,
-			cr: &psmdbv1.PerconaServerMongoDBClusterSync{
-				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-					State: psmdbv1.ClusterSyncStatePaused,
-				},
-			},
+			cr:     &psmdbv1.PerconaServerMongoDBClusterSync{},
+			state:  psmdbv1.ClusterSyncStatePaused,
 			assert: func(t *testing.T, f *fakePCSM) {
 				require.NotNil(t, f.resumed)
 				assert.False(t, *f.resumed)
@@ -201,7 +222,7 @@ func TestInvokeAction(t *testing.T) {
 			if tc.wantErr != nil {
 				f.actionErr = tc.wantErr
 			}
-			err := invokeAction(t.Context(), f, tc.action, tc.cr)
+			err := invokeAction(t.Context(), f, tc.action, tc.cr, tc.state)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 				return

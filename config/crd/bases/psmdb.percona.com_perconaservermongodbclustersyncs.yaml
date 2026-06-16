@@ -978,13 +978,6 @@ spec:
                 properties:
                   credentialsSecret:
                     type: string
-                  tls:
-                    properties:
-                      enabled:
-                        type: boolean
-                      secret:
-                        type: string
-                    type: object
                   uri:
                     type: string
                 required:

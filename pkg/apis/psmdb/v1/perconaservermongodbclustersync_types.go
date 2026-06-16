@@ -76,15 +76,6 @@ type ClusterSyncSource struct {
 	// CredentialsSecret is a same-namespace Secret with `username` and
 	// `password` keys.
 	CredentialsSecret string `json:"credentialsSecret"`
-
-	TLS *ClusterSyncTLS `json:"tls,omitempty"`
-}
-
-// ClusterSyncTLS configures only the PCSM-to-source TLS; target TLS is
-// auto-derived from the target PSMDB CR's existing secrets.
-type ClusterSyncTLS struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Secret  string `json:"secret,omitempty"`
 }
 
 // ClusterSyncState mirrors the state strings PCSM returns from
@@ -127,10 +118,6 @@ type PerconaServerMongoDBClusterSyncStatus struct {
 
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
-
-// FinalizerDeleteAfterFinalize opts the user in to deleting the CR
-// itself after post-finalize cleanup completes.
-const FinalizerDeleteAfterFinalize = "percona.com/delete-clustersync-after-finalize"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

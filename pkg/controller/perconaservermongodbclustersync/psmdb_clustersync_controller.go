@@ -3,6 +3,7 @@ package perconaservermongodbclustersync
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"time"
 
 	clustersynclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	requeueInternal = 5 * time.Second
+	requeueInterval = 5 * time.Second
 )
 
 // Add wires the ClusterSync controller into the manager.
@@ -155,7 +156,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	}
 	if !ready {
 		log.V(1).Info("PCSM deployment not ready yet", "name", clustersync.DeploymentName(cr))
-		return reconcile.Result{RequeueAfter: requeueInternal}, nil
+		return reconcile.Result{RequeueAfter: requeueInterval}, nil
 	}
 
 	if err := r.reconcileMode(ctx, cr, r.newPCSMClientFor(cr)); err != nil {
@@ -163,7 +164,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	}
 
 	log.V(1).Info("Reconciled ClusterSync", "clusterName", cr.Spec.ClusterName, "mode", cr.Spec.Mode, "state", cr.Status.State)
-	return reconcile.Result{RequeueAfter: requeueInternal}, nil
+	return reconcile.Result{RequeueAfter: requeueInterval}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
@@ -246,7 +247,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		if skipAction(action, newStatus.State) {
 			log.Info("PCSM already in matching state, skipping transition",
 				"action", action, "state", newStatus.State, "to", cr.Spec.Mode)
-		} else if err := invokeAction(ctx, pcsm, action, cr); err != nil {
+		} else if err := invokeAction(ctx, pcsm, action, cr, newStatus.State); err != nil {
 			newStatus.Error = err.Error()
 			if isPCSMUnreachable(err) {
 				log.V(1).Info("PCSM CLI not reachable during transition", "action", action, "err", err.Error())
@@ -279,15 +280,22 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 		s.StartedAt = &now
 	}
 
-	switch s.State {
-	case psmdbv1.ClusterSyncStateRunning:
-		meta.SetStatusCondition(&s.Conditions, metav1.Condition{
-			Type:    psmdbv1.ConditionClusterSyncRunning,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PCSMRunning",
-			Message: "PCSM is replicating from source to target",
-		})
-	case psmdbv1.ClusterSyncStateFinalized:
+	runningStatus := metav1.ConditionFalse
+	runningReason := "PCSMNotRunning"
+	runningMsg := fmt.Sprintf("PCSM state: %s", s.State)
+	if s.State == psmdbv1.ClusterSyncStateRunning {
+		runningStatus = metav1.ConditionTrue
+		runningReason = "PCSMRunning"
+		runningMsg = "PCSM is replicating from source to target"
+	}
+	meta.SetStatusCondition(&s.Conditions, metav1.Condition{
+		Type:    psmdbv1.ConditionClusterSyncRunning,
+		Status:  runningStatus,
+		Reason:  runningReason,
+		Message: runningMsg,
+	})
+
+	if s.State == psmdbv1.ClusterSyncStateFinalized {
 		meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 			Type:    psmdbv1.ConditionClusterSyncFinalized,
 			Status:  metav1.ConditionTrue,
@@ -297,15 +305,12 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 	}
 }
 
-func invokeAction(ctx context.Context, pcsm pcsmClient, action modeAction, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
+func invokeAction(ctx context.Context, pcsm pcsmClient, action modeAction, cr *psmdbv1.PerconaServerMongoDBClusterSync, state psmdbv1.ClusterSyncState) error {
 	switch action {
 	case actionStart:
 		return pcsm.Start(ctx, clustersynclient.StartOptions{ExcludeNamespaces: cr.Spec.ExcludeNamespaces})
 	case actionResume:
-		// fromFailure=true is the recovery path documented for resume;
-		// use it when PCSM's last observed state was failed so it knows
-		// to bypass the normal paused-precondition check.
-		return pcsm.Resume(ctx, cr.Status.State == psmdbv1.ClusterSyncStateFailed)
+		return pcsm.Resume(ctx, state == psmdbv1.ClusterSyncStateFailed)
 	case actionPause:
 		return pcsm.Pause(ctx)
 	case actionFinalize:
@@ -326,7 +331,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) requeueWithStatusError(ctx co
 	if err := r.writeStatus(ctx, cr, *newStatus); err != nil {
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{RequeueAfter: requeueInternal}, nil
+	return reconcile.Result{RequeueAfter: requeueInterval}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) writeStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, newStatus psmdbv1.PerconaServerMongoDBClusterSyncStatus) error {
