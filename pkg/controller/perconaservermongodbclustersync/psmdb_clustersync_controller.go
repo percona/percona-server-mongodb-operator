@@ -5,7 +5,7 @@ import (
 	stderrors "errors"
 	"time"
 
-	client2 "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
+	clustersynclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,7 +54,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {
-		return client2.New(r.client, r.clientcmd, cr)
+		return clustersynclient.New(r.client, r.clientcmd, cr)
 	}
 	return r, nil
 }
@@ -71,8 +71,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBClusterSync{}
 
 type pcsmClient interface {
-	Status(ctx context.Context) (client2.Status, error)
-	Start(ctx context.Context, opts client2.StartOptions) error
+	Status(ctx context.Context) (clustersynclient.Status, error)
+	Start(ctx context.Context, opts clustersynclient.StartOptions) error
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context, fromFailure bool) error
 	Finalize(ctx context.Context) error
@@ -216,7 +216,13 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) deploymentReady(ctx context.C
 		}
 		return false, err
 	}
-	return dep.Status.ReadyReplicas > 0, nil
+	if dep.Spec.Replicas == nil {
+		return false, nil
+	}
+	return dep.Generation == dep.Status.ObservedGeneration &&
+		dep.Status.UpdatedReplicas == *dep.Spec.Replicas &&
+		dep.Status.ReadyReplicas == dep.Status.UpdatedReplicas &&
+		dep.Status.UnavailableReplicas == 0, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, pcsm pcsmClient) error {
@@ -260,10 +266,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 }
 
 func isPCSMUnreachable(err error) bool {
-	return stderrors.Is(err, client2.ErrPCSMNotReady)
+	return stderrors.Is(err, clustersynclient.ErrPCSMNotReady)
 }
 
-func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed client2.Status) {
+func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed clustersynclient.Status) {
 	s.State = psmdbv1.ClusterSyncState(observed.State)
 	s.LagTimeSeconds = observed.LagTimeSeconds
 	s.Error = observed.Error
@@ -294,7 +300,7 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 func invokeAction(ctx context.Context, pcsm pcsmClient, action modeAction, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
 	switch action {
 	case actionStart:
-		return pcsm.Start(ctx, client2.StartOptions{ExcludeNamespaces: cr.Spec.ExcludeNamespaces})
+		return pcsm.Start(ctx, clustersynclient.StartOptions{ExcludeNamespaces: cr.Spec.ExcludeNamespaces})
 	case actionResume:
 		// fromFailure=true is the recovery path documented for resume;
 		// use it when PCSM's last observed state was failed so it knows

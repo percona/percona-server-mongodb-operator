@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -43,6 +44,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureSyncTargetUser(
 	cr *psmdbv1.PerconaServerMongoDBClusterSync,
 	target *psmdbv1.PerconaServerMongoDB,
 ) (psmdb.Credentials, error) {
+	log := logf.FromContext(ctx)
 	creds, err := r.ensureTargetUserSecret(ctx, cr)
 	if err != nil {
 		return psmdb.Credentials{}, errors.Wrap(err, "ensure target user secret")
@@ -55,7 +57,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureSyncTargetUser(
 	defer func(mc mongo.Client, ctx context.Context) {
 		err := mc.Disconnect(ctx)
 		if err != nil {
-			// TODO: add log
+			log.Error(err, "close target cluster")
 		}
 	}(mc, ctx)
 

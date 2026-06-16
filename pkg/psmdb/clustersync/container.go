@@ -2,6 +2,7 @@ package clustersync
 
 import (
 	"fmt"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -70,30 +71,45 @@ func probeOrDefault(override *corev1.Probe, def func() *corev1.Probe) *corev1.Pr
 // (https://perconadev.atlassian.net/browse/PCSM-345) we probe via curl on
 // loopback from inside the container. Revert to TCPSocket/HTTPGet once
 // PCSM binds to 0.0.0.0.
-func loopbackStatusProbe() corev1.ProbeHandler {
+func loopbackStatusProbe(timeoutSeconds int32) corev1.ProbeHandler {
+	maxTime := timeoutSeconds
+	if maxTime > 1 {
+		maxTime--
+	}
+	connectTimeout := int32(1)
+	if connectTimeout > maxTime {
+		connectTimeout = maxTime
+	}
 	return corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
-			Command: []string{"curl", "-fsS", "--max-time", "3", fmt.Sprintf("http://127.0.0.1:%d/status", HTTPPort)},
+			Command: []string{
+				"curl", "-fsS",
+				"--connect-timeout", strconv.Itoa(int(connectTimeout)),
+				"--max-time", strconv.Itoa(int(maxTime)),
+				fmt.Sprintf("http://127.0.0.1:%d/status", HTTPPort),
+			},
 		},
 	}
 }
 
 func livenessProbe() *corev1.Probe {
+	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackStatusProbe(),
+		ProbeHandler:        loopbackStatusProbe(timeoutSeconds),
 		InitialDelaySeconds: 30,
 		PeriodSeconds:       10,
-		TimeoutSeconds:      5,
+		TimeoutSeconds:      timeoutSeconds,
 		FailureThreshold:    5,
 	}
 }
 
 func readinessProbe() *corev1.Probe {
+	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackStatusProbe(),
+		ProbeHandler:        loopbackStatusProbe(timeoutSeconds),
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       10,
-		TimeoutSeconds:      5,
+		TimeoutSeconds:      timeoutSeconds,
 		FailureThreshold:    3,
 	}
 }
