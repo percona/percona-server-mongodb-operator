@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	k8sutils "github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
@@ -83,13 +84,13 @@ func (r *ReconcilePerconaServerMongoDB) deleteSearch(ctx context.Context, cr *ap
 	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: naming.SearchServiceName(cr, rs), Namespace: ns}}
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: naming.SearchConfigMapName(cr, rs), Namespace: ns}}
 
-	if err := r.client.Delete(ctx, sts); err != nil && !k8serrors.IsNotFound(err) {
+	if err := k8sutils.DeleteIfExists(ctx, r.client, sts); err != nil {
 		return errors.Wrapf(err, "delete StatefulSet %s", sts.Name)
 	}
-	if err := r.client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+	if err := k8sutils.DeleteIfExists(ctx, r.client, svc); err != nil {
 		return errors.Wrapf(err, "delete Service %s", svc.Name)
 	}
-	if err := r.client.Delete(ctx, cm); err != nil && !k8serrors.IsNotFound(err) {
+	if err := k8sutils.DeleteIfExists(ctx, r.client, cm); err != nil {
 		return errors.Wrapf(err, "delete ConfigMap %s", cm.Name)
 	}
 
