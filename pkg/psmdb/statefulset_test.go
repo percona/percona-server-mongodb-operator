@@ -1,12 +1,14 @@
 package psmdb
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -296,6 +298,81 @@ func TestGetCAVolumes(t *testing.T) {
 			outputVol := volumes[1]
 			assert.Equal(t, naming.BackupStorageCAFileVolumeName, outputVol.Name)
 			assert.NotNil(t, outputVol.EmptyDir)
+		})
+	}
+}
+
+func TestBackupAgentContainerProbes(t *testing.T) {
+	liveness := &corev1.Probe{
+		InitialDelaySeconds: 15,
+		PeriodSeconds:       7,
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
+		},
+	}
+	readiness := &corev1.Probe{
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       3,
+		ProbeHandler: corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt(27017)},
+		},
+	}
+
+	newCR := func() *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &api.SecretsSpec{Users: "some-users"},
+				Backup: api.BackupSpec{
+					Enabled: true,
+					Image:   "backup-image",
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name          string
+		setup         func(cr *api.PerconaServerMongoDB)
+		wantLiveness  *corev1.Probe
+		wantReadiness *corev1.Probe
+	}{
+		{
+			name:          "no probes by default",
+			setup:         func(*api.PerconaServerMongoDB) {},
+			wantLiveness:  nil,
+			wantReadiness: nil,
+		},
+		{
+			name: "custom probes honored",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.LivenessProbe = liveness
+				cr.Spec.Backup.ReadinessProbe = readiness
+			},
+			wantLiveness:  liveness,
+			wantReadiness: readiness,
+		},
+		{
+			name: "custom probes ignored on <1.23.0",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				cr.Spec.Backup.LivenessProbe = liveness
+				cr.Spec.Backup.ReadinessProbe = readiness
+			},
+			wantLiveness:  nil,
+			wantReadiness: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newCR()
+			tt.setup(cr)
+
+			c := backupAgentContainer(context.Background(), cr, "rs0", 27017, false, &corev1.Secret{})
+
+			assert.Equal(t, tt.wantLiveness, c.LivenessProbe)
+			assert.Equal(t, tt.wantReadiness, c.ReadinessProbe)
 		})
 	}
 }

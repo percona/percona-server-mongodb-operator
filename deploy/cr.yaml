@@ -812,6 +812,20 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
+#    livenessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#      failureThreshold: 5
+#    readinessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 3
 #    storages:
 #      s3-us-east:
 #        main: true
