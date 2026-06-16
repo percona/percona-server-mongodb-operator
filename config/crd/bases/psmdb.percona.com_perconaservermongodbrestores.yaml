@@ -97,8 +97,6 @@ spec:
                         - backoffMax
                         - backoffMultiplier
                         type: object
-                      workloadIdentity:
-                        type: boolean
                     required:
                     - bucket
                     type: object

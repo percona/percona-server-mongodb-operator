@@ -143,8 +143,6 @@ spec:
                     - backoffMax
                     - backoffMultiplier
                     type: object
-                  workloadIdentity:
-                    type: boolean
                 required:
                 - bucket
                 type: object
@@ -391,8 +389,6 @@ spec:
                         - backoffMax
                         - backoffMultiplier
                         type: object
-                      workloadIdentity:
-                        type: boolean
                     required:
                     - bucket
                     type: object
@@ -1317,8 +1313,6 @@ spec:
                               - backoffMax
                               - backoffMultiplier
                               type: object
-                            workloadIdentity:
-                              type: boolean
                           required:
                           - bucket
                           type: object
