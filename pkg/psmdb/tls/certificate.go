@@ -53,8 +53,10 @@ func (c *caCert) Object() *cm.Certificate {
 	}
 
 	issuerKind := cm.IssuerKind
+	issuerGroup := ""
 	if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.TLS != nil {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
+		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}
 	return &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,8 +69,9 @@ func (c *caCert) Object() *cm.Certificate {
 			CommonName: cr.Name + "-ca",
 			IsCA:       true,
 			IssuerRef: cmmeta.ObjectReference{
-				Name: caIssuerName(cr),
-				Kind: issuerKind,
+				Name:  caIssuerName(cr),
+				Kind:  issuerKind,
+				Group: issuerGroup,
 			},
 			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},

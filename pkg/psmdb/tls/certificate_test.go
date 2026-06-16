@@ -30,6 +30,7 @@ func TestCertificate(t *testing.T) {
 		t.Run("ClusterIssuerKind", func(t *testing.T) {
 			cr := cr.DeepCopy()
 			cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+			cr.Spec.TLS.IssuerConf.Group = "cert-manager.io"
 
 			t.Run("default cert-manager namespace when ClusterIssuerKind is used", func(t *testing.T) {
 				ca := CertificateCA(cr)
@@ -48,6 +49,7 @@ func TestCertificate(t *testing.T) {
 					obj := ca.Object()
 					assert.Equal(t, "psmdb-mock-psmdb-psmdb-ca-issuer", obj.Spec.IssuerRef.Name)
 					assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+					assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 				})
 				t.Run("old version", func(t *testing.T) {
 					cr := cr.DeepCopy()
@@ -56,6 +58,7 @@ func TestCertificate(t *testing.T) {
 					obj := ca.Object()
 					assert.Equal(t, "psmdb-mock-psmdb-ca-issuer", obj.Spec.IssuerRef.Name)
 					assert.Equal(t, cm.IssuerKind, obj.Spec.IssuerRef.Kind)
+					assert.Empty(t, obj.Spec.IssuerRef.Group)
 				})
 			})
 		})
@@ -76,6 +79,7 @@ func TestCertificate(t *testing.T) {
 		t.Run("ClusterIssuerKind", func(t *testing.T) {
 			cr := cr.DeepCopy()
 			cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+			cr.Spec.TLS.IssuerConf.Group = "cert-manager.io"
 
 			t.Run("issuerRef", func(t *testing.T) {
 				t.Run("latest version", func(t *testing.T) {
@@ -84,12 +88,14 @@ func TestCertificate(t *testing.T) {
 						obj := cert.Object()
 						assert.Equal(t, "psmdb-mock-psmdb-psmdb-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 					t.Run("non-internal", func(t *testing.T) {
 						cert := CertificateTLS(cr, false)
 						obj := cert.Object()
 						assert.Equal(t, "psmdb-mock-psmdb-psmdb-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 				})
 				t.Run("old version", func(t *testing.T) {
@@ -100,12 +106,14 @@ func TestCertificate(t *testing.T) {
 						obj := cert.Object()
 						assert.Equal(t, "psmdb-mock-psmdb-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 					t.Run("non-internal", func(t *testing.T) {
 						cert := CertificateTLS(cr, false)
 						obj := cert.Object()
 						assert.Equal(t, "psmdb-mock-psmdb-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 				})
 			})
