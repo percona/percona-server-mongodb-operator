@@ -368,9 +368,15 @@ func persistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 			Namespace: namespace,
 		},
 	}
+
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
+
+	if len(pvc.Spec.AccessModes) == 0 {
+		pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
+
 	return pvc
 }
 
