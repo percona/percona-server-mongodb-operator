@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	clustersynclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
+	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,7 +55,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {
-		return clustersynclient.New(r.client, r.clientcmd, cr)
+		return clustersyncclient.New(r.client, r.clientcmd, cr)
 	}
 	return r, nil
 }
@@ -72,8 +72,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBClusterSync{}
 
 type pcsmClient interface {
-	Status(ctx context.Context) (clustersynclient.Status, error)
-	Start(ctx context.Context, opts clustersynclient.StartOptions) error
+	Status(ctx context.Context) (clustersyncclient.Status, error)
+	Start(ctx context.Context, opts clustersyncclient.StartOptions) error
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context, fromFailure bool) error
 	Finalize(ctx context.Context) error
@@ -267,10 +267,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 }
 
 func isPCSMUnreachable(err error) bool {
-	return stderrors.Is(err, clustersynclient.ErrPCSMNotReady)
+	return stderrors.Is(err, clustersyncclient.ErrPCSMNotReady)
 }
 
-func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed clustersynclient.Status) {
+func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed clustersyncclient.Status) {
 	s.State = psmdbv1.ClusterSyncState(observed.State)
 	s.LagTimeSeconds = observed.LagTimeSeconds
 	s.Error = observed.Error
@@ -308,7 +308,7 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 func invokeAction(ctx context.Context, pcsm pcsmClient, action modeAction, cr *psmdbv1.PerconaServerMongoDBClusterSync, state psmdbv1.ClusterSyncState) error {
 	switch action {
 	case actionStart:
-		return pcsm.Start(ctx, clustersynclient.StartOptions{ExcludeNamespaces: cr.Spec.ExcludeNamespaces})
+		return pcsm.Start(ctx, clustersyncclient.StartOptions{ExcludeNamespaces: cr.Spec.ExcludeNamespaces})
 	case actionResume:
 		return pcsm.Resume(ctx, state == psmdbv1.ClusterSyncStateFailed)
 	case actionPause:

@@ -84,9 +84,38 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,
 			NodeSelector:     cr.Spec.NodeSelector,
 			Tolerations:      cr.Spec.Tolerations,
+			Affinity:         podAffinity(cr.Spec.Affinity, ls),
 			RuntimeClassName: cr.Spec.RuntimeClassName,
 			SecurityContext:  cr.Spec.PodSecurityContext,
-			RestartPolicy:    corev1.RestartPolicyAlways,
 		},
 	}
+}
+
+func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
+	if af == nil {
+		return nil
+	}
+	switch {
+	case af.Advanced != nil:
+		return af.Advanced
+	case af.TopologyKey != nil:
+		if *af.TopologyKey == api.AffinityOff {
+			return nil
+		}
+		labelsCopy := make(map[string]string, len(labels))
+		for k, v := range labels {
+			labelsCopy[k] = v
+		}
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: labelsCopy},
+						TopologyKey:   *af.TopologyKey,
+					},
+				},
+			},
+		}
+	}
+	return nil
 }
