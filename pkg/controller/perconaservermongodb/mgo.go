@@ -45,6 +45,15 @@ func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string) {
 	return readConcern, writeConcern
 }
 
+// PSA replsets need the explicit push since MongoDB's implicit default is w:1; user-set
+// values must also be propagated. Sharded clusters are handled via mongos.
+func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) bool {
+	if cr.Spec.Sharding.Enabled {
+		return false
+	}
+	return replset.Arbiter.Enabled || cr.Spec.DefaultRWConcern != nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -253,7 +262,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	if replset.Arbiter.Enabled && !cr.Spec.Sharding.Enabled {
+	if shouldSetDefaultRWConcern(cr, replset) {
 		readConcern, writeConcern := defaultRWConcern(cr)
 		err := cli.SetDefaultRWConcern(ctx, readConcern, writeConcern)
 		// SetDefaultRWConcern introduced in MongoDB 4.4

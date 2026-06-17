@@ -1719,15 +1719,15 @@ func (in *PerconaServerMongoDBSpec) DeepCopyInto(out *PerconaServerMongoDBSpec) 
 		*out = new(VaultSpec)
 		**out = **in
 	}
-	if in.DefaultRWConcern != nil {
-		in, out := &in.DefaultRWConcern, &out.DefaultRWConcern
-		*out = new(DefaultRWConcern)
-		**out = **in
-	}
 	if in.Search != nil {
 		in, out := &in.Search, &out.Search
 		*out = new(SearchSpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.DefaultRWConcern != nil {
+		in, out := &in.DefaultRWConcern, &out.DefaultRWConcern
+		*out = new(DefaultRWConcern)
+		**out = **in
 	}
 }
 
