@@ -109,6 +109,68 @@ func TestReleaseClusterSyncLease(t *testing.T) {
 	}
 }
 
+func TestAcquireClusterSyncLease(t *testing.T) {
+	tests := map[string]struct {
+		seedLease    bool
+		seedHolder   string
+		wantForeign  string
+		wantCreated  bool
+	}{
+		"no lease: acquires, no foreign holder": {
+			seedLease:   false,
+			wantCreated: true,
+		},
+		"lease held by us: no foreign holder": {
+			seedLease:  true,
+			seedHolder: "",
+		},
+		"lease held by another CR: returns foreign holder, does not overwrite": {
+			seedLease:   true,
+			seedHolder:  "other-sync-uid",
+			wantForeign: "other-sync-uid",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newClusterSyncCR("sync", "ns", "tgt")
+			objs := []runtime.Object{}
+			if tc.seedLease {
+				holder := tc.seedHolder
+				if holder == "" {
+					holder = naming.ClusterSyncHolderId(cr)
+				}
+				objs = append(objs, leaseFor(cr, holder))
+			}
+			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).WithRuntimeObjects(objs...).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			foreign, err := r.acquireClusterSyncLease(context.Background(), cr)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantForeign, foreign)
+
+			got := &coordv1.Lease{}
+			getErr := cl.Get(context.Background(), types.NamespacedName{
+				Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
+				Namespace: cr.Namespace,
+			}, got)
+			if tc.wantCreated {
+				require.NoError(t, getErr, "lease must be created when none existed")
+				require.NotNil(t, got.Spec.HolderIdentity)
+				assert.Equal(t, naming.ClusterSyncHolderId(cr), *got.Spec.HolderIdentity)
+				return
+			}
+			require.NoError(t, getErr)
+			require.NotNil(t, got.Spec.HolderIdentity)
+			wantHolder := tc.seedHolder
+			if wantHolder == "" {
+				wantHolder = naming.ClusterSyncHolderId(cr)
+			}
+			assert.Equal(t, wantHolder, *got.Spec.HolderIdentity, "existing lease must not be overwritten")
+		})
+	}
+}
+
 func TestEnsureReleaseLockFinalizer(t *testing.T) {
 	tests := map[string]struct {
 		existing []string

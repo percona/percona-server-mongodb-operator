@@ -132,10 +132,16 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	if err := r.ensureReleaseLockFinalizer(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "ensure %s finalizer", naming.FinalizerReleaseLock)
 	}
-	if _, err := k8s.AcquireLease(ctx, r.client,
-		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
-		naming.ClusterSyncHolderId(cr)); err != nil {
+	foreignHolder, err := r.acquireClusterSyncLease(ctx, cr)
+	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "acquire clustersync lease")
+	}
+	if foreignHolder != "" {
+		log.Info("ClusterSync lease held by another CR, holding reconcile",
+			"lease", naming.ClusterSyncLeaseName(cr.Spec.ClusterName), "holder", foreignHolder)
+		return r.requeueWithStatusError(ctx, cr, errors.Errorf(
+			"clustersync lease %s held by %q, not by this CR",
+			naming.ClusterSyncLeaseName(cr.Spec.ClusterName), foreignHolder))
 	}
 
 	svr, err := version.Server(r.clientcmd)
@@ -298,6 +304,23 @@ func restoreInFlight(s psmdbv1.RestoreState) bool {
 		return false
 	}
 	return true
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) acquireClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (string, error) {
+	lease, err := k8s.AcquireLease(ctx, r.client,
+		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
+		naming.ClusterSyncHolderId(cr))
+	if err != nil {
+		return "", err
+	}
+	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != naming.ClusterSyncHolderId(cr) {
+		holder := "<unknown>"
+		if lease.Spec.HolderIdentity != nil {
+			holder = *lease.Spec.HolderIdentity
+		}
+		return holder, nil
+	}
+	return "", nil
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
