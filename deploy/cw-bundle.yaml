@@ -29742,7 +29742,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:cngtm-208-4f637042b
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
