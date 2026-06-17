@@ -497,6 +497,18 @@ spec:
 #    envFrom:
 #    - configMapRef:
 #       name: configmap-name
+#    search:
+#      resources:
+#        requests:
+#          cpu: "8"
+#          memory: 32Gi
+#      storage:
+#        persistentVolumeClaim:
+#          resources:
+#            requests:
+#              storage: 200Gi
+#      affinity:
+#        antiAffinityTopologyKey: "kubernetes.io/hostname"
   sharding:
     enabled: true
 #    balancer:
@@ -1003,3 +1015,26 @@ spec:
 #      extraConfig:
 #        name: logrotate-config
 #      schedule: "0 0 * * *"
+#  search:
+#    enabled: true
+#    image: percona/percona-server-mongodb-search:<tag>
+#    size: 1
+#    storage:
+#      persistentVolumeClaim:
+#        resources:
+#          requests:
+#            storage: 10Gi
+#    resources:
+#      requests:
+#        cpu: "2"
+#        memory: 2Gi
+#    livenessProbe:
+#      initialDelaySeconds: 60
+#      periodSeconds: 30
+#      timeoutSeconds: 5
+#      failureThreshold: 4
+#    readinessProbe:
+#      initialDelaySeconds: 10
+#      periodSeconds: 10
+#      timeoutSeconds: 2
+#      failureThreshold: 3
