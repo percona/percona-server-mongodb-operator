@@ -52,6 +52,9 @@ func getCredentials(ctx context.Context, cl client.Reader, cr *api.PerconaServer
 	case api.RoleBackup:
 		creds.Username = string(usersSecret.Data[api.EnvMongoDBBackupUser])
 		creds.Password = string(usersSecret.Data[api.EnvMongoDBBackupPassword])
+	case api.RoleSearch:
+		creds.Username = string(usersSecret.Data[api.EnvMongoDBSearchUser])
+		creds.Password = string(usersSecret.Data[api.EnvMongoDBSearchPassword])
 	default:
 		return creds, errors.Errorf("not implemented for role: %s", role)
 	}
@@ -147,6 +150,11 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 	if cr.CompareVersion("1.13.0") >= 0 {
 		userMap[api.EnvMongoDBDatabaseAdminUser] = string(api.RoleDatabaseAdmin)
 		passKeys = append(passKeys, api.EnvMongoDBDatabaseAdminPassword)
+	}
+
+	if cr.IsSearchEnabled() {
+		userMap[api.EnvMongoDBSearchUser] = string(api.RoleSearch)
+		passKeys = append(passKeys, api.EnvMongoDBSearchPassword)
 	}
 
 	for user, role := range userMap {

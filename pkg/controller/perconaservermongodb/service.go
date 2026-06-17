@@ -62,13 +62,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosSvc(ctx context.Context, 
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-			err := r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos-"+strconv.Itoa(i))
+			err := r.createOrUpdateMongosSvc(ctx, cr, naming.MongosServiceName(cr)+"-"+strconv.Itoa(i))
 			if err != nil {
 				return errors.Wrap(err, "create or update mongos service")
 			}
 		}
 	} else {
-		err := r.createOrUpdateMongosSvc(ctx, cr, cr.Name+"-mongos")
+		err := r.createOrUpdateMongosSvc(ctx, cr, naming.MongosServiceName(cr))
 		if err != nil {
 			return errors.Wrap(err, "create or update mongos service")
 		}
