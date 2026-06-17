@@ -362,6 +362,9 @@ func TestPBMStorageConfig(t *testing.T) {
 					Bucket:    "operator-testing",
 					Prefix:    "psmdb",
 					ChunkSize: 1024 * 1024 * 10,
+					Credentials: gcs.Credentials{
+						WorkloadIdentity: true,
+					},
 				},
 			},
 		},
