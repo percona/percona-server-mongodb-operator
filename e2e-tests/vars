@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+
+with_registry() {
+	local ref="$1"
+
+	case "$ref" in
+		*.*/*|*:*/*|localhost/*)
+			printf '%s' "$ref"
+			;;
+		percona/*|perconalab/*)
+			printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
+			;;
+		*)
+			printf '%s' "$ref"
+			;;
+	esac
+}
+
+image_with_registry() {
+	local var="$1"
+	local val="${!var}"
+
+	[[ -z $val ]] && return
+
+	if [[ $val == *$'\n'* ]]; then
+		local out="" ref
+
+		while IFS= read -r ref; do
+			[[ -n $ref ]] && out+="$(with_registry "$ref")"$'\n'
+		done <<<"$val"
+
+		val="${out%$'\n'}"
+	else
+		val="$(with_registry "$val")"
+	fi
+
+	printf -v "$var" '%s' "$val"
+}
+
+detect_k8s_env() {
+	local provider="unknown"
+	if kubectl api-resources | grep -q 'openshift.io' 2>/dev/null; then
+		provider="openshift"
+	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+		provider="eks"
+	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
+		provider="gke"
+	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
+		provider="aks"
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
+		provider="kind"
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
+		provider="minikube"
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'rke2'; then
+		provider="rancher"
+	fi
+
+	echo "$provider"
+}
+
+setup_logging() {
+	if [[ ${ENABLE_LOGGING} == true ]]; then
+		echo "Logging enabled. Logs will be saved to $logs_dir/$test_name.log"
+		mkdir -p "$logs_dir"
+		exec &> >(tee "$logs_dir/$test_name.log")
+		echo "Log: $logs_dir/$test_name.log"
+	else
+		echo "Logging disabled."
+	fi
+}
+
+# Test variables
+export tmp_dir=$(mktemp -d)
+export sed=$(command -v gsed || command -v sed)
+export date=$(command -v gdate || command -v date)
+export test_name=$(basename "$test_dir")
+export namespace="${test_name}-${RANDOM}"
+export replica_namespace="${test_name}-replica-${RANDOM}"
+export conf_dir=$(realpath "$test_dir/../conf" || :)
+export src_dir=$(realpath "$test_dir/../..")
+export logs_dir="$test_dir/../logs"
+
+# Images and registry definitions
+export REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
+export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
+export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
+export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
+export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'perconalab/percona-server-mongodb-operator:main-mongod6.0\nperconalab/percona-server-mongodb-operator:main-mongod7.0\nperconalab/percona-server-mongodb-operator:main-mongod8.0'}
+export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
+export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
+export IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
+export IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
+export IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
+
+for image in \
+	IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+	IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
+	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
+	IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
+	image_with_registry "$image"
+done
+
+# Git information
+export GIT_COMMIT=$(git rev-parse HEAD)
+export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | tr '/._[:upper:]' '---[:lower:]')}
+export API="psmdb.percona.com/v1"
+export OPERATOR_VERSION=$(awk '/crVersion/ {print $2}' "$(realpath "$(dirname "${BASH_SOURCE[0]}")/../deploy/cr.yaml")")
+
+# Platform information
+export KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
+export PLATFORM=$(detect_k8s_env)
+# Exports GKE, EKS, AKS, OPENSHIFT, KIND, MINIKUBE, RANCHER variables based on detected platform
+export "$(echo "${PLATFORM}" | tr '[:lower:]' '[:upper:]')=1"
+
+# Dependencies versions
+export CERT_MANAGER_VER="1.19.3"
+export MINIO_VER="5.4.0"
+export CHAOS_MESH_VER="2.7.1"
+export PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
+export SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
+export UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
+export DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
+export SKIP_DELETE=${SKIP_DELETE:-0}
+if [[ -f "$conf_dir/cloud-secret.yml" ]]; then
+	export SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
+fi
+
+# Test logging
+setup_logging

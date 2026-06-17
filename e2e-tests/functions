@@ -1,127 +1,49 @@
 #!/bin/bash
 
-GIT_COMMIT=$(git rev-parse HEAD)
-GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-API="psmdb.percona.com/v1"
-OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
-IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
-IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod6.0
-perconalab/percona-server-mongodb-operator:main-mongod7.0
-perconalab/percona-server-mongodb-operator:main-mongod8.0'}
-IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
-SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
-PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
-IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
-IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
-IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
+source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
-REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
-REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
+kubectl_bin() {
+	local LAST_OUT="$(mktemp)"
+	local LAST_ERR="$(mktemp)"
+	local exit_status=0
+	local timeout=4
 
-detect_k8s_env() {
-	local provider="unknown"
-	if kubectl_bin api-resources | grep -q 'openshift.io' 2>/dev/null; then
-		provider="openshift"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
-		provider="eks"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
-		provider="gke"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
-		provider="aks"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
-		provider="kind"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
-		provider="minikube"
-	fi
+	for i in $(seq 0 2); do
+		set +e
+		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
+		exit_status=$?
+		set -e
+		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
+			cat "$LAST_OUT"
+			cat "$LAST_ERR" >&2
+			sleep "$((timeout * i))"
+		else
+			break
+		fi
+	done
 
-	echo "$provider"
+	cat "$LAST_OUT"
+	cat "$LAST_ERR" >&2
+	rm "$LAST_OUT" "$LAST_ERR"
+	return ${exit_status}
 }
 
-qualify_image_ref() {
-	local ref="$1"
-	local first="${ref%%/*}"
-
-	if [[ $first == *.* || $first == *:* || $first == "localhost" ]]; then
-		printf '%s' "$ref"
-		return 0
+set_debug() {
+	if [[ ${DEBUG_TESTS} == 1 ]]; then
+		set -o xtrace
+	else
+		set +o xtrace
 	fi
-
-	if [[ $ref == percona/* || $ref == perconalab/* ]]; then
-		printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
-		return 0
-	fi
-
-	printf '%s' "$ref"
 }
 
-qualify_image_var() {
-	local var="$1"
-	local val="${!var}"
-	local out=""
-	local ref
-
-	[[ -z $val ]] && return 0
-
-	if [[ $val == *$'\n'* ]]; then
-		while IFS= read -r ref; do
-			[[ -z $ref ]] && continue
-			out+=$(qualify_image_ref "$ref")
-			out+=$'\n'
-		done <<<"$val"
-		out="${out%$'\n'}"
-		printf -v "$var" '%s' "$out"
-		return 0
-	fi
-
-	printf -v "$var" '%s' "$(qualify_image_ref "$val")"
+desc() {
+	set +o xtrace
+	local msg="$@"
+	printf "\n\n-----------------------------------------------------------------------------------\n"
+	printf "$msg"
+	printf "\n-----------------------------------------------------------------------------------\n\n"
+	set_debug
 }
-
-for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
-		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
-		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
-		IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
-	qualify_image_var "$var"
-done
-CERT_MANAGER_VER="1.19.3"
-MINIO_VER="5.4.0"
-CHAOS_MESH_VER="2.7.1"
-UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
-DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
-SKIP_DELETE=${SKIP_DELETE:-0}
-tmp_dir=$(mktemp -d)
-sed=$(which gsed || which sed)
-date=$(which gdate || which date)
-
-test_name=$(basename $test_dir)
-namespace="${test_name}-${RANDOM}"
-replica_namespace="${test_name}-replica-${RANDOM}"
-conf_dir=$(realpath $test_dir/../conf || :)
-src_dir=$(realpath $test_dir/../..)
-logs_dir=$(realpath $test_dir/../logs || :)
-
-if [[ ${ENABLE_LOGGING} == "true" ]]; then
-	if [ ! -d "${logs_dir}" ]; then
-		mkdir "${logs_dir}"
-	fi
-	exec &> >(tee ${logs_dir}/${test_name}.log)
-	echo "Log: ${logs_dir}/${test_name}.log"
-fi
-
-if [ -f "$conf_dir/cloud-secret.yml" ]; then
-	SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
-fi
-
-if oc get projects 2>/dev/null; then
-	OPENSHIFT=4
-fi
-
-if kubectl get nodes | grep "^minikube" >/dev/null; then
-	export MINIKUBE=1
-fi
 
 minikube_sleep() {
 	sleep_time=${1:-10}
@@ -129,19 +51,6 @@ minikube_sleep() {
 		sleep $sleep_time
 	fi
 }
-
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "-eks-") ]; then
-	EKS=1
-else
-	EKS=0
-fi
-
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "gke") ]; then
-	GKE=1
-else
-	GKE=0
-fi
-KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
 
 log() {
 	set +o xtrace
@@ -155,14 +64,6 @@ sleep_with_log() {
 
 	log "${msg}. sleeping for ${d} seconds"
 	sleep ${d}
-}
-
-set_debug() {
-	if [[ ${DEBUG_TESTS} == 1 ]]; then
-		set -o xtrace
-	else
-		set +o xtrace
-	fi
 }
 
 version_gt() {
@@ -816,7 +717,7 @@ retry() {
 wait_for_running() {
 	local name="$1"
 	let last_pod="$(($2 - 1))" || :
-	local check_cluster_readyness="${3:-true}"
+	local check_cluster_readiness="${3:-true}"
 
 	set_debug
 	local rs_name=${name/*-/}
@@ -841,9 +742,9 @@ wait_for_running() {
 		done
 	fi
 	sleep 10
-	if [[ ${check_cluster_readyness} == "true" ]]; then
+	if [[ ${check_cluster_readiness} == "true" ]]; then
 		set +x
-		echo -n "Waiting for cluster readyness"
+		echo -n "Waiting for cluster ${cluster_name} to be ready"
 		local timeout=0
 		until [[ $(kubectl_bin get psmdb ${cluster_name} -o jsonpath={.status.state}) == "ready" ]]; do
 			sleep 1
@@ -1339,6 +1240,11 @@ run_pumba() {
 }
 
 deploy_cert_manager() {
+	if [[ $PLATFORM == "rancher" ]]; then
+		log "Rancher cluster detected, skipping cert manager deployment"
+		return
+	fi
+
 	desc 'deploy cert manager'
 
 	kubectl_bin create namespace cert-manager || :
@@ -1425,16 +1331,12 @@ destroy() {
 }
 
 destroy_cert_manager() {
-	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
-}
+	if [[ $PLATFORM == "rancher" ]]; then
+		log "Rancher cluster detected, skipping cert manager destroy"
+		return
+	fi
 
-desc() {
-	set +o xtrace
-	local msg="$@"
-	printf "\n\n-----------------------------------------------------------------------------------\n"
-	printf "$msg"
-	printf "\n-----------------------------------------------------------------------------------\n\n"
-	set_debug
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
 }
 
 get_backup_dest() {
@@ -1603,32 +1505,6 @@ spinup_psmdb() {
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}.${namespace}"
 }
 
-kubectl_bin() {
-	local LAST_OUT="$(mktemp)"
-	local LAST_ERR="$(mktemp)"
-	local exit_status=0
-	local timeout=4
-
-	for i in $(seq 0 2); do
-		set +e
-		kubectl "$@" 1>"$LAST_OUT" 2>"$LAST_ERR"
-		exit_status=$?
-		set -e
-		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			sleep "$((timeout * i))"
-		else
-			break
-		fi
-	done
-
-	cat "$LAST_OUT"
-	cat "$LAST_ERR" >&2
-	rm "$LAST_OUT" "$LAST_ERR"
-	return ${exit_status}
-}
-
 patch_secret() {
 	local secret=$1
 	local key=$2
@@ -1687,7 +1563,7 @@ run_backup() {
 		| kubectl_bin apply -f -
 }
 
-function check_backup_deletion_aws() {
+check_backup_deletion_aws() {
 	bucket=$(echo "$1" | cut -d'/' -f1)
 	key_prefix=$(echo "$1" | cut -d'/' -f2-)
 	key=$2
@@ -1708,7 +1584,7 @@ function check_backup_deletion_aws() {
 	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
 }
 
-function check_backup_deletion_gcs() {
+check_backup_deletion_gcs() {
 	backup_dest_gcp=$1
 	obj=$2
 	storage_name="gcp-cs"
@@ -1729,7 +1605,7 @@ function check_backup_deletion_gcs() {
 	echo "Backup $gcs_path not found in $storage_name"
 }
 
-function check_backup_deletion_azure() {
+ check_backup_deletion_azure() {
 	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
 	container=$(echo "$url_path" | cut -d'/' -f1)
 	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
@@ -1770,7 +1646,7 @@ check_backup_deletion() {
 	done
 }
 
-function setup_aws_credentials() {
+setup_aws_credentials() {
 	local secret_name="aws-s3-secret"
 
 	if [[ -n $AWS_ACCESS_KEY_ID ]] && [[ -n $AWS_SECRET_ACCESS_KEY ]]; then
@@ -1806,7 +1682,7 @@ function setup_aws_credentials() {
 	echo "AWS credentials configured successfully"
 }
 
-function setup_gcs_credentials() {
+setup_gcs_credentials() {
 	local secret_name="gcp-cs-secret"
 
 	if gsutil ls >/dev/null 2>&1; then
@@ -1852,7 +1728,7 @@ EOF
 	echo "GCS credentials configured successfully"
 }
 
-function setup_azure_credentials() {
+setup_azure_credentials() {
 	local secret_name="azure-secret"
 
 	echo "Setting up Azure credentials from K8s secret: $secret_name"
@@ -1945,7 +1821,7 @@ check_crd_for_deletion() {
 	done
 }
 
-function get_mongod_ver_from_image() {
+get_mongod_ver_from_image() {
 	local image=${1}
 
 	version_info=$(run_simple_cli_inside_image ${image} 'mongod --version' | $sed -r 's/^.*db version v(([0-9]+\.){2}[0-9]+-[0-9]+).*$/\1/g')
@@ -1957,7 +1833,7 @@ function get_mongod_ver_from_image() {
 	echo ${version_info}
 }
 
-function get_pbm_version() {
+get_pbm_version() {
 	local image=${1}
 
 	local version_info=$(run_simple_cli_inside_image ${image} 'pbm-agent version' | $sed -r 's/^Version:\ (([0-9]+\.){2}[0-9]+)\ .*/\1/g')
@@ -1969,7 +1845,7 @@ function get_pbm_version() {
 	echo ${version_info}
 }
 
-function run_simple_cli_inside_image() {
+run_simple_cli_inside_image() {
 	local image=${1}
 	local cli=${2}
 
@@ -1981,7 +1857,7 @@ function run_simple_cli_inside_image() {
 	echo ${output}
 }
 
-function generate_vs_json() {
+generate_vs_json() {
 	local template_path=${1}
 	local target_path=${2}
 
@@ -2449,7 +2325,7 @@ wait_for_oplogs() {
 	done
 }
 
-function check_backup_existence_aws() {
+check_backup_existence_aws() {
 	bucket=$(echo "$1" | cut -d'/' -f1)
 	key_prefix=$(echo "$1" | cut -d'/' -f2-)
 	key=$2
@@ -2470,7 +2346,7 @@ function check_backup_existence_aws() {
 	echo "Backup $bucket/$key_prefix/$key found in $storage_name"
 }
 
-function check_backup_existence_gcs() {
+check_backup_existence_gcs() {
 	backup_dest_gcp=$1
 	obj=$2
 	storage_name="gcp-cs"
@@ -2492,7 +2368,7 @@ function check_backup_existence_gcs() {
 	echo "Backup $gcs_path found in $storage_name"
 }
 
-function check_backup_existence_azure() {
+check_backup_existence_azure() {
 	url_path=$(echo "$1" | sed 's|https://[^/]*\.blob\.core\.windows\.net/||')
 	container=$(echo "$url_path" | cut -d'/' -f1)
 	blob_prefix=$(echo "$url_path" | cut -d'/' -f2-)
@@ -2562,7 +2438,7 @@ check_backup_in_storage() {
 	esac
 }
 
-function wait_all_pvc_resize() {
+wait_all_pvc_resize() {
 	local expected_size=$1
 	local max_retry=${2:-120}
 	local sleep_time=${3:-5}
@@ -2575,7 +2451,7 @@ function wait_all_pvc_resize() {
 	return 0
 }
 
-function wait_pvc_resize() {
+wait_pvc_resize() {
 	local pvc=$1
 	local expected_size=$2
 	local max_retry=${3:-120}
@@ -2599,21 +2475,45 @@ function wait_pvc_resize() {
 	return 0
 }
 
+setup_rancher_backup_storage() {
+	local minio_service_name="${1:-minio-service}"
+
+	yq '
+			.metadata.name = "minio-secret-longhorn" |
+			.stringData.AWS_ENDPOINTS = "http://'"${minio_service_name}.${namespace}"'.svc.cluster.local:9000"
+		' "${conf_dir}/minio-secret.yml" \
+		| kubectl_bin apply -n longhorn-system -f -
+
+	kubectl_bin -n longhorn-system patch backuptargets.longhorn.io default \
+		--type=merge \
+		-p '{
+			"spec": {
+				"backupTargetURL": "s3://operator-testing@us-east-1/",
+				"credentialSecret": "minio-secret-longhorn"
+			}
+		}'
+}
+
 deploy_volume_snapshot_class() {
 	local snapshot_class_file
-	local k8s_env
-	k8s_env=$(detect_k8s_env)
 
-	case "$k8s_env" in
+	case "$PLATFORM" in
 		gke)
-			snapshot_class_file="${conf_dir}/gke-volume-snapshot-class.yaml"
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-gke.yaml"
+			;;
+		rancher)
+			setup_rancher_backup_storage
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-rancher.yaml"
 			;;
 		*)
-			echo "Unsupported Kubernetes environment for volume snapshot class: $k8s_env" >&2
+			echo "Unsupported Kubernetes environment for volume snapshot class: $PLATFORM"
 			return 1
 			;;
 	esac
 
-	kubectl_bin apply -f "${snapshot_class_file}" >&2
-	yq eval '.metadata.name' "${snapshot_class_file}"
+	kubectl_bin apply -f "${snapshot_class_file}"
+}
+
+get_volume_snapshot_class() {
+	kubectl_bin get volumesnapshotclass -o jsonpath='{.items[0].metadata.name}' 2>/dev/null
 }
