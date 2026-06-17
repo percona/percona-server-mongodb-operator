@@ -262,6 +262,16 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
+	// Only enqueue the search user for password rotation if it already
+	// exists in the internal secret. On first enable the user is
+	// provisioned by createOrUpdateSystemUsers; queueing it here would
+	// try UpdateUser against a non-existent account.
+	if _, ok := currUsersSec.Data[api.EnvMongoDBSearchUser]; ok && cr.IsSearchEnabled() {
+		users = append(users, user{
+			nameKey: api.EnvMongoDBSearchUser,
+			passKey: api.EnvMongoDBSearchPassword,
+		})
+	}
 	if cr.Spec.PMM.Enabled {
 		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{

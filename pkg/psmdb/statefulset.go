@@ -18,6 +18,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
@@ -241,7 +242,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, initImage)
+	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -257,7 +258,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if hash := configs.HashHex(cr); hash != "" {
-		annotations["percona.com/configuration-hash"] = hash
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}

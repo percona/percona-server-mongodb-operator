@@ -190,8 +190,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
         - command:
@@ -204,8 +202,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always

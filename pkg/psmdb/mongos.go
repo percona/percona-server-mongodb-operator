@@ -16,6 +16,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -25,8 +26,8 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.MongosNamespacedName().Name,
-			Namespace: cr.MongosNamespacedName().Namespace,
+			Name:      naming.MongosStatefulSetName(cr),
+			Namespace: cr.Namespace,
 			Labels:    naming.MongosLabels(cr),
 		},
 	}
@@ -78,7 +79,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, initImage)
+	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -94,7 +95,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = customConf.HashHex
+		annotations[naming.AnnotationConfigHash] = customConf.HashHex
 	}
 
 	return corev1.PodTemplateSpec{
