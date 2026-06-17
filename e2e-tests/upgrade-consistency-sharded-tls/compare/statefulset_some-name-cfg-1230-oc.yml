@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 8
+  generation: 7
   labels:
     app.kubernetes.io/component: cfg
     app.kubernetes.io/instance: some-name
@@ -92,9 +92,9 @@ spec:
                 - --ssl
                 - --sslInsecure
                 - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
+                - /etc/mongodb-ssl-internal/ca.crt
                 - --sslPEMKeyFile
-                - /tmp/tls.pem
+                - /tmp/tls-internal.pem
                 - --startupDelaySeconds
                 - "7200"
             failureThreshold: 4
@@ -118,9 +118,9 @@ spec:
                 - --ssl
                 - --sslInsecure
                 - --sslCAFile
-                - /etc/mongodb-ssl/ca.crt
+                - /etc/mongodb-ssl-internal/ca.crt
                 - --sslPEMKeyFile
-                - /tmp/tls.pem
+                - /tmp/tls-internal.pem
             failureThreshold: 3
             initialDelaySeconds: 10
             periodSeconds: 3

@@ -249,10 +249,24 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 
 			if cr.TLSEnabled() {
-				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+				var tlsArgs []string
+				// Prioritize internal certificates if configured
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+					}
+				} else {
+					// Fallback to standard external certificates
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls.pem",
+					}
+				}
+
+				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command, tlsArgs...)
 			}
 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -293,10 +307,24 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 
 			if cr.TLSEnabled() {
-				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+				var tlsArgs []string
+				// Prioritize internal certificates if configured
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+					}
+				} else {
+					// Fallback to standard external certificates
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls.pem",
+					}
+				}
+
+				cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command = append(cr.Spec.Sharding.Mongos.ReadinessProbe.Exec.Command, tlsArgs...)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -455,12 +483,26 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
 
-			replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+			replset.LivenessProbe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 			if cr.TLSEnabled() {
-				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+				var tlsArgs []string
+				// Prioritize internal certificates if configured
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+					}
+				} else {
+					// Fallback to standard external certificates
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls.pem",
+					}
+				}
+
+				replset.LivenessProbe.Exec.Command = append(replset.LivenessProbe.Exec.Command, tlsArgs...)
 			}
 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -500,10 +542,23 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				},
 			}
 			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
-				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
+				var tlsArgs []string
+				// Prioritize internal certificates if configured
+				if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+					}
+				} else {
+					// Fallback to standard external certificates
+					tlsArgs = []string{
+						"--ssl", "--sslInsecure",
+						"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+						"--sslPEMKeyFile", "/tmp/tls.pem",
+					}
+				}
+				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command, tlsArgs...)
 			}
 
 			if cr.CompareVersion("1.15.0") < 0 {
@@ -871,14 +926,28 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		}
 
 		if cr.TLSEnabled() {
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
-				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
-				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
-			)
+			var tlsArgs []string
+			// Prioritize internal certificates if configured
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+				}
+			} else {
+				// Fallback to standard external certificates
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem",
+				}
+			}
+
+			nv.LivenessProbe.Exec.Command = append(nv.LivenessProbe.Exec.Command, tlsArgs...)
 		}
 
 		if cr.CompareVersion("1.14.0") >= 0 {
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			nv.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
@@ -900,10 +969,24 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 			},
 		}
 		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
-			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command,
-				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem")
+			var tlsArgs []string
+			// Prioritize internal certificates if configured
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+				}
+			} else {
+				// Fallback to standard external certificates
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem",
+				}
+			}
+
+			nv.ReadinessProbe.Exec.Command = append(nv.ReadinessProbe.Exec.Command, tlsArgs...)
 		}
 
 		if cr.CompareVersion("1.15.0") < 0 {
@@ -975,10 +1058,24 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 		}
 
 		if cr.TLSEnabled() {
-			h.LivenessProbe.Exec.Command = append(
-				h.LivenessProbe.Exec.Command,
-				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
-			)
+			var tlsArgs []string
+			// Prioritize internal certificates if configured
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+				}
+			} else {
+				// Fallback to standard external certificates
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem",
+				}
+			}
+
+			h.LivenessProbe.Exec.Command = append(h.LivenessProbe.Exec.Command, tlsArgs...)
 		}
 	}
 	startupDelaySecondsFlag := "--startupDelaySeconds"
@@ -1002,11 +1099,25 @@ func (h *HiddenSpec) setReadinessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec
 				"--component", "mongod",
 			},
 		}
-		if cr.CompareVersion("1.22.0") >= 0 && cr.TLSEnabled() {
-			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command,
-				"--ssl", "--sslInsecure",
-				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-				"--sslPEMKeyFile", "/tmp/tls.pem")
+		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			var tlsArgs []string
+			// Prioritize internal certificates if configured
+			if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.Secrets != nil && cr.Spec.Secrets.SSLInternal != "" && cr.Spec.Secrets.SSLInternal != cr.Spec.Secrets.SSL {
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl-internal/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls-internal.pem",
+				}
+			} else {
+				// Fallback to standard external certificates
+				tlsArgs = []string{
+					"--ssl", "--sslInsecure",
+					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+					"--sslPEMKeyFile", "/tmp/tls.pem",
+				}
+			}
+
+			h.ReadinessProbe.Exec.Command = append(h.ReadinessProbe.Exec.Command, tlsArgs...)
 		}
 	}
 	if h.ReadinessProbe.InitialDelaySeconds < 1 {
