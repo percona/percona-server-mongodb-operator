@@ -469,6 +469,14 @@ type PMMSpec struct {
 	// +kubebuilder:validation:Enum=profiler;mongolog
 	// +kubebuilder:default=profiler
 	QuerySource string `json:"querySource,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the pmm-client
+	// container. When not set the Operator uses its built-in liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the pmm-client container.
+	// When not set the pmm-client container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -1416,6 +1424,14 @@ type BackupSpec struct {
 	// +kubebuilder:default=120
 	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
 	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the backup-agent
+	// container. When not set the backup-agent container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the backup-agent container.
+	// When not set the backup-agent container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
