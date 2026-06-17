@@ -621,6 +621,15 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		}
 	}
 
+	if cr.CompareVersion("1.23.0") >= 0 {
+		if cr.Spec.Backup.LivenessProbe != nil {
+			c.LivenessProbe = cr.Spec.Backup.LivenessProbe
+		}
+		if cr.Spec.Backup.ReadinessProbe != nil {
+			c.ReadinessProbe = cr.Spec.Backup.ReadinessProbe
+		}
+	}
+
 	return c
 }
 
