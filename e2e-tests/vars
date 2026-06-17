@@ -85,7 +85,10 @@ export REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
 export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
-export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'perconalab/percona-server-mongodb-operator:main-mongod6.0\nperconalab/percona-server-mongodb-operator:main-mongod7.0\nperconalab/percona-server-mongodb-operator:main-mongod8.0'}
+IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
+perconalab/percona-server-mongodb-operator:main-mongod6.0
+perconalab/percona-server-mongodb-operator:main-mongod7.0
+perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
@@ -103,9 +106,9 @@ done
 
 # Git information
 export GIT_COMMIT=$(git rev-parse HEAD)
-export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | tr '/._[:upper:]' '---[:lower:]')}
+export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
 export API="psmdb.percona.com/v1"
-export OPERATOR_VERSION=$(awk '/crVersion/ {print $2}' "$(realpath "$(dirname "${BASH_SOURCE[0]}")/../deploy/cr.yaml")")
+export OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 
 # Platform information
 export KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')

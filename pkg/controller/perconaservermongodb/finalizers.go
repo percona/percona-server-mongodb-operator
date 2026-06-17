@@ -114,6 +114,15 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		}
 	}
 
+	if cr.IsSearchEnabled() {
+		cr.Spec.Search.Size = 0
+		for _, rs := range cr.Spec.Replsets {
+			if rs.Search != nil {
+				rs.Search.Size = new(int32(0))
+			}
+		}
+	}
+
 	rsDeleted := true
 	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteReplset(ctx, cr, rs); err != nil {

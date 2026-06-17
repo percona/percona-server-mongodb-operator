@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	mcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
@@ -31,14 +32,23 @@ func GetOutdatedRSPods(ctx context.Context, k8sclient client.Client, cr *api.Per
 func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, rsName string, trimOutdated bool) (corev1.PodList, error) {
 	rsPods := corev1.PodList{}
 
-	stsList := appsv1.StatefulSetList{} // All statefulsets related to replset `rsName`
+	selectors := labels.SelectorFromSet(map[string]string{
+		naming.LabelKubernetesInstance: cr.Name,
+		naming.LabelKubernetesReplset:  rsName,
+	})
+
+	// All statefulsets related to replset `rsName` expect component=search
+	req, err := labels.NewRequirement(naming.LabelKubernetesComponent, selection.NotEquals, []string{naming.ComponentSearch})
+	if err != nil {
+		return rsPods, errors.Wrap(err, "get selector requirement")
+	}
+	selectors = selectors.Add(*req)
+
+	stsList := appsv1.StatefulSetList{}
 	if err := k8sclient.List(ctx, &stsList,
 		&client.ListOptions{
-			Namespace: cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				naming.LabelKubernetesInstance: cr.Name,
-				naming.LabelKubernetesReplset:  rsName,
-			}),
+			Namespace:     cr.Namespace,
+			LabelSelector: selectors,
 		},
 	); err != nil {
 		return rsPods, errors.Wrapf(err, "failed to get statefulset list related to replset %s", rsName)
