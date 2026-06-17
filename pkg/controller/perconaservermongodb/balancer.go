@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -133,7 +134,7 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 
 	msSts := psmdb.MongosStatefulset(cr)
 
-	err := r.client.Get(ctx, cr.MongosNamespacedName(), msSts)
+	err := r.client.Get(ctx, naming.MongosNamespacedName(cr), msSts)
 	if k8sErrors.IsNotFound(err) {
 		return nil
 	}

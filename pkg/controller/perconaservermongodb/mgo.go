@@ -1120,6 +1120,9 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	}
 
 	users := []api.SystemUserRole{api.RoleClusterAdmin, api.RoleClusterMonitor, api.RoleBackup, api.RoleDatabaseAdmin}
+	if cr.IsSearchEnabled() {
+		users = append(users, api.RoleSearch)
+	}
 
 	for _, role := range users {
 		creds, err := getInternalCredentials(ctx, r.client, cr, role)

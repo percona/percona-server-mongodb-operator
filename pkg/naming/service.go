@@ -18,3 +18,11 @@ func AppProtocol(cr *api.PerconaServerMongoDB) *string {
 	}
 	return nil
 }
+
+func MongosServiceName(cr *api.PerconaServerMongoDB) string {
+	return cr.Name + "-" + ComponentMongos
+}
+
+func SearchServiceName(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
+	return SearchStatefulSetName(cr, rs)
+}

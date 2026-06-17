@@ -126,3 +126,9 @@ func NewBackupCronJobLabels(cr *api.PerconaServerMongoDB, labels map[string]stri
 
 	return ls
 }
+
+func SearchLabels(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+	ls := RSLabels(cr, rs)
+	ls[LabelKubernetesComponent] = ComponentSearch
+	return ls
+}

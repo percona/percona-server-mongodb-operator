@@ -294,8 +294,6 @@ spec:
             cpu: 300m
             memory: 1Gi
         volumeMounts:
-        - mountPath: /data/db
-          name: mongod-data
         - mountPath: /opt/percona
           name: bin
       restartPolicy: Always
