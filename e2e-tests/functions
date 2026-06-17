@@ -11,6 +11,7 @@ perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_SEARCH=${IMAGE_SEARCH:-"mongodb/mongodb-community-search:latest"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
@@ -81,7 +82,7 @@ qualify_image_var() {
 	printf -v "$var" '%s' "$(qualify_image_ref "$val")"
 }
 
-for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP IMAGE_SEARCH \
 		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
 		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
 		IMAGE_CLUSTERSYNC \
@@ -1065,7 +1066,7 @@ run_mongosh() {
 	local suffix=${4:-".svc.cluster.local"}
 	local mongo_flag="$5"
 
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
@@ -1091,6 +1092,26 @@ run_mongo_tls() {
 
 }
 
+run_mongosh_tls() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb+srv}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+
+}
+
 run_mongos() {
 	local command="$1"
 	local uri="$2"
@@ -1111,6 +1132,26 @@ run_mongos() {
 		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
 }
 
+run_mongosh_mongos() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
+
+	# mongos is not a replica set, so no replicaSet query parameter here.
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false $mongo_flag"
+}
+
 run_mongos_tls() {
 	local command="$1"
 	local uri="$2"
@@ -1129,6 +1170,21 @@ run_mongos_tls() {
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+}
+
+run_script_mongosh_mongos() {
+	local script="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local mongo_flag="$5"
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
+
+	name="$(basename $script)"
+	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
+	kubectl_bin exec ${client_container} -- \
+		bash -c "mongosh $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 run_script_mongos() {
@@ -1205,6 +1261,42 @@ compare_mongo_cmd() {
 		mongo_command=run_mongo_tls
 	else
 		mongo_command=run_mongo
+	fi
+
+	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|"c":"NETWORK"|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+			>$tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
+}
+
+compare_mongosh_cmd() {
+	local command="$1"
+	local uri="$2"
+	local postfix="$3"
+	local suffix="$4"
+	local database="${5:-myApp}"
+	local collection="${6:-test}"
+	local sort="$7"
+	local tls="${8:-false}"
+	local replicaset="$9"
+
+	local full_command="db.${collection}.${command}()"
+	if [[ -n ${sort} ]]; then
+		full_command="${full_command}.${sort}"
+	fi
+
+	log "running ${full_command} in ${database}"
+
+	if [[ $tls == "true" ]]; then
+		mongo_command=run_mongosh_tls
+	else
+		mongo_command=run_mongosh
 	fi
 
 	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
@@ -1552,6 +1644,7 @@ cat_config() {
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '(.spec | select(has("search"))).search.image = "'"$IMAGE_SEARCH"'"' \
 		| $sed -e "s/NAME_SPACE/${namespace}/g" \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }

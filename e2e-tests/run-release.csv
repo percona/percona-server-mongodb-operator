@@ -92,4 +92,6 @@ upgrade-sharded
 upgrade-partial-backup
 users
 users-vault
+vector-search
+vector-search-sharded
 version-service

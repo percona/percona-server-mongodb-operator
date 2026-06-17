@@ -4,6 +4,7 @@ const (
 	AnnotationRestoreName     = perconaPrefix + "restore-name"
 	AnnotationSSLHash         = perconaPrefix + "ssl-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"
+	AnnotationConfigHash      = perconaPrefix + "configuration-hash"
 )
 
 const AnnotationKubectlRestartedAt = "kubectl.kubernetes.io/restartedAt"

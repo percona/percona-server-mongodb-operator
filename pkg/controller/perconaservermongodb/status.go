@@ -80,6 +80,24 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	}
 
 	cr.Status.Replsets = leftRsStatuses
+
+	// Prune stale entries from status.search. When search is disabled
+	// cluster-wide, clear the map entirely so the field disappears
+	// from the serialized status (omitempty + nil map).
+	if !cr.IsSearchEnabled() {
+		cr.Status.Search = nil
+	} else {
+		leftSearch := make(map[string]api.SearchStatus, len(cr.Status.Search))
+		for _, repl := range repls {
+			if repl.ClusterRole == api.ClusterRoleConfigSvr {
+				continue
+			}
+			if v, ok := cr.Status.Search[repl.Name]; ok {
+				leftSearch[repl.Name] = v
+			}
+		}
+		cr.Status.Search = leftSearch
+	}
 	cr.Status.Size = 0
 	cr.Status.Ready = 0
 	for _, rs := range repls {
@@ -142,6 +160,14 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			if err != nil {
 				return errors.Wrapf(err, "set upgradeInProgres")
 			}
+		}
+
+		if cr.IsSearchEnabled() && rs.ClusterRole != api.ClusterRoleConfigSvr {
+			searchStatus, err := r.searchStatus(ctx, cr, rs)
+			if err != nil {
+				return errors.Wrapf(err, "get search %s status", rs.Name)
+			}
+			cr.Status.Search[rs.Name] = searchStatus
 		}
 	}
 
@@ -271,11 +297,11 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 
 	statefulSets := make([]string, 0, len(cr.Spec.Replsets)+2)
 	for _, rs := range cr.Spec.Replsets {
-		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(rs.Name).Name)
+		statefulSets = append(statefulSets, naming.MongodStatefulSetName(cr, rs))
 	}
 	if cr.Spec.Sharding.Enabled {
-		statefulSets = append(statefulSets, cr.StatefulsetNamespacedName(api.ConfigReplSetName).Name)
-		statefulSets = append(statefulSets, cr.MongosNamespacedName().Name)
+		statefulSets = append(statefulSets, naming.MongodStatefulSetName(cr, cr.Spec.Sharding.ConfigsvrReplSet))
+		statefulSets = append(statefulSets, naming.MongosStatefulSetName(cr))
 	}
 
 	// count the number of updated pods from statefulsets that have changed
