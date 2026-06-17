@@ -392,7 +392,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		applyObservedStatus(newStatus, observed)
 	}
 
-	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.StartedAt != nil)
+	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
 	if action != actionNone {
 		if skipAction(action, newStatus.State) {
 			log.Info("PCSM already in matching state, skipping transition",

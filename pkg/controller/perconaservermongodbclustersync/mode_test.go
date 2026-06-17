@@ -12,6 +12,7 @@ func TestNextAction(t *testing.T) {
 	tests := map[string]struct {
 		statusMode api.ClusterSyncMode
 		specMode   api.ClusterSyncMode
+		state      api.ClusterSyncState
 		hasStarted bool
 		wantAction modeAction
 		wantMirror bool
@@ -102,11 +103,36 @@ func TestNextAction(t *testing.T) {
 			wantAction: actionNone,
 			wantMirror: false,
 		},
+
+		"failed with spec=running resumes from failure": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionResume,
+			wantMirror: false,
+		},
+		"failed without prior start stays put": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: false,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed with spec=paused does not resume": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModePaused,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionPause,
+			wantMirror: true,
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			gotAction, gotMirror := nextAction(tc.statusMode, tc.specMode, tc.hasStarted)
+			gotAction, gotMirror := nextAction(tc.statusMode, tc.specMode, tc.state, tc.hasStarted)
 			assert.Equal(t, tc.wantAction, gotAction, "action")
 			assert.Equal(t, tc.wantMirror, gotMirror, "mirror")
 		})

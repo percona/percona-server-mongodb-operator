@@ -28,9 +28,12 @@ func skipAction(action modeAction, state api.ClusterSyncState) bool {
 	return false
 }
 
-func nextAction(statusMode, specMode api.ClusterSyncMode, hasStarted bool) (modeAction, bool) {
+func nextAction(statusMode, specMode api.ClusterSyncMode, state api.ClusterSyncState, hasStarted bool) (modeAction, bool) {
 	if statusMode == api.ClusterSyncModeFinalized {
 		return actionNone, false
+	}
+	if state == api.ClusterSyncStateFailed && specMode == api.ClusterSyncModeRunning && hasStarted {
+		return actionResume, false
 	}
 	if statusMode == specMode {
 		return actionNone, false
