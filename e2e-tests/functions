@@ -831,6 +831,8 @@ compare_kubectl() {
 			del(.spec.template.spec.containers[].env[] | select(.name == "NAMESPACE")) |
 			del(.metadata.selfLink) |
 			del(.metadata.annotations."cloud.google.com/neg") |
+			del(.metadata.annotations."field.cattle.io/publicEndpoints") |
+			del(.metadata.annotations."metallb.io/ip-allocated-from-pool") |
 			del(.metadata.annotations."kubectl.kubernetes.io/last-applied-configuration") |
 			del(.. | select(has("image")).image) |
 			del(.. | select(has("clusterIP")).clusterIP) |
