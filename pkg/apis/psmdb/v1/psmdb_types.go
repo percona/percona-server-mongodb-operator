@@ -469,6 +469,14 @@ type PMMSpec struct {
 	// +kubebuilder:validation:Enum=profiler;mongolog
 	// +kubebuilder:default=profiler
 	QuerySource string `json:"querySource,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the pmm-client
+	// container. When not set the Operator uses its built-in liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the pmm-client container.
+	// When not set the pmm-client container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -1416,6 +1424,14 @@ type BackupSpec struct {
 	// +kubebuilder:default=120
 	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
 	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the backup-agent
+	// container. When not set the backup-agent container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the backup-agent container.
+	// When not set the backup-agent container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1731,6 +1747,30 @@ func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 
 func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
+}
+
+// KeyFileAuthEnabled reports whether MongoDB should use keyFile internal
+// cluster authentication (--clusterAuthMode=keyFile).
+//
+// keyFile auth is required when:
+//   - spec.secrets.keyFile is explicitly set (operator-managed override)
+//   - tls.mode is "allowTLS" – connections may be plain, x509 is unreliable
+//   - TLS is disabled (mode: disabled + unsafe.tls: true)
+//
+// For the default "preferTLS" and for "requireTLS", MongoDB uses
+// --clusterAuthMode=x509 and no keyfile is needed.
+
+func (cr *PerconaServerMongoDB) KeyFileAuthEnabled() bool {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return true
+	}
+	if cr.Spec.Secrets.InternalKey != "" {
+		return true
+	}
+	if cr.TLSEnabled() {
+		return cr.Spec.TLS == nil || cr.Spec.TLS.Mode == TLSModeAllow
+	}
+	return cr.UnsafeTLSDisabled()
 }
 
 const (

@@ -18,8 +18,10 @@ get_node_id_from_pmm() {
 does_node_id_exists() {
 	local -a nodeList=("$@")
 	local -a nodeList_from_pmm=()
+	local admin_pass
+	admin_pass=$(kubectl_bin get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://admin:admin@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://admin:${admin_pass}@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
@@ -59,6 +61,37 @@ verify_custom_cluster_name() {
 	done
 
 	return $verified
+}
+
+check_custom_pmm_probes() {
+	desc 'verify custom PMM liveness/readiness probes set via CR are applied'
+
+	kubectl_bin patch psmdb ${cluster} --type=json -p='[
+	  {"op":"add","path":"/spec/pmm/livenessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":30,"periodSeconds":15}},
+	  {"op":"add","path":"/spec/pmm/readinessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":5,"periodSeconds":10}}
+	]'
+
+	wait_for_running $cluster-rs0 3
+
+	local liveness readiness
+	liveness=$(kubectl_bin get statefulset/${cluster}-rs0 -o jsonpath='{.spec.template.spec.containers[?(@.name=="pmm-client")].livenessProbe.exec.command[0]}')
+	readiness=$(kubectl_bin get statefulset/${cluster}-rs0 -o jsonpath='{.spec.template.spec.containers[?(@.name=="pmm-client")].readinessProbe.exec.command[0]}')
+
+	if [[ $liveness != "/bin/true" ]]; then
+		echo "error: custom pmm livenessProbe was not applied, got: '$liveness'"
+		exit 1
+	fi
+	if [[ $readiness != "/bin/true" ]]; then
+		echo "error: custom pmm readinessProbe was not applied, got: '$readiness'"
+		exit 1
+	fi
+
+	desc 'revert custom PMM probes to defaults'
+	kubectl_bin patch psmdb ${cluster} --type=json -p='[
+	  {"op":"remove","path":"/spec/pmm/livenessProbe"},
+	  {"op":"remove","path":"/spec/pmm/readinessProbe"}
+	]'
+	wait_for_running $cluster-rs0 3
 }
 
 deploy_pmm3_server() {
@@ -392,6 +425,8 @@ compare_kubectl service/$cluster-rs0
 compare_kubectl service/$cluster-mongos
 compare_kubectl statefulset/$cluster-cfg
 compare_kubectl statefulset/$cluster-mongos
+
+check_custom_pmm_probes
 
 desc 'create new PMM token and add it to the secret'
 NEW_TOKEN=$(get_pmm_server_token "operator_new")

@@ -158,6 +158,11 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
+	keyfileSecretErr := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, &corev1.Secret{})
+	if client.IgnoreNotFound(keyfileSecretErr) != nil {
+		return nil, errors.Wrap(keyfileSecretErr, "check keyfile secret")
+	}
+
 	configs := psmdb.StatefulConfigParams{
 		MongoDConf:         mongodCustomConfig,
 		LogCollectionConf:  logCollectionCustomConfig,
@@ -165,8 +170,9 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		LogRotateExtraConf: logRotateExtraConfig,
 	}
 	secrets := psmdb.StatefulSpecSecretParams{
-		UsersSecret: usersSecret,
-		SSLSecret:   sslSecret,
+		UsersSecret:   usersSecret,
+		SSLSecret:     sslSecret,
+		KeyfileExists: keyfileSecretErr == nil,
 	}
 	sfsSpec, err := psmdb.StatefulSpec(
 		ctx, cr, rs, ls, r.initImage,
