@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/psmdb.percona.com_perconaservermongodbbackups.yaml
+- bases/psmdb.percona.com_perconaservermongodbclustersyncs.yaml
 - bases/psmdb.percona.com_perconaservermongodbrestores.yaml
 - bases/psmdb.percona.com_perconaservermongodbs.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
@@ -10,6 +11,7 @@ resources:
 patchesStrategicMerge:
   - patches/versionlabel_in_psmdb.yaml
   - patches/versionlabel_in_psmdbbackup.yaml
+  - patches/versionlabel_in_psmdbclustersync.yaml
   - patches/versionlabel_in_psmdbrestore.yaml
 
 patches:
