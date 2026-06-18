@@ -143,7 +143,7 @@ if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "gke")
 else
 	GKE=0
 fi
-if [[ -z ${ARCH} && ${GKE} -eq 1 ]]; then
+if [[ -z ${ARCH} ]]; then
 	node_arches=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}' 2>/dev/null | sort -u)
 	if [[ ${node_arches} == "arm64" ]]; then
 		ARCH=arm64
@@ -1850,7 +1850,7 @@ EOF
 cat_config() {
 	cat "$1" \
 		| yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' \
-		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
+		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"${IMAGE_PMM3_CLIENT:-$IMAGE_PMM_CLIENT}"'"'
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
 		| if [[ -n ${IMAGE_LOGCOLLECTOR} ]]; then IMAGE_LOGCOLLECTOR="${IMAGE_LOGCOLLECTOR}" yq eval '(.spec | select(has("logcollector"))).logcollector.image = strenv(IMAGE_LOGCOLLECTOR)'; else cat; fi \
