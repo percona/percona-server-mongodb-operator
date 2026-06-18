@@ -21,6 +21,64 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
+func TestBackupStartOSSStorageDestination(t *testing.T) {
+	ctx := context.Background()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPBM := NewMockPBM(ctrl)
+	mockPBM.EXPECT().SendCmd(gomock.Any(), gomock.Any()).Return(nil)
+
+	cluster := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-cluster",
+			Namespace: "some-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: "1.20.0",
+			Backup: api.BackupSpec{
+				Storages: map[string]api.BackupStorageSpec{
+					"oss": {
+						Type: api.BackupStorageOSS,
+						Main: true,
+						OSS: api.BackupStorageOSSSpec{
+							Bucket:            "some-bucket",
+							Prefix:            "some-prefix",
+							CredentialsSecret: "some-secret",
+						},
+					},
+				},
+			},
+			Replsets: []*api.ReplsetSpec{
+				{Name: "rs0"},
+			},
+		},
+	}
+	backup := &managedBackups{
+		pbm:  mockPBM,
+		spec: cluster.Spec.Backup,
+	}
+
+	status, err := backup.Start(ctx, nil, cluster, &api.PerconaServerMongoDBBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-backup",
+			Namespace: "some-namespace",
+		},
+		Spec: api.PerconaServerMongoDBBackupSpec{
+			ClusterName: "some-cluster",
+			StorageName: "oss",
+			Type:        defs.LogicalBackup,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, api.BackupStateRequested, status.State)
+	assert.Equal(t, "oss", status.StorageName)
+	assert.NotNil(t, status.OSS)
+	assert.Equal(t, "oss://some-bucket/some-prefix/"+status.PBMname, status.Destination)
+}
+
 func TestBackup_Status(t *testing.T) {
 	ctx := context.Background()
 

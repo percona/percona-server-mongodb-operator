@@ -197,7 +197,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if encryptionEnabled {
 		if len(cr.Spec.Secrets.Vault) != 0 {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.Vault,
 					VolumeSource: corev1.VolumeSource{
@@ -210,7 +211,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			)
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.EncryptionKey,
 					VolumeSource: corev1.VolumeSource{
@@ -276,7 +278,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	// add TLS/SSL Volume
 	t := true
-	volumes = append(volumes,
+	volumes = append(
+		volumes,
 		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
@@ -298,7 +301,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 	)
 	if cr.Spec.Secrets.LDAPSecret != "" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
 				VolumeSource: corev1.VolumeSource{
@@ -319,7 +323,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			[]corev1.Volume{
 				{
 					Name: config.MongodDataVolClaimName,
@@ -335,7 +340,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: config.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
@@ -581,6 +587,10 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
+	// Required for backups/restores for OSS if s3 backup type is used on PBM version 2.11.0 and lower
+	if cr.CompareVersion("1.23.0") >= 0 {
+		c.Env = append(c.Env, AWSSDKChecksumEnvVars()...)
+	}
 
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
@@ -631,6 +641,19 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}
 
 	return c
+}
+
+func AWSSDKChecksumEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "AWS_REQUEST_CHECKSUM_CALCULATION",
+			Value: "when_required",
+		},
+		{
+			Name:  "AWS_RESPONSE_CHECKSUM_VALIDATION",
+			Value: "when_required",
+		},
+	}
 }
 
 func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
@@ -827,7 +850,6 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 }
 
 func GetCAVolumeMounts() []corev1.VolumeMount {
-
 	return []corev1.VolumeMount{
 		{
 			Name:      naming.BackupStorageCAInputVolumeName,

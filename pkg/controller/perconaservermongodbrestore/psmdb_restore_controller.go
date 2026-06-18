@@ -340,6 +340,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 	var minio psmdbv1.BackupStorageMinioSpec
 	var gcs psmdbv1.BackupStorageGCSSpec
 	var fs psmdbv1.BackupStorageFilesystemSpec
+	var oss psmdbv1.BackupStorageOSSSpec
 	var storageType psmdbv1.BackupStorageType
 
 	switch {
@@ -358,6 +359,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 	case cr.Spec.BackupSource.Filesystem != nil:
 		fs = *cr.Spec.BackupSource.Filesystem
 		storageType = psmdbv1.BackupStorageFilesystem
+	case cr.Spec.BackupSource.OSS != nil:
+		oss = *cr.Spec.BackupSource.OSS
+		storageType = psmdbv1.BackupStorageOSS
 	}
 
 	return psmdbv1.BackupStorageSpec{
@@ -367,6 +371,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 		GCS:        gcs,
 		Azure:      azure,
 		Filesystem: fs,
+		OSS:        oss,
 	}, nil
 }
 
@@ -394,6 +399,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				Minio:       cr.Spec.BackupSource.Minio,
 				GCS:         cr.Spec.BackupSource.GCS,
 				Azure:       cr.Spec.BackupSource.Azure,
+				OSS:         cr.Spec.BackupSource.OSS,
 				Filesystem:  cr.Spec.BackupSource.Filesystem,
 				Snapshots:   cr.Spec.BackupSource.Snapshots,
 				PBMname:     backupName,

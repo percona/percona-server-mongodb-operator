@@ -161,6 +161,15 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 					return c.MountPath == "/etc/pbm/"
 				}))
 
+			assert.True(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+					return e.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && e.Value == "when_required"
+				}))
+			assert.True(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+					return e.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && e.Value == "when_required"
+				}))
+
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
 			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
 
