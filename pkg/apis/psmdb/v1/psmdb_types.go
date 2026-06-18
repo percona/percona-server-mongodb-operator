@@ -105,6 +105,7 @@ type PerconaServerMongoDBSpec struct {
 	EnableExternalVolumeAutoscaling bool                `json:"enableExternalVolumeAutoscaling,omitempty"`
 	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
 	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
+	Search                          *SearchSpec         `json:"search,omitempty"`
 }
 
 type UserRole struct {
@@ -370,6 +371,7 @@ type PerconaServerMongoDBStatus struct {
 	Size               int32                               `json:"size"`
 	Ready              int32                               `json:"ready"`
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	Search             map[string]SearchStatus             `json:"search,omitempty"`
 }
 
 type ConditionStatus string
@@ -467,6 +469,14 @@ type PMMSpec struct {
 	// +kubebuilder:validation:Enum=profiler;mongolog
 	// +kubebuilder:default=profiler
 	QuerySource string `json:"querySource,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the pmm-client
+	// container. When not set the Operator uses its built-in liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the pmm-client container.
+	// When not set the pmm-client container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -888,6 +898,7 @@ type ReplsetSpec struct {
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 	Env                      []corev1.EnvVar              `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1413,6 +1424,14 @@ type BackupSpec struct {
 	// +kubebuilder:default=120
 	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
 	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the backup-agent
+	// container. When not set the backup-agent container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the backup-agent container.
+	// When not set the backup-agent container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1596,6 +1615,8 @@ const (
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey
 	EnvPMMServerToken                = PMMServerToken
+	EnvMongoDBSearchUser             = "MONGODB_SEARCH_USER"
+	EnvMongoDBSearchPassword         = "MONGODB_SEARCH_PASSWORD"
 )
 
 type SystemUserRole string
@@ -1613,6 +1634,8 @@ const (
 	RoleClusterMonitor SystemUserRole = "clusterMonitor"
 	// RoleBackup is used by the operator for backup and restore operations via PBM (Percona Backup for MongoDB).
 	RoleBackup SystemUserRole = "backup"
+	// RoleSearch is the user mongot authenticates as.
+	RoleSearch SystemUserRole = "searchCoordinator"
 )
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
@@ -1630,14 +1653,6 @@ func UserSecretName(cr *PerconaServerMongoDB) string {
 
 func (cr *PerconaServerMongoDB) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-}
-
-func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
-	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
-}
-
-func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
-	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
 func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
@@ -1718,10 +1733,6 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 }
 
 func (cr *PerconaServerMongoDB) TLSEnabled() bool {
-	if cr.CompareVersion("1.16.0") < 0 {
-		return !cr.Spec.UnsafeConf
-	}
-
 	if cr.Spec.TLS != nil {
 		switch cr.Spec.TLS.Mode {
 		case TLSModeDisabled:
@@ -1757,6 +1768,127 @@ func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
 	v, ok := cr.Annotations[AnnotationResyncInProgress]
 	return ok && v != ""
+}
+
+// SearchSpec is the cluster-wide configuration for MongoDB Vector Search
+// (mongot). It applies to every replset/shard that holds data; per-shard
+// differences are expressed through ReplsetSpec.Search.
+type SearchSpec struct {
+	// Enabled is the cluster-wide on/off switch. When true, the operator
+	// deploys one mongot StatefulSet per replset (non-sharded) or per
+	// shard (sharded), wires mongod and mongos to it, and provisions the
+	// searchCoordinator user.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Image is the Percona mongot container image. Required when Enabled
+	// is true. Applies to every mongot pod in the cluster.
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy is the pull policy for the mongot image. Applies
+	// to every mongot pod in the cluster.
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Configuration is raw mongot YAML merged on top of the
+	// operator-generated mongot.conf. Applies to every mongot pod in
+	// the cluster.
+	Configuration string `json:"configuration,omitempty"`
+
+	// Size is the cluster-wide default number of mongot pods per
+	// replset/shard. v1 only supports size: 1. Per-replset overrides
+	// are accepted (for forward compatibility) but every effective
+	// value must equal 1.
+	// +kubebuilder:default:=1
+	Size int32 `json:"size,omitempty"`
+
+	// Storage is the cluster-wide default PVC spec for mongot data.
+	// Per-replset override is allowed.
+	Storage *VolumeSpec `json:"storage,omitempty"`
+
+	// Resources is the cluster-wide default CPU/memory request and
+	// limits for mongot. Per-replset override is allowed.
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// JVMFlags is the cluster-wide default extra JVM flags for mongot.
+	// The operator sets the JVM max heap to 50% of the effective
+	// resources.memory if no -Xmx flag is set here. Per-replset
+	// override is allowed.
+	JVMFlags []string `json:"jvmFlags,omitempty"`
+
+	// Affinity is the cluster-wide default pod affinity. Per-replset
+	// override replaces the cluster-wide value for that shard's mongot.
+	Affinity *PodAffinity `json:"affinity,omitempty"`
+
+	// NodeSelector is the cluster-wide default. Per-replset override
+	// replaces (does not merge with) the cluster-wide value.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations is the cluster-wide default. Per-replset override
+	// replaces the cluster-wide value.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// Annotations is the cluster-wide default. Per-replset override
+	// replaces the cluster-wide value.
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels is the cluster-wide default. Per-replset override replaces
+	// the cluster-wide value.
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// ContainerSecurityContext is the cluster-wide default. Per-replset
+	// override replaces the cluster-wide value.
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// PodSecurityContext is the cluster-wide default. Per-replset
+	// override replaces the cluster-wide value.
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+
+	// LivenessProbe overrides the mongot container liveness probe. Timing
+	// fields (initialDelaySeconds, periodSeconds, timeoutSeconds,
+	// successThreshold, failureThreshold) are applied as set. When no
+	// probe handler (httpGet/exec/tcpSocket/grpc) is specified, the
+	// operator keeps its default HTTP /health check. Applies to every
+	// mongot pod in the cluster.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe overrides the mongot container readiness probe. It
+	// behaves like LivenessProbe: timing fields are applied as set, and
+	// the operator's default HTTP /health check is kept when no handler
+	// is specified. Applies to every mongot pod in the cluster.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+}
+
+// SearchReplsetOverride is an optional per-replset override for the
+// cluster-wide SearchSpec. Each non-nil field fully replaces the
+// matching cluster-wide value for that replset/shard's mongot
+// StatefulSet — there is no merge. Fields not listed here (Enabled,
+// Image, ImagePullPolicy, TLS, LogLevel, Configuration) are
+// cluster-only and may not be set per replset.
+type SearchReplsetOverride struct {
+	Size                     *int32                       `json:"size,omitempty"`
+	Storage                  *VolumeSpec                  `json:"storage,omitempty"`
+	Resources                *corev1.ResourceRequirements `json:"resources,omitempty"`
+	JVMFlags                 []string                     `json:"jvmFlags,omitempty"`
+	Affinity                 *PodAffinity                 `json:"affinity,omitempty"`
+	NodeSelector             map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations              []corev1.Toleration          `json:"tolerations,omitempty"`
+	Annotations              map[string]string            `json:"annotations,omitempty"`
+	Labels                   map[string]string            `json:"labels,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
+}
+
+// SearchStatus is the per-replset/shard status for the mongot StatefulSet.
+type SearchStatus struct {
+	Size    int32    `json:"size"`
+	Ready   int32    `json:"ready"`
+	Status  AppState `json:"status,omitempty"`
+	Message string   `json:"message,omitempty"`
+}
+
+// IsSearchEnabled reports whether vector search is enabled at the
+// cluster level.
+func (cr *PerconaServerMongoDB) IsSearchEnabled() bool {
+	return cr.Spec.Search != nil && cr.Spec.Search.Enabled
 }
 
 // LogCollectorSpec defines the configuration for enabling and customizing
