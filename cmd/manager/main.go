@@ -115,9 +115,10 @@ func main() {
 	}
 
 	options.Controller.GroupKindConcurrency = map[string]int{
-		"PerconaServerMongoDB." + psmdbv1.SchemeGroupVersion.Group:        1,
-		"PerconaServerMongoDBBackup." + psmdbv1.SchemeGroupVersion.Group:  1,
-		"PerconaServerMongoDBRestore." + psmdbv1.SchemeGroupVersion.Group: 1,
+		"PerconaServerMongoDB." + psmdbv1.SchemeGroupVersion.Group:            1,
+		"PerconaServerMongoDBBackup." + psmdbv1.SchemeGroupVersion.Group:      1,
+		"PerconaServerMongoDBRestore." + psmdbv1.SchemeGroupVersion.Group:     1,
+		"PerconaServerMongoDBClusterSync." + psmdbv1.SchemeGroupVersion.Group: 1,
 	}
 
 	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
@@ -125,6 +126,7 @@ func main() {
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDB."+psmdbv1.SchemeGroupVersion.Group] = i
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDBBackup."+psmdbv1.SchemeGroupVersion.Group] = i
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDBRestore."+psmdbv1.SchemeGroupVersion.Group] = i
+			options.Controller.GroupKindConcurrency["PerconaServerMongoDBClusterSync."+psmdbv1.SchemeGroupVersion.Group] = i
 		} else {
 			setupLog.Error(err, "MAX_CONCURRENT_RECONCILES must be a positive number")
 			os.Exit(1)
