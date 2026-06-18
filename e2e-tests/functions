@@ -1628,7 +1628,7 @@ wait_cluster_consistency() {
 
 	retry=0
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	echo -n 'waiting for cluster readyness'
+	echo -n "waiting for cluster ${cluster_name} to be ready"
 	until [[ "$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		let retry+=1
 		if [ $retry -ge $wait_time ]; then

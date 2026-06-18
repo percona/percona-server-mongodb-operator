@@ -217,6 +217,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1G
+            storage: 1Gi
       status:
         phase: Pending
