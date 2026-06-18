@@ -169,7 +169,7 @@ cluster="some-name"
 create_infra "${namespace}"
 deploy_minio
 apply_s3_storage_secrets
-deploy_minio_backup_storage_class
+deploy_volume_snapshot_class
 
 desc 'Setting up Vault'
 setup_vault
