@@ -60,12 +60,12 @@ detect_k8s_env() {
 
 setup_logging() {
 	if [[ ${ENABLE_LOGGING} == true ]]; then
-		echo "Logging enabled. Logs will be saved to $logs_dir/$test_name.log"
+		echo "Debug logging enabled. Logs will be saved to $logs_dir/$test_name.log"
 		mkdir -p "$logs_dir"
 		exec &> >(tee "$logs_dir/$test_name.log")
 		echo "Log: $logs_dir/$test_name.log"
 	else
-		echo "Logging disabled."
+		echo "Debug logging disabled."
 	fi
 }
 
