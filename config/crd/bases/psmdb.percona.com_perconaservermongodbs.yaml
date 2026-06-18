@@ -577,9 +577,9 @@ spec:
                           properties:
                             bucket:
                               type: string
-                            credentialsSecret:
-                              type: string
                             connectTimeout:
+                              type: string
+                            credentialsSecret:
                               type: string
                             endpointUrl:
                               type: string
