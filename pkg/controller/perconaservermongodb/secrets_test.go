@@ -234,6 +234,54 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 	assert.Contains(t, actual.Data, "databaseAdmin_rs0_connectionString")
 }
 
+func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t *testing.T) {
+	cr := connectionStringTestCluster()
+	users := []api.User{
+		{Name: "app-user", DB: "application", Roles: []api.UserRole{{Name: "readWrite", DB: "application"}}},
+		{Name: "report-user", DB: "reports", Roles: []api.UserRole{{Name: "read", DB: "reports"}}},
+	}
+	owner := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      users[0].DefaultSecretName(cr),
+			Namespace: cr.Namespace,
+			UID:       types.UID("custom-users-secret-uid"),
+		},
+		Data: map[string][]byte{
+			"app-user":    []byte("p@ss/word"),
+			"report-user": []byte("report/pass"),
+		},
+	}
+	rs := cr.Spec.Replsets[0]
+	r := buildFakeClient(
+		owner,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
+				Namespace: cr.Namespace,
+			},
+			Data: map[string][]byte{"stale": []byte("value")},
+		},
+		fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
+		fakePodsForRS(cr, rs)[0],
+	)
+
+	require.NoError(t, ensureCustomUsersConnectionStringSecrets(t.Context(), r.client, cr, users))
+
+	actual := new(corev1.Secret)
+	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{
+		Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
+		Namespace: cr.Namespace,
+	}, actual))
+	assert.Equal(t, map[string][]byte{
+		"app-user_rs0_connectionString":       []byte("mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0"),
+		"app-user_rs0_connectionStringSrv":    []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
+		"report-user_rs0_connectionString":    []byte("mongodb://report-user:report%2Fpass@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=reports&replicaSet=rs0"),
+		"report-user_rs0_connectionStringSrv": []byte("mongodb+srv://report-user:report%2Fpass@cluster-rs0.database.svc.cluster.local/?authSource=reports&replicaSet=rs0"),
+	}, actual.Data)
+	require.Len(t, actual.OwnerReferences, 1)
+	assert.Equal(t, owner.UID, actual.OwnerReferences[0].UID)
+}
+
 func connectionStringTestCluster() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{

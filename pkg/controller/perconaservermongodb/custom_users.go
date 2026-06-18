@@ -18,8 +18,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	s "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 )
@@ -79,6 +77,8 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 
 	uniqueUserNames := make(map[string]struct{}, len(cr.Spec.Users))
 
+	usersWithConnStr := []api.User{}
+
 	for _, user := range cr.Spec.Users {
 		err := validateUser(&user, systemUserNames, uniqueUserNames)
 		if err != nil {
@@ -112,23 +112,7 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 		}
 
 		if !user.IsExternalDB() {
-			cred := psmdb.Credentials{
-				Username:   user.Name,
-				Password:   string(sec.Data[userSecretPassKey]),
-				AuthSource: user.DB,
-			}
-			if err := ensureConnectionStringSecret(
-				ctx,
-				client,
-				cr,
-				naming.SecretCustomUserConnStrName(cr, &user),
-				user.Name,
-				cred,
-				sec,
-				!cr.Spec.Sharding.Enabled,
-			); err != nil {
-				return errors.Wrapf(err, "ensure user conn string secret %s", user.Name)
-			}
+			usersWithConnStr = append(usersWithConnStr, user)
 		}
 
 		annotationKey := buildAnnotationKey(cr, user.Name)
@@ -152,6 +136,9 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			log.Error(err, "update user roles", "user", user.Name)
 			continue
 		}
+	}
+	if err := ensureCustomUsersConnectionStringSecrets(ctx, client, cr, usersWithConnStr); err != nil {
+		return errors.Wrap(err, "failed to create custom user conn str secrets")
 	}
 
 	return nil

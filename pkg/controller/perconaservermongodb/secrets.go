@@ -60,16 +60,6 @@ func ensureConnectionStringSecret(
 	owner metav1.Object,
 	includeReplsets bool,
 ) error {
-	keyPrefix = strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' ||
-			r >= 'A' && r <= 'Z' ||
-			r >= '0' && r <= '9' ||
-			r == '.' || r == '_' || r == '-' {
-			return r
-		}
-		return '_'
-	}, keyPrefix)
-
 	connStrSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
@@ -80,49 +70,8 @@ func ensureConnectionStringSecret(
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
 		connStrSecret.Data = make(map[string][]byte)
 		connStrSecret.Labels = naming.ClusterLabels(cr)
-		if includeReplsets {
-			for _, rs := range cr.GetAllReplsets() {
-				cfg, err := psmdb.MongoConfig(ctx, cl, cr, cr.Spec.ClusterServiceDNSMode, rs, cred, false)
-				if err != nil {
-					return errors.Wrap(err, "mongo config")
-				}
-
-				connStr := cfg.URI()
-				key := keyPrefix + "_" + rs.Name
-				connStrSecret.Data[key+"_connectionString"] = []byte(connStr)
-				connStrSecret.Data[key+"_connectionStringSrv"] = []byte(cfg.SRVURI(strings.Join([]string{
-					naming.ServiceName(cr, rs),
-					cr.Namespace,
-					cr.Spec.ClusterServiceDNSSuffix,
-				}, ".")))
-
-				if rs.Expose.Enabled {
-					cfg, err := psmdb.MongoConfig(ctx, cl, cr, api.DNSModeExternal, rs, cred, true)
-					if err != nil {
-						return errors.Wrap(err, "mongo config")
-					}
-					if exposedConnStr := cfg.URI(); exposedConnStr != connStr {
-						connStrSecret.Data[key+"_connectionStringExposed"] = []byte(exposedConnStr)
-					}
-				}
-			}
-		}
-
-		if cr.Spec.Sharding.Enabled {
-			servicePerPod := cr.Spec.Sharding.Mongos.Expose.ServicePerPod
-			mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, true, servicePerPod)
-			if err != nil {
-				return errors.Wrap(err, "mongos config")
-			}
-			connStrSecret.Data[keyPrefix+"_mongos_connectionString"] = []byte(mongosCfg.URI())
-
-			if servicePerPod {
-				mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, false, true)
-				if err != nil {
-					return errors.Wrap(err, "mongos config")
-				}
-				connStrSecret.Data[keyPrefix+"_mongos_connectionStringExposed"] = []byte(mongosCfg.URI())
-			}
+		if err := fillUserConnectionString(ctx, cl, connStrSecret.Data, cr, keyPrefix, cred, includeReplsets); err != nil {
+			return errors.Wrap(err, "fill user connection string")
 		}
 		if err := controllerutil.SetOwnerReference(owner, connStrSecret, cl.Scheme()); err != nil {
 			return errors.Wrap(err, "set owner reference")
@@ -130,6 +79,123 @@ func ensureConnectionStringSecret(
 		return nil
 	})
 	return errors.Wrap(err, "create or update")
+}
+
+func ensureCustomUsersConnectionStringSecrets(
+	ctx context.Context,
+	cl client.Client,
+	cr *api.PerconaServerMongoDB,
+	users []api.User,
+) error {
+	m := map[string][]api.User{}
+	for _, u := range users {
+		secretName := u.SecretName(cr)
+		if u.IsExternalDB() {
+			continue
+		}
+		m[secretName] = append(m[secretName], u)
+	}
+
+	for secretName, users := range m {
+		secret := &corev1.Secret{}
+		err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+		if err != nil {
+			return err
+		}
+
+		connStrSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
+				Namespace: cr.Namespace,
+			},
+		}
+
+		if _, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
+			connStrSecret.Data = make(map[string][]byte)
+			connStrSecret.Labels = naming.ClusterLabels(cr)
+			for _, user := range users {
+				userSecretPassKey := user.Name
+				if user.PasswordSecretRef != nil {
+					userSecretPassKey = user.PasswordSecretRef.Key
+				}
+
+				cred := psmdb.Credentials{
+					Username:   user.Name,
+					Password:   string(secret.Data[userSecretPassKey]),
+					AuthSource: user.DB,
+				}
+				if err := fillUserConnectionString(ctx, cl, connStrSecret.Data, cr, user.Name, cred, !cr.Spec.Sharding.Enabled); err != nil {
+					return errors.Wrap(err, "fill user connection string")
+				}
+			}
+			if err := controllerutil.SetOwnerReference(secret, connStrSecret, cl.Scheme()); err != nil {
+				return errors.Wrap(err, "set owner reference")
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func fillUserConnectionString(ctx context.Context, cl client.Client, data map[string][]byte, cr *api.PerconaServerMongoDB, keyPrefix string, cred psmdb.Credentials, includeReplsets bool) error {
+	keyPrefix = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' ||
+			r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' ||
+			r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, keyPrefix)
+
+	if includeReplsets {
+		for _, rs := range cr.GetAllReplsets() {
+			cfg, err := psmdb.MongoConfig(ctx, cl, cr, cr.Spec.ClusterServiceDNSMode, rs, cred, false)
+			if err != nil {
+				return errors.Wrap(err, "mongo config")
+			}
+
+			connStr := cfg.URI()
+			key := keyPrefix + "_" + rs.Name
+			data[key+"_connectionString"] = []byte(connStr)
+			data[key+"_connectionStringSrv"] = []byte(cfg.SRVURI(strings.Join([]string{
+				naming.ServiceName(cr, rs),
+				cr.Namespace,
+				cr.Spec.ClusterServiceDNSSuffix,
+			}, ".")))
+
+			if rs.Expose.Enabled {
+				cfg, err := psmdb.MongoConfig(ctx, cl, cr, api.DNSModeExternal, rs, cred, true)
+				if err != nil {
+					return errors.Wrap(err, "mongo config")
+				}
+				if exposedConnStr := cfg.URI(); exposedConnStr != connStr {
+					data[key+"_connectionStringExposed"] = []byte(exposedConnStr)
+				}
+			}
+		}
+	}
+
+	if cr.Spec.Sharding.Enabled {
+		servicePerPod := cr.Spec.Sharding.Mongos.Expose.ServicePerPod
+		mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, true, servicePerPod)
+		if err != nil {
+			return errors.Wrap(err, "mongos config")
+		}
+		data[keyPrefix+"_mongos_connectionString"] = []byte(mongosCfg.URI())
+
+		if servicePerPod {
+			mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, false, true)
+			if err != nil {
+				return errors.Wrap(err, "mongos config")
+			}
+			data[keyPrefix+"_mongos_connectionStringExposed"] = []byte(mongosCfg.URI())
+		}
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context, cr *api.PerconaServerMongoDB) error {
