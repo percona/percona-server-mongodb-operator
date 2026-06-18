@@ -16,12 +16,14 @@ import (
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -104,12 +106,19 @@ func main() {
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: 9443,
 		}),
+		Client: client.Options{
+			Scheme: scheme,
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{&corev1.Node{}},
+			},
+		},
 	}
 
 	options.Controller.GroupKindConcurrency = map[string]int{
-		"PerconaServerMongoDB." + psmdbv1.SchemeGroupVersion.Group:        1,
-		"PerconaServerMongoDBBackup." + psmdbv1.SchemeGroupVersion.Group:  1,
-		"PerconaServerMongoDBRestore." + psmdbv1.SchemeGroupVersion.Group: 1,
+		"PerconaServerMongoDB." + psmdbv1.SchemeGroupVersion.Group:            1,
+		"PerconaServerMongoDBBackup." + psmdbv1.SchemeGroupVersion.Group:      1,
+		"PerconaServerMongoDBRestore." + psmdbv1.SchemeGroupVersion.Group:     1,
+		"PerconaServerMongoDBClusterSync." + psmdbv1.SchemeGroupVersion.Group: 1,
 	}
 
 	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
@@ -117,6 +126,7 @@ func main() {
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDB."+psmdbv1.SchemeGroupVersion.Group] = i
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDBBackup."+psmdbv1.SchemeGroupVersion.Group] = i
 			options.Controller.GroupKindConcurrency["PerconaServerMongoDBRestore."+psmdbv1.SchemeGroupVersion.Group] = i
+			options.Controller.GroupKindConcurrency["PerconaServerMongoDBClusterSync."+psmdbv1.SchemeGroupVersion.Group] = i
 		} else {
 			setupLog.Error(err, "MAX_CONCURRENT_RECONCILES must be a positive number")
 			os.Exit(1)
