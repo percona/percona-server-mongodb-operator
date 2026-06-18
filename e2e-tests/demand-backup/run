@@ -6,6 +6,39 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+check_custom_backup_probes() {
+	local cluster=$1
+
+	desc 'verify custom backup-agent liveness/readiness probes set via CR are applied'
+
+	kubectl_bin patch psmdb ${cluster%-rs0} --type=json -p='[
+	  {"op":"add","path":"/spec/backup/livenessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":30,"periodSeconds":15}},
+	  {"op":"add","path":"/spec/backup/readinessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":5,"periodSeconds":10}}
+	]'
+
+	wait_for_running $cluster 3
+
+	local liveness readiness
+	liveness=$(kubectl_bin get statefulset/${cluster} -o jsonpath='{.spec.template.spec.containers[?(@.name=="backup-agent")].livenessProbe.exec.command[0]}')
+	readiness=$(kubectl_bin get statefulset/${cluster} -o jsonpath='{.spec.template.spec.containers[?(@.name=="backup-agent")].readinessProbe.exec.command[0]}')
+
+	if [[ $liveness != "/bin/true" ]]; then
+		echo "error: custom backup-agent livenessProbe was not applied, got: '$liveness'"
+		exit 1
+	fi
+	if [[ $readiness != "/bin/true" ]]; then
+		echo "error: custom backup-agent readinessProbe was not applied, got: '$readiness'"
+		exit 1
+	fi
+
+	desc 'revert custom backup-agent probes to defaults'
+	kubectl_bin patch psmdb ${cluster%-rs0} --type=json -p='[
+	  {"op":"remove","path":"/spec/backup/livenessProbe"},
+	  {"op":"remove","path":"/spec/backup/readinessProbe"}
+	]'
+	wait_for_running $cluster 3
+}
+
 run_recovery_check() {
 	local backup=$1
 	local cluster=$2
@@ -187,6 +220,8 @@ wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
+
+check_custom_backup_probes $cluster
 
 desc 'create user'
 run_mongo \

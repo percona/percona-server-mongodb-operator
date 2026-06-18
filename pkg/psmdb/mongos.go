@@ -16,6 +16,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -25,8 +26,8 @@ func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.MongosNamespacedName().Name,
-			Namespace: cr.MongosNamespacedName().Namespace,
+			Name:      naming.MongosStatefulSetName(cr),
+			Namespace: cr.Namespace,
 			Labels:    naming.MongosLabels(cr),
 		},
 	}
@@ -63,7 +64,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	return spec
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -72,12 +73,13 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		}
 	}
 
-	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances)
+	mountKeyFile := cr.KeyFileAuthEnabled() || keyfileExists
+	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances, mountKeyFile)
 	if err != nil {
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, initImage)
+	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -93,7 +95,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations["percona.com/configuration-hash"] = customConf.HashHex
+		annotations[naming.AnnotationConfigHash] = customConf.HashHex
 	}
 
 	return corev1.PodTemplateSpec{
@@ -115,14 +117,14 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 			Containers:                    containers,
 			InitContainers:                initContainers,
-			Volumes:                       volumes(cr, customConf.Type),
+			Volumes:                       volumes(cr, customConf.Type, mountKeyFile),
 			SchedulerName:                 cr.Spec.SchedulerName,
 			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
 	}, nil
 }
 
-func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string) (corev1.Container, error) {
+func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstances []string, mountKeyFile bool) (corev1.Container, error) {
 	fvar := false
 
 	volumes := []corev1.VolumeMount{
@@ -130,22 +132,28 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
-		{
+	}
+
+	if mountKeyFile {
+		volumes = append(volumes, corev1.VolumeMount{
 			Name:      cr.Spec.Secrets.GetInternalKey(cr),
 			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
-		},
-		{
+		})
+	}
+
+	volumes = append(volumes,
+		corev1.VolumeMount{
 			Name:      "ssl",
 			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
-		{
+		corev1.VolumeMount{
 			Name:      "ssl-internal",
 			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
-	}
+	)
 
 	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
@@ -302,22 +310,12 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType) []corev1.Volume {
+func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType, mountKeyFile bool) []corev1.Volume {
 	fvar, tvar := false, true
 
 	sslVolumeOptional := &cr.Spec.Unsafe.TLS
 
 	volumes := []corev1.Volume{
-		{
-			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &secretFileMode,
-					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-					Optional:    &fvar,
-				},
-			},
-		},
 		{
 			Name: "ssl",
 			VolumeSource: corev1.VolumeSource{
@@ -352,6 +350,19 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType)
 				},
 			},
 		},
+	}
+
+	if mountKeyFile {
+		volumes = append([]corev1.Volume{{
+			Name: cr.Spec.Secrets.GetInternalKey(cr),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
+					Optional:    &fvar,
+				},
+			},
+		}}, volumes...)
 	}
 
 	if cr.Spec.Sharding.Mongos != nil {

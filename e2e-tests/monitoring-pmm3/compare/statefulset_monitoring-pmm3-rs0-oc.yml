@@ -124,9 +124,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: monitoring-pmm3-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -333,8 +330,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
@@ -344,11 +339,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: monitoring-pmm3-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: monitoring-pmm3-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}

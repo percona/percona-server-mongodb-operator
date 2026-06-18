@@ -18,6 +18,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
@@ -41,8 +42,9 @@ var secretFileMode int32 = 288
 
 // StatefulSpecSecretParams contains secrets params for the StatefulSpec.
 type StatefulSpecSecretParams struct {
-	UsersSecret *corev1.Secret
-	SSLSecret   *corev1.Secret
+	UsersSecret   *corev1.Secret
+	SSLSecret     *corev1.Secret
+	KeyfileExists bool
 }
 
 type StatefulConfigParams struct {
@@ -138,21 +140,26 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumes := []corev1.Volume{
 		{
-			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &secretFileMode,
-					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-					Optional:    &fvar,
-				},
-			},
-		},
-		{
 			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+	}
+
+	if cr.KeyFileAuthEnabled() || secrets.KeyfileExists {
+		volumes = append([]corev1.Volume{
+			{
+				Name: cr.Spec.Secrets.GetInternalKey(cr),
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
+						Optional:    &fvar,
+					},
+				},
+			},
+		}, volumes...)
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
@@ -222,6 +229,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		name:                     containerName,
 		resources:                resources,
 		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		mountKeyFile:             cr.KeyFileAuthEnabled() || secrets.KeyfileExists,
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,
@@ -234,7 +242,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, initImage)
+	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -250,7 +258,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if hash := configs.HashHex(cr); hash != "" {
-		annotations["percona.com/configuration-hash"] = hash
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
@@ -610,6 +618,15 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name:  "SSL_CERT_FILE",
 				Value: path.Join(naming.BackupStorageCAFileDirectory, naming.BackupStorageCAFileName),
 			})
+		}
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 {
+		if cr.Spec.Backup.LivenessProbe != nil {
+			c.LivenessProbe = cr.Spec.Backup.LivenessProbe
+		}
+		if cr.Spec.Backup.ReadinessProbe != nil {
+			c.ReadinessProbe = cr.Spec.Backup.ReadinessProbe
 		}
 	}
 

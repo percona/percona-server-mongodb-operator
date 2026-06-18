@@ -183,7 +183,7 @@ func TestMongosContainer(t *testing.T) {
 		},
 	}
 
-	container, err := mongosContainer(cr, false, []string{"cfg-0.test-cr-cfg.test-ns.svc.cluster.local:27017"})
+	container, err := mongosContainer(cr, false, []string{"cfg-0.test-cr-cfg.test-ns.svc.cluster.local:27017"}, cr.KeyFileAuthEnabled())
 	assert.NoError(t, err)
 
 	// Basic container fields

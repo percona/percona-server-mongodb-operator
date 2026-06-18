@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -229,6 +230,21 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}, nil
 }
 
+// searchSans returns the SAN entries for the mongot Service of the given replset/shard.
+func searchSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
+	name := naming.SearchServiceName(cr, replset)
+	return []string{
+		name,
+		name + "." + cr.Namespace,
+		name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		"*." + name,
+		"*." + name + "." + cr.Namespace,
+		"*." + name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		"*." + name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+	}
+}
+
 func getShardingSans(cr *api.PerconaServerMongoDB) []string {
 	sans := []string{
 		cr.Name + "-mongos",
@@ -278,6 +294,10 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			}
 			slices.Sort(uniqueHorizonSans)
 			sans = append(sans, uniqueHorizonSans...)
+		}
+
+		if cr.IsSearchEnabled() {
+			sans = append(sans, searchSans(cr, replset)...)
 		}
 	}
 	sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)
