@@ -285,6 +285,11 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 		passKeys = append(passKeys, api.EnvMongoDBDatabaseAdminPassword)
 	}
 
+	if cr.IsSearchEnabled() {
+		userMap[api.EnvMongoDBSearchUser] = string(api.RoleSearch)
+		passKeys = append(passKeys, api.EnvMongoDBSearchPassword)
+	}
+
 	for user, role := range userMap {
 		if _, ok := data[user]; !ok {
 			data[user] = []byte(role)

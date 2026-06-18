@@ -25,10 +25,14 @@ func ServiceName(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
 	return cr.Name + "-" + rs.Name
 }
 
-func MongosServiceName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-mongos"
-}
-
 func MongosPerPodServiceName(cr *api.PerconaServerMongoDB, idx int) string {
 	return cr.Name + "-mongos-" + strconv.Itoa(idx)
+}
+
+func MongosServiceName(cr *api.PerconaServerMongoDB) string {
+	return cr.Name + "-" + ComponentMongos
+}
+
+func SearchServiceName(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
+	return SearchStatefulSetName(cr, rs)
 }

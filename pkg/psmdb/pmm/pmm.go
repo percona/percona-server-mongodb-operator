@@ -280,6 +280,10 @@ func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
+	if cr.Spec.PMM.QuerySource != "" {
+		pmmServerArgs += " --query-source=" + cr.Spec.PMM.QuerySource
+	}
+
 	if cr.TLSEnabled() {
 		authMechanism := scramSHA256AuthMechanism
 		switch {
@@ -535,7 +539,9 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 	}
 
 	if SecretHasToken(secret) {
-		return containerForPMM3(cr, secret, dbPort, customAdminParams)
+		c := containerForPMM3(cr, secret, dbPort, customAdminParams)
+		applyCustomProbes(cr, c)
+		return c
 	}
 
 	if !cr.Spec.PMM.HasSecret(secret) {
@@ -609,7 +615,27 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 		pmmC.SecurityContext = cr.Spec.PMM.ContainerSecurityContext
 	}
 
+	applyCustomProbes(cr, &pmmC)
+
 	return &pmmC
+}
+
+// applyCustomProbes overrides the liveness and readiness probes of the
+// pmm-client container with the ones defined in the CR, if any. When the
+// corresponding field is not set the Operator keeps its default behavior:
+// the built-in liveness probe and no readiness probe.
+func applyCustomProbes(cr *api.PerconaServerMongoDB, container *corev1.Container) {
+	if container == nil || cr.CompareVersion("1.23.0") < 0 {
+		return
+	}
+
+	if cr.Spec.PMM.LivenessProbe != nil {
+		container.LivenessProbe = cr.Spec.PMM.LivenessProbe
+	}
+
+	if cr.Spec.PMM.ReadinessProbe != nil {
+		container.ReadinessProbe = cr.Spec.PMM.ReadinessProbe
+	}
 }
 
 // SecretHasToken checks if the PMM3 token is configured as part of the given secret.
