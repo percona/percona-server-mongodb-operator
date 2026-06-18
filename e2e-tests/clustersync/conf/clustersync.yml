@@ -1,0 +1,13 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBClusterSync
+metadata:
+  name: sync
+spec:
+  clusterName: target-cluster
+  image: CLUSTERSYNC_IMAGE
+  mode: running
+  pcsmConfig:
+    logLevel: debug
+  source:
+    uri: mongodb://source-cluster-mongos.NAME_SPACE.svc.cluster.local:27017
+    credentialsSecret: clustersync-source-creds
