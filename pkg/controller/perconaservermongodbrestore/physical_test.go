@@ -24,34 +24,39 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		crVersion     string
-		clusterInitSC *corev1.SecurityContext
-		wantPbmInitSC *corev1.SecurityContext
+		name                string
+		crVersion           string
+		clusterInitSC       *corev1.SecurityContext
+		wantPbmInitSC       *corev1.SecurityContext
+		wantAWSChecksumEnvs bool
 	}{
 		{
-			name:          "latest_version_with_InitContainerSecurityContext",
-			crVersion:     version.Version(),
-			clusterInitSC: initSC,
-			wantPbmInitSC: initSC,
+			name:                "latest_version_with_InitContainerSecurityContext",
+			crVersion:           version.Version(),
+			clusterInitSC:       initSC,
+			wantPbmInitSC:       initSC,
+			wantAWSChecksumEnvs: true,
 		},
 		{
-			name:          "latest_version_without_InitContainerSecurityContext",
-			crVersion:     version.Version(),
-			clusterInitSC: nil,
-			wantPbmInitSC: nil,
+			name:                "latest_version_without_InitContainerSecurityContext",
+			crVersion:           version.Version(),
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: true,
 		},
 		{
-			name:          "1_22_with_InitContainerSecurityContext_ignored",
-			crVersion:     "1.22.0",
-			clusterInitSC: initSC,
-			wantPbmInitSC: nil,
+			name:                "1_22_with_InitContainerSecurityContext_ignored",
+			crVersion:           "1.22.0",
+			clusterInitSC:       initSC,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 		{
-			name:          "1_22_without_InitContainerSecurityContext",
-			crVersion:     "1.22.0",
-			clusterInitSC: nil,
-			wantPbmInitSC: nil,
+			name:                "1_22_without_InitContainerSecurityContext",
+			crVersion:           "1.22.0",
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 	}
 
@@ -161,11 +166,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 					return c.MountPath == "/etc/pbm/"
 				}))
 
-			assert.True(t,
+			assert.Equal(t, tt.wantAWSChecksumEnvs,
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
 					return e.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && e.Value == "when_required"
 				}))
-			assert.True(t,
+			assert.Equal(t, tt.wantAWSChecksumEnvs,
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
 					return e.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && e.Value == "when_required"
 				}))
