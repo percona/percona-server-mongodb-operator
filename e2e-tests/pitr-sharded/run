@@ -29,15 +29,7 @@ main() {
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml"
 	apply_s3_storage_secrets
-
-	desc 'create custom RuntimeClass'
-	if version_gt "1.19" && [ $EKS -ne 1 ]; then
-		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-	elif version_gt "1.24" && [ $EKS -eq 1 ]; then
-		cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-	else
-		kubectl_bin apply -f "$conf_dir/container-rc.yaml"
-	fi
+	create_runtime_class
 
 	cluster="some-name"
 	desc "create first PSMDB cluster $cluster"
@@ -97,10 +89,7 @@ main() {
 	check_recovery $backup_name-1 latest "" "-3rd" "$cluster"
 	compare_latest_restorable_time "${cluster}-rs0" "${backup_name}-1"
 
-	desc 'delete custom RuntimeClass'
-	kubectl_bin delete -f "$conf_dir/container-rc.yaml"
 	destroy $namespace
-
 	desc 'test passed'
 }
 

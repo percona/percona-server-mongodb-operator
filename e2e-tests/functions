@@ -2611,3 +2611,25 @@ deploy_volume_snapshot_class() {
 get_volume_snapshot_class() {
 	kubectl_bin get volumesnapshotclass -o jsonpath='{.items[0].metadata.name}' 2>/dev/null
 }
+
+create_runtime_class() {
+	kubectl_bin delete runtimeclass container-rc --ignore-not-found
+
+	local handler
+	case "$PLATFORM" in
+		gke|aks|eks|minikube)
+				handler="runc"
+				;;
+		rancher|openshift)
+				handler="crun"
+				;;
+		*)
+				echo "Unsupported platform: $PLATFORM"
+				exit 1
+				;;
+	esac
+
+	desc "Create RuntimeClass with handler $handler"
+	yq eval ".handler = \"$handler\"" "$conf_dir/container-rc.yaml" \
+		| kubectl_bin apply -f -
+}
