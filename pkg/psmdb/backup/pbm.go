@@ -634,6 +634,12 @@ func GetPBMStorageOSSConfig(
 	if stg.OSS.CredentialsSecret == "" {
 		return config.StorageConf{}, errors.New("no credentials specified for the secret name")
 	}
+	if stg.OSS.Bucket == "" {
+		return config.StorageConf{}, errors.New("bucket is required")
+	}
+	if stg.OSS.EndpointURL == "" {
+		return config.StorageConf{}, errors.New("endpointURL is required")
+	}
 
 	ossSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.OSS.CredentialsSecret)
 	if err != nil {
