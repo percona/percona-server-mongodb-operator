@@ -876,6 +876,8 @@ spec:
 #        oss:
 #          bucket: OSS-BACKUP-BUCKET-NAME-HERE
 #          prefix: ""
+#          # credentialsSecret must contain the ALIBABA_ACCESS_KEY_ID and
+#          # ALIBABA_ACCESS_KEY_SECRET keys.
 #          credentialsSecret: my-cluster-name-backup-oss
 #          endpointUrl: https://oss-eu-central-1.aliyuncs.com
 #          region: eu-central-1
@@ -883,11 +885,13 @@ spec:
 #          uploadPartSize: 10485760
 #          maxUploadParts: 10000
 #          retryer:
-#            numMaxRetries: 3
+#            maxAttempts: 3
 #            maxBackoff: 5m
 #            baseDelay: 1s
 #          serverSideEncryption:
-#            sseAlgorithm: AES256
+#            encryptionMethod: sse
+#            encryptionAlgorithm: KMS
+#            encryptionKeyId: OSS-KMS-KEY-ID-HERE
 #      minio:
 #        type: minio
 #        minio:
