@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,6 +65,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:     mgr.GetScheme(),
 		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
+		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
 	}, nil
 }
 
@@ -94,6 +96,7 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	apiReader client.Reader
 	scheme    *runtime.Scheme
 	clientcmd *clientcmd.Client
+	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
 }
@@ -273,6 +276,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
+	if blocked, err := r.checkClusterSyncLease(ctx, cr, cluster); err != nil {
+		return status, err
+	} else if blocked {
+		status.State = psmdbv1.BackupStateWaiting
+		return status, nil
+	}
+
 	log.Info("Acquiring the backup lock")
 	lease, err := k8s.AcquireLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
 	if err != nil {
@@ -303,6 +313,30 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	})
 
 	return status, err
+}
+
+// checkClusterSyncLease blocks a fresh backup from starting while a
+// ClusterSync CR owns the target cluster. PCSM continuously applies
+// source writes, which pins the WiredTiger history (open backup
+// cursor) and grows disk usage unboundedly. Only gates New/Waiting;
+// in-flight backups (Running/Ready/Error) keep going.
+func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	if cr.Status.State != psmdbv1.BackupStateNew && cr.Status.State != psmdbv1.BackupStateWaiting {
+		return false, nil
+	}
+	csLeaseName := naming.ClusterSyncLeaseName(cluster.Name)
+	active, err := k8s.IsLeaseActive(ctx, r.client, csLeaseName, cr.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "check clustersync lease")
+	}
+	if !active {
+		return false, nil
+	}
+	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
+	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+		cluster.Name, csLeaseName)
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
