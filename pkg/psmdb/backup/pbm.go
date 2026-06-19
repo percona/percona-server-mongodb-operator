@@ -650,9 +650,6 @@ func GetPBMStorageOSSConfig(
 			Credentials: oss.Credentials{
 				AccessKeyID:     storage.MaskedString(string(ossSecret.Data[OSSAccessKeySecretKey])),
 				AccessKeySecret: storage.MaskedString(string(ossSecret.Data[OSSSecretAccessKeySecretKey])),
-				// SecurityToken:   "",
-				// RoleARN:         "",
-				// SessionName:     "",
 			},
 			ConnectTimeout: stg.OSS.ConnectTimeout.Duration,
 			UploadPartSize: stg.OSS.UploadPartSize,
