@@ -1,0 +1,344 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+source_cluster="source-cluster"
+target_cluster="target-cluster"
+sync_cr="sync"
+
+clustersync_source_secret="clustersync-source-creds"
+
+mongosh_on_mongos() {
+	local cluster="$1"
+	local user="$2"
+	local pass="$3"
+	local script="$4"
+
+	kubectl_bin exec "${cluster}-mongos-0" -c mongos -- \
+		mongosh "mongodb://${user}:${pass}@%2Ftmp%2Fmongodb-27017.sock/admin" --quiet --eval "${script}"
+}
+
+wait_pcsm_state() {
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	local deploy="deploy/${sync_cr}-pcsm"
+	echo -n "waiting for pcsm state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin exec "${deploy}" -c pcsm -- pcsm status 2>/dev/null | jq -r '.state // empty' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok (state=${state})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for pcsm state=${expected}; last state=${state:-<none>}"
+			kubectl_bin describe "${deploy}" || true
+			kubectl_bin logs "${deploy}" -c pcsm --tail=200 || true
+			exit 1
+		fi
+	done
+}
+
+wait_target_doc_count() {
+	sleep 10
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	echo -n "waiting for target myApp.test count=${expected}"
+	local elapsed=0
+	local count=""
+	while true; do
+		count=$(mongosh_on_mongos "${target_cluster}" "myApp" "myPass" \
+			'db.getSiblingDB("myApp").test.countDocuments({})' 2>/dev/null | tr -d '[:space:]' || true)
+		if [[ ${count} =~ ^[0-9]+$ ]] && [[ ${count} -eq ${expected} ]]; then
+			echo " ok (count=${count})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for target count=${expected}; last count=${count:-<none>}"
+			exit 1
+		fi
+	done
+}
+
+wait_cr_status_state() {
+	local expected="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	echo -n "waiting for psmdb-clustersync/${sync_cr} status.state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin get psmdb-clustersync "${sync_cr}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for status.state=${expected}; last state=${state:-<none>}"
+			exit 1
+		fi
+	done
+}
+
+patch_sync_mode() {
+	local mode="$1"
+
+	desc "patch ${sync_cr} mode=${mode}"
+	kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p "{\"spec\":{\"mode\":\"${mode}\"}}"
+}
+
+wait_kind_state() {
+	local kind="$1"
+	local name="$2"
+	local expected="$3"
+	local timeout="${4:-300}"
+
+	set +o xtrace
+	echo -n "waiting for ${kind}/${name} state=${expected}"
+	local elapsed=0
+	local state=""
+	while true; do
+		state=$(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} == "${expected}" ]]; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		if [[ ${state} == "error" ]]; then
+			echo
+			echo "${kind}/${name} reached state=error: $(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.error}' 2>/dev/null || true)"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for ${kind}/${name} state=${expected}; last state=${state:-<none>}"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+	done
+}
+
+assert_state_stable() {
+	local kind="$1"
+	local name="$2"
+	local expected="$3"
+	local duration="${4:-30}"
+
+	set +o xtrace
+	echo -n "asserting ${kind}/${name} stays in state=${expected} for ${duration}s"
+	local elapsed=0
+	while [[ ${elapsed} -lt ${duration} ]]; do
+		local state
+		state=$(kubectl_bin get "${kind}" "${name}" -o jsonpath='{.status.state}' 2>/dev/null || true)
+		if [[ ${state} != "${expected}" ]]; then
+			echo
+			echo "${kind}/${name} unexpectedly transitioned to state=${state:-<none>} (expected ${expected})"
+			kubectl_bin describe "${kind}" "${name}" || true
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+	echo " ok"
+	set_debug
+}
+
+assert_event_present() {
+	local name="$1"
+	local reason="$2"
+
+	set +o xtrace
+	local count
+	count=$(kubectl_bin get events \
+		--field-selector "involvedObject.name=${name},reason=${reason}" \
+		-o jsonpath='{.items[*].reason}' 2>/dev/null | tr ' ' '\n' | grep -c "^${reason}$" || true)
+	if [[ ${count} -eq 0 ]]; then
+		echo "expected event reason=${reason} on ${name}, none found"
+		kubectl_bin get events --field-selector "involvedObject.name=${name}" || true
+		exit 1
+	fi
+	echo "event reason=${reason} present on ${name} (count=${count})"
+	set_debug
+}
+
+apply_backup_named() {
+	local name="$1"
+	yq eval ".metadata.name = \"${name}\"" "${test_dir}/conf/backup-minio.yml" \
+		| kubectl_bin apply -f -
+}
+
+apply_restore_named() {
+	local name="$1"
+	local backup="$2"
+	yq eval ".metadata.name = \"${name}\" | .spec.backupName = \"${backup}\"" "${test_dir}/conf/restore.yml" \
+		| kubectl_bin apply -f -
+}
+
+desc 'create infra'
+create_infra "${namespace}"
+
+desc 'deploy minio (storage for target-cluster backups)'
+deploy_minio
+
+desc 'apply users secrets, minio secret and start client'
+kubectl_bin apply \
+	-f "${test_dir}/conf/secrets.yml" \
+	-f "${conf_dir}/minio-secret.yml" \
+	-f "${conf_dir}/client.yml"
+
+desc "deploy ${source_cluster}"
+apply_cluster "${test_dir}/conf/source-cluster.yml"
+
+desc "deploy ${target_cluster}"
+apply_cluster "${test_dir}/conf/target-cluster.yml"
+
+desc "wait for ${source_cluster} ready"
+wait_for_running "${source_cluster}-rs0" 1
+wait_for_running "${source_cluster}-cfg" 1 "false"
+wait_for_running "${source_cluster}-mongos" 1 "false"
+wait_cluster_consistency "${source_cluster}"
+
+desc "wait for ${target_cluster} ready (which has 2 shards vs source's 1 shard)"
+wait_for_running "${target_cluster}-rs0" 1
+wait_for_running "${target_cluster}-rs1" 1 "false"
+wait_for_running "${target_cluster}-cfg" 1 "false"
+wait_for_running "${target_cluster}-mongos" 1 "false"
+wait_cluster_consistency "${target_cluster}"
+
+desc "read PCSM source credentials from secret/${clustersync_source_secret}"
+source_user=$(getSecretData "${clustersync_source_secret}" "username")
+source_pass=$(getSecretData "${clustersync_source_secret}" "password")
+
+desc "create '${source_user}' user on ${source_cluster} (for PCSM)"
+mongosh_on_mongos "${source_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'${source_user}',pwd:'${source_pass}',roles:[{role:'backup',db:'admin'},{role:'clusterMonitor',db:'admin'},{role:'readAnyDatabase',db:'admin'}]})"
+
+desc "verify '${source_user}' user authenticates"
+mongosh_on_mongos "${source_cluster}" "${source_user}" "${source_pass}" \
+	'db.runCommand({connectionStatus: 1}).authInfo'
+
+desc "create 'myApp' user on ${source_cluster} (workload writer/reader)"
+mongosh_on_mongos "${source_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]})"
+
+desc "create 'myApp' user on ${target_cluster} (verification reader)"
+mongosh_on_mongos "${target_cluster}" "userAdmin" "userAdmin123456" \
+	"db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]})"
+
+desc "write initial data to ${source_cluster}"
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
+
+desc "wait for backup-agent on ${target_cluster}"
+wait_backup_agent "${target_cluster}-rs0-0"
+wait_backup_agent "${target_cluster}-rs1-0"
+wait_backup_agent "${target_cluster}-cfg-0"
+
+desc 'take a backup of target before clustersync starts (used for restore lease tests)'
+apply_backup_named "initial-backup"
+wait_backup "initial-backup" "ready"
+
+desc "apply ClusterSync CR with mode=running"
+cat "${test_dir}/conf/clustersync.yml" \
+	| $sed -e "s|CLUSTERSYNC_IMAGE|${IMAGE_CLUSTERSYNC}|g" -e "s|NAME_SPACE|${namespace}|g" \
+	| kubectl_bin apply -f -
+
+desc 'wait for PCSM deployment to become available'
+kubectl_bin wait --for=condition=Available --timeout=5m "deployment/${sync_cr}-pcsm"
+
+desc 'wait for PCSM state=running after initial sync'
+wait_pcsm_state "running" 600
+
+desc "verify initial data is replicated to ${target_cluster}"
+wait_target_doc_count 1 300
+
+desc 'write data to source, verify it replicates'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100501})'
+wait_target_doc_count 2 180
+
+desc 'write more data to source, verify it replicates'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100502})'
+wait_target_doc_count 3 180
+
+desc 'transition: running -> paused'
+patch_sync_mode "paused"
+wait_pcsm_state "paused" 180
+wait_cr_status_state "paused" 120
+
+desc 'write data while paused, verify that target still has old data count'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100503})'
+wait_target_doc_count 3 180
+
+desc 'transition: paused -> running'
+patch_sync_mode "running"
+wait_pcsm_state "running" 300
+wait_cr_status_state "running" 120
+
+desc 'write data while running, verify replication and existence of data written when sync was paused'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
+wait_target_doc_count 5 180
+
+desc 'lease test: backup CR applied while clustersync is running should stay in waiting'
+apply_backup_named "backup-during-sync"
+wait_kind_state "psmdb-backup" "backup-during-sync" "waiting" 120
+assert_state_stable "psmdb-backup" "backup-during-sync" "waiting" 30
+assert_event_present "backup-during-sync" "ClusterSyncActive"
+
+desc 'delete during-sync CRs so they do not race with post-finalize checks'
+kubectl_bin delete psmdb-backup backup-during-sync --ignore-not-found --wait=true
+
+desc 'transition: running -> finalized'
+patch_sync_mode "finalized"
+wait_pcsm_state "finalized" 300
+wait_cr_status_state "finalized" 120
+
+desc 'write data after finalize, verify target count does not increase'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
+wait_target_doc_count 5 10
+
+desc 'lease test: backup CR applied after finalize should complete (clustersync lease released)'
+apply_backup_named "backup-after-finalize"
+wait_backup "backup-after-finalize" "ready"
+
+desc 'lease test: restore CR applied after finalize should complete (clustersync lease released)'
+apply_restore_named "restore-after-finalize" "initial-backup"
+wait_kind_state "psmdb-restore" "restore-after-finalize" "ready" 1800
+
+destroy "${namespace}"
+
+desc 'test passed'

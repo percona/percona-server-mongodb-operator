@@ -19,6 +19,7 @@ IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
 IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
+IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:0.9.0"}
 
 REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
@@ -84,6 +85,7 @@ qualify_image_var() {
 for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP IMAGE_SEARCH \
 		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
 		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
+		IMAGE_CLUSTERSYNC \
 		IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
 	qualify_image_var "$var"
 done
