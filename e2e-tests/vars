@@ -16,7 +16,7 @@ with_registry() {
 	esac
 }
 
-image_with_registry() {
+qualify_image_var() {
 	local var="$1"
 	local val="${!var}"
 
@@ -101,7 +101,7 @@ for image in \
 	IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
 	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
 	IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
-	image_with_registry "$image"
+	qualify_image_var "$image"
 done
 
 # Git information
