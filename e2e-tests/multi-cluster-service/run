@@ -12,7 +12,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-if [ $GKE -ne 1 ]; then
+if [ "$GKE" -ne 1 ]; then
 	echo "Skip the test. We run it for GKE only"
 	exit 0
 fi
