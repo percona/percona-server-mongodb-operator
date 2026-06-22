@@ -28,6 +28,7 @@ demand-backup-physical-parallel
 demand-backup-physical-aws
 demand-backup-physical-azure
 demand-backup-physical-gcp-s3
+demand-backup-gcs-workload-identity
 demand-backup-physical-gcp-native
 demand-backup-physical-minio
 demand-backup-physical-minio-native

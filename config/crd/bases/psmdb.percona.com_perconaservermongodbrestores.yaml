@@ -99,7 +99,6 @@ spec:
                         type: object
                     required:
                     - bucket
-                    - credentialsSecret
                     type: object
                   lastTransition:
                     format: date-time

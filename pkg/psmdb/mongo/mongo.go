@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -185,7 +186,7 @@ func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern,
 	cmd := bson.D{
 		{Key: "setDefaultRWConcern", Value: 1},
 		{Key: "defaultReadConcern", Value: bson.D{{Key: "level", Value: readConcern}}},
-		{Key: "defaultWriteConcern", Value: bson.D{{Key: "w", Value: writeConcern}}},
+		{Key: "defaultWriteConcern", Value: bson.D{{Key: "w", Value: parseWriteConcernW(writeConcern)}}},
 	}
 
 	res := client.Database("admin").RunCommand(ctx, cmd)
@@ -194,6 +195,17 @@ func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern,
 	}
 
 	return nil
+}
+
+// parseWriteConcernW returns the value for defaultWriteConcern.w with the
+// correct BSON type. MongoDB rejects {w: "1"} as a missing custom tag, so any
+// non-negative integer string is sent as an int; everything else (including
+// "majority" and custom getLastErrorModes tags) stays a string.
+func parseWriteConcernW(w string) interface{} {
+	if n, err := strconv.Atoi(w); err == nil && n >= 0 {
+		return n
+	}
+	return w
 }
 
 func (client *mongoClient) ReadConfig(ctx context.Context) (RSConfig, error) {
