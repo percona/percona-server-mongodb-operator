@@ -1914,8 +1914,8 @@ function setup_alibaba_cloud_s3_credentials() {
 		set +x
 	fi
 
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null | base64 -d 2>/dev/null)
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
