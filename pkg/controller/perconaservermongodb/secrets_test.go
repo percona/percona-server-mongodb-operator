@@ -143,8 +143,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.20/?authSource=application"),
-				"app_user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com/?authSource=application"),
+				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.20:27017/?authSource=application"),
+				"app_user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com:27017/?authSource=application"),
 			},
 		},
 	}
@@ -231,7 +231,10 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 		Namespace: cr.Namespace,
 	}
 	require.NoError(t, r.client.Get(t.Context(), key, actual))
-	assert.Contains(t, actual.Data, "databaseAdmin_rs0_connectionString")
+	assert.Equal(t,
+		[]byte("mongodb://databaseAdmin:password@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=admin&replicaSet=rs0"),
+		actual.Data["databaseAdmin_rs0_connectionString"],
+	)
 }
 
 func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t *testing.T) {

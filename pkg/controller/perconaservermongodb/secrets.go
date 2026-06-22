@@ -36,7 +36,7 @@ func getInternalCredentials(ctx context.Context, cl client.Reader, cr *api.Perco
 }
 
 func getCredentials(secret *corev1.Secret, role api.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
+	creds := psmdb.Credentials{AuthSource: "admin"}
 	envKeyUser, envKeyPass := role.EnvKeyUsername(), role.EnvKeyPassword()
 	if envKeyUser == "" || envKeyPass == "" {
 		return creds, errors.Errorf("invalid role %s", string(role))
