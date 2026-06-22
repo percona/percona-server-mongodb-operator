@@ -2730,6 +2730,19 @@ spec:
                 type: string
               crVersion:
                 type: string
+              defaultRWConcern:
+                properties:
+                  readConcern:
+                    enum:
+                    - local
+                    - available
+                    - majority
+                    - linearizable
+                    - snapshot
+                    type: string
+                  writeConcern:
+                    type: string
+                type: object
               enableExternalVolumeAutoscaling:
                 type: boolean
               enableVolumeExpansion:

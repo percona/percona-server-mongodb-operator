@@ -106,6 +106,13 @@ type PerconaServerMongoDBSpec struct {
 	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
 	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
 	Search                          *SearchSpec         `json:"search,omitempty"`
+	DefaultRWConcern                *DefaultRWConcern   `json:"defaultRWConcern,omitempty"`
+}
+
+type DefaultRWConcern struct {
+	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
+	ReadConcern  string `json:"readConcern,omitempty"`
+	WriteConcern string `json:"writeConcern,omitempty"`
 }
 
 type UserRole struct {
