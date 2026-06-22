@@ -387,7 +387,7 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 		if err != nil {
 			return "", errors.Wrap(err, "get ingress endpoint")
 		}
-		return host, nil
+		return fmt.Sprintf("%s:%d", host, mongosPort), nil
 	}
 
 	return fmt.Sprintf("%s.%s.%s:%d", svc.Name, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, mongosPort), nil

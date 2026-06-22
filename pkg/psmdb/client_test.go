@@ -248,7 +248,7 @@ func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 				svc.Spec.ClusterIP = "10.0.0.20"
 				return []client.Object{svc}
 			},
-			expectedURI: "mongodb://app-user:p%40ss%2Fword@10.0.0.20/?authSource=application",
+			expectedURI: "mongodb://app-user:p%40ss%2Fword@10.0.0.20:27017/?authSource=application",
 		},
 		"load balancer external address": {
 			exposeType: corev1.ServiceTypeLoadBalancer,
@@ -260,7 +260,7 @@ func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 				}
 				return []client.Object{svc}
 			},
-			expectedURI: "mongodb://app-user:p%40ss%2Fword@mongos.example.com/?authSource=application",
+			expectedURI: "mongodb://app-user:p%40ss%2Fword@mongos.example.com:27017/?authSource=application",
 		},
 	}
 
