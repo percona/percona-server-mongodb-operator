@@ -12,6 +12,9 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func newTestCR() *api.PerconaServerMongoDB {
@@ -21,7 +24,7 @@ func newTestCR() *api.PerconaServerMongoDB {
 			Namespace: "test-ns",
 		},
 		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.23.0",
+			CRVersion: version.Version(),
 			Secrets: &api.SecretsSpec{
 				SSL:         "test-cluster-ssl",
 				SSLInternal: "test-cluster-ssl-internal",
@@ -229,4 +232,54 @@ func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
 	// With certManagementPolicy userProvidedOnly and no TLS secret yet, the operator
 	// must not create certificates and should wait for the user to provide them.
 	assert.ErrorIs(t, err, errTLSNotReady)
+}
+
+func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
+	newExternalIssuerCR := func() *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.TLS = &api.TLSSpec{
+			IssuerConf: api.IssuerConfReference{
+				Name:  "external-issuer",
+				Kind:  "AWSPCAIssuer",
+				Group: "awspca.cert-manager.io",
+			},
+		}
+		return cr
+	}
+
+	t.Run("uses existing external issuer", func(t *testing.T) {
+		cr := newExternalIssuerCR()
+		cm := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+		r := &ReconcilePerconaServerMongoDB{}
+
+		status, err := r.applyCertManagerCertificates(t.Context(), cr, cm)
+		require.NoError(t, err)
+		assert.Equal(t, util.ApplyStatusUnchanged, status)
+
+		assert.Zero(t, cm.ApplyCAIssuerCalls)
+		assert.Zero(t, cm.ApplyIssuerCalls)
+		assert.Equal(t, 2, cm.ApplyCertificateCalls)
+		assert.Equal(t, 1, cm.WaitForCertsCalls)
+		assert.Equal(t, []string{"test-cluster-ssl", "test-cluster-ssl-internal"}, cm.CertNames)
+		assert.Equal(t, []string{"external-issuer", "external-issuer"}, cm.IssuerRefNames)
+		assert.Equal(t, []string{"AWSPCAIssuer", "AWSPCAIssuer"}, cm.IssuerRefKinds)
+		assert.Equal(t, []string{"awspca.cert-manager.io", "awspca.cert-manager.io"}, cm.IssuerRefGroups)
+		assert.Equal(t, [][]string{{"test-cluster-ssl", "test-cluster-ssl-internal"}}, cm.WaitForCertNames)
+	})
+
+	t.Run("requires name", func(t *testing.T) {
+		cr := newExternalIssuerCR()
+		cr.Spec.TLS.IssuerConf.Name = ""
+		cm := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+		r := &ReconcilePerconaServerMongoDB{}
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cm)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "external issuer requires tls.issuerConf.name")
+
+		assert.Zero(t, cm.ApplyCAIssuerCalls)
+		assert.Zero(t, cm.ApplyIssuerCalls)
+		assert.Zero(t, cm.ApplyCertificateCalls)
+		assert.Zero(t, cm.WaitForCertsCalls)
+	})
 }

@@ -60,6 +60,18 @@ func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
+func IsExternalIssuer(cr *api.PerconaServerMongoDB) bool {
+	if cr.Spec.TLS == nil {
+		return false
+	}
+	switch cr.Spec.TLS.IssuerConf.Kind {
+	case "", cm.IssuerKind, cm.ClusterIssuerKind:
+		return false
+	default:
+		return true
+	}
+}
+
 func issuerName(cr *api.PerconaServerMongoDB) string {
 	const suffix = "-psmdb-issuer"
 	tls := cr.Spec.TLS

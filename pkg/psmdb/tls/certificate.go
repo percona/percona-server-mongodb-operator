@@ -136,7 +136,7 @@ func (c *tlsCert) Object() *cm.Certificate {
 			DNSNames:   GetCertificateSans(cr),
 			IsCA:       false,
 			Duration:   &cr.Spec.TLS.CertValidityDuration,
-			IssuerRef: cmmeta.ObjectReference{
+			IssuerRef: cmmeta.IssuerReference{
 				Name:  issuerName(cr),
 				Kind:  issuerKind,
 				Group: issuerGroup,

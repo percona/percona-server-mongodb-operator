@@ -404,28 +404,34 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		}
 		return nil
 	}
-	if err := applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyCAIssuer(ctx, cr)
-	}); err != nil {
-		return "", errors.Wrap(err, "apply ca issuer")
-	}
+	if tls.IsExternalIssuer(cr) {
+		if cr.Spec.TLS.IssuerConf.Name == "" {
+			return "", errors.New("external issuer requires tls.issuerConf.name")
+		}
+	} else {
+		if err := applyFunc(func() (util.ApplyStatus, error) {
+			return c.ApplyCAIssuer(ctx, cr)
+		}); err != nil {
+			return "", errors.Wrap(err, "apply ca issuer")
+		}
 
-	caCert := tls.CertificateCA(cr)
+		caCert := tls.CertificateCA(cr)
 
-	if err := applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyCertificate(ctx, cr, caCert)
-	}); err != nil {
-		return "", errors.Wrap(err, "create ca certificate")
-	}
+		if err := applyFunc(func() (util.ApplyStatus, error) {
+			return c.ApplyCertificate(ctx, cr, caCert)
+		}); err != nil {
+			return "", errors.Wrap(err, "create ca certificate")
+		}
 
-	if err := c.WaitForCerts(ctx, cr, caCert); err != nil {
-		return "", errors.Wrap(err, "failed to wait for ca cert")
-	}
+		if err := c.WaitForCerts(ctx, cr, caCert); err != nil {
+			return "", errors.Wrap(err, "failed to wait for ca cert")
+		}
 
-	if err := applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyIssuer(ctx, cr)
-	}); err != nil {
-		return "", errors.Wrap(err, "create issuer")
+		if err := applyFunc(func() (util.ApplyStatus, error) {
+			return c.ApplyIssuer(ctx, cr)
+		}); err != nil {
+			return "", errors.Wrap(err, "create issuer")
+		}
 	}
 
 	tlsCert := tls.CertificateTLS(cr, false)
