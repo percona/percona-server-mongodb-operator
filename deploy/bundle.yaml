@@ -30367,13 +30367,13 @@ spec:
                   issuerConf:
                     properties:
                       group:
-                        default: cert-manager.io
                         type: string
                       kind:
-                        default: Issuer
                         type: string
                       name:
                         type: string
+                    required:
+                    - name
                     type: object
                   mode:
                     type: string

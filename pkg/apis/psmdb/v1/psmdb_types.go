@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/go-logr/logr"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
@@ -193,29 +194,13 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode             `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool               `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration     `json:"certValidityDuration,omitempty"`
-	IssuerConf               IssuerConfReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                  `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration        `json:"certValidityDuration,omitempty"`
+	IssuerConf               cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
-}
-
-type IssuerConfReference struct {
-	// Name of the issuer being referred to.
-	// +optional
-	Name string `json:"name"`
-	// Kind of the issuer being referred to.
-	// Defaults to 'Issuer'.
-	// +optional
-	// +kubebuilder:default=Issuer
-	Kind string `json:"kind,omitempty"`
-	// Group of the issuer being referred to.
-	// Defaults to 'cert-manager.io'.
-	// +optional
-	// +kubebuilder:default="cert-manager.io"
-	Group string `json:"group,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
