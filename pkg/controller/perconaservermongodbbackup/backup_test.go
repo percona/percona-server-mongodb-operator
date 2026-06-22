@@ -9,7 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
@@ -149,7 +149,7 @@ func TestBackup_Status(t *testing.T) {
 						Status:           defs.StatusDone,
 						StartTS:          1234567890,
 						LastTransitionTS: 1234567900,
-						LastWriteTS:      primitive.Timestamp{T: 1234567950},
+						LastWriteTS:      bsonv2.Timestamp{T: 1234567950},
 						Size:             1073741824, // 1GB
 					}, nil)
 				mockPBM.EXPECT().

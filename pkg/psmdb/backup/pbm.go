@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -75,7 +74,7 @@ type PBM interface {
 
 	GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map[string]string) (*oplog.OplogChunk, error)
 	GetLatestTimelinePITR(ctx context.Context, rsMap map[string]string) (oplog.Timeline, error)
-	PITRGetChunksSlice(ctx context.Context, rs string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error)
+	PITRGetChunksSlice(ctx context.Context, rs string, from, to bson.Timestamp) ([]oplog.OplogChunk, error)
 	PITRChunksCollection() *mongo.Collection
 
 	Logger() pbmLog.Logger
@@ -108,7 +107,7 @@ type PBM interface {
 	GetConfig(ctx context.Context) (*config.Config, error)
 	GetConfigVar(ctx context.Context, key string) (any, error)
 
-	DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error
+	DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 
 	Node(ctx context.Context) (string, error)
 }
@@ -912,7 +911,7 @@ func (b *pbmC) ValidateBackupInStorage(ctx context.Context, cfg *config.Config, 
 		return nil
 	}
 
-	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", primitive.Timestamp{})
+	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", bson.Timestamp{})
 	stg, err := util.StorageFromConfig(&cfg.Storage, "", e)
 	if err != nil {
 		return errors.Wrap(err, "storage from config")
@@ -1070,7 +1069,7 @@ func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) 
 
 func (b *pbmC) GetTimelinesPITR(ctx context.Context, rsMap map[string]string) ([]oplog.Timeline, error) {
 	var (
-		now       = primitive.Timestamp{T: uint32(time.Now().UTC().Unix())}
+		now       = bson.Timestamp{T: uint32(time.Now().UTC().Unix())}
 		timelines [][]oplog.Timeline
 	)
 
@@ -1114,7 +1113,7 @@ func (b *pbmC) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]strin
 
 // PITRGetChunkContains returns a pitr slice chunk that belongs to the
 // given replica set and contains the given timestamp
-func (b *pbmC) pitrGetChunkContains(ctx context.Context, rs string, ts primitive.Timestamp) (*oplog.OplogChunk, error) {
+func (b *pbmC) pitrGetChunkContains(ctx context.Context, rs string, ts bson.Timestamp) (*oplog.OplogChunk, error) {
 	res := b.Client.PITRChunksCollection().FindOne(
 		ctx,
 		bson.D{
@@ -1141,7 +1140,7 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map
 	reverseMap := util.MakeReverseRSMapFunc(rsMap)
 	rs := reverseMap(nodeInfo.SetName)
 
-	c, err := b.pitrGetChunkContains(ctx, rs, primitive.Timestamp{T: uint32(unixTS)})
+	c, err := b.pitrGetChunkContains(ctx, rs, bson.Timestamp{T: uint32(unixTS)})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrNoOplogsForPITR
@@ -1156,7 +1155,7 @@ func (b *pbmC) GetPITRChunkContains(ctx context.Context, unixTS int64, rsMap map
 	return c, nil
 }
 
-func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error) {
+func (b *pbmC) PITRGetChunksSlice(ctx context.Context, rsName string, from, to bson.Timestamp) ([]oplog.OplogChunk, error) {
 	return oplog.PITRGetChunksSlice(ctx, b.Client, rsName, from, to)
 }
 
@@ -1321,7 +1320,7 @@ func (b *pbmC) DeleteBackupMeta(ctx context.Context, name string) error {
 }
 
 func (b *pbmC) DeleteBackup(ctx context.Context, name string) error {
-	e := b.Logger().NewEvent(string(ctrl.CmdDeleteBackup), "", "", primitive.Timestamp{})
+	e := b.Logger().NewEvent(string(ctrl.CmdDeleteBackup), "", "", bson.Timestamp{})
 	return deleteBackup(ctx, b.Client, name, "", e)
 }
 
@@ -1422,8 +1421,8 @@ func (b *pbmC) PITRChunksCollection() *mongo.Collection {
 	return b.Client.PITRChunksCollection()
 }
 
-func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
-	e := b.Logger().NewEvent(string(ctrl.CmdDeletePITR), "", "", primitive.Timestamp{})
+func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error {
+	e := b.Logger().NewEvent(string(ctrl.CmdDeletePITR), "", "", bson.Timestamp{})
 
 	cfg, err := b.GetConfig(ctx)
 	if err != nil {
@@ -1443,7 +1442,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) 
 		return errors.Wrap(err, "storage from config")
 	}
 
-	chunks, err := b.PITRGetChunksSlice(ctx, "", primitive.Timestamp{}, until)
+	chunks, err := b.PITRGetChunksSlice(ctx, "", bson.Timestamp{}, until)
 	if err != nil {
 		return errors.Wrap(err, "get pitr chunks")
 	}

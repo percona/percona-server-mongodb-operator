@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -91,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context,
 	}
 	defer pbmc.Close(ctx)
 
-	if err := pbmc.DeletePITRChunks(ctx, primitive.Timestamp{
+	if err := pbmc.DeletePITRChunks(ctx, bson.Timestamp{
 		T: uint32(time.Now().Unix()),
 	}); err != nil {
 		return errors.Wrap(err, "delete pitr chunks")

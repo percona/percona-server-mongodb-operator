@@ -3,8 +3,8 @@ package fake
 import (
 	"context"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -41,7 +41,7 @@ func (p *fakePBM) GetLatestTimelinePITR(ctx context.Context, rsMap map[string]st
 	return oplog.Timeline{}, nil
 }
 
-func (p *fakePBM) PITRGetChunksSlice(ctx context.Context, rs string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error) {
+func (p *fakePBM) PITRGetChunksSlice(ctx context.Context, rs string, from, to bson.Timestamp) ([]oplog.OplogChunk, error) {
 	return nil, nil
 }
 
@@ -157,6 +157,6 @@ func (p *fakePBM) ValidateBackup(ctx context.Context, cfg *config.Config, bcp *p
 	return nil
 }
 
-func (p *fakePBM) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
+func (p *fakePBM) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error {
 	return nil
 }

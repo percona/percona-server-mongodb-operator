@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -131,13 +131,13 @@ func getRestoreCmd(ctx context.Context, pbmc backup.PBM, cr *psmdbv1.PerconaServ
 			if _, err := pbmc.GetPITRChunkContains(ctx, ts, cr.Spec.RSMap); err != nil {
 				return ctrl.Cmd{}, err
 			}
-			cmd.Restore.OplogTS = primitive.Timestamp{T: uint32(ts)}
+			cmd.Restore.OplogTS = bson.Timestamp{T: uint32(ts)}
 		case psmdbv1.PITRestoreTypeLatest:
 			tl, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
 			if err != nil {
 				return ctrl.Cmd{}, err
 			}
-			cmd.Restore.OplogTS = primitive.Timestamp{T: tl.End}
+			cmd.Restore.OplogTS = bson.Timestamp{T: tl.End}
 		}
 	}
 
