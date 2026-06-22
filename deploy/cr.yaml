@@ -876,8 +876,6 @@ spec:
 #        oss:
 #          bucket: OSS-BACKUP-BUCKET-NAME-HERE
 #          prefix: ""
-#          # credentialsSecret must contain the ALIBABA_ACCESS_KEY_ID and
-#          # ALIBABA_ACCESS_KEY_SECRET keys.
 #          credentialsSecret: my-cluster-name-backup-oss
 #          endpointUrl: https://oss-eu-central-1.aliyuncs.com
 #          region: eu-central-1
