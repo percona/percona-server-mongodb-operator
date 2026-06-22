@@ -110,7 +110,7 @@ function apply_resourcequota() {
 
 set_debug
 
-if [ "$EKS" == 1 ]; then
+if [[ "$EKS" -eq 1 ]]; then
 	echo "EKS environment detected, creating storageclass for EBS volumes"
 	kubectl_bin apply -f "${test_dir}/conf/eks-storageclass.yml"
 else
@@ -126,7 +126,7 @@ kubectl_bin apply \
 
 desc 'create PSMDB cluster with storageAutoscaling enabled'
 cluster="some-name"
-if [ "$EKS" == 1 ]; then
+if [[ "$EKS" -eq 1 ]]; then
 	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
 else
 	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
@@ -160,7 +160,7 @@ wait_cluster_consistency "$cluster" 64
 desc 'verify cluster is ready'
 kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
 
-if [[ -n ${OPENSHIFT} || $EKS == 1 ]]; then
+if [[ -n "$OPENSHIFT" || "$EKS" -eq 1 ]]; then
 	# On AWS (OpenShift/EKS), EBS volumes can only be expanded once every 6 hours.
 	# Skip the multi-resize quota and maxSize tests since they require
 	# multiple sequential resizes of the same volume.
@@ -209,21 +209,18 @@ wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "9Gi" 60 10
 wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "9Gi" 60 10
 
 fill_disk_to_threshold "${cluster}-rs0-0" 50 5200
+wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "10Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "10Gi" 60 10
+wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "10Gi" 60 10
 
 final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
-if [[ ${final_size} == "10Gi" ]]; then
-	echo "PVC correctly stopped at maxSize 10Gi"
-elif [[ ${final_size} == "9Gi" ]]; then
-	echo "PVC is at 9Gi, will resize to 10Gi (maxSize)"
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "10Gi" 60 10
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "10Gi" 60 10
-	wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "10Gi" 60 10
-else
-	echo "WARNING: PVC size is ${final_size}, expected 9Gi or 10Gi"
+if [[ ${final_size} != "10Gi" ]]; then
+	echo "WARNING: PVC size is ${final_size}, expected 10Gi"
+	exit 1
 fi
 
 desc 'verify final autoscaling status'
-check_autoscaling_status "${cluster}" 4 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+check_autoscaling_status "${cluster}" 5 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
 
 wait_cluster_consistency "$cluster" 64
 

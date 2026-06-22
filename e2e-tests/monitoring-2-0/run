@@ -90,7 +90,7 @@ insert_data_mongos "100700" "myApp" \
 	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 
 desc 'add PMM_SERVER_API_KEY for secret some-users'
-API_KEY=$(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
+API_KEY=$(execute_curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
 kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
 
 desc 'check if all 3 Pods started'
@@ -159,12 +159,12 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pa
 wait_for_running $cluster-rs0 3
 
 # get services list from pmm server
-curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
+execute_curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-mongos-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-rs0-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-cfg-0 ${tmp_dir}/pmm_service_list.json
 
-if [[ -n ${OPENSHIFT} ]]; then
+if [[ -n "$OPENSHIFT" ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server
 	if [ -n "$OPERATOR_NS" ]; then
 		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
