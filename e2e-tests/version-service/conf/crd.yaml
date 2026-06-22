@@ -145,7 +145,6 @@ spec:
                     type: object
                 required:
                 - bucket
-                - credentialsSecret
                 type: object
               lastTransition:
                 format: date-time
@@ -1464,7 +1463,6 @@ spec:
                         type: object
                     required:
                     - bucket
-                    - credentialsSecret
                     type: object
                   lastTransition:
                     format: date-time
@@ -2551,7 +2549,6 @@ spec:
                               type: object
                           required:
                           - bucket
-                          - credentialsSecret
                           type: object
                         main:
                           type: boolean

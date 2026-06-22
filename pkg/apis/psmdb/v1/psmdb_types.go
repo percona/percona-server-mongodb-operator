@@ -1338,7 +1338,7 @@ type GCSRetryer struct {
 type BackupStorageGCSSpec struct {
 	Bucket            string      `json:"bucket"`
 	Prefix            string      `json:"prefix,omitempty"`
-	CredentialsSecret string      `json:"credentialsSecret"`
+	CredentialsSecret string      `json:"credentialsSecret,omitempty"`
 	ChunkSize         int         `json:"chunkSize,omitempty"`
 	Retryer           *GCSRetryer `json:"retryer,omitempty"`
 }

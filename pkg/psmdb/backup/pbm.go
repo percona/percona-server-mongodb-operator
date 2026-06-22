@@ -525,6 +525,12 @@ func GetPBMStorageGCSConfig(
 				HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
 			}
 		}
+	} else {
+		// No credentials secret provided — enable WorkloadIdentity so PBM
+		// uses Application Default Credentials (GKE Workload Identity / ADC).
+		storageConf.GCS.Credentials = gcs.Credentials{
+			WorkloadIdentity: true,
+		}
 	}
 
 	if stg.GCS.Retryer != nil {

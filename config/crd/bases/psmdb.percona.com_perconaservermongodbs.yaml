@@ -525,7 +525,6 @@ spec:
                               type: object
                           required:
                           - bucket
-                          - credentialsSecret
                           type: object
                         main:
                           type: boolean
