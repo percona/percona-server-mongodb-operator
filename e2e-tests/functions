@@ -1803,6 +1803,31 @@ function check_backup_deletion_aws() {
 	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
 }
 
+function check_backup_deletion_oss() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	endpoint=$(echo "$3" | $sed 's|://oss-|://s3.oss-|')
+	region=$4
+	storage_name="oss-native"
+	retry=0
+
+	setup_alibaba_cloud_s3_credentials "$region"
+
+	while aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+}
+
 function check_backup_deletion_gcs() {
 	backup_dest_gcp=$1
 	obj=$2
