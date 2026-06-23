@@ -1369,7 +1369,7 @@ get_mongo_primary() {
 check_exported_mongos_service_endpoint() {
 	local host=$1
 
-	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+	if [ "$host:27017" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
 		echo "Exported host is not correct after the restore"
 		exit 1
 	fi
