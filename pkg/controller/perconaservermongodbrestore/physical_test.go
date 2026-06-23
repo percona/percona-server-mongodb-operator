@@ -26,6 +26,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	tests := []struct {
 		name                string
 		crVersion           string
+		backupVersion       string
+		storages            map[string]psmdbv1.BackupStorageSpec
 		clusterInitSC       *corev1.SecurityContext
 		wantPbmInitSC       *corev1.SecurityContext
 		wantAWSChecksumEnvs bool
@@ -33,6 +35,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		{
 			name:                "latest_version_with_InitContainerSecurityContext",
 			crVersion:           version.Version(),
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       initSC,
 			wantAWSChecksumEnvs: true,
@@ -40,13 +44,26 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		{
 			name:                "latest_version_without_InitContainerSecurityContext",
 			crVersion:           version.Version(),
+			backupVersion:       "2.12.0",
+			storages:            s3CompatibleOSSStorage(),
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
-			wantAWSChecksumEnvs: true,
+			wantAWSChecksumEnvs: false,
+		},
+		{
+			name:                "latest_version_with_regular_s3",
+			crVersion:           version.Version(),
+			backupVersion:       "2.11.0",
+			storages:            regularS3Storage(),
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 		{
 			name:                "1_22_with_InitContainerSecurityContext_ignored",
 			crVersion:           "1.22.0",
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
@@ -54,6 +71,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		{
 			name:                "1_22_without_InitContainerSecurityContext",
 			crVersion:           "1.22.0",
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
@@ -72,7 +91,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Backup: psmdbv1.BackupSpec{
-						Image: "percona/percona-backup-mongodb:latest",
+						Image:    "percona/percona-backup-mongodb:latest",
+						Storages: tt.storages,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "extra-volume",
@@ -86,6 +106,9 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 						SSL:   "ssl-secret",
 					},
 					InitContainerSecurityContext: tt.clusterInitSC,
+				},
+				Status: psmdbv1.PerconaServerMongoDBStatus{
+					BackupVersion: tt.backupVersion,
 				},
 			}
 
@@ -181,5 +204,27 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
 			assert.Equal(t, expectedURI, lastEnvVar.Value)
 		})
+	}
+}
+
+func s3CompatibleOSSStorage() map[string]psmdbv1.BackupStorageSpec {
+	return map[string]psmdbv1.BackupStorageSpec{
+		"oss-s3": {
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+			},
+		},
+	}
+}
+
+func regularS3Storage() map[string]psmdbv1.BackupStorageSpec {
+	return map[string]psmdbv1.BackupStorageSpec{
+		"s3": {
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				EndpointURL: "https://s3.amazonaws.com",
+			},
+		},
 	}
 }

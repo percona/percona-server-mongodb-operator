@@ -587,8 +587,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
-	// Required for backups/restores for OSS if s3 backup type is used on PBM version 2.11.0 and lower
-	if cr.CompareVersion("1.23.0") >= 0 {
+	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetAWSSDKChecksumEnvVars(cr) {
 		c.Env = append(c.Env, AWSSDKChecksumEnvVars()...)
 	}
 
@@ -654,6 +653,21 @@ func AWSSDKChecksumEnvVars() []corev1.EnvVar {
 			Value: "when_required",
 		},
 	}
+}
+
+func ShouldSetAWSSDKChecksumEnvVars(cr *api.PerconaServerMongoDB) bool {
+	pbm2110OrOlder, err := cr.ComparePBMAgentVersion("2.11.0")
+	if err != nil || pbm2110OrOlder > 0 {
+		return false
+	}
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageS3 && strings.Contains(storage.S3.EndpointURL, naming.OSSCloudEndpointURL) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {

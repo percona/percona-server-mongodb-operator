@@ -83,10 +83,6 @@ spec:
               value: "true"
             - name: PBM_AGENT_SIDECAR_SLEEP
               value: "5"
-            - name: AWS_REQUEST_CHECKSUM_CALCULATION
-              value: when_required
-            - name: AWS_RESPONSE_CHECKSUM_VALIDATION
-              value: when_required
             - name: PBM_AGENT_TLS_ENABLED
               value: "true"
             - name: PBM_MONGODB_PORT
