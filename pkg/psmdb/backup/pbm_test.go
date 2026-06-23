@@ -558,6 +558,63 @@ func TestPBMStorageConfig(t *testing.T) {
 	}
 }
 
+func TestPBMStorageOSSUsesGlobalSSESecretFallback(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "test-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets: &api.SecretsSpec{
+				SSE: "global-sse-secret",
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: MinPBMVersionOSS,
+		},
+	}
+	cl := buildFakeClient(t,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test-namespace",
+			},
+			Data: map[string][]byte{
+				"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
+				"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "global-sse-secret",
+				Namespace: "test-namespace",
+			},
+			Data: map[string][]byte{
+				SSECustomerKey:    []byte("s3-key-id"),
+				OSSSSECustomerKey: []byte("oss-key-id"),
+			},
+		},
+	)
+
+	got, err := GetPBMStorageConfig(context.Background(), cl, cr, api.BackupStorageSpec{
+		Type: api.BackupStorageOSS,
+		OSS: api.BackupStorageOSSSpec{
+			Bucket:            "operator-testing",
+			Region:            "oss-eu-central-1",
+			EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
+			CredentialsSecret: "test-secret",
+			ServerSideEncryption: api.OSSServerSideEncryption{
+				EncryptionMethod:    "sse",
+				EncryptionAlgorithm: "KMS",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got.OSS.ServerSideEncryption)
+	require.Equal(t, storage.MaskedString("oss-key-id"), got.OSS.ServerSideEncryption.EncryptionKeyID)
+}
+
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{

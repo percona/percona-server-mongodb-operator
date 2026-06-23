@@ -49,6 +49,7 @@ const (
 	MinPBMVersionOSS                 = "2.12.0"
 	KMSKeyID                         = "KMS_KEY_ID"
 	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
+	OSSSSECustomerKey                = "OSS_SSE_CUSTOMER_KEY"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
 	OSSAccessKeySecretKey            = "ALIBABA_ACCESS_KEY_ID"
@@ -679,7 +680,7 @@ func GetPBMStorageOSSConfig(
 				EncryptionAlgorithm: sse.EncryptionAlgorithm,
 				EncryptionKeyID:     storage.MaskedString(sse.EncryptionKeyID),
 			}
-		case len(cluster.Spec.Secrets.SSE) != 0:
+		case cluster.Spec.Secrets != nil && len(cluster.Spec.Secrets.SSE) != 0:
 			sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, cluster.Spec.Secrets.SSE)
 			if err != nil {
 				return storageConf, errors.Wrap(err, "get sse credentials secret")
@@ -687,10 +688,10 @@ func GetPBMStorageOSSConfig(
 			storageConf.OSS.ServerSideEncryption = &oss.SSE{
 				EncryptionMethod:    sse.EncryptionMethod,
 				EncryptionAlgorithm: sse.EncryptionAlgorithm,
-				EncryptionKeyID:     storage.MaskedString(string(sseSecret.Data[SSECustomerKey])),
+				EncryptionKeyID:     storage.MaskedString(string(sseSecret.Data[OSSSSECustomerKey])),
 			}
 		default:
-			return storageConf, errors.New("no SseCustomerKey specified")
+			return storageConf, errors.New("no encryptionKeyId or SSE secret specified")
 		}
 	}
 
