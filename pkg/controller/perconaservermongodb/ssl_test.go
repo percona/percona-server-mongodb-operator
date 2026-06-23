@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"testing"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -238,7 +239,7 @@ func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
 	newExternalIssuerCR := func() *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.TLS = &api.TLSSpec{
-			IssuerConf: api.IssuerConfReference{
+			IssuerConf: cmmeta.IssuerReference{
 				Name:  "external-issuer",
 				Kind:  "AWSPCAIssuer",
 				Group: "awspca.cert-manager.io",
