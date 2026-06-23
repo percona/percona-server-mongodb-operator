@@ -745,8 +745,15 @@ func yamlMarshalUnsafe(in any) ([]byte, error) {
 		return nil, errors.Wrap(err, "marshal to bson")
 	}
 
+	// DefaultDocumentM is required so that nested documents decode into bson.M as
+	// well. Without it, the mongo-driver v2 decoder decodes nested documents into
+	// bson.D, which yaml.Marshal then renders as a list of {key, value} pairs
+	// instead of a proper YAML map.
+	dec := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(bsonBytes)))
+	dec.DefaultDocumentM()
+
 	var tmp bson.M
-	if err := bson.Unmarshal(bsonBytes, &tmp); err != nil {
+	if err := dec.Decode(&tmp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal to bson.M")
 	}
 	delete(tmp, "epoch")
