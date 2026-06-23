@@ -1492,7 +1492,7 @@ get_metric_values() {
 	local user_pass=$3
 	local start=$($date -u "+%s" -d "-1 minute")
 	local end=$($date -u "+%s")
-	local endpoint$(get_service_endpoint monitoring-service)
+	local endpoint=$(get_service_endpoint monitoring-service)
 
 	execute_curl -s -k \
 		-u "$user_pass" \
