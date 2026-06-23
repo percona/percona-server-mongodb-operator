@@ -815,9 +815,6 @@ compare_kubectl() {
 	if [[ -n "$OPENSHIFT" && -f ${expected_result//.yml/-oc.yml} ]]; then
 		desc "OPENSHIFT"
 		expected_result=${expected_result//.yml/-oc.yml}
-		if [[ "$OPENSHIFT" -eq 4 && -f ${expected_result//-oc.yml/-4-oc.yml} ]]; then
-			expected_result=${expected_result//-oc.yml/-4-oc.yml}
-		fi
 	fi
 
 	kubectl_bin get -o yaml ${resource} \
