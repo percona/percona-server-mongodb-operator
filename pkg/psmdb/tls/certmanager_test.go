@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +27,7 @@ func TestCreateIssuer(t *testing.T) {
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			TLS: &api.TLSSpec{
-				IssuerConf: api.IssuerConfReference{
+				IssuerConf: cmmeta.IssuerReference{
 					Name: customIssuerName,
 					Kind: cm.IssuerKind,
 				},
@@ -118,7 +119,7 @@ func TestCreateCertificate(t *testing.T) {
 				SSL: "ssl",
 			},
 			TLS: &api.TLSSpec{
-				IssuerConf: api.IssuerConfReference{
+				IssuerConf: cmmeta.IssuerReference{
 					Name:  customIssuerName,
 					Kind:  customIssuerKind,
 					Group: customIssuerGroup,
@@ -296,11 +297,13 @@ func TestWaitForCerts(t *testing.T) {
 func buildFakeClient(objs ...client.Object) CertManagerController {
 	s := scheme.Scheme
 
-	s.AddKnownTypes(api.SchemeGroupVersion,
+	s.AddKnownTypes(
+		api.SchemeGroupVersion,
 		new(api.PerconaServerMongoDB),
 	)
 
-	s.AddKnownTypes(cm.SchemeGroupVersion,
+	s.AddKnownTypes(
+		cm.SchemeGroupVersion,
 		new(cm.Issuer),
 		new(cm.ClusterIssuer),
 		new(cm.Certificate),
