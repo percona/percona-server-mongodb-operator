@@ -22,8 +22,6 @@ import (
 )
 
 func TestBackupStartOSSStorageDestination(t *testing.T) {
-	ctx := context.Background()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -60,7 +58,7 @@ func TestBackupStartOSSStorageDestination(t *testing.T) {
 		spec: cluster.Spec.Backup,
 	}
 
-	status, err := backup.Start(ctx, nil, cluster, &api.PerconaServerMongoDBBackup{
+	status, err := backup.Start(t.Context(), nil, cluster, &api.PerconaServerMongoDBBackup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "some-backup",
 			Namespace: "some-namespace",
