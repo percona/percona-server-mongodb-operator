@@ -7,6 +7,7 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -64,8 +65,6 @@ func TestCreateIssuer(t *testing.T) {
 
 		err = r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
 		assert.NoError(t, err)
-
-		assert.NoError(t, err)
 		assert.Equal(t, "psmdb-mock-psmdb-issuer", issuer.Name)
 	})
 
@@ -102,6 +101,47 @@ func TestCreateIssuer(t *testing.T) {
 
 		assert.Equal(t, "psmdb-mock-psmdb-psmdb-issuer", issuer.Name)
 	})
+
+	t.Run("Use namespaced issuer for old CR version", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.CRVersion = "1.22.0"
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = ""
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		require.NoError(t, err)
+
+		issuer := new(cm.Issuer)
+		err = r.GetClient().Get(ctx, types.NamespacedName{
+			Name:      issuerName(cr),
+			Namespace: cr.Namespace,
+		}, issuer)
+		require.NoError(t, err)
+	})
+}
+
+func TestCreateCAIssuer(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Kind: cm.ClusterIssuerKind,
+				},
+			},
+		},
+	}
+	r := buildFakeClient(cr)
+
+	_, err := r.ApplyCAIssuer(t.Context(), cr)
+	require.NoError(t, err)
+
+	issuer := new(cm.ClusterIssuer)
+	err = r.GetClient().Get(t.Context(), types.NamespacedName{Name: caIssuerName(cr)}, issuer)
+	require.NoError(t, err)
+	assert.Empty(t, issuer.Namespace)
 }
 
 func TestCreateCertificate(t *testing.T) {

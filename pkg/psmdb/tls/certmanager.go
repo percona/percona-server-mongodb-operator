@@ -119,7 +119,12 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 			},
 		},
 	}
-	switch cr.Spec.TLS.IssuerConf.Kind {
+
+	kind := cm.IssuerKind
+	if cr.CompareVersion("1.23.0") >= 0 {
+		kind = cr.Spec.TLS.IssuerConf.Kind
+	}
+	switch kind {
 	case cm.IssuerKind:
 		issuer = &cm.Issuer{
 			ObjectMeta: meta,
@@ -145,26 +150,25 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
 	var issuer client.Object
 	meta := metav1.ObjectMeta{
-		Name:      caIssuerName(cr),
-		Namespace: cr.Namespace,
-		Labels:    naming.ClusterLabels(cr),
+		Name:   caIssuerName(cr),
+		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
 		IssuerConfig: cm.IssuerConfig{
 			SelfSigned: &cm.SelfSignedIssuer{},
 		},
 	}
-	kind := cr.Spec.TLS.IssuerConf.Kind
-	if cr.CompareVersion("1.23.0") < 0 {
-		kind = cm.IssuerKind
+	kind := cm.IssuerKind
+	if cr.CompareVersion("1.23.0") >= 0 {
+		kind = cr.Spec.TLS.IssuerConf.Kind
 	}
-
 	switch kind {
 	case cm.IssuerKind:
 		issuer = &cm.Issuer{
 			ObjectMeta: meta,
 			Spec:       spec,
 		}
+		issuer.SetNamespace(cr.Namespace)
 	case cm.ClusterIssuerKind:
 		issuer = &cm.ClusterIssuer{
 			ObjectMeta: meta,

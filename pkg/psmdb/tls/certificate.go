@@ -116,7 +116,7 @@ func (c *tlsCert) Object() *cm.Certificate {
 
 	issuerKind := cm.IssuerKind
 	issuerGroup := ""
-	if cr.Spec.TLS != nil {
+	if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.TLS != nil {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}

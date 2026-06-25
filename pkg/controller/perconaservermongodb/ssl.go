@@ -216,7 +216,8 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				return nil
 			}
 
-			caSecret, err := r.getSecret(ctx, cr, tls.CertificateCA(cr).SecretName())
+			caCert := tls.CertificateCA(cr)
+			caSecret, err := r.getSecretInNamespace(ctx, caCert.Namespace(), caCert.SecretName())
 			if err != nil {
 				if k8serr.IsNotFound(err) {
 					return nil
@@ -265,10 +266,14 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 }
 
 func (r *ReconcilePerconaServerMongoDB) getSecret(ctx context.Context, cr *api.PerconaServerMongoDB, name string) (*corev1.Secret, error) {
+	return r.getSecretInNamespace(ctx, cr.Namespace, name)
+}
+
+func (r *ReconcilePerconaServerMongoDB) getSecretInNamespace(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
 	secret := new(corev1.Secret)
 	err := r.client.Get(ctx,
 		types.NamespacedName{
-			Namespace: cr.Namespace,
+			Namespace: namespace,
 			Name:      name,
 		},
 		secret,

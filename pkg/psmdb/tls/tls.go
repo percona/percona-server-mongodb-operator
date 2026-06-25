@@ -43,23 +43,40 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 		return false, nil
 	}
 
+	certificateName := secret.Annotations[cm.CertificateNameKey]
+	if certificateName != "" {
+		certificate := new(cm.Certificate)
+		if err := c.Get(ctx, types.NamespacedName{
+			Name:      certificateName,
+			Namespace: secret.Namespace,
+		}, certificate); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return true, errors.Wrap(err, "failed to get certificate")
+			}
+		} else if metav1.IsControlledBy(certificate, cr) {
+			return false, nil
+		}
+	}
+
 	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
 	if issuerName == "" {
 		return true, nil
 	}
 
 	var issuer client.Object
+	issuerNamespace := secret.Namespace
 	switch secret.Annotations[cm.IssuerKindAnnotationKey] {
 	case cm.IssuerKind:
 		issuer = new(cm.Issuer)
 	case cm.ClusterIssuerKind:
 		issuer = new(cm.ClusterIssuer)
+		issuerNamespace = ""
 	default:
 		return true, nil
 	}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      issuerName,
-		Namespace: secret.Namespace,
+		Namespace: issuerNamespace,
 	}, issuer); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return true, nil

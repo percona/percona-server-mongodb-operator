@@ -56,10 +56,6 @@ func (c *CertManagerController) ApplyCertificate(ctx context.Context, cr *api.Pe
 	return util.ApplyStatusUnchanged, nil
 }
 
-func (c *CertManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	return nil
-}
-
 func (c *CertManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, cert ...tls.Certificate) error {
 	c.WaitForCertsCalls++
 	names := make([]string, 0, len(cert))
