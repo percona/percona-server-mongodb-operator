@@ -384,8 +384,8 @@ func GetPBMStorageMinioConfig(
 		}
 
 		storageConf.Minio.Credentials = mio.Credentials{
-			AccessKeyID:     storage.MaskedString(string(accessKey)),
-			SecretAccessKey: storage.MaskedString(string(secretAccessKey)),
+			AccessKeyID:     storage.MaskedString(accessKey),
+			SecretAccessKey: storage.MaskedString(secretAccessKey),
 		}
 	}
 
@@ -438,7 +438,7 @@ func GetPBMStorageS3Config(
 				}
 				storageConf.S3.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[SSECustomerKey])),
+					SseCustomerKey:       storage.MaskedString(sseSecret.Data[SSECustomerKey]),
 				}
 			default:
 				return storageConf, errors.New("no SseCustomerKey specified")
@@ -467,8 +467,8 @@ func GetPBMStorageS3Config(
 			}
 		}
 		storageConf.S3.Credentials = s3.Credentials{
-			AccessKeyID:     storage.MaskedString(string(s3secret.Data[AWSAccessKeySecretKey])),
-			SecretAccessKey: storage.MaskedString(string(s3secret.Data[AWSSecretAccessKeySecretKey])),
+			AccessKeyID:     storage.MaskedString(s3secret.Data[AWSAccessKeySecretKey]),
+			SecretAccessKey: storage.MaskedString(s3secret.Data[AWSSecretAccessKeySecretKey]),
 		}
 	}
 
@@ -518,16 +518,16 @@ func GetPBMStorageGCSConfig(
 
 		if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				ClientEmail: storage.MaskedString(string(gcsSecret.Data[GCSClientEmailSecretKey])),
-				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[GCSPrivateKeySecretKey])),
+				ClientEmail: storage.MaskedString(gcsSecret.Data[GCSClientEmailSecretKey]),
+				PrivateKey:  storage.MaskedString(gcsSecret.Data[GCSPrivateKeySecretKey]),
 			}
 		}
 
 		// s3 compatibility
 		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[AWSAccessKeySecretKey])),
-				HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
+				HMACAccessKey: storage.MaskedString(gcsSecret.Data[AWSAccessKeySecretKey]),
+				HMACSecret:    storage.MaskedString(gcsSecret.Data[AWSSecretAccessKeySecretKey]),
 			}
 		}
 	}
@@ -617,7 +617,7 @@ func GetPBMStorageAzureConfig(
 			EndpointURL: stg.Azure.EndpointURL,
 			Prefix:      stg.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(string(azureSecret.Data[AzureStorageAccountKeySecretKey])),
+				Key: storage.MaskedString(azureSecret.Data[AzureStorageAccountKeySecretKey]),
 			},
 		},
 	}
@@ -654,8 +654,8 @@ func GetPBMStorageOSSConfig(
 			Bucket:      stg.OSS.Bucket,
 			Prefix:      stg.OSS.Prefix,
 			Credentials: oss.Credentials{
-				AccessKeyID:     storage.MaskedString(string(ossSecret.Data[OSSAccessKeySecretKey])),
-				AccessKeySecret: storage.MaskedString(string(ossSecret.Data[OSSSecretAccessKeySecretKey])),
+				AccessKeyID:     storage.MaskedString(ossSecret.Data[OSSAccessKeySecretKey]),
+				AccessKeySecret: storage.MaskedString(ossSecret.Data[OSSSecretAccessKeySecretKey]),
 			},
 			ConnectTimeout: stg.OSS.ConnectTimeout.Duration,
 			UploadPartSize: stg.OSS.UploadPartSize,
@@ -666,8 +666,8 @@ func GetPBMStorageOSSConfig(
 	// s3 compatibility
 	if _, ok := ossSecret.Data[AWSAccessKeySecretKey]; ok {
 		storageConf.OSS.Credentials = oss.Credentials{
-			AccessKeyID:     storage.MaskedString(string(ossSecret.Data[AWSAccessKeySecretKey])),
-			AccessKeySecret: storage.MaskedString(string(ossSecret.Data[AWSSecretAccessKeySecretKey])),
+			AccessKeyID:     storage.MaskedString(ossSecret.Data[AWSAccessKeySecretKey]),
+			AccessKeySecret: storage.MaskedString(ossSecret.Data[AWSSecretAccessKeySecretKey]),
 		}
 	}
 
