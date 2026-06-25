@@ -59,6 +59,106 @@ func TestCompareTags(t *testing.T) {
 	}
 }
 
+func TestDefaultRWConcern(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		spec              *api.DefaultRWConcern
+		wantReadConcern   string
+		wantWriteConcern  string
+	}{
+		"nil spec falls back to majority": {
+			spec:             nil,
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"empty fields fall back to majority": {
+			spec:             &api.DefaultRWConcern{},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"only read overridden": {
+			spec:             &api.DefaultRWConcern{ReadConcern: "local"},
+			wantReadConcern:  "local",
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"only write overridden": {
+			spec:             &api.DefaultRWConcern{WriteConcern: "1"},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: "1",
+		},
+		"both overridden": {
+			spec:             &api.DefaultRWConcern{ReadConcern: "local", WriteConcern: "1"},
+			wantReadConcern:  "local",
+			wantWriteConcern: "1",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{DefaultRWConcern: tt.spec},
+			}
+			gotRead, gotWrite := defaultRWConcern(cr)
+			assert.Equal(t, tt.wantReadConcern, gotRead)
+			assert.Equal(t, tt.wantWriteConcern, gotWrite)
+		})
+	}
+}
+
+func TestShouldSetDefaultRWConcern(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		shardingEnabled bool
+		arbiterEnabled  bool
+		rwConcern       *api.DefaultRWConcern
+		want            bool
+	}{
+		"PSS, no custom concern": {
+			want: false,
+		},
+		"PSA, no custom concern": {
+			arbiterEnabled: true,
+			want:           true,
+		},
+		"PSS, custom concern": {
+			rwConcern: &api.DefaultRWConcern{WriteConcern: "1"},
+			want:      true,
+		},
+		"PSA, custom concern": {
+			arbiterEnabled: true,
+			rwConcern:      &api.DefaultRWConcern{WriteConcern: "1"},
+			want:           true,
+		},
+		"sharded, PSA": {
+			shardingEnabled: true,
+			arbiterEnabled:  true,
+			want:            false,
+		},
+		"sharded, custom concern": {
+			shardingEnabled: true,
+			rwConcern:       &api.DefaultRWConcern{WriteConcern: "1"},
+			want:            false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					Sharding:         api.Sharding{Enabled: tc.shardingEnabled},
+					DefaultRWConcern: tc.rwConcern,
+				},
+			}
+			rs := &api.ReplsetSpec{
+				Arbiter: api.Arbiter{Enabled: tc.arbiterEnabled},
+			}
+			assert.Equal(t, tc.want, shouldSetDefaultRWConcern(cr, rs))
+		})
+	}
+}
+
 func TestGetRoles(t *testing.T) {
 	tests := map[string]struct {
 		crVersion string

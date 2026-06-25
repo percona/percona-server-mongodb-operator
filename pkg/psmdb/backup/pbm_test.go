@@ -346,6 +346,28 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"gcs without credentials (ADC / Workload Identity)": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					ChunkSize: 1024 * 1024 * 10,
+				},
+			},
+			config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					ChunkSize: 1024 * 1024 * 10,
+					Credentials: gcs.Credentials{
+						WorkloadIdentity: true,
+					},
+				},
+			},
+		},
 		"gcs s3 compatibility": {
 			[]client.Object{
 				&corev1.Secret{
