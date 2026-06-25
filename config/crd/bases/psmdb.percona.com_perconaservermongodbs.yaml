@@ -611,6 +611,8 @@ spec:
                                   type: string
                                 encryptionMethod:
                                   type: string
+                                secretName:
+                                  type: string
                               type: object
                             uploadPartSize:
                               format: int64

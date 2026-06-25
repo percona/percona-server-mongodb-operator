@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	// "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -558,7 +556,7 @@ func TestPBMStorageConfig(t *testing.T) {
 	}
 }
 
-func TestPBMStorageOSSUsesGlobalSSESecretFallback(t *testing.T) {
+func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cr",
@@ -566,15 +564,13 @@ func TestPBMStorageOSSUsesGlobalSSESecretFallback(t *testing.T) {
 		},
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
-			Secrets: &api.SecretsSpec{
-				SSE: "global-sse-secret",
-			},
 		},
 		Status: api.PerconaServerMongoDBStatus{
 			BackupVersion: MinPBMVersionOSS,
 		},
 	}
-	cl := buildFakeClient(t,
+	cl := buildFakeClient(
+		t,
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-secret",
@@ -587,12 +583,11 @@ func TestPBMStorageOSSUsesGlobalSSESecretFallback(t *testing.T) {
 		},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "global-sse-secret",
+				Name:      "oss-sse-secret",
 				Namespace: "test-namespace",
 			},
 			Data: map[string][]byte{
-				SSECustomerKey:    []byte("s3-key-id"),
-				OSSSSECustomerKey: []byte("oss-key-id"),
+				SSECustomerKey: []byte("oss-key-id"),
 			},
 		},
 	)
@@ -605,6 +600,7 @@ func TestPBMStorageOSSUsesGlobalSSESecretFallback(t *testing.T) {
 			EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
 			CredentialsSecret: "test-secret",
 			ServerSideEncryption: api.OSSServerSideEncryption{
+				SecretName:          "oss-sse-secret",
 				EncryptionMethod:    "sse",
 				EncryptionAlgorithm: "KMS",
 			},

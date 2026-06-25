@@ -1363,6 +1363,7 @@ type BackupStorageOSSSpec struct {
 }
 
 type OSSServerSideEncryption struct {
+	SecretName          string `json:"secretName,omitempty"`
 	EncryptionMethod    string `json:"encryptionMethod,omitempty"`
 	EncryptionAlgorithm string `json:"encryptionAlgorithm,omitempty"`
 	EncryptionKeyID     string `json:"encryptionKeyId,omitempty"`

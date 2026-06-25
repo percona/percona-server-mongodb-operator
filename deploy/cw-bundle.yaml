@@ -238,6 +238,8 @@ spec:
                         type: string
                       encryptionMethod:
                         type: string
+                      secretName:
+                        type: string
                     type: object
                   uploadPartSize:
                     format: int64
@@ -1602,6 +1604,8 @@ spec:
                             type: string
                           encryptionMethod:
                             type: string
+                          secretName:
+                            type: string
                         type: object
                       uploadPartSize:
                         format: int64
@@ -2726,6 +2730,8 @@ spec:
                                 encryptionKeyId:
                                   type: string
                                 encryptionMethod:
+                                  type: string
+                                secretName:
                                   type: string
                               type: object
                             uploadPartSize:

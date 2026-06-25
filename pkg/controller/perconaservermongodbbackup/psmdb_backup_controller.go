@@ -563,15 +563,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 					EncryptionAlgorithm: sse.EncryptionAlgorithm,
 					EncryptionKeyID:     storage.MaskedString(sse.EncryptionKeyID),
 				}
-			case cluster != nil && cluster.Spec.Secrets != nil && len(cluster.Spec.Secrets.SSE) != 0:
-				sseSecret, err := secret(ctx, r.client, cr.Namespace, cluster.Spec.Secrets.SSE)
+			case len(sse.SecretName) != 0:
+				sseSecret, err := secret(ctx, r.client, cluster.Namespace, sse.SecretName)
 				if err != nil {
 					return nil, errors.Wrap(err, "get sse credentials secret")
 				}
 				ossConf.ServerSideEncryption = &oss.SSE{
 					EncryptionMethod:    sse.EncryptionMethod,
 					EncryptionAlgorithm: sse.EncryptionAlgorithm,
-					EncryptionKeyID:     storage.MaskedString(string(sseSecret.Data[backup.OSSSSECustomerKey])),
+					EncryptionKeyID:     storage.MaskedString(sseSecret.Data[backup.SSECustomerKey]),
 				}
 			default:
 				return nil, errors.New("no encryptionKeyId or SSE secret specified")

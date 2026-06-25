@@ -887,6 +887,7 @@ spec:
 #            maxBackoff: 5m
 #            baseDelay: 1s
 #          serverSideEncryption:
+#            secretName: my-cluster-name-backup-oss-sse
 #            encryptionMethod: sse
 #            encryptionAlgorithm: KMS
 #            encryptionKeyId: OSS-KMS-KEY-ID-HERE
