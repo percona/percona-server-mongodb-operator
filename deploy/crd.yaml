@@ -14930,6 +14930,7 @@ spec:
                       type: object
                   required:
                   - size
+                  - volumeSpec
                   type: object
                 type: array
               revisionHistoryLimit:
@@ -27517,6 +27518,7 @@ spec:
                         type: object
                     required:
                     - size
+                    - volumeSpec
                     type: object
                   enabled:
                     type: boolean
