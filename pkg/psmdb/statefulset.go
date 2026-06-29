@@ -58,13 +58,17 @@ func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
 // needsTmpVolume reports whether a shared writable /tmp emptyDir must be added
 // to the pod because the mongod or backup agent container runs with a read-only
 // root filesystem.
-func needsTmpVolume(cr *api.PerconaServerMongoDB, containerSecurityContext *corev1.SecurityContext) bool {
+func needsTmpVolume(cr *api.PerconaServerMongoDB, mongodSecurityContext *corev1.SecurityContext) bool {
 	if cr.CompareVersion("1.23.0") < 0 {
 		return false
 	}
-	if readOnlyRootFilesystemEnabled(containerSecurityContext) {
+	// mongod needs a writable /tmp whenever its own root filesystem is read-only,
+	// regardless of whether the backup agent is running.
+	if readOnlyRootFilesystemEnabled(mongodSecurityContext) {
 		return true
 	}
+	// Otherwise the shared volume is only needed for an enabled backup agent that
+	// runs with a read-only root filesystem.
 	return cr.Spec.Backup.Enabled && readOnlyRootFilesystemEnabled(cr.Spec.Backup.ContainerSecurityContext)
 }
 
