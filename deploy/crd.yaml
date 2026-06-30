@@ -199,6 +199,53 @@ spec:
                   secure:
                     type: boolean
                 type: object
+              oss:
+                properties:
+                  bucket:
+                    type: string
+                  connectTimeout:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  endpointUrl:
+                    type: string
+                  maxUploadParts:
+                    format: int32
+                    type: integer
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      baseDelay:
+                        type: string
+                      maxAttempts:
+                        type: integer
+                      maxBackoff:
+                        type: string
+                    required:
+                    - baseDelay
+                    - maxAttempts
+                    - maxBackoff
+                    type: object
+                  serverSideEncryption:
+                    properties:
+                      encryptionAlgorithm:
+                        type: string
+                      encryptionKeyId:
+                        type: string
+                      encryptionMethod:
+                        type: string
+                      secretName:
+                        type: string
+                    type: object
+                  uploadPartSize:
+                    format: int64
+                    type: integer
+                required:
+                - credentialsSecret
+                type: object
               pbmName:
                 type: string
               pbmPod:
@@ -1517,6 +1564,53 @@ spec:
                       secure:
                         type: boolean
                     type: object
+                  oss:
+                    properties:
+                      bucket:
+                        type: string
+                      connectTimeout:
+                        type: string
+                      credentialsSecret:
+                        type: string
+                      endpointUrl:
+                        type: string
+                      maxUploadParts:
+                        format: int32
+                        type: integer
+                      prefix:
+                        type: string
+                      region:
+                        type: string
+                      retryer:
+                        properties:
+                          baseDelay:
+                            type: string
+                          maxAttempts:
+                            type: integer
+                          maxBackoff:
+                            type: string
+                        required:
+                        - baseDelay
+                        - maxAttempts
+                        - maxBackoff
+                        type: object
+                      serverSideEncryption:
+                        properties:
+                          encryptionAlgorithm:
+                            type: string
+                          encryptionKeyId:
+                            type: string
+                          encryptionMethod:
+                            type: string
+                          secretName:
+                            type: string
+                        type: object
+                      uploadPartSize:
+                        format: int64
+                        type: integer
+                    required:
+                    - credentialsSecret
+                    type: object
                   pbmName:
                     type: string
                   pbmPod:
@@ -2595,6 +2689,53 @@ spec:
                               type: object
                             secure:
                               type: boolean
+                          type: object
+                        oss:
+                          properties:
+                            bucket:
+                              type: string
+                            connectTimeout:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            endpointUrl:
+                              type: string
+                            maxUploadParts:
+                              format: int32
+                              type: integer
+                            prefix:
+                              type: string
+                            region:
+                              type: string
+                            retryer:
+                              properties:
+                                baseDelay:
+                                  type: string
+                                maxAttempts:
+                                  type: integer
+                                maxBackoff:
+                                  type: string
+                              required:
+                              - baseDelay
+                              - maxAttempts
+                              - maxBackoff
+                              type: object
+                            serverSideEncryption:
+                              properties:
+                                encryptionAlgorithm:
+                                  type: string
+                                encryptionKeyId:
+                                  type: string
+                                encryptionMethod:
+                                  type: string
+                                secretName:
+                                  type: string
+                              type: object
+                            uploadPartSize:
+                              format: int64
+                              type: integer
+                          required:
+                          - credentialsSecret
                           type: object
                         s3:
                           properties:

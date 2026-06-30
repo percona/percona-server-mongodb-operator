@@ -152,6 +152,10 @@ func TestConnectionLeaks(t *testing.T) {
 						Name:      cr.Spec.Secrets.Users,
 						Namespace: cr.Namespace,
 					},
+					Data: map[string][]byte{
+						api.EnvMongoDBDatabaseAdminUser:     []byte("databaseAdmin"),
+						api.EnvMongoDBDatabaseAdminPassword: []byte("databaseAdminPassword"),
+					},
 				})
 			}
 

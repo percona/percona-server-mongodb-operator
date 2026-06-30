@@ -77,6 +77,8 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 
 	uniqueUserNames := make(map[string]struct{}, len(cr.Spec.Users))
 
+	usersWithConnStr := []api.User{}
+
 	for _, user := range cr.Spec.Users {
 		err := validateUser(&user, systemUserNames, uniqueUserNames)
 		if err != nil {
@@ -109,6 +111,10 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			continue
 		}
 
+		if !user.IsExternalDB() {
+			usersWithConnStr = append(usersWithConnStr, user)
+		}
+
 		annotationKey := buildAnnotationKey(cr, user.Name)
 
 		if userInfo == nil && !user.IsExternalDB() {
@@ -130,6 +136,9 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			log.Error(err, "update user roles", "user", user.Name)
 			continue
 		}
+	}
+	if err := ensureCustomUsersConnectionStringSecrets(ctx, client, cr, usersWithConnStr); err != nil {
+		return errors.Wrap(err, "failed to create custom user conn str secrets")
 	}
 
 	return nil
@@ -314,7 +323,8 @@ func updatePass(
 	user *api.User,
 	userInfo *mongo.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	if userInfo == nil || user.IsExternalDB() {
@@ -405,7 +415,8 @@ func createUser(
 	mongoCli mongo.Client,
 	user *api.User,
 	secret *corev1.Secret,
-	annotationKey, passKey string) error {
+	annotationKey, passKey string,
+) error {
 	log := logf.FromContext(ctx)
 
 	roles := make([]mongo.Role, 0)
@@ -457,21 +468,16 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 		return nil, nil
 	}
 
-	defaultSecretName := fmt.Sprintf("%s-custom-user-secret", cr.Name)
-
-	secretName := defaultSecretName
-	if user.PasswordSecretRef != nil {
-		secretName = user.PasswordSecretRef.Name
-	}
+	secretName := user.SecretName(cr)
 
 	secret := &corev1.Secret{}
 	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
 
-	if err != nil && secretName != defaultSecretName {
+	if err != nil && secretName != user.DefaultSecretName(cr) {
 		return nil, errors.Wrap(err, "failed to get user secret")
 	}
 
-	if err != nil && !k8serrors.IsNotFound(err) && secretName == defaultSecretName {
+	if err != nil && !k8serrors.IsNotFound(err) && secretName == user.DefaultSecretName(cr) {
 		return nil, errors.Wrap(err, "failed to get user secret")
 	}
 
@@ -502,7 +508,7 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 	}
 
 	_, hasPass := secret.Data[passKey]
-	if !hasPass && secretName == defaultSecretName {
+	if !hasPass && secretName == user.DefaultSecretName(cr) {
 		pass, err := s.GeneratePassword()
 		if err != nil {
 			return nil, errors.Wrap(err, "generate custom user password")

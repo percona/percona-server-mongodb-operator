@@ -1,6 +1,8 @@
 package naming
 
 import (
+	"strconv"
+
 	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -17,6 +19,14 @@ func AppProtocol(cr *api.PerconaServerMongoDB) *string {
 		return ptr.To("mongo")
 	}
 	return nil
+}
+
+func ServiceName(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string {
+	return cr.Name + "-" + rs.Name
+}
+
+func MongosPerPodServiceName(cr *api.PerconaServerMongoDB, idx int) string {
+	return cr.Name + "-mongos-" + strconv.Itoa(idx)
 }
 
 func MongosServiceName(cr *api.PerconaServerMongoDB) string {
