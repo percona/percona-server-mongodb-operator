@@ -140,6 +140,18 @@ func (u *User) IsExternalDB() bool {
 	return u.DB == "$external"
 }
 
+func (u *User) DefaultSecretName(cr *PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-custom-user-secret", cr.Name)
+}
+
+func (u *User) SecretName(cr *PerconaServerMongoDB) string {
+	if u.PasswordSecretRef != nil {
+		return u.PasswordSecretRef.Name
+	}
+
+	return u.DefaultSecretName(cr)
+}
+
 type RoleAuthenticationRestriction struct {
 	ClientSource  []string `json:"clientSource,omitempty"`
 	ServerAddress []string `json:"serverAddress,omitempty"`
@@ -1672,6 +1684,42 @@ const (
 	// RoleSearch is the user mongot authenticates as.
 	RoleSearch SystemUserRole = "searchCoordinator"
 )
+
+func (role SystemUserRole) EnvKeyUsername() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminUser
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminUser
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminUser
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorUser
+	case RoleBackup:
+		return EnvMongoDBBackupUser
+	case RoleSearch:
+		return EnvMongoDBSearchUser
+	}
+	return ""
+}
+
+func (role SystemUserRole) EnvKeyPassword() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminPassword
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminPassword
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminPassword
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorPassword
+	case RoleBackup:
+		return EnvMongoDBBackupPassword
+	case RoleSearch:
+		return EnvMongoDBSearchPassword
+	}
+	return ""
+}
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
 	return internalPrefix + cr.Name + userPostfix
