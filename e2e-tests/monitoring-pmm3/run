@@ -18,10 +18,15 @@ get_node_id_from_pmm() {
 does_node_id_exists() {
 	local -a nodeList=("$@")
 	local -a nodeList_from_pmm=()
-	local admin_pass
-	admin_pass=$(kubectl_bin get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+	local admin_pass=$(kubectl_bin get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+	local endpoint=$(get_service_endpoint monitoring-service)
+
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://admin:${admin_pass}@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(
+			execute_curl --insecure -s -X GET --user "admin:${admin_pass}" \
+				"https://${endpoint}/v1/inventory/nodes?node_type=NODE_TYPE_CONTAINER_NODE" \
+			| jq -r --arg node_id "$node_id" '.nodes[]? | select(.node_id == $node_id) | .node_id'
+		))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
@@ -37,7 +42,7 @@ verify_custom_cluster_name() {
 	endpoint=$(get_service_endpoint monitoring-service)
 
 	local response
-	response=$(curl -s -k \
+	response=$(execute_curl -s -k \
 		-H "Authorization: Bearer ${token}" \
 		"https://$endpoint/v1/inventory/services?service_type=SERVICE_TYPE_MONGODB_SERVICE")
 
@@ -102,7 +107,7 @@ deploy_pmm3_server() {
 	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm repo update
 
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n "$OPENSHIFT" ]]; then
 		oc create sa pmm-server
 		oc adm policy add-scc-to-user privileged -z pmm-server
 		if [[ $OPERATOR_NS ]]; then
@@ -172,8 +177,8 @@ EOF
 
 	local wait_count=30
 	local retry=0
-	until [[ "$(curl -s -k -H "Authorization: Bearer ${token}" -XPOST -d @payload.json "https://$endpoint/v1/qan/metrics:getReport" \
-		| jq '.rows[].fingerprint')" ]]; do
+	until [[ "$(execute_curl -s -k -H "Authorization: Bearer ${token}" -XPOST -d "$(cat payload.json)" "https://$endpoint/v1/qan/metrics:getReport" \
+		| jq -r '(.rows // [])[]? | .fingerprint // empty')" ]]; do
 		sleep 2
 		local start=$($date -u "+%s" -d "-1 minute")
 		local end=$($date -u "+%s")
@@ -205,7 +210,7 @@ get_metric_values() {
 
 	local wait_count=30
 	local retry=0
-	until [[ $(curl -s -k -H "Authorization: Bearer ${token}" "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
+	until [[ $(execute_curl -s -k -H "Authorization: Bearer ${token}" "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
 		| jq '.data.result[0].values[][1]' \
 		| grep '^"[0-9]') ]]; do
 		sleep 2
@@ -234,7 +239,7 @@ get_pmm_server_token() {
 	fi
 
 	local create_response create_status_code create_json_response
-	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+	create_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
 		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
 		--user "admin:${ADMIN_PASSWORD}" \
 		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts" \
@@ -258,7 +263,7 @@ get_pmm_server_token() {
 	fi
 
 	local token_response token_status_code token_json_response
-	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+	token_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' \
 		-d "{\"name\":\"${key_name}\"}" \
 		--user "admin:${ADMIN_PASSWORD}" \
 		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
@@ -294,7 +299,7 @@ delete_pmm_server_token() {
 	local user_credentials="admin:${ADMIN_PASSWORD}"
 
 	local service_accounts_response service_accounts_status
-	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+	service_accounts_response=$(execute_curl --insecure -s -X GET --user "${user_credentials}" \
 		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/search" \
 		-w "\n%{http_code}")
 
@@ -316,7 +321,7 @@ delete_pmm_server_token() {
 	fi
 
 	local tokens_response tokens_status tokens_json
-	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+	tokens_response=$(execute_curl --insecure -s -X GET --user "${user_credentials}" \
 		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
@@ -338,7 +343,7 @@ delete_pmm_server_token() {
 	fi
 
 	local delete_response delete_status
-	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
+	delete_response=$(execute_curl --insecure -s -X DELETE --user "${user_credentials}" \
 		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
 		-w "\n%{http_code}")
 
@@ -510,9 +515,9 @@ for instance in "${does_node_id_exists_in_pmm[@]}"; do
 	fi
 done
 
-if [[ -n ${OPENSHIFT} ]]; then
+if [[ -n "$OPENSHIFT" ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server
-	if [ -n "$OPERATOR_NS" ]; then
+	if [[ -n "$OPERATOR_NS" ]]; then
 		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
 	else
 		oc delete rolebinding pmm-psmdb-operator-namespace-only

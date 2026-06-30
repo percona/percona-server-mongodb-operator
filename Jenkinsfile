@@ -260,6 +260,7 @@ void runTest(Integer TEST_ID) {
                         export DEBUG_TESTS=1
                     fi
                     export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                    export IMAGE=perconalab/percona-server-mongodb-operator:$VERSION
                     time ./e2e-tests/$testName/run
                 """
             }
