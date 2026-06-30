@@ -1347,6 +1347,12 @@ type GCSRetryer struct {
 	BackoffMultiplier float64       `json:"backoffMultiplier"`
 }
 
+type OSSRetryer struct {
+	MaxAttempts int             `json:"maxAttempts"`
+	MaxBackoff  metav1.Duration `json:"maxBackoff"`
+	BaseDelay   metav1.Duration `json:"baseDelay"`
+}
+
 type BackupStorageGCSSpec struct {
 	Bucket            string      `json:"bucket"`
 	Prefix            string      `json:"prefix,omitempty"`
@@ -1362,6 +1368,26 @@ type BackupStorageAzureSpec struct {
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
+type BackupStorageOSSSpec struct {
+	Bucket               string                  `json:"bucket,omitempty"`
+	Prefix               string                  `json:"prefix,omitempty"`
+	CredentialsSecret    string                  `json:"credentialsSecret"`
+	EndpointURL          string                  `json:"endpointUrl,omitempty"`
+	Region               string                  `json:"region,omitempty"`
+	ConnectTimeout       metav1.Duration         `json:"connectTimeout,omitempty"`
+	UploadPartSize       int64                   `json:"uploadPartSize,omitempty"`
+	MaxUploadParts       int32                   `json:"maxUploadParts,omitempty"`
+	Retryer              *OSSRetryer             `json:"retryer,omitempty"`
+	ServerSideEncryption OSSServerSideEncryption `json:"serverSideEncryption,omitempty"`
+}
+
+type OSSServerSideEncryption struct {
+	SecretName          string `json:"secretName,omitempty"`
+	EncryptionMethod    string `json:"encryptionMethod,omitempty"`
+	EncryptionAlgorithm string `json:"encryptionAlgorithm,omitempty"`
+	EncryptionKeyID     string `json:"encryptionKeyId,omitempty"`
+}
+
 type BackupStorageFilesystemSpec struct {
 	Path string `json:"path"`
 }
@@ -1374,6 +1400,7 @@ const (
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
 	BackupStorageMinio      BackupStorageType = "minio"
+	BackupStorageOSS        BackupStorageType = "oss"
 )
 
 type BackupStorageSpec struct {
@@ -1386,6 +1413,7 @@ type BackupStorageSpec struct {
 	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	OSS        BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
