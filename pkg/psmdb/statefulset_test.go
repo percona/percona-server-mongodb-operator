@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -300,6 +301,181 @@ func TestGetCAVolumes(t *testing.T) {
 			assert.NotNil(t, outputVol.EmptyDir)
 		})
 	}
+}
+
+func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
+	tests := []struct {
+		name string
+		cr   *api.PerconaServerMongoDB
+		want bool
+	}{
+		{
+			name: "s3-compatible oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "s3-compatible oss with pbm 2.10",
+			cr: backupChecksumTestCR("2.10.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "s3-compatible oss with pbm 2.12",
+			cr: backupChecksumTestCR("2.12.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "native oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageOSS,
+				OSS: api.BackupStorageOSSSpec{
+					EndpointURL: "https://oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "regular s3 with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.amazonaws.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "missing pbm version",
+			cr: backupChecksumTestCR("", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "multiple storages include s3-compatible oss",
+			cr: backupChecksumTestCR("2.11.0",
+				api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.amazonaws.com",
+					},
+				},
+				api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+					},
+				},
+			),
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ShouldSetAWSSDKChecksumEnvVars(tt.cr))
+		})
+	}
+}
+
+func TestBackupAgentContainerAWSSDKChecksumEnvVars(t *testing.T) {
+	tests := []struct {
+		name string
+		cr   *api.PerconaServerMongoDB
+		want bool
+	}{
+		{
+			name: "sets env vars for s3-compatible oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "does not set env vars for pbm 2.12",
+			cr: backupChecksumTestCR("2.12.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "does not set env vars before operator 1.23",
+			cr: func() *api.PerconaServerMongoDB {
+				cr := backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+					},
+				})
+				cr.Spec.CRVersion = "1.22.0"
+				return cr
+			}(),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := backupAgentContainer(context.Background(), tt.cr, "rs0", 27017, false, &corev1.Secret{})
+
+			hasRequestChecksumEnv := slices.ContainsFunc(c.Env, func(env corev1.EnvVar) bool {
+				return env.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && env.Value == "when_required"
+			})
+			hasResponseChecksumEnv := slices.ContainsFunc(c.Env, func(env corev1.EnvVar) bool {
+				return env.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && env.Value == "when_required"
+			})
+
+			assert.Equal(t, tt.want, hasRequestChecksumEnv)
+			assert.Equal(t, tt.want, hasResponseChecksumEnv)
+		})
+	}
+}
+
+func backupChecksumTestCR(pbmVersion string, storages ...api.BackupStorageSpec) *api.PerconaServerMongoDB {
+	cr := &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{Users: "some-users"},
+			Backup: api.BackupSpec{
+				Enabled:  true,
+				Image:    "backup-image",
+				Storages: make(map[string]api.BackupStorageSpec, len(storages)),
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: pbmVersion,
+		},
+	}
+
+	for i, storage := range storages {
+		cr.Spec.Backup.Storages[fmt.Sprintf("storage-%d", i)] = storage
+	}
+
+	return cr
 }
 
 func TestBackupAgentContainerProbes(t *testing.T) {

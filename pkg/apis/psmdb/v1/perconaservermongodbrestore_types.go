@@ -163,14 +163,19 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
+		if r.Spec.BackupSource.OSS != nil && !strings.HasPrefix(r.Spec.BackupSource.Destination, "oss://") {
+			return errors.New("backupSource destination should use oss protocol format")
+		}
+
 		if backupType != defs.ExternalBackup &&
 			len(r.Spec.StorageName) == 0 &&
 			r.Spec.BackupSource.S3 == nil &&
 			r.Spec.BackupSource.GCS == nil &&
 			r.Spec.BackupSource.Azure == nil &&
 			r.Spec.BackupSource.Minio == nil &&
+			r.Spec.BackupSource.OSS == nil &&
 			r.Spec.BackupSource.Filesystem == nil {
-			return errors.New("one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
+			return errors.New("one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure, backupSource.oss or backupSource.filesystem is required")
 		}
 	}
 
