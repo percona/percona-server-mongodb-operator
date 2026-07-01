@@ -165,9 +165,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 			}
 
 			for _, todel := range oldjobs {
+				log.Info("deleting backup exceeding retention", "job", item.Name, "backup", todel.Name)
 				err = r.client.Delete(ctx, &todel)
 				if err != nil {
-					log.Error(err, "failed to delete backup object")
+					log.Error(err, "failed to delete backup object", "backup", todel.Name)
 					return true
 				}
 			}

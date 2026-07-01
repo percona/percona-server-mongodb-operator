@@ -6,6 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestMongoConfiguration_GetPort(t *testing.T) {
@@ -500,6 +502,149 @@ func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
 				require.NotNil(t, result)
 				assert.Equal(t, tt.expectValue, *result)
 			}
+		})
+	}
+}
+
+func TestKeyFileAuthEnabled(t *testing.T) {
+	tests := map[string]struct {
+		cr       *PerconaServerMongoDB
+		expected bool
+	}{
+		"crVersion < 1.23 always true regardless of TLS mode": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: "1.22.0",
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"preferTLS → false": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: false,
+		},
+		"requireTLS → false": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeRequire},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: false,
+		},
+		"allowTLS → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeAllow},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"TLS disabled + unsafe → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModeDisabled},
+					Unsafe:    UnsafeFlags{TLS: true},
+					Secrets:   &SecretsSpec{},
+				},
+			},
+			expected: true,
+		},
+		"InternalKey explicitly set → true": {
+			cr: &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &TLSSpec{Mode: TLSModePrefer},
+					Secrets:   &SecretsSpec{InternalKey: "my-custom-keyfile"},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.cr.KeyFileAuthEnabled())
+		})
+	}
+}
+
+func TestCanRestore(t *testing.T) {
+	tests := map[string]struct {
+		spec      PerconaServerMongoDBSpec
+		restore   *PerconaServerMongoDBRestore
+		expectErr string
+	}{
+		"managed cluster, no sharding, no cloning": {
+			spec:    PerconaServerMongoDBSpec{},
+			restore: &PerconaServerMongoDBRestore{},
+		},
+		"unmanaged cluster": {
+			spec:      PerconaServerMongoDBSpec{Unmanaged: true},
+			restore:   &PerconaServerMongoDBRestore{},
+			expectErr: "can't run restore in an unmanaged cluster",
+		},
+		"sharded cluster with namespace cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Sharding: Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+			expectErr: "namespace cloning is not supported in sharded clusters",
+		},
+		"sharded cluster without namespace cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Sharding: Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{},
+		},
+		"unsharded cluster with namespace cloning": {
+			spec: PerconaServerMongoDBSpec{},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+		},
+		"unmanaged takes precedence over sharded cloning": {
+			spec: PerconaServerMongoDBSpec{
+				Unmanaged: true,
+				Sharding:  Sharding{Enabled: true},
+			},
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					Selective: &SelectiveRestoreOpts{NamespaceFrom: "db1.coll1", NamespaceTo: "db2.coll2"},
+				},
+			},
+			expectErr: "can't run restore in an unmanaged cluster",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &PerconaServerMongoDB{Spec: tc.spec}
+			err := cr.CanRestore(t.Context(), tc.restore)
+			if tc.expectErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.EqualError(t, err, tc.expectErr)
 		})
 	}
 }

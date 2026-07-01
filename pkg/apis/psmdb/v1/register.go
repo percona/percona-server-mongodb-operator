@@ -26,5 +26,7 @@ func init() {
 		&PerconaServerMongoDBBackupList{},
 		&PerconaServerMongoDBRestore{},
 		&PerconaServerMongoDBRestoreList{},
+		&PerconaServerMongoDBClusterSync{},
+		&PerconaServerMongoDBClusterSyncList{},
 	)
 }

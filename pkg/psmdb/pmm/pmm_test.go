@@ -1,7 +1,6 @@
 package pmm
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -9,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -16,99 +16,314 @@ import (
 )
 
 func TestContainer(t *testing.T) {
-	ctx := context.Background()
-	boolTrue := true
+	ctx := t.Context()
+
+	tokenSecret := &corev1.Secret{
+		Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(`token`)},
+	}
+	pmm2Secret := &corev1.Secret{
+		Data: map[string][]byte{"PMM_SERVER_API_KEY": []byte(`key`)},
+	}
 
 	tests := map[string]struct {
-		secret            *corev1.Secret
-		pmmEnabled        bool
-		expectedContainer *corev1.Container
-		params            string
+		secret *corev1.Secret
+		setup  func(cr *api.PerconaServerMongoDB)
+		assert func(t *testing.T, container *corev1.Container)
 	}{
 		"pmm disabled": {
-			pmmEnabled: false,
+			setup:  func(cr *api.PerconaServerMongoDB) { cr.Spec.PMM.Enabled = false },
+			assert: assertNilContainer,
 		},
 		"secret is nil": {
-			pmmEnabled: true,
+			assert: assertNilContainer,
 		},
 		"pmm enabled but secret token is empty": {
-			pmmEnabled: true,
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					"PMM_SERVER_TOKEN": []byte(``),
-				},
-			},
+			secret: &corev1.Secret{Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(``)}},
+			assert: assertNilContainer,
 		},
 		"pmm enabled but secret token is missing": {
-			pmmEnabled: true,
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					"RANDOM_SECRET": []byte(`foo`),
-				},
-			},
+			secret: &corev1.Secret{Data: map[string][]byte{"RANDOM_SECRET": []byte(`foo`)}},
+			assert: assertNilContainer,
 		},
 		"pmm enabled - pmm3 container constructed": {
-			pmmEnabled: true,
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					"PMM_SERVER_TOKEN": []byte(`token`),
-				},
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
 			},
-			expectedContainer: buildExpectedPMMContainer(),
+			assert: assertFullPMMContainer(buildExpectedPMMContainer()),
+		},
+		"pmm enabled - explicit SCRAM-SHA-256 honored on >=1.23.0": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm enabled - unset mechanism falls back to SCRAM-SHA-256 on >=1.23.0": {
+			secret: tokenSecret,
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm enabled - explicit SCRAM-SHA-256 ignored on <1.23.0": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertAuthMechanism("SCRAM-SHA-1"),
+		},
+		"pmm2 enabled - explicit SCRAM-SHA-256 honored on >=1.23.0": {
+			secret: pmm2Secret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm2 enabled - unset mechanism falls back to SCRAM-SHA-256 on >=1.23.0": {
+			secret: pmm2Secret,
+			assert: assertAuthMechanism("SCRAM-SHA-256"),
+		},
+		"pmm enabled - TLS disabled omits authentication-mechanism flag": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
+			},
+			assert: assertNoAuthMechanism(),
+		},
+		"pmm enabled - query-source=mongolog is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "mongolog"
+			},
+			assert: assertQuerySource("mongolog"),
+		},
+		"pmm enabled - query-source=profiler is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "profiler"
+			},
+			assert: assertQuerySource("profiler"),
+		},
+		"pmm enabled - query-source not set omits flag": {
+			secret: tokenSecret,
+			assert: assertNoQuerySource(),
+		},
+		"pmm3 enabled - default probes: built-in liveness, no readiness": {
+			secret: tokenSecret,
+			assert: assertDefaultProbes(),
+		},
+		"pmm2 enabled - default probes: built-in liveness, no readiness": {
+			secret: pmm2Secret,
+			assert: assertDefaultProbes(),
+		},
+		"pmm3 enabled - custom liveness and readiness probes honored": {
+			secret: tokenSecret,
+			setup:  setupCustomProbes,
+			assert: assertCustomProbes(),
+		},
+		"pmm2 enabled - custom liveness and readiness probes honored": {
+			secret: pmm2Secret,
+			setup:  setupCustomProbes,
+			assert: assertCustomProbes(),
+		},
+		"pmm enabled - custom probes ignored on <1.23.0": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				setupCustomProbes(cr)
+			},
+			assert: assertDefaultProbes(),
 		},
 	}
+
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
-				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion:       version.Version(),
-					ImagePullPolicy: corev1.PullAlways,
-					PMM: api.PMMSpec{
-						Enabled:           tt.pmmEnabled,
-						Image:             "pmm-image",
-						ServerHost:        "server-host",
-						CustomClusterName: "custom-cluster",
-						Resources: corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("100m"),
-							},
-						},
-						MongodParams: "-param custom-mongodb-param",
-						ContainerSecurityContext: &corev1.SecurityContext{
-							RunAsNonRoot: &boolTrue,
-						},
-					},
-				},
+			cr := defaultPMMCR()
+			if tt.setup != nil {
+				tt.setup(cr)
 			}
 			container := Container(ctx, cr, tt.secret, 27017, cr.Spec.PMM.MongodParams)
-			if tt.expectedContainer != nil {
-				assert.Equal(t, tt.expectedContainer.Name, container.Name)
-				assert.Equal(t, tt.expectedContainer.Image, container.Image)
-				assert.Equal(t, len(tt.expectedContainer.Env), len(container.Env))
-				for index, ev := range container.Env {
-					assert.Equal(t, tt.expectedContainer.Env[index].Name, ev.Name)
-					assert.Equal(t, tt.expectedContainer.Env[index].Value, ev.Value)
-				}
-				for i, port := range tt.expectedContainer.Ports {
-					assert.Equal(t, tt.expectedContainer.Ports[i].Name, port.Name)
-				}
-				assert.Equal(t, tt.expectedContainer.Resources, container.Resources)
-				assert.Equal(t, tt.expectedContainer.ImagePullPolicy, container.ImagePullPolicy)
-				assert.Equal(t, tt.expectedContainer.SecurityContext, container.SecurityContext)
-				assert.Equal(t, len(tt.expectedContainer.VolumeMounts), len(container.VolumeMounts))
-				for i, volumeMount := range container.VolumeMounts {
-					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].Name, volumeMount.Name)
-					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].MountPath, volumeMount.MountPath)
-					assert.Equal(t, tt.expectedContainer.VolumeMounts[i].ReadOnly, volumeMount.ReadOnly)
-				}
-				return
-			}
-			assert.Equal(t, tt.expectedContainer, container)
+			tt.assert(t, container)
 		})
+	}
+}
+
+func defaultPMMCR() *api.PerconaServerMongoDB {
+	boolTrue := true
+	return &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "test-ns",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion:       version.Version(),
+			ImagePullPolicy: corev1.PullAlways,
+			PMM: api.PMMSpec{
+				Enabled:           true,
+				Image:             "pmm-image",
+				ServerHost:        "server-host",
+				CustomClusterName: "custom-cluster",
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("100m"),
+					},
+				},
+				MongodParams: "-param custom-mongodb-param",
+				ContainerSecurityContext: &corev1.SecurityContext{
+					RunAsNonRoot: &boolTrue,
+				},
+			},
+		},
+	}
+}
+
+func assertNilContainer(t *testing.T, container *corev1.Container) {
+	assert.Nil(t, container)
+}
+
+func customLivenessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		InitialDelaySeconds: 15,
+		PeriodSeconds:       7,
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.FromInt(7777),
+				Path: "/custom/Liveness",
+			},
+		},
+	}
+}
+
+func customReadinessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       3,
+		ProbeHandler: corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{
+				Port: intstr.FromInt(7777),
+			},
+		},
+	}
+}
+
+func setupCustomProbes(cr *api.PerconaServerMongoDB) {
+	cr.Spec.PMM.LivenessProbe = customLivenessProbe()
+	cr.Spec.PMM.ReadinessProbe = customReadinessProbe()
+}
+
+// assertDefaultProbes checks the Operator keeps its built-in liveness probe
+// and sets no readiness probe when nothing is configured in the CR.
+func assertDefaultProbes() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		assert.Nil(t, container.ReadinessProbe)
+		if assert.NotNil(t, container.LivenessProbe) && assert.NotNil(t, container.LivenessProbe.HTTPGet) {
+			assert.Equal(t, "/local/Status", container.LivenessProbe.HTTPGet.Path)
+		}
+	}
+}
+
+func assertCustomProbes() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		assert.Equal(t, customLivenessProbe(), container.LivenessProbe)
+		assert.Equal(t, customReadinessProbe(), container.ReadinessProbe)
+	}
+}
+
+func assertAuthMechanism(want string) func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.Contains(t, prerun, "--authentication-mechanism="+want)
+	}
+}
+
+func assertQuerySource(want string) func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.Contains(t, prerun, "--query-source="+want)
+	}
+}
+
+func assertNoQuerySource() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.NotContains(t, prerun, "--query-source")
+	}
+}
+
+func assertNoAuthMechanism() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.NotContains(t, prerun, "--authentication-mechanism")
+		assert.NotContains(t, prerun, "--tls")
+	}
+}
+
+func assertFullPMMContainer(expected *corev1.Container) func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		assert.Equal(t, expected.Name, container.Name)
+		assert.Equal(t, expected.Image, container.Image)
+		assert.Equal(t, len(expected.Env), len(container.Env))
+		for index, ev := range container.Env {
+			assert.Equal(t, expected.Env[index].Name, ev.Name)
+			assert.Equal(t, expected.Env[index].Value, ev.Value)
+		}
+		for i, port := range expected.Ports {
+			assert.Equal(t, expected.Ports[i].Name, port.Name)
+		}
+		assert.Equal(t, expected.Resources, container.Resources)
+		assert.Equal(t, expected.ImagePullPolicy, container.ImagePullPolicy)
+		assert.Equal(t, expected.SecurityContext, container.SecurityContext)
+		assert.Equal(t, len(expected.VolumeMounts), len(container.VolumeMounts))
+		for i, volumeMount := range container.VolumeMounts {
+			assert.Equal(t, expected.VolumeMounts[i].Name, volumeMount.Name)
+			assert.Equal(t, expected.VolumeMounts[i].MountPath, volumeMount.MountPath)
+			assert.Equal(t, expected.VolumeMounts[i].ReadOnly, volumeMount.ReadOnly)
+		}
 	}
 }
 
@@ -122,7 +337,7 @@ func buildExpectedPMMContainer() *corev1.Container {
 		tempDir      = "/tmp/pmm"
 		prerunScript = `cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
 pmm-admin status --wait=10s;
-pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-1 --authentication-database=admin;
+pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-256 --authentication-database=admin;
 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'`
 	)
 

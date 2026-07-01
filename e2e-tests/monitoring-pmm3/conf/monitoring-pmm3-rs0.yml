@@ -63,6 +63,10 @@ spec:
         annotations:
           test: monitoring-pmm3
 
+  logcollector:
+    enabled: true
+    image:
+
   pmm:
     enabled: true
     image:
@@ -70,5 +74,6 @@ spec:
     mongosParams: "--environment=dev-mongos"
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
     customClusterName:
+    authenticationMechanism: SCRAM-SHA-256
   secrets:
     users: some-users

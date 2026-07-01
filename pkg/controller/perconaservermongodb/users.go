@@ -36,7 +36,8 @@ func getInternalSecretData(cr *api.PerconaServerMongoDB, secret *corev1.Secret) 
 
 func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	sysUsersSecretObj := corev1.Secret{}
-	err := r.client.Get(ctx,
+	err := r.client.Get(
+		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.Secrets.Users,
@@ -52,7 +53,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	secretName := api.InternalUserSecretName(cr)
 	internalSysSecretObj := corev1.Secret{}
 
-	err = r.client.Get(ctx,
+	err = r.client.Get(
+		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      secretName,
@@ -86,6 +88,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	// we do this check after work with secret objects because in case of upgrade cluster we need to be sure that internal secret exist
 	if cr.Status.State != api.AppStateReady {
 		return nil
+	}
+
+	cred, err := getCredentials(&sysUsersSecretObj, api.RoleDatabaseAdmin)
+	if err != nil {
+		return errors.Wrap(err, "get database admin credentials")
+	}
+	if err := ensureConnectionStringSecret(
+		ctx,
+		r.client,
+		cr,
+		naming.SecretDatabaseAdminConnStrName(cr),
+		string(api.RoleDatabaseAdmin),
+		cred,
+		&sysUsersSecretObj,
+		true,
+	); err != nil {
+		return errors.Wrap(err, "ensure connection string secret")
 	}
 
 	dataChanged, err := sysUsersSecretDataChanged(cr, &sysUsersSecretObj, &internalSysSecretObj)
@@ -262,6 +281,16 @@ func (r *ReconcilePerconaServerMongoDB) updateSysUsers(ctx context.Context, cr *
 			},
 		}, users...)
 	}
+	// Only enqueue the search user for password rotation if it already
+	// exists in the internal secret. On first enable the user is
+	// provisioned by createOrUpdateSystemUsers; queueing it here would
+	// try UpdateUser against a non-existent account.
+	if _, ok := currUsersSec.Data[api.EnvMongoDBSearchUser]; ok && cr.IsSearchEnabled() {
+		users = append(users, user{
+			nameKey: api.EnvMongoDBSearchUser,
+			passKey: api.EnvMongoDBSearchPassword,
+		})
+	}
 	if cr.Spec.PMM.Enabled {
 		if pmm.SecretHasToken(newUsersSec) {
 			users = append([]user{
@@ -354,7 +383,7 @@ func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
 }
 
-func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret *corev1.Secret, internalSecret *corev1.Secret) (bool, error) {
+func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret, internalSecret *corev1.Secret) (bool, error) {
 	newData := getInternalSecretData(cr, usersSecret)
 	newDataJSON, err := json.Marshal(newData)
 	if err != nil {

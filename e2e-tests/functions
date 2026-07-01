@@ -11,12 +11,15 @@ perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
+IMAGE_SEARCH=${IMAGE_SEARCH:-"mongodb/mongodb-community-search:latest"}
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
+IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
+IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:0.9.0"}
 
 REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
@@ -79,9 +82,10 @@ qualify_image_var() {
 	printf -v "$var" '%s' "$(qualify_image_ref "$val")"
 }
 
-for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+for var in IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP IMAGE_SEARCH \
 		IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
 		IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
+		IMAGE_CLUSTERSYNC \
 		IMAGE_LOGCOLLECTOR IMAGE_OPERATOR; do
 	qualify_image_var "$var"
 done
@@ -1062,7 +1066,7 @@ run_mongosh() {
 	local suffix=${4:-".svc.cluster.local"}
 	local mongo_flag="$5"
 
-	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
@@ -1088,6 +1092,26 @@ run_mongo_tls() {
 
 }
 
+run_mongosh_tls() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb+srv}
+	local suffix=${4:-.svc.cluster.local}
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+
+}
+
 run_mongos() {
 	local command="$1"
 	local uri="$2"
@@ -1108,6 +1132,26 @@ run_mongos() {
 		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
 }
 
+run_mongosh_mongos() {
+	local command="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local mongo_flag="$5"
+	local port=${6:-"27017"}
+
+	suffix_port=$(echo "$suffix" | awk -F':' '{print $2}')
+	if [[ -z $suffix_port ]]; then
+		suffix="$suffix:$port"
+	fi
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
+
+	# mongos is not a replica set, so no replicaSet query parameter here.
+	kubectl_bin exec ${client_container} -- \
+		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false $mongo_flag"
+}
+
 run_mongos_tls() {
 	local command="$1"
 	local uri="$2"
@@ -1126,6 +1170,21 @@ run_mongos_tls() {
 
 	kubectl_bin exec ${client_container} -- \
 		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+}
+
+run_script_mongosh_mongos() {
+	local script="$1"
+	local uri="$2"
+	local driver=${3:-mongodb}
+	local suffix=${4:-.svc.cluster.local}
+	local mongo_flag="$5"
+
+	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
+
+	name="$(basename $script)"
+	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
+	kubectl_bin exec ${client_container} -- \
+		bash -c "mongosh $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 run_script_mongos() {
@@ -1216,6 +1275,42 @@ compare_mongo_cmd() {
 	fi
 }
 
+compare_mongosh_cmd() {
+	local command="$1"
+	local uri="$2"
+	local postfix="$3"
+	local suffix="$4"
+	local database="${5:-myApp}"
+	local collection="${6:-test}"
+	local sort="$7"
+	local tls="${8:-false}"
+	local replicaset="$9"
+
+	local full_command="db.${collection}.${command}()"
+	if [[ -n ${sort} ]]; then
+		full_command="${full_command}.${sort}"
+	fi
+
+	log "running ${full_command} in ${database}"
+
+	if [[ $tls == "true" ]]; then
+		mongo_command=run_mongosh_tls
+	else
+		mongo_command=run_mongosh
+	fi
+
+	$mongo_command "use ${database}\n ${full_command}" "$uri" "mongodb" "$suffix" "" ${replicaset} \
+		| grep -E -v 'I NETWORK|W NETWORK|F NETWORK|"c":"NETWORK"|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|Started a new thread for the timer service' \
+		| $sed -re 's/ObjectId\("[0-9a-f]+"\)//; s/-[0-9]+.svc/-xxx.svc/' \
+			>$tmp_dir/${command}${postfix}
+
+	if [[ ${UPDATE_COMPARE_FILES} -eq 0 ]]; then
+		diff -u ${test_dir}/compare/${command}${postfix}.json $tmp_dir/${command}${postfix}
+	else
+		cp $tmp_dir/${command}${postfix} ${test_dir}/compare/${command}${postfix}.json
+	fi
+}
+
 compare_mongos_cmd() {
 	local command="$1"
 	local uri="$2"
@@ -1274,7 +1369,7 @@ get_mongo_primary() {
 check_exported_mongos_service_endpoint() {
 	local host=$1
 
-	if [ "$host" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
+	if [ "$host:27017" != "$(kubectl_bin get psmdb $cluster -o=jsonpath='{.status.host}')" ]; then
 		echo "Exported host is not correct after the restore"
 		exit 1
 	fi
@@ -1440,7 +1535,7 @@ get_backup_dest() {
 	local backup_name=$1
 
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.destination}' \
-		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||"
+		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||" | sed "s|oss://||"
 }
 
 get_service_endpoint() {
@@ -1549,6 +1644,7 @@ cat_config() {
 		| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' \
 		| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' \
 		| yq eval '(.spec | select(has("backup"))).backup.image = "'"$IMAGE_BACKUP"'"' \
+		| yq eval '(.spec | select(has("search"))).search.image = "'"$IMAGE_SEARCH"'"' \
 		| $sed -e "s/NAME_SPACE/${namespace}/g" \
 		| yq eval '.spec.upgradeOptions.apply="Never"'
 }
@@ -1707,6 +1803,31 @@ function check_backup_deletion_aws() {
 	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
 }
 
+function check_backup_deletion_oss() {
+	bucket=$(echo "$1" | cut -d'/' -f1)
+	key_prefix=$(echo "$1" | cut -d'/' -f2-)
+	key=$2
+	endpoint=$(echo "$3" | $sed 's|://oss-|://s3.oss-|')
+	region=$4
+	storage_name="oss-native"
+	retry=0
+
+	setup_alibaba_cloud_s3_credentials "$region"
+
+	while aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+		if [ $retry -ge 15 ]; then
+			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
+			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			exit 1
+		fi
+		echo "waiting for backup to be deleted from $storage_name"
+		sleep 10
+		((retry += 1))
+	done
+
+	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+}
+
 function check_backup_deletion_gcs() {
 	backup_dest_gcp=$1
 	obj=$2
@@ -1803,6 +1924,38 @@ function setup_aws_credentials() {
 	[[ $trace_was_on -eq 1 ]] && set -x
 
 	echo "AWS credentials configured successfully"
+}
+
+function setup_alibaba_cloud_s3_credentials() {
+	local region=${1:-"us-east-1"}
+	local secret_name="alibaba-cloud-secret"
+
+	echo "Setting up Alibaba Cloud S3-compatible credentials from secret: $secret_name"
+
+	# Disable tracing while credentials are read and exported.
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null | base64 -d 2>/dev/null)
+
+	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret"
+		return 1
+	fi
+
+	export AWS_ACCESS_KEY_ID
+	export AWS_SECRET_ACCESS_KEY
+	export AWS_DEFAULT_REGION="$region"
+	export AWS_REGION="$region"
+
+	[[ $trace_was_on -eq 1 ]] && set -x
+
+	echo "Alibaba Cloud S3-compatible credentials configured successfully"
 }
 
 function setup_gcs_credentials() {
@@ -2325,6 +2478,42 @@ get_bucket_name() {
 	kubectl_bin get psmdb-backup $backup_name -o jsonpath='{.status.s3.bucket}'
 }
 
+get_backup_storage_name() {
+	local backup_name=$1
+
+	kubectl_bin get psmdb-backup "$backup_name" -o jsonpath='{.spec.storageName}'
+}
+
+get_backup_cluster_name() {
+	local backup_name=$1
+
+	kubectl_bin get psmdb-backup "$backup_name" -o jsonpath='{.spec.clusterName}'
+}
+
+get_backup_storage_s3_field() {
+	local backup_name=$1
+	local field=$2
+	local cluster_name
+	local storage_name
+
+	cluster_name=$(get_backup_cluster_name "$backup_name")
+	storage_name=$(get_backup_storage_name "$backup_name")
+
+	kubectl_bin get psmdb "$cluster_name" -o json | jq -r --arg storage "$storage_name" --arg field "$field" '.spec.backup.storages[$storage].s3[$field]'
+}
+
+get_backup_storage_oss_field() {
+	local backup_name=$1
+	local field=$2
+	local cluster_name
+	local storage_name
+
+	cluster_name=$(get_backup_cluster_name "$backup_name")
+	storage_name=$(get_backup_storage_name "$backup_name")
+
+	kubectl_bin get psmdb "$cluster_name" -o json | jq -r --arg storage "$storage_name" --arg field "$field" '.spec.backup.storages[$storage].oss[$field]'
+}
+
 check_recovery() {
 	local backup_name=$1
 	local restore_type=$2
@@ -2452,10 +2641,16 @@ function check_backup_existence_aws() {
 	bucket=$(echo "$1" | cut -d'/' -f1)
 	key_prefix=$(echo "$1" | cut -d'/' -f2-)
 	key=$2
-	storage_name="aws-s3"
+	endpoint=$3
+	storage_name=${4:-"aws-s3"}
 	retry=0
 
-	until aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
+	local endpoint_arg=()
+	if [[ -n $endpoint ]]; then
+		endpoint_arg=(--endpoint-url "$endpoint")
+	fi
+
+	until aws "${endpoint_arg[@]}" s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
 		if [ $retry -ge 30 ]; then
 			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
 			echo "Backup was not found in bucket -- $storage_name"
@@ -2529,6 +2724,19 @@ check_backup_in_storage() {
 			endpoint="s3.amazonaws.com"
 			setup_aws_credentials
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
+			;;
+		alibaba-s3)
+			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
+			region=$(get_backup_storage_s3_field "$backup" "region")
+			setup_alibaba_cloud_s3_credentials "$region"
+			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
+			;;
+		oss)
+			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
+			region=$(get_backup_storage_oss_field "$backup" "region")
+			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
+			setup_alibaba_cloud_s3_credentials "$region"
+			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"

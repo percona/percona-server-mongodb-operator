@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
 var anotherOpBackoff = wait.Backoff{
@@ -182,7 +183,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			Storage string `json:"storage"`
 		}
 		if err := json.Unmarshal(stdoutBuf.Bytes(), &out); err != nil {
-			return status, errors.Wrap(err, "unmarshal PBM restore output")
+			return status, errors.Wrapf(err, "unmarshal PBM restore output: %s", stdoutBuf.String())
 		}
 
 		status.State = psmdbv1.RestoreStateRequested
@@ -266,58 +267,22 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		for _, rs := range replsets {
-			stsName := naming.MongodStatefulSetName(cluster, rs)
-
-			log.Info("Deleting statefulset", "statefulset", stsName)
-
-			sts := appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stsName,
-					Namespace: cluster.Namespace,
-				},
-			}
-
-			if err := r.client.Delete(ctx, &sts); err != nil {
-				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-			}
+			toDelete := []string{naming.MongodStatefulSetName(cluster, rs)}
 
 			if rs.NonVoting.Enabled {
-				stsName := naming.NonVotingStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
+				toDelete = append(toDelete, naming.NonVotingStatefulSetName(cluster, rs))
 			}
-
 			if rs.Hidden.Enabled {
-				stsName := naming.HiddenStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
+				toDelete = append(toDelete, naming.HiddenStatefulSetName(cluster, rs))
+			}
+			if rs.Arbiter.Enabled {
+				toDelete = append(toDelete, naming.ArbiterStatefulSetName(cluster, rs))
+			}
+			if cluster.IsSearchEnabled() && rs.ClusterRole != api.ClusterRoleConfigSvr {
+				toDelete = append(toDelete, naming.SearchStatefulSetName(cluster, rs))
 			}
 
-			if rs.Arbiter.Enabled {
-				stsName := naming.ArbiterStatefulSetName(cluster, rs)
-
+			for _, stsName := range toDelete {
 				log.Info("Deleting statefulset", "statefulset", stsName)
 
 				sts := appsv1.StatefulSet{
@@ -367,7 +332,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
-	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32) error {
+	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32,
+) error {
 	log := logf.FromContext(ctx)
 
 	sts := appsv1.StatefulSet{}
@@ -390,7 +356,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			"install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
 		}, " && "),
 	}
-	pbmInit := psmdb.EntrypointInitContainer(
+	pbmInit := psmdbInit.EntrypointContainer(
 		cluster,
 		"pbm-init",
 		cluster.Spec.Backup.Image,
@@ -473,6 +439,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+
+	if cluster.CompareVersion("1.23.0") >= 0 && psmdb.ShouldSetAWSSDKChecksumEnvVars(cluster) {
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, psmdb.AWSSDKChecksumEnvVars()...)
+	}
 
 	sslSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
@@ -601,6 +571,42 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 		if rs.Arbiter.Enabled {
 			stsName := naming.ArbiterStatefulSetName(cluster, rs)
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				sts := appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      stsName,
+						Namespace: cluster.Namespace,
+					},
+				}
+
+				err := r.client.Get(ctx, nn, &sts)
+				if err != nil {
+					return err
+				}
+
+				orig := sts.DeepCopy()
+				zero := int32(0)
+
+				sts.Spec.Replicas = &zero
+
+				if sts.Annotations == nil {
+					sts.Annotations = make(map[string]string)
+				}
+				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if cluster.IsSearchEnabled() {
+			stsName := naming.SearchStatefulSetName(cluster, rs)
 			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
@@ -826,7 +832,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
 	set := naming.RSLabels(cluster, rs)
 	set[naming.LabelKubernetesComponent] = component
 
-	err := r.client.List(ctx,
+	err := r.client.List(
+		ctx,
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cluster.Namespace,

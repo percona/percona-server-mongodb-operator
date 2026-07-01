@@ -86,6 +86,7 @@ type PerconaServerMongoDBSpec struct {
 	ImagePullPolicy              corev1.PullPolicy                    `json:"imagePullPolicy,omitempty"`
 	PMM                          PMMSpec                              `json:"pmm,omitempty"`
 	UpdateStrategy               appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	RevisionHistoryLimit         *int32                               `json:"revisionHistoryLimit,omitempty"`
 	UpgradeOptions               UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	SchedulerName                string                               `json:"schedulerName,omitempty"`
 	ClusterServiceDNSSuffix      string                               `json:"clusterServiceDNSSuffix,omitempty"`
@@ -104,6 +105,14 @@ type PerconaServerMongoDBSpec struct {
 	EnableExternalVolumeAutoscaling bool                `json:"enableExternalVolumeAutoscaling,omitempty"`
 	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
 	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
+	Search                          *SearchSpec         `json:"search,omitempty"`
+	DefaultRWConcern                *DefaultRWConcern   `json:"defaultRWConcern,omitempty"`
+}
+
+type DefaultRWConcern struct {
+	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
+	ReadConcern  string `json:"readConcern,omitempty"`
+	WriteConcern string `json:"writeConcern,omitempty"`
 }
 
 type UserRole struct {
@@ -129,6 +138,18 @@ func (u *User) UserID() string {
 
 func (u *User) IsExternalDB() bool {
 	return u.DB == "$external"
+}
+
+func (u *User) DefaultSecretName(cr *PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-custom-user-secret", cr.Name)
+}
+
+func (u *User) SecretName(cr *PerconaServerMongoDB) string {
+	if u.PasswordSecretRef != nil {
+		return u.PasswordSecretRef.Name
+	}
+
+	return u.DefaultSecretName(cr)
 }
 
 type RoleAuthenticationRestriction struct {
@@ -177,11 +198,21 @@ const (
 	TLSModeRequire  TLSMode = "requireTLS"
 )
 
+type CertManagementPolicy string
+
+const (
+	CertManagementAuto             CertManagementPolicy = "auto"
+	CertManagementUserProvidedOnly CertManagementPolicy = "userProvidedOnly"
+)
+
 type TLSSpec struct {
 	Mode                     TLSMode                 `json:"mode,omitempty"`
 	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
 	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
 	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	// +kubebuilder:default=auto
+	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
+	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
@@ -359,6 +390,7 @@ type PerconaServerMongoDBStatus struct {
 	Size               int32                               `json:"size"`
 	Ready              int32                               `json:"ready"`
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	Search             map[string]SearchStatus             `json:"search,omitempty"`
 }
 
 type ConditionStatus string
@@ -374,6 +406,8 @@ const (
 	ConditionTypePendingSmartUpdate AppState = "pendingSmartUpdate"
 
 	ConditionTypePBMReady AppState = "PBMReady"
+
+	ConditionTypeTLSSecretsReady AppState = "TLSSecretsReady"
 )
 
 type ClusterCondition struct {
@@ -441,6 +475,27 @@ type PMMSpec struct {
 
 	// PMM cluster name. If not set Operator uses cr.Name for PMM cluster name.
 	CustomClusterName string `json:"customClusterName,omitempty"`
+
+	// AuthenticationMechanism is the SASL mechanism the PMM client uses to
+	// authenticate the clusterMonitor user against mongod/mongos.
+	// +kubebuilder:validation:Enum=SCRAM-SHA-256;SCRAM-SHA-1
+	AuthenticationMechanism string `json:"authenticationMechanism,omitempty"`
+
+	// QuerySource defines the source for Query Analytics (QAN) data collection.
+	// Use "profiler" to collect queries via the MongoDB profiler (default),
+	// or "mongolog" to collect queries from mongod log files (requires PMM >= 3.3.0
+	// and mongod configured to write logs to /data/db/logs/).
+	// +kubebuilder:validation:Enum=profiler;mongolog
+	// +kubebuilder:default=profiler
+	QuerySource string `json:"querySource,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the pmm-client
+	// container. When not set the Operator uses its built-in liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the pmm-client container.
+	// When not set the pmm-client container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // HasSecret is used for PMM2. PMM2 is reaching its EOL.
@@ -573,10 +628,11 @@ type PodAffinity struct {
 }
 
 type ExternalNode struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port,omitempty"`
-	Priority int    `json:"priority"`
-	Votes    int    `json:"votes"`
+	Host        string `json:"host"`
+	Port        int    `json:"port,omitempty"`
+	Priority    int    `json:"priority"`
+	Votes       int    `json:"votes"`
+	ArbiterOnly bool   `json:"arbiterOnly,omitempty"`
 
 	ReplsetOverride `json:",inline"`
 }
@@ -840,11 +896,12 @@ type PrimaryPreferTagSelectorSpec map[string]string
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name                     string                       `json:"name,omitempty"`
-	Size                     int32                        `json:"size"`
-	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
-	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
-	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Size        int32           `json:"size"`
+	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
+	Arbiter     Arbiter         `json:"arbiter,omitempty"`
+	Expose      ExposeTogglable `json:"expose,omitempty"`
+	// +kubebuilder:validation:Required
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
@@ -861,6 +918,7 @@ type ReplsetSpec struct {
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 	Env                      []corev1.EnvVar              `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -945,7 +1003,8 @@ func (r ReplsetSpec) GetSize() int32 {
 }
 
 type LivenessProbeExtended struct {
-	corev1.Probe        `json:",inline"`
+	corev1.Probe `json:",inline"`
+	// Deprecated: Starting from v1.23.0 this option has no effect
 	StartupDelaySeconds int `json:"startupDelaySeconds,omitempty"`
 }
 
@@ -1289,10 +1348,16 @@ type GCSRetryer struct {
 	BackoffMultiplier float64       `json:"backoffMultiplier"`
 }
 
+type OSSRetryer struct {
+	MaxAttempts int             `json:"maxAttempts"`
+	MaxBackoff  metav1.Duration `json:"maxBackoff"`
+	BaseDelay   metav1.Duration `json:"baseDelay"`
+}
+
 type BackupStorageGCSSpec struct {
 	Bucket            string      `json:"bucket"`
 	Prefix            string      `json:"prefix,omitempty"`
-	CredentialsSecret string      `json:"credentialsSecret"`
+	CredentialsSecret string      `json:"credentialsSecret,omitempty"`
 	ChunkSize         int         `json:"chunkSize,omitempty"`
 	Retryer           *GCSRetryer `json:"retryer,omitempty"`
 }
@@ -1302,6 +1367,26 @@ type BackupStorageAzureSpec struct {
 	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`
 	EndpointURL       string `json:"endpointUrl,omitempty"`
+}
+
+type BackupStorageOSSSpec struct {
+	Bucket               string                  `json:"bucket,omitempty"`
+	Prefix               string                  `json:"prefix,omitempty"`
+	CredentialsSecret    string                  `json:"credentialsSecret"`
+	EndpointURL          string                  `json:"endpointUrl,omitempty"`
+	Region               string                  `json:"region,omitempty"`
+	ConnectTimeout       metav1.Duration         `json:"connectTimeout,omitempty"`
+	UploadPartSize       int64                   `json:"uploadPartSize,omitempty"`
+	MaxUploadParts       int32                   `json:"maxUploadParts,omitempty"`
+	Retryer              *OSSRetryer             `json:"retryer,omitempty"`
+	ServerSideEncryption OSSServerSideEncryption `json:"serverSideEncryption,omitempty"`
+}
+
+type OSSServerSideEncryption struct {
+	SecretName          string `json:"secretName,omitempty"`
+	EncryptionMethod    string `json:"encryptionMethod,omitempty"`
+	EncryptionAlgorithm string `json:"encryptionAlgorithm,omitempty"`
+	EncryptionKeyID     string `json:"encryptionKeyId,omitempty"`
 }
 
 type BackupStorageFilesystemSpec struct {
@@ -1316,6 +1401,7 @@ const (
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
 	BackupStorageMinio      BackupStorageType = "minio"
+	BackupStorageOSS        BackupStorageType = "oss"
 )
 
 type BackupStorageSpec struct {
@@ -1328,6 +1414,7 @@ type BackupStorageSpec struct {
 	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	OSS        BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
@@ -1385,6 +1472,14 @@ type BackupSpec struct {
 	// +kubebuilder:default=120
 	StartingDeadlineSeconds *int64         `json:"startingDeadlineSeconds,omitempty"`
 	HookScript              HookScriptSpec `json:"hookScript,omitempty"`
+
+	// LivenessProbe overrides the default liveness probe of the backup-agent
+	// container. When not set the backup-agent container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the backup-agent container.
+	// When not set the backup-agent container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (b BackupSpec) IsPITREnabled() bool {
@@ -1464,6 +1559,16 @@ type Expose struct {
 
 	InternalTrafficPolicy *corev1.ServiceInternalTrafficPolicy `json:"internalTrafficPolicy,omitempty"`
 	ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy  `json:"externalTrafficPolicy,omitempty"`
+
+	ExternalDNS *ExternalDNSConfig `json:"externalDNS,omitempty"`
+}
+
+type ExternalDNSConfig struct {
+	Prefix string `json:"prefix,omitempty"`
+	// +kubebuilder:validation:Required
+	Domain string `json:"domain"`
+	// +kubebuilder:validation:Minimum=0
+	TTL int `json:"ttl,omitempty"`
 }
 
 func (e *Expose) SaveOldMeta() bool {
@@ -1558,6 +1663,8 @@ const (
 	EnvPMMServerPassword             = PMMPasswordKey
 	EnvPMMServerAPIKey               = PMMAPIKey
 	EnvPMMServerToken                = PMMServerToken
+	EnvMongoDBSearchUser             = "MONGODB_SEARCH_USER"
+	EnvMongoDBSearchPassword         = "MONGODB_SEARCH_PASSWORD"
 )
 
 type SystemUserRole string
@@ -1575,7 +1682,45 @@ const (
 	RoleClusterMonitor SystemUserRole = "clusterMonitor"
 	// RoleBackup is used by the operator for backup and restore operations via PBM (Percona Backup for MongoDB).
 	RoleBackup SystemUserRole = "backup"
+	// RoleSearch is the user mongot authenticates as.
+	RoleSearch SystemUserRole = "searchCoordinator"
 )
+
+func (role SystemUserRole) EnvKeyUsername() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminUser
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminUser
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminUser
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorUser
+	case RoleBackup:
+		return EnvMongoDBBackupUser
+	case RoleSearch:
+		return EnvMongoDBSearchUser
+	}
+	return ""
+}
+
+func (role SystemUserRole) EnvKeyPassword() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminPassword
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminPassword
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminPassword
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorPassword
+	case RoleBackup:
+		return EnvMongoDBBackupPassword
+	case RoleSearch:
+		return EnvMongoDBSearchPassword
+	}
+	return ""
+}
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
 	return internalPrefix + cr.Name + userPostfix
@@ -1592,14 +1737,6 @@ func UserSecretName(cr *PerconaServerMongoDB) string {
 
 func (cr *PerconaServerMongoDB) NamespacedName() types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-}
-
-func (cr *PerconaServerMongoDB) StatefulsetNamespacedName(rsName string) types.NamespacedName {
-	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
-}
-
-func (cr *PerconaServerMongoDB) MongosNamespacedName() types.NamespacedName {
-	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
 
 func (cr *PerconaServerMongoDB) GetReplsets() []*ReplsetSpec {
@@ -1640,12 +1777,16 @@ func (cr *PerconaServerMongoDB) CanBackup(ctx context.Context) error {
 	return nil
 }
 
-func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context) error {
+func (cr *PerconaServerMongoDB) CanRestore(ctx context.Context, restore *PerconaServerMongoDBRestore) error {
 	log := logf.FromContext(ctx).V(1).WithValues("cluster", cr.Name, "namespace", cr.Namespace)
 	log.Info("checking if restore is allowed")
 
 	if cr.Spec.Unmanaged {
 		return errors.New("can't run restore in an unmanaged cluster")
+	}
+
+	if cr.Spec.Sharding.Enabled && restore.IsCloningNamespace() {
+		return errors.New("namespace cloning is not supported in sharded clusters")
 	}
 
 	return nil
@@ -1676,10 +1817,6 @@ func (cr *PerconaServerMongoDB) MCSEnabled() bool {
 }
 
 func (cr *PerconaServerMongoDB) TLSEnabled() bool {
-	if cr.CompareVersion("1.16.0") < 0 {
-		return !cr.Spec.UnsafeConf
-	}
-
 	if cr.Spec.TLS != nil {
 		switch cr.Spec.TLS.Mode {
 		case TLSModeDisabled:
@@ -1694,6 +1831,30 @@ func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 
 func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
+}
+
+// KeyFileAuthEnabled reports whether MongoDB should use keyFile internal
+// cluster authentication (--clusterAuthMode=keyFile).
+//
+// keyFile auth is required when:
+//   - spec.secrets.keyFile is explicitly set (operator-managed override)
+//   - tls.mode is "allowTLS" – connections may be plain, x509 is unreliable
+//   - TLS is disabled (mode: disabled + unsafe.tls: true)
+//
+// For the default "preferTLS" and for "requireTLS", MongoDB uses
+// --clusterAuthMode=x509 and no keyfile is needed.
+
+func (cr *PerconaServerMongoDB) KeyFileAuthEnabled() bool {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return true
+	}
+	if cr.Spec.Secrets.InternalKey != "" {
+		return true
+	}
+	if cr.TLSEnabled() {
+		return cr.Spec.TLS == nil || cr.Spec.TLS.Mode == TLSModeAllow
+	}
+	return cr.UnsafeTLSDisabled()
 }
 
 const (
@@ -1715,6 +1876,127 @@ func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 func (cr *PerconaServerMongoDB) PBMResyncInProgress() bool {
 	v, ok := cr.Annotations[AnnotationResyncInProgress]
 	return ok && v != ""
+}
+
+// SearchSpec is the cluster-wide configuration for MongoDB Vector Search
+// (mongot). It applies to every replset/shard that holds data; per-shard
+// differences are expressed through ReplsetSpec.Search.
+type SearchSpec struct {
+	// Enabled is the cluster-wide on/off switch. When true, the operator
+	// deploys one mongot StatefulSet per replset (non-sharded) or per
+	// shard (sharded), wires mongod and mongos to it, and provisions the
+	// searchCoordinator user.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Image is the Percona mongot container image. Required when Enabled
+	// is true. Applies to every mongot pod in the cluster.
+	Image string `json:"image,omitempty"`
+
+	// ImagePullPolicy is the pull policy for the mongot image. Applies
+	// to every mongot pod in the cluster.
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Configuration is raw mongot YAML merged on top of the
+	// operator-generated mongot.conf. Applies to every mongot pod in
+	// the cluster.
+	Configuration string `json:"configuration,omitempty"`
+
+	// Size is the cluster-wide default number of mongot pods per
+	// replset/shard. v1 only supports size: 1. Per-replset overrides
+	// are accepted (for forward compatibility) but every effective
+	// value must equal 1.
+	// +kubebuilder:default:=1
+	Size int32 `json:"size,omitempty"`
+
+	// Storage is the cluster-wide default PVC spec for mongot data.
+	// Per-replset override is allowed.
+	Storage *VolumeSpec `json:"storage,omitempty"`
+
+	// Resources is the cluster-wide default CPU/memory request and
+	// limits for mongot. Per-replset override is allowed.
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// JVMFlags is the cluster-wide default extra JVM flags for mongot.
+	// The operator sets the JVM max heap to 50% of the effective
+	// resources.memory if no -Xmx flag is set here. Per-replset
+	// override is allowed.
+	JVMFlags []string `json:"jvmFlags,omitempty"`
+
+	// Affinity is the cluster-wide default pod affinity. Per-replset
+	// override replaces the cluster-wide value for that shard's mongot.
+	Affinity *PodAffinity `json:"affinity,omitempty"`
+
+	// NodeSelector is the cluster-wide default. Per-replset override
+	// replaces (does not merge with) the cluster-wide value.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations is the cluster-wide default. Per-replset override
+	// replaces the cluster-wide value.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// Annotations is the cluster-wide default. Per-replset override
+	// replaces the cluster-wide value.
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels is the cluster-wide default. Per-replset override replaces
+	// the cluster-wide value.
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// ContainerSecurityContext is the cluster-wide default. Per-replset
+	// override replaces the cluster-wide value.
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// PodSecurityContext is the cluster-wide default. Per-replset
+	// override replaces the cluster-wide value.
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+
+	// LivenessProbe overrides the mongot container liveness probe. Timing
+	// fields (initialDelaySeconds, periodSeconds, timeoutSeconds,
+	// successThreshold, failureThreshold) are applied as set. When no
+	// probe handler (httpGet/exec/tcpSocket/grpc) is specified, the
+	// operator keeps its default HTTP /health check. Applies to every
+	// mongot pod in the cluster.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe overrides the mongot container readiness probe. It
+	// behaves like LivenessProbe: timing fields are applied as set, and
+	// the operator's default HTTP /health check is kept when no handler
+	// is specified. Applies to every mongot pod in the cluster.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+}
+
+// SearchReplsetOverride is an optional per-replset override for the
+// cluster-wide SearchSpec. Each non-nil field fully replaces the
+// matching cluster-wide value for that replset/shard's mongot
+// StatefulSet — there is no merge. Fields not listed here (Enabled,
+// Image, ImagePullPolicy, TLS, LogLevel, Configuration) are
+// cluster-only and may not be set per replset.
+type SearchReplsetOverride struct {
+	Size                     *int32                       `json:"size,omitempty"`
+	Storage                  *VolumeSpec                  `json:"storage,omitempty"`
+	Resources                *corev1.ResourceRequirements `json:"resources,omitempty"`
+	JVMFlags                 []string                     `json:"jvmFlags,omitempty"`
+	Affinity                 *PodAffinity                 `json:"affinity,omitempty"`
+	NodeSelector             map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations              []corev1.Toleration          `json:"tolerations,omitempty"`
+	Annotations              map[string]string            `json:"annotations,omitempty"`
+	Labels                   map[string]string            `json:"labels,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
+}
+
+// SearchStatus is the per-replset/shard status for the mongot StatefulSet.
+type SearchStatus struct {
+	Size    int32    `json:"size"`
+	Ready   int32    `json:"ready"`
+	Status  AppState `json:"status,omitempty"`
+	Message string   `json:"message,omitempty"`
+}
+
+// IsSearchEnabled reports whether vector search is enabled at the
+// cluster level.
+func (cr *PerconaServerMongoDB) IsSearchEnabled() bool {
+	return cr.Spec.Search != nil && cr.Spec.Search.Enabled
 }
 
 // LogCollectorSpec defines the configuration for enabling and customizing

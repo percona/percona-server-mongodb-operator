@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"maps"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -157,6 +158,11 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrap(err, "check ssl secrets")
 	}
 
+	keyfileSecretErr := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, &corev1.Secret{})
+	if client.IgnoreNotFound(keyfileSecretErr) != nil {
+		return nil, errors.Wrap(keyfileSecretErr, "check keyfile secret")
+	}
+
 	configs := psmdb.StatefulConfigParams{
 		MongoDConf:         mongodCustomConfig,
 		LogCollectionConf:  logCollectionCustomConfig,
@@ -164,8 +170,9 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		LogRotateExtraConf: logRotateExtraConfig,
 	}
 	secrets := psmdb.StatefulSpecSecretParams{
-		UsersSecret: usersSecret,
-		SSLSecret:   sslSecret,
+		UsersSecret:   usersSecret,
+		SSLSecret:     sslSecret,
+		KeyfileExists: keyfileSecretErr == nil,
 	}
 	sfsSpec, err := psmdb.StatefulSpec(
 		ctx, cr, rs, ls, r.initImage,
@@ -183,12 +190,10 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}
-	for k, v := range sslAnn {
-		sfsSpec.Template.Annotations[k] = v
-	}
+	maps.Copy(sfsSpec.Template.Annotations, sslAnn)
 
 	if preservedValue, exists := cr.Annotations[api.AnnotationPreservedRestartedAt(sfs.Name)]; exists {
-		sfsSpec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = preservedValue
+		sfsSpec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = preservedValue
 	}
 
 	return sfs, nil
