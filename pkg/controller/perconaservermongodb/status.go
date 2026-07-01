@@ -257,7 +257,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 	}
 
 	if state != api.AppStateReady {
-		log.V(1).Info("Cluster is not ready",
+		log.V(1).Info(
+			"Cluster is not ready",
 			"pbmStatus", pbmStatus,
 			"upgradeInProgress", inProgress,
 			"replsetsReady", replsetsReady,
@@ -589,7 +590,7 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 
 func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
 	if cr.Spec.Sharding.Enabled {
-		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr, false)
+		addrs, err := psmdb.GetMongosAddrs(ctx, r.client, cr, false, cr.Spec.Sharding.Mongos.Expose.ServicePerPod)
 		if err != nil {
 			return "", errors.Wrap(err, "get mongos addresses")
 		}
@@ -599,7 +600,8 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 
 	if rs := cr.Spec.Replsets[0]; rs.Expose.Enabled && (rs.Expose.ExposeType == corev1.ServiceTypeLoadBalancer || rs.Expose.ExposeType == corev1.ServiceTypeClusterIP) {
 		list := corev1.PodList{}
-		err := r.client.List(ctx,
+		err := r.client.List(
+			ctx,
 			&list,
 			&client.ListOptions{
 				Namespace:     cr.Namespace,

@@ -18,11 +18,15 @@ demand-backup-incremental-aws
 demand-backup-incremental-azure
 demand-backup-incremental-gcp-native
 demand-backup-incremental-gcp-s3
+demand-backup-incremental-oss-s3
+demand-backup-incremental-oss-native
 demand-backup-incremental-minio
 demand-backup-incremental-sharded-aws
 demand-backup-incremental-sharded-azure
 demand-backup-incremental-sharded-gcp-native
 demand-backup-incremental-sharded-gcp-s3
+demand-backup-incremental-sharded-oss-s3
+demand-backup-incremental-sharded-oss-native
 demand-backup-incremental-sharded-minio
 demand-backup-logical-minio-native-tls
 demand-backup-physical-parallel
@@ -31,6 +35,8 @@ demand-backup-physical-azure
 demand-backup-physical-gcp-s3
 demand-backup-gcs-workload-identity
 demand-backup-physical-gcp-native
+demand-backup-physical-oss-s3
+demand-backup-physical-oss-native
 demand-backup-physical-minio
 demand-backup-physical-minio-native
 demand-backup-physical-minio-native-tls
@@ -38,6 +44,8 @@ demand-backup-physical-sharded-parallel
 demand-backup-physical-sharded-aws
 demand-backup-physical-sharded-azure
 demand-backup-physical-sharded-gcp-native
+demand-backup-physical-sharded-oss-s3
+demand-backup-physical-sharded-oss-native
 demand-backup-physical-sharded-minio
 demand-backup-physical-sharded-minio-native
 demand-backup-sharded
