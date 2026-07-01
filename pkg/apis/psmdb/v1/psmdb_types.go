@@ -896,11 +896,12 @@ type PrimaryPreferTagSelectorSpec map[string]string
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name                     string                       `json:"name,omitempty"`
-	Size                     int32                        `json:"size"`
-	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
-	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
-	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Size        int32           `json:"size"`
+	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
+	Arbiter     Arbiter         `json:"arbiter,omitempty"`
+	Expose      ExposeTogglable `json:"expose,omitempty"`
+	// +kubebuilder:validation:Required
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
