@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -302,6 +303,181 @@ func TestGetCAVolumes(t *testing.T) {
 	}
 }
 
+func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
+	tests := []struct {
+		name string
+		cr   *api.PerconaServerMongoDB
+		want bool
+	}{
+		{
+			name: "s3-compatible oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "s3-compatible oss with pbm 2.10",
+			cr: backupChecksumTestCR("2.10.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "s3-compatible oss with pbm 2.12",
+			cr: backupChecksumTestCR("2.12.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "native oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageOSS,
+				OSS: api.BackupStorageOSSSpec{
+					EndpointURL: "https://oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "regular s3 with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.amazonaws.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "missing pbm version",
+			cr: backupChecksumTestCR("", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "multiple storages include s3-compatible oss",
+			cr: backupChecksumTestCR("2.11.0",
+				api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.amazonaws.com",
+					},
+				},
+				api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+					},
+				},
+			),
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ShouldSetAWSSDKChecksumEnvVars(tt.cr))
+		})
+	}
+}
+
+func TestBackupAgentContainerAWSSDKChecksumEnvVars(t *testing.T) {
+	tests := []struct {
+		name string
+		cr   *api.PerconaServerMongoDB
+		want bool
+	}{
+		{
+			name: "sets env vars for s3-compatible oss with pbm 2.11",
+			cr: backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: true,
+		},
+		{
+			name: "does not set env vars for pbm 2.12",
+			cr: backupChecksumTestCR("2.12.0", api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+				},
+			}),
+			want: false,
+		},
+		{
+			name: "does not set env vars before operator 1.23",
+			cr: func() *api.PerconaServerMongoDB {
+				cr := backupChecksumTestCR("2.11.0", api.BackupStorageSpec{
+					Type: api.BackupStorageS3,
+					S3: api.BackupStorageS3Spec{
+						EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+					},
+				})
+				cr.Spec.CRVersion = "1.22.0"
+				return cr
+			}(),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := backupAgentContainer(context.Background(), tt.cr, "rs0", 27017, false, &corev1.Secret{})
+
+			hasRequestChecksumEnv := slices.ContainsFunc(c.Env, func(env corev1.EnvVar) bool {
+				return env.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && env.Value == "when_required"
+			})
+			hasResponseChecksumEnv := slices.ContainsFunc(c.Env, func(env corev1.EnvVar) bool {
+				return env.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && env.Value == "when_required"
+			})
+
+			assert.Equal(t, tt.want, hasRequestChecksumEnv)
+			assert.Equal(t, tt.want, hasResponseChecksumEnv)
+		})
+	}
+}
+
+func backupChecksumTestCR(pbmVersion string, storages ...api.BackupStorageSpec) *api.PerconaServerMongoDB {
+	cr := &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{Users: "some-users"},
+			Backup: api.BackupSpec{
+				Enabled:  true,
+				Image:    "backup-image",
+				Storages: make(map[string]api.BackupStorageSpec, len(storages)),
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: pbmVersion,
+		},
+	}
+
+	for i, storage := range storages {
+		cr.Spec.Backup.Storages[fmt.Sprintf("storage-%d", i)] = storage
+	}
+
+	return cr
+}
+
 func TestBackupAgentContainerProbes(t *testing.T) {
 	liveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
@@ -373,6 +549,214 @@ func TestBackupAgentContainerProbes(t *testing.T) {
 
 			assert.Equal(t, tt.wantLiveness, c.LivenessProbe)
 			assert.Equal(t, tt.wantReadiness, c.ReadinessProbe)
+		})
+	}
+}
+
+func rorfsSecurityContext(enabled bool) *corev1.SecurityContext {
+	return &corev1.SecurityContext{ReadOnlyRootFilesystem: &enabled}
+}
+
+func TestReadOnlyRootFilesystemEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		sc   *corev1.SecurityContext
+		want bool
+	}{
+		{name: "nil context", sc: nil, want: false},
+		{name: "nil flag", sc: &corev1.SecurityContext{}, want: false},
+		{name: "explicitly false", sc: rorfsSecurityContext(false), want: false},
+		{name: "explicitly true", sc: rorfsSecurityContext(true), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, readOnlyRootFilesystemEnabled(tt.sc))
+		})
+	}
+}
+
+func TestNeedsTmpVolume(t *testing.T) {
+	newCR := func(setup func(cr *api.PerconaServerMongoDB)) *api.PerconaServerMongoDB {
+		cr := &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+			},
+		}
+		setup(cr)
+		return cr
+	}
+
+	tests := []struct {
+		name     string
+		cr       *api.PerconaServerMongoDB
+		mongodSC *corev1.SecurityContext
+		want     bool
+	}{
+		{
+			name:     "no readOnlyRootFilesystem anywhere",
+			cr:       newCR(func(*api.PerconaServerMongoDB) {}),
+			mongodSC: nil,
+			want:     false,
+		},
+		{
+			name:     "mongod readOnlyRootFilesystem",
+			cr:       newCR(func(*api.PerconaServerMongoDB) {}),
+			mongodSC: rorfsSecurityContext(true),
+			want:     true,
+		},
+		{
+			name: "backup agent readOnlyRootFilesystem with backup enabled",
+			cr: newCR(func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.Enabled = true
+				cr.Spec.Backup.ContainerSecurityContext = rorfsSecurityContext(true)
+			}),
+			mongodSC: nil,
+			want:     true,
+		},
+		{
+			name: "backup agent readOnlyRootFilesystem but backup disabled",
+			cr: newCR(func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.Enabled = false
+				cr.Spec.Backup.ContainerSecurityContext = rorfsSecurityContext(true)
+			}),
+			mongodSC: nil,
+			want:     false,
+		},
+		{
+			name: "mongod readOnlyRootFilesystem ignored on <1.23.0",
+			cr: newCR(func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+			}),
+			mongodSC: rorfsSecurityContext(true),
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, needsTmpVolume(tt.cr, tt.mongodSC))
+		})
+	}
+}
+
+func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	allowInvalidCerts := true
+	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
+
+	newCR := func(crVersion string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: crVersion,
+				Secrets:   &api.SecretsSpec{Users: "some-users"},
+				TLS: &api.TLSSpec{
+					Mode:                     api.TLSModePrefer,
+					AllowInvalidCertificates: &allowInvalidCerts,
+				},
+			},
+		}
+	}
+
+	newParams := func(sc *corev1.SecurityContext) containerFnParams {
+		return containerFnParams{
+			replset: &api.ReplsetSpec{
+				Name:    "rs0",
+				Storage: &api.MongodSpecStorage{},
+			},
+			name:                     naming.ContainerMongod,
+			livenessProbe:            &api.LivenessProbeExtended{},
+			containerSecurityContext: sc,
+		}
+	}
+
+	tests := []struct {
+		name      string
+		crVersion string
+		sc        *corev1.SecurityContext
+		wantMount bool
+	}{
+		{name: "no security context", crVersion: version.Version(), sc: nil, wantMount: false},
+		{name: "readOnlyRootFilesystem false", crVersion: version.Version(), sc: rorfsSecurityContext(false), wantMount: false},
+		{name: "readOnlyRootFilesystem true", crVersion: version.Version(), sc: rorfsSecurityContext(true), wantMount: true},
+		{name: "readOnlyRootFilesystem true ignored on <1.23.0", crVersion: "1.22.0", sc: rorfsSecurityContext(true), wantMount: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := container(context.Background(), newCR(tt.crVersion), newParams(tt.sc))
+			require.NoError(t, err)
+
+			if tt.wantMount {
+				assert.Contains(t, c.VolumeMounts, tmpMount)
+			} else {
+				assert.NotContains(t, c.VolumeMounts, tmpMount)
+			}
+		})
+	}
+}
+
+func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
+
+	newCR := func() *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &api.SecretsSpec{Users: "some-users"},
+				Backup: api.BackupSpec{
+					Enabled: true,
+					Image:   "backup-image",
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name      string
+		setup     func(cr *api.PerconaServerMongoDB)
+		wantMount bool
+	}{
+		{
+			name:      "no security context",
+			setup:     func(*api.PerconaServerMongoDB) {},
+			wantMount: false,
+		},
+		{
+			name: "readOnlyRootFilesystem false",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.ContainerSecurityContext = rorfsSecurityContext(false)
+			},
+			wantMount: false,
+		},
+		{
+			name: "readOnlyRootFilesystem true",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.ContainerSecurityContext = rorfsSecurityContext(true)
+			},
+			wantMount: true,
+		},
+		{
+			name: "readOnlyRootFilesystem true ignored on <1.23.0",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				cr.Spec.Backup.ContainerSecurityContext = rorfsSecurityContext(true)
+			},
+			wantMount: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newCR()
+			tt.setup(cr)
+
+			c := backupAgentContainer(context.Background(), cr, "rs0", 27017, false, &corev1.Secret{})
+
+			if tt.wantMount {
+				assert.Contains(t, c.VolumeMounts, tmpMount)
+			} else {
+				assert.NotContains(t, c.VolumeMounts, tmpMount)
+			}
 		})
 	}
 }

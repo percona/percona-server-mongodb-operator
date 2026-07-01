@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -230,6 +233,77 @@ func TestInvokeAction(t *testing.T) {
 			require.NoError(t, err)
 			if tc.assert != nil {
 				tc.assert(t, f)
+			}
+		})
+	}
+}
+
+func TestReconcileModeTargetAlreadyFinalized(t *testing.T) {
+	tests := map[string]struct {
+		spec        psmdbv1.PerconaServerMongoDBClusterSyncSpec
+		status      psmdbv1.PerconaServerMongoDBClusterSyncStatus
+		observed    client.Status
+		wantErrSubs string
+		wantEvent   bool
+	}{
+		"new CR inherits finalized from a previous sync on this target: surfaces conflict, no action": {
+			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+				ClusterName: "tgt",
+				Mode:        psmdbv1.ClusterSyncModeRunning,
+			},
+			observed:    client.Status{State: "finalized", LagTimeSeconds: 297},
+			wantErrSubs: "inherited from a previous ClusterSync",
+			wantEvent:   true,
+		},
+		"intentional finalize from running: no inherited-state error, normal flow": {
+			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+				ClusterName: "tgt",
+				Mode:        psmdbv1.ClusterSyncModeFinalized,
+			},
+			status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				Mode:      psmdbv1.ClusterSyncModeRunning,
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Hour)},
+			},
+			observed: client.Status{State: "finalized"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				ObjectMeta: metav1.ObjectMeta{Name: "sync3", Namespace: "ns", UID: "u"},
+				Spec:       tc.spec,
+				Status:     tc.status,
+			}
+			cl := fake.NewClientBuilder().
+				WithScheme(clusterSyncScheme(t)).
+				WithStatusSubresource(cr).
+				WithObjects(cr).
+				Build()
+			rec := record.NewFakeRecorder(4)
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+
+			f := &fakePCSM{statusResp: tc.observed}
+
+			err := r.reconcileMode(context.Background(), cr, f)
+			require.NoError(t, err)
+
+			got := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, got))
+
+			if tc.wantErrSubs != "" {
+				assert.Contains(t, got.Status.Error, tc.wantErrSubs)
+				assert.Nil(t, f.started, "should not have issued /start while target already finalized")
+				assert.Zero(t, f.finalized, "should not have issued /finalize either")
+			} else {
+				assert.NotContains(t, got.Status.Error, "inherited from a previous ClusterSync")
+			}
+
+			select {
+			case ev := <-rec.Events:
+				assert.True(t, tc.wantEvent, "did not expect a recorded event, got %q", ev)
+			default:
+				assert.False(t, tc.wantEvent, "expected a recorded event")
 			}
 		})
 	}
