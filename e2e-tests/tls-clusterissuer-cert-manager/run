@@ -24,6 +24,47 @@ check_secret_data_key() {
 	fi
 }
 
+create_clusterissuer_rbac() {
+	local cluster_issuer_name=$1
+	local operator_sa=${2:-percona-server-mongodb-operator}
+
+	kubectl_bin create clusterrole "${cluster_issuer_name}-reader" \
+		--verb=get,list,watch,create,update,patch \
+		--resource=clusterissuers.cert-manager.io \
+		--dry-run=client -o yaml | kubectl_bin apply -f -
+
+	kubectl_bin create clusterrolebinding "${cluster_issuer_name}-reader-${namespace}" \
+		--clusterrole="${cluster_issuer_name}-reader" \
+		--serviceaccount="${OPERATOR_NS:-$namespace}:${operator_sa}" \
+		--dry-run=client -o yaml | kubectl_bin apply -f -
+}
+
+delete_clusterissuer_rbac() {
+	local cluster_issuer_name=$1
+
+	kubectl_bin delete clusterrolebinding "${cluster_issuer_name}-reader-${namespace}" --ignore-not-found
+	kubectl_bin delete clusterrole "${cluster_issuer_name}-reader" --ignore-not-found
+}
+
+check_operator_cannot_read_clusterissuers() {
+	local operator_sa=${1:-percona-server-mongodb-operator}
+	local can_i
+	local exit_status
+
+	set +e
+	can_i=$(kubectl auth can-i get clusterissuers.cert-manager.io \
+		--all-namespaces \
+		--as="system:serviceaccount:${OPERATOR_NS:-$namespace}:${operator_sa}" 2>&1)
+	exit_status=$?
+	set -e
+
+	if [ "$exit_status" -eq 0 ] || [[ "$can_i" != no* ]]; then
+		echo "Operator service account should not be able to get clusterissuers.cert-manager.io"
+		echo "$can_i"
+		exit 1
+	fi
+}
+
 main() {
 	if [ -z "$OPERATOR_NS" ]; then
 		echo "Skipping the test. This test runs only in cluster-wide mode"
@@ -32,6 +73,12 @@ main() {
 
 	create_infra "$namespace"
 	deploy_cert_manager
+
+	cluster="some-name"
+
+	desc 'step 1: operator preserves user-created certificates when it has RBAC to read ClusterIssuers'
+	create_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
+	create_clusterissuer_rbac "$cluster-psmdb-issuer"
 
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "$conf_dir/secrets.yml"
@@ -46,7 +93,6 @@ main() {
 	deploy_cmctl
 	sleep 60
 
-	cluster="some-name"
 	desc "create first PSMDB cluster $cluster"
 	apply_cluster "$test_dir/conf/$cluster.yml"
 
@@ -55,11 +101,39 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'compare custom certificates and clusterissuers'
-	compare_kubectl "certificate/${cluster}-ssl" "-custom"
-	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
+	desc 'compare user certificates are preserved and clusterissuers are not overwritten'
+	compare_kubectl "certificate/${cluster}-ssl" "-user"
+	compare_kubectl "certificate/${cluster}-ssl-internal" "-user"
 	compare_kubectl "clusterissuer/$cluster-psmdb-ca-issuer" "-custom"
 	compare_kubectl "clusterissuer/$cluster-psmdb-issuer" "-custom"
+
+	desc 'step 2: operator creates certificates using the existing user ClusterIssuer when it has no RBAC to read ClusterIssuers'
+	delete_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
+	delete_clusterissuer_rbac "$cluster-psmdb-issuer"
+	check_operator_cannot_read_clusterissuers
+
+	desc 'delete cluster'
+	kubectl delete psmdb --all
+	wait_for_delete psmdb/$cluster 180
+
+	kubectl delete pvc --all
+	kubectl_bin delete secret "$cluster-ssl-old" "$cluster-ssl-internal-old" --ignore-not-found
+
+	desc 'delete user certificates so operator recreates them using the existing clusterissuer'
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl.yml" --ignore-not-found
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl-internal.yml" --ignore-not-found
+
+	desc "recreate PSMDB cluster $cluster without clusterissuer RBAC"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'compare custom certificates without clusterissuer RBAC'
+	compare_kubectl "certificate/${cluster}-ssl" "-custom"
+	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
 
 	desc 'delete cluster'
 	kubectl delete psmdb --all
@@ -67,18 +141,16 @@ main() {
 
 	kubectl delete pvc --all
 
+	desc 'step 3: operator creates its own ClusterIssuer and certificates when no user ClusterIssuer exists'
+	create_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
+	create_clusterissuer_rbac "$cluster-psmdb-issuer"
+
 	desc 'delete custom cert-manager issuers and certificates'
-	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-ca-issuer.yml"
-	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-issuer.yml"
-	kubectl_bin delete -f "$test_dir/conf/some-name-ca-cert.yml"
-	kubectl_bin delete -f "$test_dir/conf/some-name-ssl-internal.yml"
-	kubectl_bin delete -f "$test_dir/conf/some-name-ssl.yml"
-
-	sleep 30
-
-	desc 'delete ssl secrets, operator should recreate them'
-	kubectl_bin delete secret "$cluster-ssl-internal"
-	kubectl_bin delete secret "$cluster-ssl"
+	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-ca-issuer.yml" --ignore-not-found
+	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-issuer.yml" --ignore-not-found
+	kubectl_bin delete -f "$test_dir/conf/some-name-ca-cert.yml" --ignore-not-found
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl-internal.yml" --ignore-not-found
+	kubectl_bin delete -f "$test_dir/conf/some-name-ssl.yml" --ignore-not-found
 
 	sleep 30
 
@@ -133,6 +205,9 @@ main() {
 	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled" "skip_generation_check"
 	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled" "skip_generation_check"
 	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled" "skip_generation_check"
+
+	delete_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
+	delete_clusterissuer_rbac "$cluster-psmdb-issuer"
 
 	destroy "$namespace"
 	desc 'test passed'

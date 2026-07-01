@@ -30755,26 +30755,6 @@ rules:
   - create
   - delete
 ---
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: percona-server-mongodb-operator-cert-manager
-rules:
-- apiGroups:
-  - certmanager.k8s.io
-  - cert-manager.io
-  resources:
-  - clusterissuers
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-  - deletecollection
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -30790,19 +30770,6 @@ subjects:
 roleRef:
   kind: Role
   name: percona-server-mongodb-operator
-  apiGroup: rbac.authorization.k8s.io
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: service-account-percona-server-mongodb-operator-cert-manager
-subjects:
-- kind: ServiceAccount
-  name: percona-server-mongodb-operator
-  namespace: "psmdb-operator"
-roleRef:
-  kind: ClusterRole
-  name: percona-server-mongodb-operator-cert-manager
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1

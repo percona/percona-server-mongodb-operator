@@ -9,6 +9,7 @@ spec:
   updateStrategy: SmartUpdate
   tls:
     issuerConf:
+      name: some-name-psmdb-issuer
       kind: ClusterIssuer
   backup:
     enabled: false

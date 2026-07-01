@@ -1,19 +1,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  annotations: {}
+  annotations:
+    some-random-annotation: "true"
   generation: 1
-  labels:
-    app.kubernetes.io/instance: some-name
-    app.kubernetes.io/managed-by: percona-server-mongodb-operator
-    app.kubernetes.io/name: percona-server-mongodb
-    app.kubernetes.io/part-of: percona-server-mongodb
-  name: some-name-ssl
-  ownerReferences:
-    - blockOwnerDeletion: true
-      controller: true
-      kind: PerconaServerMongoDB
-      name: some-name
+  name: some-name-ssl-internal
 spec:
   commonName: some-name
   dnsNames:
@@ -45,10 +36,9 @@ spec:
     - '*.some-name-cfg.NAME_SPACE.svc.clusterset.local'
   duration: 2160h0m0s
   issuerRef:
-    group: cert-manager.io
     kind: ClusterIssuer
     name: some-name-psmdb-issuer
-  secretName: some-name-ssl
+  secretName: some-name-ssl-internal
   subject:
     organizations:
-      - PSMDB
+      - CUSTOM
