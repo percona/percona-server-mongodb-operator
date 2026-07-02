@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -119,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, nil, nil
 		}
 		if cr.Status.Replsets[replset.Name].Initialized {
-			if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
+			if errors.As(err, &topology.ServerSelectionError{}) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
 				log.Error(err, "FULL CLUSTER CRASH")
 
 				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)

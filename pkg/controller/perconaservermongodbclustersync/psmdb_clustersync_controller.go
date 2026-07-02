@@ -86,7 +86,7 @@ type pcsmClient interface {
 type ReconcilePerconaServerMongoDBClusterSync struct {
 	client    client.Client
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
 	newPCSMClientFor     func(*psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient

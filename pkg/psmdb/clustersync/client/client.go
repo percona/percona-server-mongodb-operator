@@ -44,7 +44,7 @@ type Client struct {
 	cr   *psmdbv1.PerconaServerMongoDBClusterSync
 }
 
-func New(k8s k8sclient.Client, cc *clientcmd.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) *Client {
+func New(k8s k8sclient.Client, cc clientcmd.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) *Client {
 	return &Client{k8s: k8s, exec: cc, cr: cr}
 }
 

@@ -37,7 +37,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileExternalSnapshotRestore(
 
 	switch cr.Status.State {
 	case psmdbv1.RestoreStateNew:
-		return r.reconcileSnapshotNew(cr)
+		return r.reconcileSnapshotNew(ctx, cr, cluster)
 
 	case psmdbv1.RestoreStateWaiting:
 		return r.reconcileSnapshotWaiting(ctx, cr, cluster)
@@ -53,9 +53,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileExternalSnapshotRestore(
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotNew(
+	ctx context.Context,
 	restore *psmdbv1.PerconaServerMongoDBRestore,
+	cluster *psmdbv1.PerconaServerMongoDB,
 ) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	status := restore.Status
+
+	if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
+		return status, errors.Wrap(err, "update PBM config secret")
+	}
+
 	status.State = psmdbv1.RestoreStateWaiting
 	return status, nil
 }
@@ -68,10 +75,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 	log := logf.FromContext(ctx)
 
 	status := restore.Status
-	if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
-		return status, errors.Wrap(err, "update PBM config secret")
-	}
-
 	if err := r.createOrUpdateDBConfigSecret(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "create db config secret")
 	}

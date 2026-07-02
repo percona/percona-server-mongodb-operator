@@ -86,7 +86,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
