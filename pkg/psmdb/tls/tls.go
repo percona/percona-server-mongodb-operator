@@ -43,17 +43,52 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 		return false, nil
 	}
 
+	certificateName := secret.Annotations[cm.CertificateNameKey]
+	certificateFound := false
+	if certificateName != "" {
+		certificate := new(cm.Certificate)
+		if err := c.Get(ctx, types.NamespacedName{
+			Name:      certificateName,
+			Namespace: secret.Namespace,
+		}, certificate); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return true, errors.Wrap(err, "failed to get certificate")
+			}
+		} else {
+			certificateFound = true
+			if metav1.IsControlledBy(certificate, cr) {
+				return false, nil
+			}
+		}
+	}
+
 	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
-	if secret.Annotations[cm.IssuerKindAnnotationKey] != cm.IssuerKind || issuerName == "" {
+	if issuerName == "" {
 		return true, nil
 	}
-	issuer := new(cm.Issuer)
+
+	var issuer client.Object
+	issuerNamespace := secret.Namespace
+	kind := secret.Annotations[cm.IssuerKindAnnotationKey]
+	switch kind {
+	case cm.IssuerKind:
+		issuer = new(cm.Issuer)
+	case cm.ClusterIssuerKind:
+		issuer = new(cm.ClusterIssuer)
+		issuerNamespace = ""
+	default:
+		return true, nil
+	}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      issuerName,
-		Namespace: secret.Namespace,
+		Namespace: issuerNamespace,
 	}, issuer); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return true, nil
+		if k8serrors.IsNotFound(err) || (kind == cm.ClusterIssuerKind && k8serrors.IsForbidden(err)) {
+			// The issuer is gone or unreadable (Forbidden in namespaced installs).
+			// Only treat the secret as user-created if its Certificate CRD still exists
+			// and is not operator-owned. If the Certificate is gone, the secret is
+			// orphaned and the operator should recreate it.
+			return certificateFound, nil
 		}
 		return true, errors.Wrap(err, "failed to get issuer")
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 // secretFileMode is the default mode for Secret projections
-const secretFileMode int32 = 0400
+const secretFileMode int32 = 0o400
 
 // StatefulSet returns the StatefulSet object that runs the mongot
 // group for the given replset. configHash is set as a pod-template
@@ -63,8 +63,9 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 			Labels:    objectLabels,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: naming.SearchServiceName(cr, rs),
-			Replicas:    &spec.Size,
+			ServiceName:          naming.SearchServiceName(cr, rs),
+			RevisionHistoryLimit: cr.Spec.RevisionHistoryLimit,
+			Replicas:             &spec.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: objectLabels,
 			},
