@@ -142,6 +142,7 @@ backup_name_aws="backup-aws-s3"
 backup_name_minio="backup-minio"
 backup_name_gcp="backup-gcp-cs"
 backup_name_azure="backup-azure-blob"
+backup_name_oss_native="backup-oss-native"
 
 desc 'run backups'
 run_backup minio
@@ -149,10 +150,12 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
 	run_backup gcp-cs
 	run_backup azure-blob
+	run_backup oss-native
 
 	wait_backup "$backup_name_aws"
 	wait_backup "$backup_name_gcp"
 	wait_backup "$backup_name_azure"
+	wait_backup "$backup_name_oss_native"
 fi
 wait_backup "$backup_name_minio"
 
@@ -200,6 +203,21 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_restore "$backup_name_azure"
 	wait_restore "$backup_name_azure" "$cluster"
 	check_data
+
+	desc 'check backup and restore -- oss-native'
+	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
+	backup_endpoint_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "endpointUrl")
+	backup_region_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "region")
+	check_backup_in_storage ${backup_name_oss_native} oss rs0 'myApp.test.gz'
+	check_backup_in_storage ${backup_name_oss_native} oss rs1 'myApp1.test.gz'
+	check_backup_in_storage ${backup_name_oss_native} oss rs2 'myApp2.test.gz'
+	insert_data_mongos "100501" "myApp" "" "$custom_port"
+	insert_data_mongos "100501" "myApp1" "" "$custom_port"
+	insert_data_mongos "100501" "myApp2" "" "$custom_port"
+	check_data "-2nd"
+	run_restore "$backup_name_oss_native"
+	wait_restore "$backup_name_oss_native" "$cluster"
+	check_data
 fi
 
 desc 'check backup and restore -- minio'
@@ -228,6 +246,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
 fi
 
 # Temporarily skipping this check

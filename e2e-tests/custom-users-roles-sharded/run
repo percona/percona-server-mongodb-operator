@@ -31,6 +31,70 @@ check_auth() {
 	fi
 }
 
+check_connection_string() {
+	local secret_name="$1"
+	local data_key="$2"
+	local connection_string
+	local client_container
+	local ping
+	local tls_args=()
+
+	if ! connection_string=$(kubectl_bin get secret "$secret_name" -o "go-template={{index .data \"$data_key\"}}" | base64 -d); then
+		return 1
+	fi
+	if [ -z "$connection_string" ]; then
+		return 1
+	fi
+	if [[ "$connection_string" == *"tls=true"* || "$connection_string" == *"ssl=true"* || "$connection_string" == mongodb+srv://* ]]; then
+		tls_args+=(
+			--tls
+			--tlsCAFile /etc/mongodb-ssl/ca.crt
+			--tlsCertificateKeyFile /tmp/tls.pem
+			--tlsAllowInvalidHostnames
+		)
+	fi
+
+	client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	ping=$(kubectl_bin exec "$client_container" -- \
+		mongo "$connection_string" --quiet "${tls_args[@]}" \
+		--eval 'db.runCommand({ ping: 1 }).ok' \
+		| grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:')
+
+	if [ "$ping" != "1" ]; then
+		return 1
+	fi
+}
+
+check_connection_strings() {
+	local secret_name="$1"
+	shift
+	local key_prefix
+	local data_keys
+	local data_key
+
+	if ! data_keys=$(kubectl_bin get secret "$secret_name" \
+		-o 'go-template={{range $key, $_ := .data}}{{$key}}{{"\n"}}{{end}}'); then
+		return 1
+	fi
+	if [ -z "$data_keys" ]; then
+		return 1
+	fi
+
+	for key_prefix in "$@"; do
+		if ! grep -Fxq "${key_prefix}_connectionString" <<<"$data_keys"; then
+			return 1
+		fi
+		if ! grep -Fxq "${key_prefix}_connectionStringSrv" <<<"$data_keys"; then
+			return 1
+		fi
+	done
+
+	while IFS= read -r data_key; do
+		[ -z "$data_key" ] && continue
+		check_connection_string "$secret_name" "$data_key" || return 1
+	done <<<"$data_keys"
+}
+
 get_user_cmd() {
 	local user="$1"
 
@@ -78,9 +142,8 @@ create_infra "$namespace"
 
 mongosUri="userAdmin:userAdmin123456@$cluster-mongos.$namespace"
 
-desc 'create secrets and start client'
-kubectl_bin apply -f "${conf_dir}/client.yml" \
-	-f "${conf_dir}/secrets.yml" \
+desc 'create secrets'
+kubectl_bin apply -f "${conf_dir}/secrets.yml" \
 	-f "${test_dir}/conf/app-user-secrets.yml"
 
 
@@ -103,6 +166,15 @@ wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 wait_cluster_consistency "${cluster}"
 
+desc 'start client'
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+kubectl_bin rollout status deployment/psmdb-client --timeout=360s
+
+desc 'check database admin connection strings'
+retry 60 2 check_connection_strings "$cluster-databaseadmin-conn-str" \
+	"databaseAdmin_rs0" \
+	"databaseAdmin_cfg"
+
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg
@@ -114,11 +186,13 @@ userOne="user-one"
 userOnePass=$(getSecretData "user-one" "userOnePassKey")
 compare 'admin' "$(get_user_cmd \"user-one\")" "$mongosUri" "user-one"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
+retry 60 2 check_connection_strings "user-one-conn-str"
 
 generatedUserSecret="$cluster-custom-user-secret"
 generatedPass=$(kubectl_bin get secret $generatedUserSecret -o jsonpath="{.data.user-gen}" | base64 -d)
 compare 'admin' "$(get_user_cmd \"user-gen\")" "$mongosUri" "user-gen"
 check_auth "user-gen:$generatedPass@$cluster-mongos.$namespace"
+retry 60 2 check_connection_strings "$generatedUserSecret-conn-str"
 
 # Only check if $external.user-external user exists, as the password is not known
 # since we don't have a external provider set in this test
@@ -151,6 +225,7 @@ userTwoPass=$(getSecretData "user-two" "userTwoPassKey")
 # Both users should be in the DB, the operator should not delete the user removed from the CR
 check_auth "$userTwo:$userTwoPass@$cluster-mongos.$namespace"
 check_auth "$userOne:$userOnePass@$cluster-mongos.$namespace"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check password change'
 userTwoNewPass="new-user-two-password"
@@ -158,6 +233,7 @@ patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
 sleep 20
 
 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check user roles update from CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -218,6 +294,7 @@ compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-rol
 # user-three and user-two should be in the DB
 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
 check_auth "user-three:$userTwoNewPass@$cluster-mongos.$namespace"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check new user created after updated user db via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -239,12 +316,13 @@ wait_for_running $cluster-rs0 3
 
 compare 'newDb' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-newDb-db"
 compare 'admin' "$(get_user_cmd \"user-three\")" "$mongosUri" "user-three-admin-db"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check new user created with default db and secret password key'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 		"spec": {"users":[
 			{
-				"name":"user-four",
+				"name":"user/four",
 				"passwordSecretRef": {
 					"name": "user-two"
 				},
@@ -256,7 +334,8 @@ kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
 	}'
 wait_for_running $cluster-rs0 3
 
-compare 'admin' "$(get_user_cmd \"user-four\")" "$mongosUri" "user-four"
+compare 'admin' "$(get_user_cmd \"user/four\")" "$mongosUri" "user-four"
+retry 60 2 check_connection_strings "user-two-conn-str"
 
 # ======================== Roles ========================
 
@@ -476,6 +555,7 @@ compare 'testAdmin1' "$(get_role_cmd \"role-four\" )" "$mongosUri" "role-four"
 compare 'testAdmin2' "$(get_role_cmd \"role-five\" )" "$mongosUri" "role-five"
 compare 'testAdmin' "$(get_user_cmd \"user-five\")" "$mongosUri" "user-five"
 compare 'testAdmin' "$(get_user_cmd \"user-six\")" "$mongosUri" "user-six"
+retry 60 2 check_connection_strings "user-one-conn-str"
 
 destroy $namespace
 
