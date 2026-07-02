@@ -1644,6 +1644,8 @@ run_pumba() {
 deploy_cert_manager() {
 	desc 'deploy cert manager'
 
+	kubectl_bin -n cert-manager delete clusterissuer --all || :
+	kubectl_bin -n cert-manager delete certificate --all || :
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	curl -sL "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" \

@@ -206,10 +206,10 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode                 `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                  `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration        `json:"certValidityDuration,omitempty"`
+	IssuerConf               cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
