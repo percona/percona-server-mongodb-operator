@@ -725,7 +725,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get current pbm config from pod")
 	}
 
-	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmC, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
@@ -742,7 +742,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	pbmConfig.PITR.Enabled = false
+	if pbmConfig.PITR != nil {
+		pbmConfig.PITR.Enabled = false
+	}
 
 	newConfBytes, err := yamlMarshalUnsafe(pbmConfig)
 	if err != nil {

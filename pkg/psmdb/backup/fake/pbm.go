@@ -138,7 +138,7 @@ func (p *fakePBM) SetConfig(ctx context.Context, cfg *config.Config) error {
 }
 
 func (p *fakePBM) GetConfig(ctx context.Context) (*config.Config, error) {
-	return nil, nil
+	return &config.Config{}, nil
 }
 
 func (p *fakePBM) GetConfigVar(ctx context.Context, key string) (any, error) {

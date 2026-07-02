@@ -20,6 +20,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestGeneratePVCFromSnapshot(t *testing.T) {
@@ -78,7 +79,34 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 }
 
 func TestReconcileSnapshotNew(t *testing.T) {
-	r := fakeReconciler()
+	podZero := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster-rs0-0",
+			Namespace: "default",
+		},
+	}
+
+	r := fakeReconciler(podZero)
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+		},
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets: &psmdbv1.SecretsSpec{
+				Users: "my-cluster-secrets",
+			},
+			Replsets: []*psmdbv1.ReplsetSpec{
+				{
+					Name:    "rs0",
+					Size:    3,
+					Storage: &psmdbv1.MongodSpecStorage{},
+				},
+			},
+		},
+	}
 
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
 		ObjectMeta: metav1.ObjectMeta{
@@ -91,7 +119,7 @@ func TestReconcileSnapshotNew(t *testing.T) {
 		},
 	}
 
-	status, err := r.reconcileSnapshotNew(restore)
+	status, err := r.reconcileSnapshotNew(t.Context(), restore, cluster)
 	assert.NoError(t, err)
 	assert.Equal(t, psmdbv1.RestoreStateWaiting, status.State)
 	// Other status fields should be preserved
@@ -917,6 +945,23 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 	ctx := context.Background()
 
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+		},
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Replsets: []*psmdbv1.ReplsetSpec{
+				{
+					Name:    "rs0",
+					Size:    3,
+					Storage: &psmdbv1.MongodSpecStorage{},
+				},
+			},
+		},
+	}
+
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-restore",
@@ -927,8 +972,15 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 		},
 	}
 
-	r := fakeReconciler()
-	status, err := r.reconcileExternalSnapshotRestore(ctx, restore, nil, nil)
+	podZero := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster-rs0-0",
+			Namespace: "default",
+		},
+	}
+
+	r := fakeReconciler(podZero)
+	status, err := r.reconcileExternalSnapshotRestore(ctx, restore, nil, cluster)
 	assert.NoError(t, err)
 	assert.Equal(t, psmdbv1.RestoreStateWaiting, status.State)
 }

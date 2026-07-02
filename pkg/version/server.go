@@ -32,7 +32,7 @@ var (
 
 // Server returns server version and platform (k8s|oc)
 // it performs API requests for the first invocation and then returns "cached" value
-func Server(cl *clientcmd.Client) (*ServerVersion, error) {
+func Server(cl clientcmd.Client) (*ServerVersion, error) {
 	mx.Lock()
 	defer mx.Unlock()
 	if cVersion != nil {
@@ -50,7 +50,7 @@ func Server(cl *clientcmd.Client) (*ServerVersion, error) {
 }
 
 // GetServer make request to platform server and returns server version and platform (k8s|oc)
-func GetServer(cl *clientcmd.Client) (*ServerVersion, error) {
+func GetServer(cl clientcmd.Client) (*ServerVersion, error) {
 	client := cl.REST()
 
 	version := &ServerVersion{}

@@ -1471,7 +1471,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 	return nil
 }
 
-func ResyncConfigExec(ctx context.Context, cl *clientcmd.Client, pod *corev1.Pod) error {
+func ResyncConfigExec(ctx context.Context, cl clientcmd.Client, pod *corev1.Pod) error {
 	log := logf.FromContext(ctx)
 
 	stdoutBuffer := bytes.Buffer{}
