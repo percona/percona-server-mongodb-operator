@@ -26,9 +26,6 @@ spec:
     - '*.some-name-rs0.NAME_SPACE.svc.cluster.local'
     - some-name-rs0.NAME_SPACE.svc.clusterset.local
     - '*.some-name-rs0.NAME_SPACE.svc.clusterset.local'
-    - some-name-rs0-0.clouddemo.xyz
-    - some-name-rs0-1.clouddemo.xyz
-    - some-name-rs0-2.clouddemo.xyz
     - '*.NAME_SPACE.svc.clusterset.local'
     - some-name-mongos
     - some-name-mongos.NAME_SPACE
@@ -49,7 +46,7 @@ spec:
   duration: 2160h0m0s
   issuerRef:
     group: cert-manager.io
-    kind: Issuer
+    kind: ClusterIssuer
     name: some-name-psmdb-issuer
   secretName: some-name-ssl
   subject:
