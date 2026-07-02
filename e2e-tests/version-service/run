@@ -24,9 +24,10 @@ function check_telemetry_transfer() {
 		.spec.initImage = "'$IMAGE'" |
 		.spec.crVersion = "9.9.9" |
 		.spec.image = "'$IMAGE_MONGOD'" |
-		.spec.pmm.image = "'$IMAGE_PMM_CLIENT'" |
+		.spec.pmm.image = "'$IMAGE_PMM3_CLIENT'" |
 		.spec.backup.enabled = false |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' ${src_dir}/deploy/cr-minimal.yaml \
+		| add_arch_to_psmdb - \
 		| kubectl_bin apply -f -
 
 	desc 'check if Pod is started'
@@ -143,7 +144,7 @@ kubectl_bin delete pod -l run=version-service ${OPERATOR_NS:+-n $OPERATOR_NS}
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "disabled"
 
 cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
-expected_images=("percona/percona-server-mongodb:6.0.3-2" "percona/percona-server-mongodb:8.0.4-1-multi" "percona/percona-server-mongodb:8.0.4-1-multi" "percona/percona-server-mongodb:6.0.4-3" "$IMAGE_MONGOD")
+expected_images=("percona/percona-server-mongodb:6.0.27-21" "percona/percona-server-mongodb:8.0.19-7" "percona/percona-server-mongodb:8.0.19-7" "percona/percona-server-mongodb:6.0.27-21" "$IMAGE_MONGOD")
 
 for i in "${!cases[@]}"; do
 	desc "test ${cases[$i]}"
@@ -162,8 +163,9 @@ for i in "${!cases[@]}"; do
 		.spec.backup.enabled = false |
 		del(.spec.backup.tasks) |
 		.spec.image = "'$IMAGE_MONGOD'" |
-		.spec.pmm.image = "'$IMAGE_PMM_CLIENT'" |
+		.spec.pmm.image = "'$IMAGE_PMM3_CLIENT'" |
 		.spec.backup.image = "'$IMAGE_BACKUP'"' "$tmp_file" \
+		| add_arch_to_psmdb - \
 		| kubectl_bin apply -f -
 
 	desc 'check if Pod is started'

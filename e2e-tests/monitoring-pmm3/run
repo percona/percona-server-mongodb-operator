@@ -116,11 +116,23 @@ deploy_pmm3_server() {
 		local additional_params="--set platform=openshift --set supresshttp2=false --set serviceAccount.create=false --set serviceAccount.name=pmm-server"
 	fi
 
+	local pmm_args=(
+		--set fullnameOverride=monitoring-server
+		--set image.tag=${IMAGE_PMM3_SERVER#*:}
+		--set image.repository=${IMAGE_PMM3_SERVER%:*}
+		--set service.type=LoadBalancer
+	)
+	if arch_scheduling_enabled; then
+		pmm_args+=(
+			--set "nodeSelector.kubernetes\.io/arch=${ARCH}"
+			--set "tolerations[0].key=kubernetes.io/arch"
+			--set "tolerations[0].operator=Equal"
+			--set "tolerations[0].value=${ARCH}"
+			--set "tolerations[0].effect=NoSchedule"
+		)
+	fi
 	retry 10 60 helm install monitoring percona/pmm \
-		--set fullnameOverride=monitoring-server \
-		--set image.tag=${IMAGE_PMM3_SERVER#*:} \
-		--set image.repository=${IMAGE_PMM3_SERVER%:*} \
-		--set service.type=LoadBalancer \
+		"${pmm_args[@]}" \
 		$additional_params \
 		--force
 }

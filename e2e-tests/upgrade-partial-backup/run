@@ -129,6 +129,7 @@ setup_cluster() {
 		    "endpointUrl": "https://storage.googleapis.com"
 		  }
 		}' \
+		| add_arch_to_psmdb - \
 		| kubectl_bin apply -f -
 
 	wait_for_running ${cluster}-rs0 3

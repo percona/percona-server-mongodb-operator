@@ -25,7 +25,7 @@ spec:
     containerSecurityContext:
       runAsNonRoot: true
       runAsUser: 1001210000
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image:
   imagePullPolicy: Always
   pmm:
     enabled: false

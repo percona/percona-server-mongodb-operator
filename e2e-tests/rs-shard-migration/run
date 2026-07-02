@@ -38,7 +38,34 @@ function main() {
 	wait_backup "backup-minio-1"
 
 	desc 'initiate migration from replicaset to sharded cluster'
-	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"add","path":"/spec/sharding","value":{"configsvrReplSet":{"size":'${CLUSTER_SIZE}',"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}},"enabled":true,"mongos":{"size":1}}}]'
+	sharding_patch=$(jq -nc \
+		--argjson size "${CLUSTER_SIZE}" \
+		--argjson scheduling "$(arch_psmdb_scheduling_json)" \
+		'[
+			{
+				op: "add",
+				path: "/spec/sharding",
+				value: {
+					enabled: true,
+					configsvrReplSet: ({
+						size: $size,
+						volumeSpec: {
+							persistentVolumeClaim: {
+								resources: {
+									requests: {
+										storage: "3Gi"
+									}
+								}
+							}
+						}
+					} + $scheduling),
+					mongos: ({
+						size: 1
+					} + $scheduling)
+				}
+			}
+		]')
+	kubectl_bin patch psmdb/${cluster} --type json -p="${sharding_patch}"
 	sleep 10
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
