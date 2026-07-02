@@ -15071,6 +15071,7 @@ spec:
                       type: object
                   required:
                   - size
+                  - volumeSpec
                   type: object
                 type: array
               revisionHistoryLimit:
@@ -27658,6 +27659,7 @@ spec:
                         type: object
                     required:
                     - size
+                    - volumeSpec
                     type: object
                   enabled:
                     type: boolean
@@ -30945,13 +30947,22 @@ spec:
           livenessProbe:
             failureThreshold: 3
             httpGet:
-              path: /metrics
-              port: metrics
+              path: /healthz
+              port: health
+              scheme: HTTP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: health
               scheme: HTTP
           ports:
           - containerPort: 8080
             protocol: TCP
             name: metrics
+          - containerPort: 8081
+            protocol: TCP
+            name: health
           command:
           - percona-server-mongodb-operator
           env:
@@ -30977,3 +30988,5 @@ spec:
               value: "false"
             - name: MAX_CONCURRENT_RECONCILES
               value: "1"
+            - name: CERTMANAGER_NAMESPACE
+              value: "cert-manager"

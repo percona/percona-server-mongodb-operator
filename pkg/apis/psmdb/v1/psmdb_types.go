@@ -206,10 +206,10 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode                 `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                  `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration        `json:"certValidityDuration,omitempty"`
+	IssuerConf               cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
@@ -896,11 +896,12 @@ type PrimaryPreferTagSelectorSpec map[string]string
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name                     string                       `json:"name,omitempty"`
-	Size                     int32                        `json:"size"`
-	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
-	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
-	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Size        int32           `json:"size"`
+	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
+	Arbiter     Arbiter         `json:"arbiter,omitempty"`
+	Expose      ExposeTogglable `json:"expose,omitempty"`
+	// +kubebuilder:validation:Required
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
