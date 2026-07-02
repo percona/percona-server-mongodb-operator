@@ -140,6 +140,18 @@ func (u *User) IsExternalDB() bool {
 	return u.DB == "$external"
 }
 
+func (u *User) DefaultSecretName(cr *PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-custom-user-secret", cr.Name)
+}
+
+func (u *User) SecretName(cr *PerconaServerMongoDB) string {
+	if u.PasswordSecretRef != nil {
+		return u.PasswordSecretRef.Name
+	}
+
+	return u.DefaultSecretName(cr)
+}
+
 type RoleAuthenticationRestriction struct {
 	ClientSource  []string `json:"clientSource,omitempty"`
 	ServerAddress []string `json:"serverAddress,omitempty"`
@@ -194,10 +206,10 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode                 `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                  `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration        `json:"certValidityDuration,omitempty"`
+	IssuerConf               cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
@@ -884,11 +896,12 @@ type PrimaryPreferTagSelectorSpec map[string]string
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name                     string                       `json:"name,omitempty"`
-	Size                     int32                        `json:"size"`
-	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
-	Arbiter                  Arbiter                      `json:"arbiter,omitempty"`
-	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Size        int32           `json:"size"`
+	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
+	Arbiter     Arbiter         `json:"arbiter,omitempty"`
+	Expose      ExposeTogglable `json:"expose,omitempty"`
+	// +kubebuilder:validation:Required
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
@@ -1335,6 +1348,12 @@ type GCSRetryer struct {
 	BackoffMultiplier float64       `json:"backoffMultiplier"`
 }
 
+type OSSRetryer struct {
+	MaxAttempts int             `json:"maxAttempts"`
+	MaxBackoff  metav1.Duration `json:"maxBackoff"`
+	BaseDelay   metav1.Duration `json:"baseDelay"`
+}
+
 type BackupStorageGCSSpec struct {
 	Bucket            string      `json:"bucket"`
 	Prefix            string      `json:"prefix,omitempty"`
@@ -1350,6 +1369,26 @@ type BackupStorageAzureSpec struct {
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 }
 
+type BackupStorageOSSSpec struct {
+	Bucket               string                  `json:"bucket,omitempty"`
+	Prefix               string                  `json:"prefix,omitempty"`
+	CredentialsSecret    string                  `json:"credentialsSecret"`
+	EndpointURL          string                  `json:"endpointUrl,omitempty"`
+	Region               string                  `json:"region,omitempty"`
+	ConnectTimeout       metav1.Duration         `json:"connectTimeout,omitempty"`
+	UploadPartSize       int64                   `json:"uploadPartSize,omitempty"`
+	MaxUploadParts       int32                   `json:"maxUploadParts,omitempty"`
+	Retryer              *OSSRetryer             `json:"retryer,omitempty"`
+	ServerSideEncryption OSSServerSideEncryption `json:"serverSideEncryption,omitempty"`
+}
+
+type OSSServerSideEncryption struct {
+	SecretName          string `json:"secretName,omitempty"`
+	EncryptionMethod    string `json:"encryptionMethod,omitempty"`
+	EncryptionAlgorithm string `json:"encryptionAlgorithm,omitempty"`
+	EncryptionKeyID     string `json:"encryptionKeyId,omitempty"`
+}
+
 type BackupStorageFilesystemSpec struct {
 	Path string `json:"path"`
 }
@@ -1362,6 +1401,7 @@ const (
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
 	BackupStorageMinio      BackupStorageType = "minio"
+	BackupStorageOSS        BackupStorageType = "oss"
 )
 
 type BackupStorageSpec struct {
@@ -1374,6 +1414,7 @@ type BackupStorageSpec struct {
 	Minio      BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS        BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
+	OSS        BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
 }
 
@@ -1644,6 +1685,42 @@ const (
 	// RoleSearch is the user mongot authenticates as.
 	RoleSearch SystemUserRole = "searchCoordinator"
 )
+
+func (role SystemUserRole) EnvKeyUsername() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminUser
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminUser
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminUser
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorUser
+	case RoleBackup:
+		return EnvMongoDBBackupUser
+	case RoleSearch:
+		return EnvMongoDBSearchUser
+	}
+	return ""
+}
+
+func (role SystemUserRole) EnvKeyPassword() string {
+	switch role {
+	case RoleDatabaseAdmin:
+		return EnvMongoDBDatabaseAdminPassword
+	case RoleClusterAdmin:
+		return EnvMongoDBClusterAdminPassword
+	case RoleUserAdmin:
+		return EnvMongoDBUserAdminPassword
+	case RoleClusterMonitor:
+		return EnvMongoDBClusterMonitorPassword
+	case RoleBackup:
+		return EnvMongoDBBackupPassword
+	case RoleSearch:
+		return EnvMongoDBSearchPassword
+	}
+	return ""
+}
 
 func InternalUserSecretName(cr *PerconaServerMongoDB) string {
 	return internalPrefix + cr.Name + userPostfix

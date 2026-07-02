@@ -62,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosSvc(ctx context.Context, 
 
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-			err := r.createOrUpdateMongosSvc(ctx, cr, naming.MongosServiceName(cr)+"-"+strconv.Itoa(i))
+			err := r.createOrUpdateMongosSvc(ctx, cr, naming.MongosPerPodServiceName(cr, i))
 			if err != nil {
 				return errors.Wrap(err, "create or update mongos service")
 			}
@@ -128,7 +128,8 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 	ls := naming.ClusterLabels(cr)
 
 	seList := mcs.ServiceExportList()
-	err := r.client.List(ctx,
+	err := r.client.List(
+		ctx,
 		seList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -149,7 +150,8 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 	}
 
 	svcList := &corev1.ServiceList{}
-	err = r.client.List(ctx,
+	err = r.client.List(
+		ctx,
 		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -213,7 +215,8 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 
 	// clear old services
 	svcList := &corev1.ServiceList{}
-	err := r.client.List(ctx,
+	err := r.client.List(
+		ctx,
 		svcList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -243,10 +246,10 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedMongosSvc(ctx context.Cont
 	svcNames := make(map[string]struct{}, cr.Spec.Sharding.Mongos.Size)
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
 		for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-			svcNames[cr.Name+"-mongos-"+strconv.Itoa(i)] = struct{}{}
+			svcNames[naming.MongosPerPodServiceName(cr, i)] = struct{}{}
 		}
 	} else {
-		svcNames[cr.Name+"-mongos"] = struct{}{}
+		svcNames[naming.MongosServiceName(cr)] = struct{}{}
 	}
 
 	svcList, err := psmdb.GetMongosServices(ctx, r.client, cr)
