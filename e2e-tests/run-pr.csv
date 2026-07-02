@@ -92,6 +92,7 @@ split-horizon
 split-horizon-manual-tls
 stable-resource-version
 storage
+tls-clusterissuer-cert-manager
 tls-issue-cert-manager
 unsafe-psa
 upgrade
