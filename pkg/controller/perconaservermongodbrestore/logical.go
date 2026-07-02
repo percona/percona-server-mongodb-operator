@@ -110,23 +110,17 @@ func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec
 	return
 }
 
-func runRestore(ctx context.Context, backup string, pbmc backup.PBM, cr *psmdbv1.PerconaServerMongoDBRestore) (string, error) {
-	log := logf.FromContext(ctx)
-	log.Info("Starting logical restore", "backup", backup)
-
-	var (
-		cmd   ctrl.Cmd
-		rName = time.Now().UTC().Format(time.RFC3339Nano)
-	)
-
-	cmd = ctrl.Cmd{
+func getRestoreCmd(ctx context.Context, pbmc backup.PBM, cr *psmdbv1.PerconaServerMongoDBRestore, restoreName, backupName string) (ctrl.Cmd, error) {
+	cmd := ctrl.Cmd{
 		Cmd: ctrl.CmdRestore,
 		Restore: &ctrl.RestoreCmd{
-			Name:          rName,
-			BackupName:    backup,
+			Name:          restoreName,
+			BackupName:    backupName,
 			RSMap:         cr.Spec.RSMap,
 			Namespaces:    cr.Spec.Selective.GetNamespaces(),
 			UsersAndRoles: cr.Spec.Selective.GetWithUsersAndRoles(),
+			NamespaceFrom: cr.Spec.Selective.GetNamespaceFrom(),
+			NamespaceTo:   cr.Spec.Selective.GetNamespaceTo(),
 		},
 	}
 
@@ -135,16 +129,29 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, cr *psmdbv1
 		case psmdbv1.PITRestoreTypeDate:
 			ts := pitr.Date.Unix()
 			if _, err := pbmc.GetPITRChunkContains(ctx, ts, cr.Spec.RSMap); err != nil {
-				return "", err
+				return ctrl.Cmd{}, err
 			}
 			cmd.Restore.OplogTS = primitive.Timestamp{T: uint32(ts)}
 		case psmdbv1.PITRestoreTypeLatest:
 			tl, err := pbmc.GetLatestTimelinePITR(ctx, cr.Spec.RSMap)
 			if err != nil {
-				return "", err
+				return ctrl.Cmd{}, err
 			}
 			cmd.Restore.OplogTS = primitive.Timestamp{T: tl.End}
 		}
+	}
+
+	return cmd, nil
+}
+
+func runRestore(ctx context.Context, backupName string, pbmc backup.PBM, cr *psmdbv1.PerconaServerMongoDBRestore) (string, error) {
+	log := logf.FromContext(ctx)
+	log.Info("Starting logical restore", "backup", backupName)
+
+	restoreName := time.Now().UTC().Format(time.RFC3339Nano)
+	cmd, err := getRestoreCmd(ctx, pbmc, cr, restoreName, backupName)
+	if err != nil {
+		return "", err
 	}
 
 	log.Info("Sending restore command", "restoreCmd", cmd.Restore)
@@ -152,5 +159,5 @@ func runRestore(ctx context.Context, backup string, pbmc backup.PBM, cr *psmdbv1
 		return "", errors.Wrap(err, "send restore cmd")
 	}
 
-	return rName, nil
+	return restoreName, nil
 }

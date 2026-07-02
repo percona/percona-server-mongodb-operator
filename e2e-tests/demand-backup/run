@@ -6,6 +6,39 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+check_custom_backup_probes() {
+	local cluster=$1
+
+	desc 'verify custom backup-agent liveness/readiness probes set via CR are applied'
+
+	kubectl_bin patch psmdb ${cluster%-rs0} --type=json -p='[
+	  {"op":"add","path":"/spec/backup/livenessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":30,"periodSeconds":15}},
+	  {"op":"add","path":"/spec/backup/readinessProbe","value":{"exec":{"command":["/bin/true"]},"initialDelaySeconds":5,"periodSeconds":10}}
+	]'
+
+	wait_for_running $cluster 3
+
+	local liveness readiness
+	liveness=$(kubectl_bin get statefulset/${cluster} -o jsonpath='{.spec.template.spec.containers[?(@.name=="backup-agent")].livenessProbe.exec.command[0]}')
+	readiness=$(kubectl_bin get statefulset/${cluster} -o jsonpath='{.spec.template.spec.containers[?(@.name=="backup-agent")].readinessProbe.exec.command[0]}')
+
+	if [[ $liveness != "/bin/true" ]]; then
+		echo "error: custom backup-agent livenessProbe was not applied, got: '$liveness'"
+		exit 1
+	fi
+	if [[ $readiness != "/bin/true" ]]; then
+		echo "error: custom backup-agent readinessProbe was not applied, got: '$readiness'"
+		exit 1
+	fi
+
+	desc 'revert custom backup-agent probes to defaults'
+	kubectl_bin patch psmdb ${cluster%-rs0} --type=json -p='[
+	  {"op":"remove","path":"/spec/backup/livenessProbe"},
+	  {"op":"remove","path":"/spec/backup/readinessProbe"}
+	]'
+	wait_for_running $cluster 3
+}
+
 run_recovery_check() {
 	local backup=$1
 	local cluster=$2
@@ -112,6 +145,46 @@ run_recovery_check_selective() {
 	fi
 }
 
+run_recovery_check_namespace_remap() {
+	local backup=$1
+	local cluster=$2
+	local database=$3
+	local src_collection=$4
+	local dst_collection=$5
+
+	restore_name="restore-$backup-remapped"
+
+	run_mongo \
+		"use $database\n db.$dst_collection.drop()" \
+		"myApp:myPass@$cluster.$namespace"
+
+	if [[ $(collection_exists "$dst_collection") == "true" ]]; then
+		echo "Collection $dst_collection exists before restore"
+		exit 1
+	fi
+
+	yq "$test_dir/conf/restore.yml" \
+		| yq ".metadata.name=\"$restore_name\"" \
+		| yq ".spec.backupName=\"$backup\"" \
+		| yq ".spec.selective.nsFrom=\"$database.$src_collection\"" \
+		| yq ".spec.selective.nsTo=\"$database.$dst_collection\"" \
+		| kubectl_bin apply -f -
+
+	wait_restore "$backup-remapped" "${cluster/-rs0/}"
+
+	if [[ $(collection_exists "$dst_collection") == "false" ]]; then
+		echo "Collection $dst_collection doesn't exist after restore"
+		exit 1
+	fi
+
+	if [[ $(collection_exists "$src_collection") == "false" ]]; then
+		echo "Collection $src_collection missing after remap restore"
+		exit 1
+	fi
+
+	compare_mongo_cmd "find" "myApp:myPass@$cluster.$namespace" "-remapped" ".svc.cluster.local" "$database" "$dst_collection"
+}
+
 compare_pbm_profile_setup() {
 	local cluster=$1
 	local profile=$2
@@ -147,6 +220,8 @@ wait_for_running $cluster 3
 
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster
+
+check_custom_backup_probes $cluster
 
 desc 'create user'
 run_mongo \
@@ -199,6 +274,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_gcp_s3="backup-gcp-cs-s3"
 	backup_name_gcp_sa="backup-gcp-cs-sa"
 	backup_name_azure="backup-azure-blob"
+	backup_name_oss_native="backup-oss-native"
 fi
 
 desc 'run backups'
@@ -207,6 +283,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
+	run_backup oss-native
 fi
 run_backup "minio"
 
@@ -215,6 +292,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
+	wait_backup "$backup_name_oss_native"
 fi
 wait_backup "$backup_name_minio"
 
@@ -243,6 +321,13 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	setup_azure_credentials
 	check_backup_existence_azure ${backup_dest_azure} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
+
+	desc 'check backup and restore -- oss-native'
+	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
+	backup_endpoint_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "endpointUrl")
+	backup_region_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "region")
+	check_backup_in_storage ${backup_name_oss_native} oss rs0 'myApp.test.gz'
+	run_recovery_check "$backup_name_oss_native" "$cluster"
 fi
 
 desc 'check backup and restore -- minio'
@@ -268,6 +353,9 @@ run_mongo \
 desc 'selective restore with users and roles -- minio'
 run_recovery_check_selective "$backup_name_minio" "$cluster" "myApp" "test2" "true" "$custom_user_name" "$custom_role_name"
 
+desc 'selective restore with namespace remap -- minio'
+run_recovery_check_namespace_remap "$backup_name_minio" "$cluster" "myApp" "test" "test_remapped"
+
 desc 'restore from backup source, with storageName -- minio'
 backup_dest_minio=$(get_backup_dest "$backup_name_minio")
 run_recovery_check_bkp_source "$backup_name_minio" "$backup_dest_minio" "$cluster" "${backup_name_minio}-source-0"
@@ -292,6 +380,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
 fi
 
 desc 'checking backup deletion without cr'
@@ -301,6 +390,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
+	run_backup oss-native
 fi
 
 wait_backup "$backup_name_minio"
@@ -309,10 +399,14 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
+	wait_backup "$backup_name_oss_native"
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
+	backup_endpoint_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "endpointUrl")
+	backup_region_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "region")
 fi
 
 kubectl_bin delete psmdb --all
@@ -334,6 +428,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
 fi
 
 # Temporarily skipping this check

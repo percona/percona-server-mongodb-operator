@@ -11,8 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -75,6 +78,70 @@ func TestGetReconcileInterval(t *testing.T) {
 
 			got := getReconcileInterval()
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestEnsureSecurityKeys(t *testing.T) {
+	tests := []struct {
+		name                    string
+		crVersion               string
+		vaultSecret             string
+		wantEncryptionKeySecret bool
+	}{
+		{
+			name:                    "creates security keys without vault",
+			crVersion:               "1.23.0",
+			wantEncryptionKeySecret: true,
+		},
+		{
+			name:                    "creates security keys with vault before 1.23.0",
+			crVersion:               "1.22.0",
+			vaultSecret:             "vault-secret",
+			wantEncryptionKeySecret: true,
+		},
+		{
+			name:        "skips encryption key with vault since 1.23.0",
+			crVersion:   "1.23.0",
+			vaultSecret: "vault-secret",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-cluster",
+					Namespace: "some-ns",
+				},
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: tt.crVersion,
+					Secrets: &psmdbv1.SecretsSpec{
+						EncryptionKey: "cluster1-mongodb-encryption-key",
+						Vault:         tt.vaultSecret,
+					},
+				},
+			}
+			s := runtime.NewScheme()
+			require.NoError(t, corev1.AddToScheme(s))
+			require.NoError(t, psmdbv1.SchemeBuilder.AddToScheme(s))
+			cl := fake.NewClientBuilder().WithScheme(s).Build()
+			r := &ReconcilePerconaServerMongoDB{
+				client: cl,
+				scheme: s,
+			}
+
+			require.NoError(t, r.ensureSecurityKeys(t.Context(), cr))
+
+			err := cl.Get(t.Context(), types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, &corev1.Secret{})
+			assert.NoError(t, err)
+
+			err = cl.Get(t.Context(), types.NamespacedName{Name: cr.Spec.Secrets.EncryptionKey, Namespace: cr.Namespace}, &corev1.Secret{})
+			if tt.wantEncryptionKeySecret {
+				assert.NoError(t, err)
+				return
+			}
+			assert.True(t, k8serrors.IsNotFound(err), "expected %s to be absent, got %v", cr.Spec.Secrets.EncryptionKey, err)
 		})
 	}
 }
@@ -202,6 +269,45 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 					Enabled: true,
 				},
 			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Replset volumeSpec validation", func() {
+		It("should reject a replset without volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-no-volumespec-rs0", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Replsets[0].VolumeSpec = nil
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+		})
+
+		It("should reject an additional replset without volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-no-volumespec-rs1", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Replsets = append(cr.Spec.Replsets, &psmdbv1.ReplsetSpec{
+				Name: "rs1",
+				Size: 3,
+			})
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+		})
+
+		It("should allow an additional replset that specifies volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-rs1-with-volumespec", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs1 := cr.Spec.Replsets[0].DeepCopy()
+			rs1.Name = "rs1"
+			cr.Spec.Replsets = append(cr.Spec.Replsets, rs1)
 
 			err = k8sClient.Create(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())

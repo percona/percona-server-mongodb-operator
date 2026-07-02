@@ -18,6 +18,7 @@ import (
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	k8sutils "github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -45,11 +47,25 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	pkgSecret "github.com/percona/percona-server-mongodb-operator/pkg/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+const eventRegardingNameIndex = "regarding.name"
+
+func eventRegardingNameIndexer(o client.Object) []string {
+	evt, ok := o.(*eventsv1.Event)
+	if !ok {
+		return nil
+	}
+	if evt.Regarding.Name == "" {
+		return nil
+	}
+	return []string{evt.Regarding.Name}
+}
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -57,6 +73,13 @@ func Add(mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
+	}
+
+	// the volume resize logic lists PVC events through the cached client,
+	// which requires the field to be indexed
+	err = mgr.GetFieldIndexer().IndexField(context.TODO(), &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
+	if err != nil {
+		return errors.Wrapf(err, "index events by %s", eventRegardingNameIndex)
 	}
 
 	return add(mgr, r)
@@ -81,22 +104,12 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "failed to get operator pod image")
 	}
 
-	client, err := client.New(mgr.GetConfig(), client.Options{
-		Scheme: mgr.GetScheme(),
-		Cache: &client.CacheOptions{
-			DisableFor: []client.Object{&corev1.Node{}},
-		},
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "create client")
-	}
-
 	secretProviders := []pkgSecret.Provider{
 		new(vault.Provider),
 	}
 
 	return &ReconcilePerconaServerMongoDB{
-		client:                 client,
+		client:                 mgr.GetClient(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
 		reconcileIn:            getReconcileInterval(),
@@ -444,26 +457,20 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	err = r.reconcileSSL(ctx, cr)
 	if err != nil {
+		if errors.Is(err, errTLSNotReady) {
+			// certManagementPolicy is userProvidedOnly and the TLS secret isn't there yet.
+			// Stay in init state and wait for the user to create it instead of erroring out.
+			log.Info("waiting for user-provided TLS secret before continuing reconciliation", "secret", api.SSLSecretName(cr))
+			err = nil
+			return rr, nil
+		}
 		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+api.SSLSecretName(cr)+` manually or setup cert-manager correctly`, err)
 		return reconcile.Result{}, err
 	}
 
-	ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
+	err = r.ensureSecurityKeys(ctx, cr)
 	if err != nil {
-		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
 		return reconcile.Result{}, err
-	}
-	if ikCreated {
-		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
-	}
-
-	created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)
-	if err != nil {
-		err = errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.EncryptionKey)
-		return reconcile.Result{}, err
-	}
-	if created {
-		log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
 	}
 
 	err = r.reconcileBackups(ctx, cr)
@@ -538,10 +545,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
-			return err
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete arbiter statefulset: %s", naming.ArbiterStatefulSetName(cr, replset))
 		}
 	}
 
@@ -553,10 +558,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
-			return err
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete non voting statefulset: %s", naming.NonVotingStatefulSetName(cr, replset))
 		}
 	}
 
@@ -564,15 +567,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 		matchLabels = naming.HiddenLabels(cr, replset)
 		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
 		if err != nil {
-			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
+			err = errors.Errorf("reconcile hidden StatefulSet for %s: %v", replset.Name, err)
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
-			return err
+		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace)); err != nil {
+			return errors.Wrapf(err, "failed to delete hidden statefulset: %s", naming.HiddenStatefulSetName(cr, replset))
 		}
+	}
+
+	if err := r.reconcileSearch(ctx, cr, replset); err != nil {
+		return errors.Wrapf(err, "reconcile search for replset %s", replset.Name)
 	}
 
 	_, ok := cr.Status.Replsets[replset.Name]
@@ -836,7 +841,8 @@ type statefulSetWithReplicaNameAndPort struct {
 // client and perform necessary operations before the sts deletion.
 func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx context.Context, cr *api.PerconaServerMongoDB) ([]statefulSetWithReplicaNameAndPort, error) {
 	existingSTSList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &existingSTSList,
+	if err := r.client.List(
+		ctx, &existingSTSList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -948,6 +954,32 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 	return nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) ensureSecurityKeys(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
+	if cr.KeyFileAuthEnabled() {
+		ikCreated, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.GetInternalKey(cr), api.InternalKeyName, 768, true)
+		if err != nil {
+			return errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.GetInternalKey(cr))
+		}
+		if ikCreated {
+			log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.GetInternalKey(cr))
+		}
+	}
+
+	if cr.Spec.Secrets.Vault == "" || cr.CompareVersion("1.23.0") < 0 {
+		created, err := r.ensureSecurityKey(ctx, cr, cr.Spec.Secrets.EncryptionKey, api.EncryptionKeyName, 32, false)
+		if err != nil {
+			return errors.Wrapf(err, "ensure mongo Key %s", cr.Spec.Secrets.EncryptionKey)
+		}
+		if created {
+			log.Info("Created a new mongo key", "KeyName", cr.Spec.Secrets.EncryptionKey)
+		}
+	}
+
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int, setOwner bool) (created bool, err error) {
 	key := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -1043,24 +1075,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, c
 
 	sfsName := cr.Name + "-" + api.ConfigReplSetName
 	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
-
-	if err := r.client.Delete(ctx, sfs); err != nil && !k8serrors.IsNotFound(err) {
+	if err := k8sutils.DeleteIfExists(ctx, r.client, sfs); err != nil {
 		return errors.Wrapf(err, "failed to delete sfs: %s", sfs.Name)
 	}
 
-	svc := corev1.Service{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + api.ConfigReplSetName, Namespace: cr.Namespace}, &svc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to get config service")
+	svc := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-" + api.ConfigReplSetName,
+			Namespace: cr.Namespace,
+		},
 	}
-
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-
-	err = r.client.Delete(ctx, &svc)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete config service")
+	if err := k8sutils.DeleteIfExists(ctx, r.client, &svc); err != nil {
+		return errors.Wrapf(err, "failed to delete config service: %s", svc.Name)
 	}
 
 	return nil
@@ -1098,15 +1124,6 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 	return errors.Wrap(err, "failed to set FCV")
 }
 
-func (r *ReconcilePerconaServerMongoDB) deleteMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	err := r.client.Delete(ctx, psmdb.MongosStatefulset(cr))
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "failed to delete mongos statefulset")
-	}
-
-	return nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Sharding.Enabled {
 		return nil
@@ -1133,11 +1150,18 @@ func (r *ReconcilePerconaServerMongoDB) deleteMongosIfNeeded(ctx context.Context
 		}
 	}
 
-	return r.deleteMongos(ctx, cr)
+	if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.MongosStatefulset(cr)); err != nil {
+		return errors.Wrap(err, "failed to delete mongos statefulset")
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
 	reconcileConfigMap := func(rs *api.ReplsetSpec, name string, configuration string) error {
+		configuration, err := vectorsearch.InjectMongodConfig(configuration, cr, rs)
+		if err != nil {
+			return errors.Wrap(err, "inject search setParameters")
+		}
 		if configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongod config map %s", name)
@@ -1228,7 +1252,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	reconcileConfigMap := func() error {
 		name := naming.MongosCustomConfigName(cr)
-		if !cr.Spec.Sharding.Enabled || cr.Spec.Sharding.Mongos.Configuration == "" {
+		var userConfig string
+		if cr.Spec.Sharding.Enabled {
+			userConfig = string(cr.Spec.Sharding.Mongos.Configuration)
+		}
+		configuration, err := vectorsearch.InjectMongosConfig(userConfig, cr)
+		if err != nil {
+			return errors.Wrap(err, "inject search setParameters")
+		}
+		if !cr.Spec.Sharding.Enabled || configuration == "" {
 			if err := deleteConfigMapIfExists(ctx, r.client, cr, name); err != nil {
 				return errors.Wrapf(err, "failed to delete mongos config map: %s", name)
 			}
@@ -1242,11 +1274,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 				Labels:    naming.MongosLabels(cr),
 			},
 			Data: map[string]string{
-				"mongos.conf": string(cr.Spec.Sharding.Mongos.Configuration),
+				"mongos.conf": configuration,
 			},
 		}
-		err := r.createOrUpdateConfigMap(ctx, cr, cm)
-		if err != nil {
+		if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 			return errors.Wrap(err, "create or update configmap")
 		}
 		return nil
@@ -1500,7 +1531,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		cfgInstances = append(cfgInstances, ext.Host)
 	}
 
-	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, customConfig, cfgInstances)
+	keyfileSecretErr := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.Secrets.GetInternalKey(cr), Namespace: cr.Namespace}, &corev1.Secret{})
+	if client.IgnoreNotFound(keyfileSecretErr) != nil {
+		return errors.Wrap(keyfileSecretErr, "check keyfile secret for mongos")
+	}
+
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, customConfig, cfgInstances, keyfileSecretErr == nil)
 	if err != nil {
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
@@ -1590,11 +1626,44 @@ func ensurePVCs(
 
 var errTLSNotReady = errors.New("waiting for TLS secret")
 
+// currentSSLAnnotation reads the current SSL annotations from existing StatefulSets
+// to preserve them when the TLS secret is missing.
+func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
+	annotation := map[string]string{
+		naming.AnnotationSSLHash:         "",
+		naming.AnnotationSSLInternalHash: "",
+	}
+
+	sfsList := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &sfsList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				naming.LabelKubernetesInstance: cr.Name,
+			}),
+		},
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to get statefulset list")
+	}
+
+	if len(sfsList.Items) > 0 {
+		sts := sfsList.Items[0]
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLHash]; ok {
+			annotation[naming.AnnotationSSLHash] = v
+		}
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLInternalHash]; ok {
+			annotation[naming.AnnotationSSLInternalHash] = v
+		}
+	}
+
+	return annotation, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
 	annotation := make(map[string]string)
 
-	annotation["percona.com/ssl-hash"] = ""
-	annotation["percona.com/ssl-internal-hash"] = ""
+	annotation[naming.AnnotationSSLHash] = ""
+	annotation[naming.AnnotationSSLInternalHash] = ""
 
 	getHash := func(secret *corev1.Secret) string {
 		if secret == nil {
@@ -1606,7 +1675,8 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 
 	getSecret := func(name string) (*corev1.Secret, error) {
 		secretObj := corev1.Secret{}
-		err := r.client.Get(ctx,
+		err := r.client.Get(
+			ctx,
 			types.NamespacedName{
 				Namespace: cr.Namespace,
 				Name:      name,
@@ -1619,17 +1689,29 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		return &secretObj, nil
 	}
 
+	isUserProvidedOnly := cr.Spec.TLS != nil && cr.Spec.TLS.CertManagementPolicy == api.CertManagementUserProvidedOnly
+
 	sslSecret, err := getSecret(api.SSLSecretName(cr))
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			if cr.UnsafeTLSDisabled() {
 				return annotation, nil
 			}
+			if isUserProvidedOnly {
+				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", api.SSLSecretName(cr))
+				cr.Status.AddCondition(api.ClusterCondition{
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
+					Reason:  "TLSSecretNotFound",
+					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLSecretName(cr)),
+				})
+				return r.currentSSLAnnotation(ctx, cr)
+			}
 			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
-	annotation["percona.com/ssl-hash"] = getHash(sslSecret)
+	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {
@@ -1641,11 +1723,26 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 			if cr.UnsafeTLSDisabled() || isCustomSecret {
 				return annotation, nil
 			}
+			if isUserProvidedOnly {
+				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", api.SSLInternalSecretName(cr))
+				cr.Status.AddCondition(api.ClusterCondition{
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
+					Reason:  "TLSSecretNotFound",
+					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", api.SSLInternalSecretName(cr)),
+				})
+				return r.currentSSLAnnotation(ctx, cr)
+			}
 			return nil, errTLSNotReady
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLInternalSecretName(cr))
 	}
-	annotation["percona.com/ssl-internal-hash"] = getHash(sslInternalSecret)
+	annotation[naming.AnnotationSSLInternalHash] = getHash(sslInternalSecret)
+
+	cr.Status.AddCondition(api.ClusterCondition{
+		Status: api.ConditionTrue,
+		Type:   api.ConditionTypeTLSSecretsReady,
+	})
 
 	return annotation, nil
 }

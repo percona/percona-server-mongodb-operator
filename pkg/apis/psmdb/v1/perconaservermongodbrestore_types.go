@@ -24,9 +24,13 @@ type PerconaServerMongoDBRestoreSpec struct {
 	RSMap        map[string]string                 `json:"replsetRemapping,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="(!has(self.nsFrom) && !has(self.nsTo)) || (has(self.nsFrom) && has(self.nsTo))",message="nsFrom and nsTo need to be set together"
+// +kubebuilder:validation:XValidation:rule="(!has(self.nsFrom) && !has(self.nsTo)) || self.nsFrom != self.nsTo",message="nsFrom and nsTo can't be the same"
 type SelectiveRestoreOpts struct {
 	WithUsersAndRoles bool     `json:"withUsersAndRoles,omitempty"`
 	Namespaces        []string `json:"namespaces,omitempty"`
+	NamespaceFrom     string   `json:"nsFrom,omitempty"`
+	NamespaceTo       string   `json:"nsTo,omitempty"`
 }
 
 func (s *SelectiveRestoreOpts) GetNamespaces() []string {
@@ -41,6 +45,20 @@ func (s *SelectiveRestoreOpts) GetWithUsersAndRoles() bool {
 		return false
 	}
 	return s.WithUsersAndRoles
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaceFrom() string {
+	if s == nil {
+		return ""
+	}
+	return s.NamespaceFrom
+}
+
+func (s *SelectiveRestoreOpts) GetNamespaceTo() string {
+	if s == nil {
+		return ""
+	}
+	return s.NamespaceTo
 }
 
 // RestoreState is for restore status states
@@ -132,6 +150,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 		return errors.New("one of backupName or backupSource is required")
 	}
 
+	if backupType != defs.LogicalBackup && r.IsCloningNamespace() {
+		return errors.New("nsFrom and nsTo are only available for logical backups")
+	}
+
 	if r.Spec.BackupSource != nil {
 		if r.Spec.BackupSource.Type != defs.ExternalBackup && len(r.Spec.BackupSource.Destination) == 0 {
 			return errors.New("backupSource destination is required")
@@ -141,14 +163,19 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
+		if r.Spec.BackupSource.OSS != nil && !strings.HasPrefix(r.Spec.BackupSource.Destination, "oss://") {
+			return errors.New("backupSource destination should use oss protocol format")
+		}
+
 		if backupType != defs.ExternalBackup &&
 			len(r.Spec.StorageName) == 0 &&
 			r.Spec.BackupSource.S3 == nil &&
 			r.Spec.BackupSource.GCS == nil &&
 			r.Spec.BackupSource.Azure == nil &&
 			r.Spec.BackupSource.Minio == nil &&
+			r.Spec.BackupSource.OSS == nil &&
 			r.Spec.BackupSource.Filesystem == nil {
-			return errors.New("one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure or backupSource.filesystem is required")
+			return errors.New("one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure, backupSource.oss or backupSource.filesystem is required")
 		}
 	}
 
@@ -168,6 +195,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMongoDBRestore) IsCloningNamespace() bool {
+	return r.Spec.Selective != nil && r.Spec.Selective.NamespaceFrom != ""
 }
 
 // +kubebuilder:validation:Type=string

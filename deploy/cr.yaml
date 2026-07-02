@@ -28,6 +28,7 @@ spec:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    allowInvalidCertificates: true
+#    certManagementPolicy: auto
 #    issuerConf:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
@@ -77,10 +78,12 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
+#    querySource: profiler
 #    resources:
 #      requests:
 #        memory: 150M
@@ -88,6 +91,24 @@ spec:
 #      limits:
 #        memory: 256M
 #        cpu: 400m
+#    # Override the built-in liveness probe of the pmm-client container.
+#    # When not set, the Operator uses HTTP GET :7777/local/Status.
+#    livenessProbe:
+#      httpGet:
+#        path: /local/Status
+#        port: 7777
+#      initialDelaySeconds: 60
+#      timeoutSeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 5
+#    # Add a readiness probe for the pmm-client container.
+#    # When not set, the container has no readiness probe.
+#    readinessProbe:
+#      tcpSocket:
+#        port: 7777
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 3
 
   replsets:
   - name: rs0
@@ -264,6 +285,10 @@ spec:
 #        rack: rack-22
 #      internalTrafficPolicy: Local
 #      externalTrafficPolicy: Local
+#      externalDNS:
+#        prefix: "service-name"
+#        domain: "mongo.example.com"
+#        ttl: 300
     resources:
       limits:
         cpu: "600m"
@@ -472,6 +497,18 @@ spec:
 #    envFrom:
 #    - configMapRef:
 #       name: configmap-name
+#    search:
+#      resources:
+#        requests:
+#          cpu: "8"
+#          memory: 32Gi
+#      storage:
+#        persistentVolumeClaim:
+#          resources:
+#            requests:
+#              storage: 200Gi
+#      affinity:
+#        antiAffinityTopologyKey: "kubernetes.io/hostname"
   sharding:
     enabled: true
 #    balancer:
@@ -574,6 +611,10 @@ spec:
 #          rack: rack-22
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
       resources:
         limits:
           cpu: "600m"
@@ -699,6 +740,10 @@ spec:
 #        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
@@ -779,6 +824,20 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
+#    livenessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#      failureThreshold: 5
+#    readinessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 3
 #    storages:
 #      s3-us-east:
 #        main: true
@@ -812,6 +871,26 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
+#      oss-native:
+#        type: oss
+#        oss:
+#          bucket: OSS-BACKUP-BUCKET-NAME-HERE
+#          prefix: ""
+#          credentialsSecret: my-cluster-name-backup-oss
+#          endpointUrl: https://oss-eu-central-1.aliyuncs.com
+#          region: eu-central-1
+#          connectTimeout: 10s
+#          uploadPartSize: 10485760
+#          maxUploadParts: 10000
+#          retryer:
+#            maxAttempts: 3
+#            maxBackoff: 5m
+#            baseDelay: 1s
+#          serverSideEncryption:
+#            secretName: my-cluster-name-backup-oss-sse
+#            encryptionMethod: sse
+#            encryptionAlgorithm: KMS
+#            encryptionKeyId: OSS-KMS-KEY-ID-HERE
 #      minio:
 #        type: minio
 #        minio:
@@ -955,4 +1034,27 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 0 * * *"
+#      schedule: "0 0 * * *"
+#  search:
+#    enabled: true
+#    image: percona/percona-server-mongodb-search:<tag>
+#    size: 1
+#    storage:
+#      persistentVolumeClaim:
+#        resources:
+#          requests:
+#            storage: 10Gi
+#    resources:
+#      requests:
+#        cpu: "2"
+#        memory: 2Gi
+#    livenessProbe:
+#      initialDelaySeconds: 60
+#      periodSeconds: 30
+#      timeoutSeconds: 5
+#      failureThreshold: 4
+#    readinessProbe:
+#      initialDelaySeconds: 10
+#      periodSeconds: 10
+#      timeoutSeconds: 2
+#      failureThreshold: 3

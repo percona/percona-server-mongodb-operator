@@ -7,12 +7,14 @@ import (
 	"strings"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
@@ -130,6 +132,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
 		cr.Spec.TLS.AllowInvalidCertificates = &t
+	}
+
+	if cr.Spec.TLS.IssuerConf.Kind == "" {
+		cr.Spec.TLS.IssuerConf.Kind = cm.IssuerKind
+	}
+	if cr.Spec.TLS.IssuerConf.Group == "" {
+		cr.Spec.TLS.IssuerConf.Group = "cert-manager.io"
 	}
 
 	if cr.Spec.UnsafeConf {
@@ -257,7 +266,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -349,6 +359,18 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
+
+		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
+			if dns.Domain == "" {
+				return errors.New("externalDNS requires domain for mongos")
+			}
+			if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+				return fmt.Errorf("externalDNS domain %q for mongos is not a valid domain name: %s", dns.Domain, strings.Join(errs, "; "))
+			}
+			if dns.Prefix == "" {
+				dns.Prefix = cr.Name
+			}
 		}
 	}
 
@@ -453,7 +475,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				replset.LivenessProbe.Exec.Command = append(
 					replset.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -720,6 +743,18 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
+	if dns := rs.Expose.ExternalDNS; dns != nil {
+		if dns.Domain == "" {
+			return fmt.Errorf("externalDNS requires domain for replset %s", rs.Name)
+		}
+		if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+			return fmt.Errorf("externalDNS domain %q for replset %s is not a valid domain name: %s", dns.Domain, rs.Name, strings.Join(errs, "; "))
+		}
+		if dns.Prefix == "" {
+			dns.Prefix = cr.Name
+		}
+	}
+
 	if cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {
 		if rs.Expose.DeprecatedExposeType != "" {
 			log.Info("Field `.expose.exposeType` was deprecated in 1.18.0. Consider using `.expose.type` instead", "cluster", cr.Name, "namespace", cr.Namespace, "replset", rs.Name)
@@ -859,7 +894,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
 			nv.LivenessProbe.ProbeHandler.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 
 	if nv.ReadinessProbe == nil {
@@ -960,7 +996,8 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		h.LivenessProbe.Exec.Command = append(
 			h.LivenessProbe.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 }
 
