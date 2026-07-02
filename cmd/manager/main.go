@@ -7,10 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmgrscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
@@ -21,6 +18,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +46,8 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apis.AddToScheme(scheme))
 	utilruntime.Must(volumesnapshotv1.AddToScheme(scheme))
+	// Setup Scheme for cert-manager resources
+	utilruntime.Must(certmgrscheme.AddToScheme(scheme))
 }
 
 func main() {
@@ -109,7 +109,7 @@ func main() {
 		Client: client.Options{
 			Scheme: scheme,
 			Cache: &client.CacheOptions{
-				DisableFor: []client.Object{&corev1.Node{}},
+				DisableFor: []client.Object{&corev1.Node{}, &cm.ClusterIssuer{}},
 			},
 		},
 	}
@@ -154,12 +154,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup Scheme for cert-manager resources
-	if err := certmgrscheme.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "")
-		os.Exit(1)
-	}
-
 	if err := mcs.Register(discovery.NewDiscoveryClientForConfigOrDie(config), setupLog); err != nil {
 		setupLog.Error(err, "failed to register multicluster service")
 		os.Exit(1)
@@ -195,7 +189,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 func getLogEncoder(log logr.Logger) zapcore.Encoder {
