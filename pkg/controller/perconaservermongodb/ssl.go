@@ -7,10 +7,11 @@ import (
 	"slices"
 	"sort"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,7 +31,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 
 	secretObj := corev1.Secret{}
 	secretInternalObj := corev1.Secret{}
-	errSecret := r.client.Get(ctx,
+	errSecret := r.client.Get(
+		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.SSLSecretName(cr),
@@ -44,7 +46,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if secret is created by user")
 	}
-	errInternalSecret := r.client.Get(ctx,
+	errInternalSecret := r.client.Get(
+		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.SSLInternalSecretName(cr),
@@ -67,7 +70,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 
 	// If certManagementPolicy is userProvidedOnly, the operator should not create any certificates automatically.
 	if cr.Spec.TLS != nil && cr.Spec.TLS.CertManagementPolicy == api.CertManagementUserProvidedOnly {
-		if k8serr.IsNotFound(errSecret) {
+		if k8serrors.IsNotFound(errSecret) {
 			// The user opted to manage TLS secrets themselves but hasn't created them yet
 			// (e.g. during initial cluster creation). Don't bring up the cluster without TLS:
 			// wait in init state until the user provides the secret.
@@ -84,7 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	if k8serr.IsNotFound(errSecret) && errInternalSecret == nil && isCustomSecretInternal {
+	if k8serrors.IsNotFound(errSecret) && errInternalSecret == nil && isCustomSecretInternal {
 		// If the user has only created an internal secret, we should create a copy of it as a non-internal secret.
 		newSecret := secretInternalObj.DeepCopy()
 		newSecret.ObjectMeta = metav1.ObjectMeta{
@@ -144,7 +147,8 @@ func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Conte
 
 func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &sfsList,
+	if err := r.client.List(
+		ctx, &sfsList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
@@ -216,9 +220,10 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				return nil
 			}
 
-			caSecret, err := r.getSecret(ctx, cr, tls.CertificateCA(cr).SecretName())
+			caCert := tls.CertificateCA(cr)
+			caSecret, err := r.getSecretInNamespace(ctx, caCert.Namespace(), caCert.SecretName())
 			if err != nil {
-				if k8serr.IsNotFound(err) {
+				if k8serrors.IsNotFound(err) {
 					return nil
 				}
 				return errors.Wrap(err, "failed to get ca secret")
@@ -227,7 +232,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			for _, name := range secretNames {
 				secret, err := r.getSecret(ctx, cr, name)
 				if err != nil {
-					if k8serr.IsNotFound(err) {
+					if k8serrors.IsNotFound(err) {
 						continue
 					}
 					return errors.Wrap(err, "get secret")
@@ -261,20 +266,19 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 		return errors.Wrap(err, "update cert mangager certs")
 	}
 
-	c := r.newCertManagerCtrlFunc(r.client, r.scheme, false)
-	if cr.CompareVersion("1.15.0") >= 0 {
-		if err := c.DeleteDeprecatedIssuerIfExists(ctx, cr); err != nil {
-			return errors.Wrap(err, "delete deprecated issuer")
-		}
-	}
 	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getSecret(ctx context.Context, cr *api.PerconaServerMongoDB, name string) (*corev1.Secret, error) {
+	return r.getSecretInNamespace(ctx, cr.Namespace, name)
+}
+
+func (r *ReconcilePerconaServerMongoDB) getSecretInNamespace(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
 	secret := new(corev1.Secret)
-	err := r.client.Get(ctx,
+	err := r.client.Get(
+		ctx,
 		types.NamespacedName{
-			Namespace: cr.Namespace,
+			Namespace: namespace,
 			Name:      name,
 		},
 		secret,
@@ -296,7 +300,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 	for _, name := range secrets {
 		secret, err := r.getSecret(ctx, cr, name)
 		if err != nil {
-			if k8serr.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				continue
 			}
 			return errors.Wrap(err, "get secret")
@@ -360,14 +364,14 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	for _, secretName := range secretNames {
 		secret, err := r.getSecret(ctx, cr, secretName)
 		if err != nil {
-			if k8serr.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				continue
 			}
 			return errors.Wrap(err, "get ca secret")
 		}
 		oldSecret, err := r.getSecret(ctx, cr, secretName+"-old")
 		if err != nil {
-			if k8serr.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				continue
 			}
 			return errors.Wrap(err, "get ca secret")
@@ -410,57 +414,71 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		}
 		return nil
 	}
-	if cr.CompareVersion("1.15.0") >= 0 {
-		err := applyFunc(func() (util.ApplyStatus, error) {
+
+	externalIssuer := tls.IsExternalIssuer(cr)
+	if externalIssuer && cr.Spec.TLS.IssuerConf.Name == "" {
+		return "", errors.New("external issuer requires tls.issuerConf.name")
+	}
+	if kind := cr.Spec.TLS.IssuerConf.Kind; kind == cm.ClusterIssuerKind {
+		ci := new(cm.ClusterIssuer)
+		if err := r.client.Get(ctx, types.NamespacedName{
+			Name: cr.Spec.TLS.IssuerConf.Name,
+		}, ci); client.IgnoreNotFound(err) != nil {
+			if k8serrors.IsForbidden(err) {
+				// In namespaced installs we may not have cluster-scoped read permissions.
+				// Ignore only RBAC-denied errors and let cert-manager handle issuer resolution.
+				externalIssuer = true
+			} else {
+				return "", errors.Wrap(err, "failed to get cluster issuer")
+			}
+		}
+	}
+
+	if !externalIssuer {
+		if err := applyFunc(func() (util.ApplyStatus, error) {
 			return c.ApplyCAIssuer(ctx, cr)
-		})
-		if err != nil {
+		}); err != nil {
 			return "", errors.Wrap(err, "apply ca issuer")
 		}
 
 		caCert := tls.CertificateCA(cr)
-		err = applyFunc(func() (util.ApplyStatus, error) {
+
+		if err := applyFunc(func() (util.ApplyStatus, error) {
 			return c.ApplyCertificate(ctx, cr, caCert)
-		})
-		if err != nil {
+		}); err != nil {
 			return "", errors.Wrap(err, "create ca certificate")
 		}
 
-		err = c.WaitForCerts(ctx, cr, caCert)
-		if err != nil {
+		if err := c.WaitForCerts(ctx, cr, caCert); err != nil {
 			return "", errors.Wrap(err, "failed to wait for ca cert")
+		}
+
+		if err := applyFunc(func() (util.ApplyStatus, error) {
+			return c.ApplyIssuer(ctx, cr)
+		}); err != nil {
+			return "", errors.Wrap(err, "create issuer")
 		}
 	}
 
-	err := applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyIssuer(ctx, cr)
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "create issuer")
-	}
-
 	tlsCert := tls.CertificateTLS(cr, false)
-	err = applyFunc(func() (util.ApplyStatus, error) {
+	if err := applyFunc(func() (util.ApplyStatus, error) {
 		return c.ApplyCertificate(ctx, cr, tlsCert)
-	})
-	if err != nil {
+	}); err != nil {
 		return "", errors.Wrap(err, "create certificate")
 	}
 
 	certificates := []tls.Certificate{tlsCert}
 
 	if internalCert := tls.CertificateTLS(cr, true); tlsCert.SecretName() != internalCert.SecretName() {
-		err = applyFunc(func() (util.ApplyStatus, error) {
+		if err := applyFunc(func() (util.ApplyStatus, error) {
 			return c.ApplyCertificate(ctx, cr, internalCert)
-		})
-		if err != nil {
+		}); err != nil {
 			return "", errors.Wrap(err, "create certificate")
 		}
 		certificates = append(certificates, internalCert)
 	}
 
-	err = c.WaitForCerts(ctx, cr, certificates...)
-	if err != nil {
+	if err := c.WaitForCerts(ctx, cr, certificates...); err != nil {
 		return "", errors.Wrap(err, "failed to wait for certs")
 	}
 	return applyStatus, nil
@@ -517,7 +535,7 @@ func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context,
 	if err == nil {
 		return caSecret.Data["ca.crt"], caSecret.Data["ca.key"], nil
 	}
-	if !k8serr.IsNotFound(err) {
+	if !k8serrors.IsNotFound(err) {
 		return nil, nil, errors.Wrap(err, "get CA secret")
 	}
 
@@ -572,7 +590,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, c
 	caSecretName := tls.ManualCASecretName(cr)
 	caSecret, err := r.getSecret(ctx, cr, caSecretName)
 	if err != nil {
-		if k8serr.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			// CA secret doesn't exist (created before this feature). Cannot re-sign safely.
 			log.Info("CA secret not found, skipping manual SSL update. Delete TLS secrets to trigger full regeneration.", "secret", caSecretName)
 			return nil
@@ -589,7 +607,7 @@ func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, c
 	for _, secretName := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
 		secret, err := r.getSecret(ctx, cr, secretName)
 		if err != nil {
-			if k8serr.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				continue
 			}
 			return errors.Wrapf(err, "get secret %s", secretName)
@@ -620,11 +638,11 @@ func (r *ReconcilePerconaServerMongoDB) createSSLSecret(ctx context.Context, sec
 		Namespace: secret.GetNamespace(),
 	}, oldSecret)
 
-	if err != nil && !k8serr.IsNotFound(err) {
+	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "get object")
 	}
 
-	if k8serr.IsNotFound(err) {
+	if k8serrors.IsNotFound(err) {
 		return r.client.Create(ctx, secret)
 	}
 
