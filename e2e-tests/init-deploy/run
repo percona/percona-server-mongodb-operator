@@ -103,6 +103,13 @@ desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster2
 compare_kubectl service/$cluster2
 
+desc 'check defaultRWConcern is applied on the cluster'
+rwc=$(run_mongo 'JSON.stringify(db.adminCommand({getDefaultRWConcern:1}))' "clusterAdmin:clusterAdmin123456@$cluster2.$namespace" \
+	| grep -E '^\{.*\}$')
+[[ $(jq -r '.defaultReadConcern.level' <<<"$rwc") == "majority" ]]
+[[ $(jq -r '.defaultWriteConcern.w' <<<"$rwc") == "majority" ]]
+[[ $(jq -r '.defaultWriteConcern.wtimeout' <<<"$rwc") == "5000" ]]
+
 desc 'write data, read from all'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
