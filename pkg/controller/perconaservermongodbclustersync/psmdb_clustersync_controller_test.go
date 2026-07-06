@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -351,36 +351,121 @@ func (m *recordingMongoClient) UpdateUserRoles(_ context.Context, _, _ string, r
 }
 
 func TestEnsureTargetMongoUser(t *testing.T) {
-	creds := psmdb.Credentials{Username: "clustersync-cr", Password: "new-password"}
+	const (
+		username = "clustersync-cr"
+		password = "new-password"
+	)
+	passwordHash := sha256Hash([]byte(password))
+
+	secretWith := func(annotations map[string]string) *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Annotations: annotations},
+			Data: map[string][]byte{
+				targetUserSecretUsernameKey: []byte(username),
+				targetUserSecretPasswordKey: []byte(password),
+			},
+		}
+	}
+	existingWithDesiredRoles := &mongo.User{DB: "admin", Roles: append([]mongo.Role(nil), syncTargetUserRoles...)}
 
 	tests := map[string]struct {
-		mc      *recordingMongoClient
-		wantErr string
-		assert  func(t *testing.T, m *recordingMongoClient)
+		mc          *recordingMongoClient
+		sec         *corev1.Secret
+		wantErr     string
+		wantMutated bool
+		assert      func(t *testing.T, m *recordingMongoClient, s *corev1.Secret)
 	}{
-		"missing user is created with secret password": {
-			mc: &recordingMongoClient{getUserInfoResp: nil},
-			assert: func(t *testing.T, m *recordingMongoClient) {
+		"missing user is created and password hash annotation is set": {
+			mc:          &recordingMongoClient{getUserInfoResp: nil},
+			sec:         secretWith(nil),
+			wantMutated: true,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Equal(t, 1, m.createUserCalls)
-				assert.Equal(t, "new-password", m.lastCreatePass)
+				assert.Equal(t, password, m.lastCreatePass)
+				assert.Zero(t, m.updateUserPassCalls)
+				assert.Zero(t, m.updateRolesCalls)
+				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+			},
+		},
+		"steady state converged does no writes": {
+			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
+			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			wantMutated: false,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
+				assert.Zero(t, m.createUserCalls)
 				assert.Zero(t, m.updateUserPassCalls)
 				assert.Zero(t, m.updateRolesCalls)
 			},
 		},
-		"existing user has password and roles re-applied": {
-			mc: &recordingMongoClient{getUserInfoResp: &mongo.User{DB: "admin"}},
-			assert: func(t *testing.T, m *recordingMongoClient) {
-				assert.Zero(t, m.createUserCalls)
+		"password hash mismatch triggers UpdateUserPass and annotation refresh": {
+			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
+			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: "stale"}),
+			wantMutated: true,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Equal(t, 1, m.updateUserPassCalls)
-				assert.Equal(t, "new-password", m.lastUpdatePass)
+				assert.Equal(t, password, m.lastUpdatePass)
+				assert.Zero(t, m.updateRolesCalls)
+				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+			},
+		},
+		"recreated secret with existing mongo user triggers UpdateUserPass and creates annotation map": {
+			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
+			sec:         secretWith(nil),
+			wantMutated: true,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
+				assert.Equal(t, 1, m.updateUserPassCalls)
+				assert.Equal(t, password, m.lastUpdatePass)
+				assert.Zero(t, m.updateRolesCalls)
+				require.NotNil(t, s.Annotations)
+				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+			},
+		},
+		"new cr reconcile against stale mongo user with drifted roles applies both password and roles": {
+			mc: &recordingMongoClient{
+				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}},
+			},
+			sec:         secretWith(nil),
+			wantMutated: true,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
+				assert.Equal(t, 1, m.updateUserPassCalls)
+				assert.Equal(t, password, m.lastUpdatePass)
+				assert.Equal(t, 1, m.updateRolesCalls)
+				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
+				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+			},
+		},
+		"role drift triggers UpdateUserRoles without touching password": {
+			mc: &recordingMongoClient{
+				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}},
+			},
+			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			wantMutated: false,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
+				assert.Zero(t, m.updateUserPassCalls)
 				assert.Equal(t, 1, m.updateRolesCalls)
 				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
 			},
 		},
+		"roles in a different order are treated as equal": {
+			mc: &recordingMongoClient{
+				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{
+					{Role: "readWriteAnyDatabase", DB: "admin"},
+					{Role: "clusterManager", DB: "admin"},
+					{Role: "clusterMonitor", DB: "admin"},
+					{Role: "restore", DB: "admin"},
+				}},
+			},
+			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			wantMutated: false,
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
+				assert.Zero(t, m.updateRolesCalls)
+			},
+		},
 		"GetUserInfo error short-circuits with no writes": {
 			mc:      &recordingMongoClient{getUserInfoErr: errors.New("error")},
+			sec:     secretWith(nil),
 			wantErr: "look up target user",
-			assert: func(t *testing.T, m *recordingMongoClient) {
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Zero(t, m.createUserCalls)
 				assert.Zero(t, m.updateUserPassCalls)
 				assert.Zero(t, m.updateRolesCalls)
@@ -388,6 +473,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 		},
 		"CreateUser error is wrapped": {
 			mc:      &recordingMongoClient{getUserInfoResp: nil, createUserErr: errors.New("error")},
+			sec:     secretWith(nil),
 			wantErr: "create target user",
 		},
 		"UpdateUserPass error stops before UpdateUserRoles": {
@@ -395,8 +481,9 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				getUserInfoResp:   &mongo.User{DB: "admin"},
 				updateUserPassErr: errors.New("error"),
 			},
+			sec:     secretWith(nil),
 			wantErr: "sync target user password",
-			assert: func(t *testing.T, m *recordingMongoClient) {
+			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Zero(t, m.updateRolesCalls)
 			},
 		},
@@ -405,21 +492,23 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				getUserInfoResp: &mongo.User{DB: "admin"},
 				updateRolesErr:  errors.New("error"),
 			},
+			sec:     secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
 			wantErr: "sync target user roles",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := ensureTargetMongoUser(t.Context(), tc.mc, creds)
+			mutated, err := ensureTargetMongoUser(t.Context(), tc.mc, tc.sec)
 			if tc.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr)
 			} else {
 				require.NoError(t, err)
+				assert.Equal(t, tc.wantMutated, mutated)
 			}
 			if tc.assert != nil {
-				tc.assert(t, tc.mc)
+				tc.assert(t, tc.mc, tc.sec)
 			}
 		})
 	}
