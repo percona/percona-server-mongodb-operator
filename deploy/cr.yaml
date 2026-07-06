@@ -61,7 +61,7 @@ spec:
 #    readConcern: majority
 #    writeConcern:
 #      w: majority
-#      wtimeout: 5000
+#      wtimeout: 0
 #  vault:
 #    endpointURL: https://vault-service:8200
 #    tlsSecret: my-tls-vault-secret
