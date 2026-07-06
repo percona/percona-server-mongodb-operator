@@ -28490,6 +28490,11 @@ spec:
             required:
             - image
             type: object
+            x-kubernetes-validations:
+            - message: pmm.querySource 'mongolog' requires logcollector to be enabled
+              rule: '!has(self.pmm) || !has(self.pmm.enabled) || !self.pmm.enabled
+                || !has(self.pmm.querySource) || self.pmm.querySource != ''mongolog''
+                || (has(self.logcollector) && has(self.logcollector.enabled) && self.logcollector.enabled)'
           status:
             properties:
               backupConfigHash:
