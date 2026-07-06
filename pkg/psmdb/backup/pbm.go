@@ -34,6 +34,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
@@ -45,10 +46,13 @@ import (
 )
 
 const (
+	MinPBMVersionOSS                 = "2.12.0"
 	KMSKeyID                         = "KMS_KEY_ID"
 	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	OSSAccessKeySecretKey            = "ALIBABA_ACCESS_KEY_ID"
+	OSSSecretAccessKeySecretKey      = "ALIBABA_ACCESS_KEY_SECRET"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 	GCSClientEmailSecretKey          = "GCS_CLIENT_EMAIL"
@@ -123,7 +127,8 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 		return "", errors.Wrap(err, "get secrets")
 	}
 
-	murl := fmt.Sprintf("mongodb://%s:%s@%s/",
+	murl := fmt.Sprintf(
+		"mongodb://%s:%s@%s/",
 		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_USER"])),
 		url.QueryEscape(string(scr.Data["MONGODB_BACKUP_PASSWORD"])),
 		strings.Join(addrs, ","),
@@ -379,8 +384,8 @@ func GetPBMStorageMinioConfig(
 		}
 
 		storageConf.Minio.Credentials = mio.Credentials{
-			AccessKeyID:     storage.MaskedString(string(accessKey)),
-			SecretAccessKey: storage.MaskedString(string(secretAccessKey)),
+			AccessKeyID:     storage.MaskedString(accessKey),
+			SecretAccessKey: storage.MaskedString(secretAccessKey),
 		}
 	}
 
@@ -433,7 +438,7 @@ func GetPBMStorageS3Config(
 				}
 				storageConf.S3.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: stg.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[SSECustomerKey])),
+					SseCustomerKey:       storage.MaskedString(sseSecret.Data[SSECustomerKey]),
 				}
 			default:
 				return storageConf, errors.New("no SseCustomerKey specified")
@@ -462,8 +467,8 @@ func GetPBMStorageS3Config(
 			}
 		}
 		storageConf.S3.Credentials = s3.Credentials{
-			AccessKeyID:     storage.MaskedString(string(s3secret.Data[AWSAccessKeySecretKey])),
-			SecretAccessKey: storage.MaskedString(string(s3secret.Data[AWSSecretAccessKeySecretKey])),
+			AccessKeyID:     storage.MaskedString(s3secret.Data[AWSAccessKeySecretKey]),
+			SecretAccessKey: storage.MaskedString(s3secret.Data[AWSSecretAccessKeySecretKey]),
 		}
 	}
 
@@ -513,16 +518,16 @@ func GetPBMStorageGCSConfig(
 
 		if _, ok := gcsSecret.Data[GCSClientEmailSecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				ClientEmail: storage.MaskedString(string(gcsSecret.Data[GCSClientEmailSecretKey])),
-				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[GCSPrivateKeySecretKey])),
+				ClientEmail: storage.MaskedString(gcsSecret.Data[GCSClientEmailSecretKey]),
+				PrivateKey:  storage.MaskedString(gcsSecret.Data[GCSPrivateKeySecretKey]),
 			}
 		}
 
 		// s3 compatibility
 		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
 			storageConf.GCS.Credentials = gcs.Credentials{
-				HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[AWSAccessKeySecretKey])),
-				HMACSecret:    storage.MaskedString(string(gcsSecret.Data[AWSSecretAccessKeySecretKey])),
+				HMACAccessKey: storage.MaskedString(gcsSecret.Data[AWSAccessKeySecretKey]),
+				HMACSecret:    storage.MaskedString(gcsSecret.Data[AWSSecretAccessKeySecretKey]),
 			}
 		}
 	} else {
@@ -568,6 +573,33 @@ func GetPBMStorageS3CompatibleGCSConfig(
 	return conf, nil
 }
 
+func GetPBMStorageS3CompatibleOSSConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	stg psmdbv1.BackupStorageSpec,
+) (config.StorageConf, error) {
+	oss := psmdbv1.BackupStorageSpec{
+		Type: psmdbv1.BackupStorageOSS,
+		OSS: psmdbv1.BackupStorageOSSSpec{
+			Bucket:            stg.S3.Bucket,
+			Prefix:            stg.S3.Prefix,
+			EndpointURL:       stg.S3.EndpointURL,
+			Region:            stg.S3.Region,
+			UploadPartSize:    int64(stg.S3.UploadPartSize),
+			MaxUploadParts:    stg.S3.MaxUploadParts,
+			CredentialsSecret: stg.S3.CredentialsSecret,
+		},
+	}
+
+	conf, err := GetPBMStorageOSSConfig(ctx, k8sclient, cluster, oss)
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "get oss config")
+	}
+
+	return conf, nil
+}
+
 func GetPBMStorageAzureConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -591,9 +623,89 @@ func GetPBMStorageAzureConfig(
 			EndpointURL: stg.Azure.EndpointURL,
 			Prefix:      stg.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(string(azureSecret.Data[AzureStorageAccountKeySecretKey])),
+				Key: storage.MaskedString(azureSecret.Data[AzureStorageAccountKeySecretKey]),
 			},
 		},
+	}
+
+	return storageConf, nil
+}
+
+func GetPBMStorageOSSConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	stg psmdbv1.BackupStorageSpec,
+) (config.StorageConf, error) {
+	if stg.OSS.CredentialsSecret == "" {
+		return config.StorageConf{}, errors.New("no credentials specified for the secret name")
+	}
+	if stg.OSS.Bucket == "" {
+		return config.StorageConf{}, errors.New("bucket is required")
+	}
+	if stg.OSS.EndpointURL == "" {
+		return config.StorageConf{}, errors.New("endpointURL is required")
+	}
+
+	ossSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.OSS.CredentialsSecret)
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "get oss credentials secret")
+	}
+
+	storageConf := config.StorageConf{
+		Type: storage.OSS,
+		OSS: &oss.Config{
+			Region:      stg.OSS.Region,
+			EndpointURL: stg.OSS.EndpointURL,
+			Bucket:      stg.OSS.Bucket,
+			Prefix:      stg.OSS.Prefix,
+			Credentials: oss.Credentials{
+				AccessKeyID:     storage.MaskedString(ossSecret.Data[OSSAccessKeySecretKey]),
+				AccessKeySecret: storage.MaskedString(ossSecret.Data[OSSSecretAccessKeySecretKey]),
+			},
+			ConnectTimeout: stg.OSS.ConnectTimeout.Duration,
+			UploadPartSize: stg.OSS.UploadPartSize,
+			MaxUploadParts: stg.OSS.MaxUploadParts,
+		},
+	}
+
+	// s3 compatibility
+	if _, ok := ossSecret.Data[AWSAccessKeySecretKey]; ok {
+		storageConf.OSS.Credentials = oss.Credentials{
+			AccessKeyID:     storage.MaskedString(ossSecret.Data[AWSAccessKeySecretKey]),
+			AccessKeySecret: storage.MaskedString(ossSecret.Data[AWSSecretAccessKeySecretKey]),
+		}
+	}
+
+	if sse := stg.OSS.ServerSideEncryption; len(sse.EncryptionAlgorithm) != 0 {
+		switch {
+		case len(sse.EncryptionKeyID) != 0:
+			storageConf.OSS.ServerSideEncryption = &oss.SSE{
+				EncryptionMethod:    sse.EncryptionMethod,
+				EncryptionAlgorithm: sse.EncryptionAlgorithm,
+				EncryptionKeyID:     storage.MaskedString(sse.EncryptionKeyID),
+			}
+		case len(sse.SecretName) != 0:
+			sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, sse.SecretName)
+			if err != nil {
+				return storageConf, errors.Wrap(err, "get sse credentials secret")
+			}
+			storageConf.OSS.ServerSideEncryption = &oss.SSE{
+				EncryptionMethod:    sse.EncryptionMethod,
+				EncryptionAlgorithm: sse.EncryptionAlgorithm,
+				EncryptionKeyID:     storage.MaskedString(sseSecret.Data[SSECustomerKey]),
+			}
+		default:
+			return storageConf, errors.New("no encryptionKeyId or SSE secret specified")
+		}
+	}
+
+	if r := stg.OSS.Retryer; r != nil {
+		storageConf.OSS.Retryer = &oss.Retryer{
+			MaxAttempts: r.MaxAttempts,
+			MaxBackoff:  r.MaxBackoff.Duration,
+			BaseDelay:   r.BaseDelay.Duration,
+		}
 	}
 
 	return storageConf, nil
@@ -605,16 +717,24 @@ func GetPBMStorageConfig(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	stg psmdbv1.BackupStorageSpec,
 ) (config.StorageConf, error) {
-	pbm210Plus, err := cluster.ComparePBMAgentVersion("2.10.0")
+	pbm2100Plus, err := cluster.ComparePBMAgentVersion("2.10.0")
+	if err != nil {
+		return config.StorageConf{}, errors.Wrap(err, "compare pbm-agent version")
+	}
+	pbm2120Plus, err := cluster.ComparePBMAgentVersion(MinPBMVersionOSS)
 	if err != nil {
 		return config.StorageConf{}, errors.Wrap(err, "compare pbm-agent version")
 	}
 
 	switch stg.Type {
 	case psmdbv1.BackupStorageS3:
-		if pbm210Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.GCSEndpointURL) {
+		if pbm2100Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.GCSEndpointURL) {
 			conf, err := GetPBMStorageS3CompatibleGCSConfig(ctx, k8sclient, cluster, stg)
 			return conf, errors.Wrap(err, "get s3-compatible gcs config")
+		}
+		if pbm2120Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.OSSCloudEndpointURL) {
+			conf, err := GetPBMStorageS3CompatibleOSSConfig(ctx, k8sclient, cluster, stg)
+			return conf, errors.Wrap(err, "get s3-compatible oss config")
 		}
 		conf, err := GetPBMStorageS3Config(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get s3 config")
@@ -627,6 +747,12 @@ func GetPBMStorageConfig(
 	case psmdbv1.BackupStorageAzure:
 		conf, err := GetPBMStorageAzureConfig(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get azure config")
+	case psmdbv1.BackupStorageOSS:
+		if pbm2120Plus < 0 {
+			return config.StorageConf{}, errors.Errorf("oss storage requires PBM %s or newer", MinPBMVersionOSS)
+		}
+		conf, err := GetPBMStorageOSSConfig(ctx, k8sclient, cluster, stg)
+		return conf, errors.Wrap(err, "get oss config")
 	case psmdbv1.BackupStorageFilesystem:
 		return config.StorageConf{
 			Type: storage.Filesystem,

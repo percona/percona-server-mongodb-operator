@@ -871,6 +871,26 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
+#      oss-native:
+#        type: oss
+#        oss:
+#          bucket: OSS-BACKUP-BUCKET-NAME-HERE
+#          prefix: ""
+#          credentialsSecret: my-cluster-name-backup-oss
+#          endpointUrl: https://oss-eu-central-1.aliyuncs.com
+#          region: eu-central-1
+#          connectTimeout: 10s
+#          uploadPartSize: 10485760
+#          maxUploadParts: 10000
+#          retryer:
+#            maxAttempts: 3
+#            maxBackoff: 5m
+#            baseDelay: 1s
+#          serverSideEncryption:
+#            secretName: my-cluster-name-backup-oss-sse
+#            encryptionMethod: sse
+#            encryptionAlgorithm: KMS
+#            encryptionKeyId: OSS-KMS-KEY-ID-HERE
 #      minio:
 #        type: minio
 #        minio:

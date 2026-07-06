@@ -823,3 +823,28 @@ func TestStatefulSet_Affinity_Off(t *testing.T) {
 	assert.Nil(t, sts.Spec.Template.Spec.Affinity,
 		"affinity must be nil when the topology key is the off sentinel")
 }
+
+func TestStatefulSet_RevisionHistoryLimit(t *testing.T) {
+	t.Run("propagated from cluster spec when set", func(t *testing.T) {
+		limit := int32(5)
+		cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+		cr.Spec.RevisionHistoryLimit = &limit
+		rs := newTestRS()
+
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+		require.NotNil(t, sts.Spec.RevisionHistoryLimit,
+			"revisionHistoryLimit must be applied to the search StatefulSet")
+		assert.Equal(t, int32(5), *sts.Spec.RevisionHistoryLimit)
+	})
+
+	t.Run("nil when unset on cluster spec", func(t *testing.T) {
+		cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
+		rs := newTestRS()
+
+		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
+
+		assert.Nil(t, sts.Spec.RevisionHistoryLimit,
+			"revisionHistoryLimit must follow the cluster spec, defaulting to nil when unset")
+	})
+}

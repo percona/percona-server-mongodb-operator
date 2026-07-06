@@ -47,7 +47,7 @@ check_backup_in_storage ${backup_name_gcp_cs_native} gcs rs0
 
 log "drop collection"
 run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
-log "check backup and restore -- $backup_name"
+log "check backup and restore -- ${backup_name_gcp_cs_native}"
 
 log 'running restore'
 run_restore "${backup_name_gcp_cs_native}"

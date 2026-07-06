@@ -244,6 +244,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
 		secretName = storage.S3.CredentialsSecret
 	case psmdbv1.BackupStorageAzure:
 		secretName = storage.Azure.CredentialsSecret
+	case psmdbv1.BackupStorageOSS:
+		secretName = storage.OSS.CredentialsSecret
 	}
 
 	if secretName != "" {
@@ -311,7 +313,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRConfig(ctx context.Context,
 		if !hasFullBackup {
 			log.Info(
 				fmt.Sprintf("Point-in-time recovery will work only with full backup in main storage (%s).", stgName) +
-					" Please create one manually or wait for scheduled backup to be created (if configured).")
+					" Please create one manually or wait for scheduled backup to be created (if configured).",
+			)
 			return nil
 		}
 	}
@@ -665,7 +668,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 	}
 
 	podList := corev1.PodList{}
-	if err := r.client.List(ctx,
+	if err := r.client.List(
+		ctx,
 		&podList,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,

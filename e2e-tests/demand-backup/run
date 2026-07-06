@@ -274,6 +274,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_gcp_s3="backup-gcp-cs-s3"
 	backup_name_gcp_sa="backup-gcp-cs-sa"
 	backup_name_azure="backup-azure-blob"
+	backup_name_oss_native="backup-oss-native"
 fi
 
 desc 'run backups'
@@ -282,6 +283,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
+	run_backup oss-native
 fi
 run_backup "minio"
 
@@ -290,6 +292,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
+	wait_backup "$backup_name_oss_native"
 fi
 wait_backup "$backup_name_minio"
 
@@ -318,6 +321,13 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	setup_azure_credentials
 	check_backup_existence_azure ${backup_dest_azure} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_azure" "$cluster"
+
+	desc 'check backup and restore -- oss-native'
+	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
+	backup_endpoint_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "endpointUrl")
+	backup_region_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "region")
+	check_backup_in_storage ${backup_name_oss_native} oss rs0 'myApp.test.gz'
+	run_recovery_check "$backup_name_oss_native" "$cluster"
 fi
 
 desc 'check backup and restore -- minio'
@@ -370,6 +380,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
 fi
 
 desc 'checking backup deletion without cr'
@@ -379,6 +390,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
+	run_backup oss-native
 fi
 
 wait_backup "$backup_name_minio"
@@ -387,10 +399,14 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
+	wait_backup "$backup_name_oss_native"
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
 	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
+	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
+	backup_endpoint_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "endpointUrl")
+	backup_region_oss_native=$(get_backup_storage_oss_field "$backup_name_oss_native" "region")
 fi
 
 kubectl_bin delete psmdb --all
@@ -412,6 +428,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
+	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
 fi
 
 # Temporarily skipping this check

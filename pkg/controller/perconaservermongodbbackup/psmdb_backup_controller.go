@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -375,7 +376,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])),
+				Key: storage.MaskedString(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -392,8 +393,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get gcs credentials secret")
 			}
 			gcsConf.Credentials = gcs.Credentials{
-				ClientEmail: storage.MaskedString(string(gcsSecret.Data[backup.GCSClientEmailSecretKey])),
-				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[backup.GCSPrivateKeySecretKey])),
+				ClientEmail: storage.MaskedString(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
+				PrivateKey:  storage.MaskedString(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
 			}
 		}
 
@@ -417,8 +418,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
-				AccessKeyID:     storage.MaskedString(string(s3secret.Data[backup.AWSAccessKeySecretKey])),
-				SecretAccessKey: storage.MaskedString(string(s3secret.Data[backup.AWSSecretAccessKeySecretKey])),
+				AccessKeyID:     storage.MaskedString(s3secret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: storage.MaskedString(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
 		}
 
@@ -436,8 +437,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 
 				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[backup.AWSAccessKeySecretKey])),
-					HMACSecret:    storage.MaskedString(string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey])),
+					HMACAccessKey: storage.MaskedString(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
+					HMACSecret:    storage.MaskedString(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
 				}
 			}
 
@@ -458,7 +459,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[backup.SSECustomerKey])),
+					SseCustomerKey:       storage.MaskedString(sseSecret.Data[backup.SSECustomerKey]),
 				}
 			default:
 				return nil, errors.New("no SseCustomerKey specified")
@@ -521,11 +522,62 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get minio credentials secret")
 			}
 			minioConf.Credentials = mio.Credentials{
-				AccessKeyID:     storage.MaskedString(string(minioSecret.Data[backup.AWSAccessKeySecretKey])),
-				SecretAccessKey: storage.MaskedString(string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey])),
+				AccessKeyID:     storage.MaskedString(minioSecret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: storage.MaskedString(minioSecret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
 		}
 		return mio.New(minioConf, "", nil)
+	case cr.Status.OSS != nil:
+		if cr.Status.OSS.CredentialsSecret == "" {
+			return nil, errors.New("no oss credentials specified for the secret name")
+		}
+		ossSecret, err := secret(ctx, r.client, cr.GetNamespace(), cr.Status.OSS.CredentialsSecret)
+		if err != nil {
+			return nil, errors.Wrap(err, "get oss credentials secret")
+		}
+		ossConf := &oss.Config{
+			Region:         cr.Status.OSS.Region,
+			EndpointURL:    cr.Status.OSS.EndpointURL,
+			Bucket:         cr.Status.OSS.Bucket,
+			Prefix:         cr.Status.OSS.Prefix,
+			UploadPartSize: cr.Status.OSS.UploadPartSize,
+			MaxUploadParts: cr.Status.OSS.MaxUploadParts,
+			ConnectTimeout: cr.Status.OSS.ConnectTimeout.Duration,
+			Credentials: oss.Credentials{
+				AccessKeyID:     storage.MaskedString(ossSecret.Data[backup.OSSAccessKeySecretKey]),
+				AccessKeySecret: storage.MaskedString(ossSecret.Data[backup.OSSSecretAccessKeySecretKey]),
+			},
+		}
+		if cr.Status.OSS.Retryer != nil {
+			ossConf.Retryer = &oss.Retryer{
+				MaxAttempts: cr.Status.OSS.Retryer.MaxAttempts,
+				MaxBackoff:  cr.Status.OSS.Retryer.MaxBackoff.Duration,
+				BaseDelay:   cr.Status.OSS.Retryer.BaseDelay.Duration,
+			}
+		}
+		if sse := cr.Status.OSS.ServerSideEncryption; len(sse.EncryptionAlgorithm) != 0 {
+			switch {
+			case len(sse.EncryptionKeyID) != 0:
+				ossConf.ServerSideEncryption = &oss.SSE{
+					EncryptionMethod:    sse.EncryptionMethod,
+					EncryptionAlgorithm: sse.EncryptionAlgorithm,
+					EncryptionKeyID:     storage.MaskedString(sse.EncryptionKeyID),
+				}
+			case len(sse.SecretName) != 0:
+				sseSecret, err := secret(ctx, r.client, cluster.Namespace, sse.SecretName)
+				if err != nil {
+					return nil, errors.Wrap(err, "get sse credentials secret")
+				}
+				ossConf.ServerSideEncryption = &oss.SSE{
+					EncryptionMethod:    sse.EncryptionMethod,
+					EncryptionAlgorithm: sse.EncryptionAlgorithm,
+					EncryptionKeyID:     storage.MaskedString(sseSecret.Data[backup.SSECustomerKey]),
+				}
+			default:
+				return nil, errors.New("no encryptionKeyId or SSE secret specified")
+			}
+		}
+		return oss.New(ossConf, "", nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
 	}
@@ -667,6 +719,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure
+	case cr.Status.OSS != nil:
+		storage.Type = psmdbv1.BackupStorageOSS
+		storage.OSS = *cr.Status.OSS
 	case cr.Status.Filesystem != nil:
 		err := r.deleteFilesystemBackup(ctx, cluster, cr)
 		if err != nil {

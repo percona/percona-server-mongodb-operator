@@ -23,8 +23,8 @@ wait_for_running "$cluster-rs0" 1
 compare_kubectl statefulset/mydb-rs0
 
 secrets_count=$(kubectl_bin get secret -o json | jq --arg pattern "$cluster" '[.items[] | select(.metadata.name | test($pattern))] | length')
-if [[ $secrets_count != 6 ]]; then
-	echo "It's expected to have 6 secrets. Currently have $secrets_count"
+if [[ $secrets_count != 7 ]]; then
+	echo "It's expected to have 7 secrets. Currently have $secrets_count"
 	exit 1
 fi
 

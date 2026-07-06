@@ -188,6 +188,17 @@ func (b *managedBackups) Start(
 				status.Destination = "azure://" + status.Destination
 			}
 		}
+	case api.BackupStorageOSS:
+		status.OSS = &stg.OSS
+
+		status.Destination = stg.OSS.Bucket
+
+		if stg.OSS.Prefix != "" {
+			status.Destination = stg.OSS.Bucket + "/" + stg.OSS.Prefix
+		}
+		if !strings.HasPrefix(stg.OSS.Bucket, "oss://") {
+			status.Destination = "oss://" + status.Destination
+		}
 	case api.BackupStorageFilesystem:
 		status.Filesystem = &stg.Filesystem
 		status.Destination = strings.TrimSuffix(stg.Filesystem.Path, "/")

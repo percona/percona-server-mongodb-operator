@@ -183,7 +183,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			Storage string `json:"storage"`
 		}
 		if err := json.Unmarshal(stdoutBuf.Bytes(), &out); err != nil {
-			return status, errors.Wrap(err, "unmarshal PBM restore output")
+			return status, errors.Wrapf(err, "unmarshal PBM restore output: %s", stdoutBuf.String())
 		}
 
 		status.State = psmdbv1.RestoreStateRequested
@@ -332,7 +332,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
-	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32) error {
+	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32,
+) error {
 	log := logf.FromContext(ctx)
 
 	sts := appsv1.StatefulSet{}
@@ -438,6 +439,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+
+	if cluster.CompareVersion("1.23.0") >= 0 && psmdb.ShouldSetAWSSDKChecksumEnvVars(cluster) {
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, psmdb.AWSSDKChecksumEnvVars()...)
+	}
 
 	sslSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
@@ -827,7 +832,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
 	set := naming.RSLabels(cluster, rs)
 	set[naming.LabelKubernetesComponent] = component
 
-	err := r.client.List(ctx,
+	err := r.client.List(
+		ctx,
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cluster.Namespace,

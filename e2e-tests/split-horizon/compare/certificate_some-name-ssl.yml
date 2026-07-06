@@ -48,6 +48,7 @@ spec:
     - '*.some-name-cfg.NAME_SPACE.svc.clusterset.local'
   duration: 2160h0m0s
   issuerRef:
+    group: cert-manager.io
     kind: Issuer
     name: some-name-psmdb-issuer
   secretName: some-name-ssl

@@ -274,4 +274,43 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	Context("Replset volumeSpec validation", func() {
+		It("should reject a replset without volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-no-volumespec-rs0", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Replsets[0].VolumeSpec = nil
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+		})
+
+		It("should reject an additional replset without volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-no-volumespec-rs1", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Replsets = append(cr.Spec.Replsets, &psmdbv1.ReplsetSpec{
+				Name: "rs1",
+				Size: 3,
+			})
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+		})
+
+		It("should allow an additional replset that specifies volumeSpec", func() {
+			cr, err := readDefaultCR("psmdb-rs1-with-volumespec", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs1 := cr.Spec.Replsets[0].DeepCopy()
+			rs1.Name = "rs1"
+			cr.Spec.Replsets = append(cr.Spec.Replsets, rs1)
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })

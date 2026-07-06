@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -495,12 +496,16 @@ func TestGetCustomUserSecret(t *testing.T) {
 			if tt.hasExistingSecret && tt.errMsg == "" {
 				assert.NoError(t, err)
 				assert.Equal(t, secret.Name, "custom-secret")
+				assert.Equal(t, tt.user.SecretName(cr), secret.Name)
+				assert.Equal(t, naming.SecretCustomUserConnStrName(cr, tt.user), secret.Name+"-conn-str")
 				assert.Equal(t, string(secret.Data[passKey]), "existing-password")
 				return
 			}
 			if !tt.hasExistingSecret && tt.errMsg == "" {
 				assert.NoError(t, err)
 				assert.Equal(t, secret.Name, tt.crName+"-custom-user-secret")
+				assert.Equal(t, tt.user.SecretName(cr), secret.Name)
+				assert.Equal(t, naming.SecretCustomUserConnStrName(cr, tt.user), secret.Name+"-conn-str")
 				assert.NotEmpty(t, string(secret.Data[passKey]))
 			}
 			if tt.errMsg != "" {

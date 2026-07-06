@@ -198,3 +198,51 @@ func TestCheckFieldsCloningNamespace(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreCheckFieldsBackupSourceOSS(t *testing.T) {
+	tests := map[string]struct {
+		restore *PerconaServerMongoDBRestore
+		wantErr string
+	}{
+		"valid oss source": {
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					ClusterName: "some-cluster",
+					BackupSource: &PerconaServerMongoDBBackupStatus{
+						Destination: "oss://some-bucket/some-prefix/2026-06-17T10:00:00Z",
+						OSS: &BackupStorageOSSSpec{
+							Bucket:            "some-bucket",
+							CredentialsSecret: "some-secret",
+						},
+					},
+				},
+			},
+		},
+		"invalid oss scheme": {
+			restore: &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					ClusterName: "some-cluster",
+					BackupSource: &PerconaServerMongoDBBackupStatus{
+						Destination: "s3://some-bucket/some-prefix/2026-06-17T10:00:00Z",
+						OSS: &BackupStorageOSSSpec{
+							Bucket:            "some-bucket",
+							CredentialsSecret: "some-secret",
+						},
+					},
+				},
+			},
+			wantErr: "backupSource destination should use oss protocol format",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := tt.restore.CheckFields(defs.LogicalBackup)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
+}

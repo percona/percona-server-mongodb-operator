@@ -30,6 +30,8 @@ func TestMongosHost(t *testing.T) {
 
 	tests := map[string]struct {
 		init          func(cl client.Client)
+		useInternal   bool
+		exposeType    corev1.ServiceType
 		expectedHost  string
 		expectedError error
 	}{
@@ -61,6 +63,59 @@ func TestMongosHost(t *testing.T) {
 				assert.NoError(t, cl.Create(ctx, svc))
 			},
 			expectedHost: "test-cluster-mongos.default.svc.cluster.local:27018",
+		},
+		"loadbalancer service type": {
+			init: func(cl client.Client) {
+				svc := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-mongos",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeLoadBalancer,
+						Ports: []corev1.ServicePort{
+							{
+								Name: "mongos",
+								Port: 27018,
+							},
+						},
+					},
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{Hostname: "mongos.example.com"},
+							},
+						},
+					},
+				}
+				assert.NoError(t, cl.Create(ctx, svc))
+			},
+			exposeType:   corev1.ServiceTypeLoadBalancer,
+			expectedHost: "mongos.example.com:27018",
+		},
+		"loadbalancer service type with internal address": {
+			init: func(cl client.Client) {
+				svc := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-mongos",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeLoadBalancer,
+						ClusterIP: "10.0.0.20",
+						Ports: []corev1.ServicePort{
+							{
+								Name: "mongos",
+								Port: 27018,
+							},
+						},
+					},
+				}
+				assert.NoError(t, cl.Create(ctx, svc))
+			},
+			useInternal:  true,
+			exposeType:   corev1.ServiceTypeLoadBalancer,
+			expectedHost: "10.0.0.20:27018",
 		},
 		"err: clusterip service type and port not found": {
 			init: func(cl client.Client) {
@@ -102,13 +157,16 @@ func TestMongosHost(t *testing.T) {
 						Mongos: &api.MongosSpec{
 							Expose: api.MongosExpose{
 								ServicePerPod: false,
+								Expose: api.Expose{
+									ExposeType: tt.exposeType,
+								},
 							},
 						},
 					},
 				},
 			}
 
-			host, err := MongosHost(ctx, cl, cr, pod, false)
+			host, err := MongosHost(ctx, cl, cr, pod, tt.useInternal)
 			if tt.expectedError != nil {
 				assert.Empty(t, host)
 				assert.EqualError(t, err, tt.expectedError.Error())

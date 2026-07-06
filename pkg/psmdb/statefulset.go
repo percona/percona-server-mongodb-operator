@@ -40,6 +40,38 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 
 var secretFileMode int32 = 288
 
+// tmpVolumeName and tmpMountPath define the writable /tmp emptyDir that is
+// injected into containers running with readOnlyRootFilesystem enabled. mongod
+// (WiredTiger temp/sort-spill files) and the backup agent (pbm-entry.sh writes
+// /tmp/tls.pem) both require a writable /tmp at runtime.
+const (
+	tmpVolumeName = "tmp"
+	tmpMountPath  = "/tmp"
+)
+
+// readOnlyRootFilesystemEnabled reports whether the given container security
+// context requests a read-only root filesystem.
+func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
+	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
+}
+
+// needsTmpVolume reports whether a shared writable /tmp emptyDir must be added
+// to the pod because the mongod or backup agent container runs with a read-only
+// root filesystem.
+func needsTmpVolume(cr *api.PerconaServerMongoDB, mongodSecurityContext *corev1.SecurityContext) bool {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return false
+	}
+	// mongod needs a writable /tmp whenever its own root filesystem is read-only,
+	// regardless of whether the backup agent is running.
+	if readOnlyRootFilesystemEnabled(mongodSecurityContext) {
+		return true
+	}
+	// Otherwise the shared volume is only needed for an enabled backup agent that
+	// runs with a read-only root filesystem.
+	return cr.Spec.Backup.Enabled && readOnlyRootFilesystemEnabled(cr.Spec.Backup.ContainerSecurityContext)
+}
+
 // StatefulSpecSecretParams contains secrets params for the StatefulSpec.
 type StatefulSpecSecretParams struct {
 	UsersSecret   *corev1.Secret
@@ -171,6 +203,18 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		})
 	}
 
+	// When readOnlyRootFilesystem is enabled on the mongod or backup agent
+	// container, the pod needs a shared writable /tmp emptyDir. The matching
+	// volumeMounts are added to the respective containers below.
+	if needsTmpVolume(cr, containerSecurityContext) {
+		volumes = append(volumes, corev1.Volume{
+			Name: tmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+
 	if configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
@@ -197,7 +241,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if encryptionEnabled {
 		if len(cr.Spec.Secrets.Vault) != 0 {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.Vault,
 					VolumeSource: corev1.VolumeSource{
@@ -210,7 +255,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				},
 			)
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.EncryptionKey,
 					VolumeSource: corev1.VolumeSource{
@@ -276,7 +322,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	// add TLS/SSL Volume
 	t := true
-	volumes = append(volumes,
+	volumes = append(
+		volumes,
 		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
@@ -298,7 +345,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 	)
 	if cr.Spec.Secrets.LDAPSecret != "" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
 				VolumeSource: corev1.VolumeSource{
@@ -319,7 +367,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			[]corev1.Volume{
 				{
 					Name: config.MongodDataVolClaimName,
@@ -335,7 +384,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: config.MongodDataVolClaimName,
 					VolumeSource: corev1.VolumeSource{
@@ -518,6 +568,12 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	if len(cr.Spec.Backup.VolumeMounts) > 0 {
 		volumeMounts = append(volumeMounts, cr.Spec.Backup.VolumeMounts...)
 	}
+	if cr.CompareVersion("1.23.0") >= 0 && readOnlyRootFilesystemEnabled(cr.Spec.Backup.ContainerSecurityContext) {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      tmpVolumeName,
+			MountPath: tmpMountPath,
+		})
+	}
 	if attachHookScript {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      config.PBMHookscriptVolClaimName,
@@ -581,6 +637,9 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
+	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetAWSSDKChecksumEnvVars(cr) {
+		c.Env = append(c.Env, AWSSDKChecksumEnvVars()...)
+	}
 
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
@@ -631,6 +690,34 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}
 
 	return c
+}
+
+func AWSSDKChecksumEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "AWS_REQUEST_CHECKSUM_CALCULATION",
+			Value: "when_required",
+		},
+		{
+			Name:  "AWS_RESPONSE_CHECKSUM_VALIDATION",
+			Value: "when_required",
+		},
+	}
+}
+
+func ShouldSetAWSSDKChecksumEnvVars(cr *api.PerconaServerMongoDB) bool {
+	pbm2110OrOlder, err := cr.ComparePBMAgentVersion("2.11.0")
+	if err != nil || pbm2110OrOlder > 0 {
+		return false
+	}
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageS3 && strings.Contains(storage.S3.EndpointURL, naming.OSSCloudEndpointURL) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
@@ -827,7 +914,6 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 }
 
 func GetCAVolumeMounts() []corev1.VolumeMount {
-
 	return []corev1.VolumeMount{
 		{
 			Name:      naming.BackupStorageCAInputVolumeName,

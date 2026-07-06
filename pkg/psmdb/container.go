@@ -140,6 +140,16 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		})
 	}
 
+	// mongod requires a writable /tmp (WiredTiger temp/sort-spill files) when
+	// the root filesystem is read-only. The matching emptyDir volume is added
+	// to the pod spec in StatefulSpec.
+	if cr.CompareVersion("1.23.0") >= 0 && readOnlyRootFilesystemEnabled(containerSecurityContext) {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      tmpVolumeName,
+			MountPath: tmpMountPath,
+		})
+	}
+
 	rsName := replset.Name
 	if name, err := replset.CustomReplsetName(); err == nil {
 		rsName = name

@@ -124,6 +124,7 @@ spec:
               memory: 100M
           securityContext:
             privileged: false
+            readOnlyRootFilesystem: true
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -146,6 +147,8 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /tmp
+              name: tmp
           workingDir: /data/db
         - args:
             - pbm-agent-entrypoint
@@ -186,6 +189,7 @@ spec:
           resources: {}
           securityContext:
             privileged: false
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1001
           terminationMessagePath: /dev/termination-log
@@ -199,6 +203,8 @@ spec:
               readOnly: true
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /tmp
+              name: tmp
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -235,6 +241,8 @@ spec:
           name: bin
         - emptyDir: {}
           name: mongosh
+        - emptyDir: {}
+          name: tmp
         - configMap:
             defaultMode: 420
             name: sec-context-rs0-mongod

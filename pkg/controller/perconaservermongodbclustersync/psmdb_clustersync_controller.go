@@ -107,8 +107,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, cr)
 	}
-	
-	if cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
+
+	// Gate on spec.Mode so a new CR inheriting finalized state from a
+	// previous sync on the same target doesn't short-circuit.
+	if cr.Spec.Mode == psmdbv1.ClusterSyncModeFinalized && cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
 		if err := r.releaseClusterSyncLease(ctx, cr); err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "release clustersync lease after finalize")
 		}
@@ -194,11 +196,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mode")
 	}
 
-	// PCSM has stopped replicating; the cluster is free again. We keep
-	// the finalizer (released on CR delete) but drop the lease so
-	// backups/restores can proceed without waiting for the user to
-	// delete the CR.
-	if cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
+	// Drop the lease once the user-requested finalize completes so
+	// backups/restores don't wait on CR deletion. Same gate as the
+	// early-exit above.
+	if cr.Spec.Mode == psmdbv1.ClusterSyncModeFinalized && cr.Status.State == psmdbv1.ClusterSyncStateFinalized {
 		if err := r.releaseClusterSyncLease(ctx, cr); err != nil {
 			return reconcile.Result{}, errors.Wrap(err, "release clustersync lease after finalize")
 		}
@@ -413,6 +414,18 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		log.Error(statusErr, "pcsm status failed")
 	} else {
 		applyObservedStatus(newStatus, observed)
+	}
+
+	// StartedAt==nil + observed finalized means the state belongs to a
+	// previous sync on the same target — PCSM persists lifecycle state
+	// on the target cluster. Surface, don't keep retrying /start.
+	if newStatus.State == psmdbv1.ClusterSyncStateFinalized &&
+		newStatus.StartedAt == nil &&
+		cr.Spec.Mode != psmdbv1.ClusterSyncModeFinalized {
+		newStatus.Error = "PCSM reports state=finalized inherited from a previous ClusterSync against this target; PCSM lifecycle state must be reset on the target cluster before a new ClusterSync can start"
+		r.recorder.Eventf(cr, corev1.EventTypeWarning, "PCSMTargetAlreadyFinalized",
+			"target cluster %q has PCSM state=finalized from a previous ClusterSync; reset PCSM state on the target before starting a new sync", cr.Spec.ClusterName)
+		return r.writeStatus(ctx, cr, *newStatus)
 	}
 
 	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
