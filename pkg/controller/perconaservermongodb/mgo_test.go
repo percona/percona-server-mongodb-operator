@@ -63,9 +63,10 @@ func TestDefaultRWConcern(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		spec              *api.DefaultRWConcern
-		wantReadConcern   string
-		wantWriteConcern  string
+		spec             *api.DefaultRWConcern
+		wantReadConcern  string
+		wantWriteConcern string
+		wantWTimeout     int
 	}{
 		"nil spec falls back to majority": {
 			spec:             nil,
@@ -82,15 +83,30 @@ func TestDefaultRWConcern(t *testing.T) {
 			wantReadConcern:  "local",
 			wantWriteConcern: mongo.DefaultWriteConcern,
 		},
-		"only write overridden": {
-			spec:             &api.DefaultRWConcern{WriteConcern: "1"},
+		"only write w overridden": {
+			spec:             &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			wantReadConcern:  mongo.DefaultReadConcern,
 			wantWriteConcern: "1",
 		},
-		"both overridden": {
-			spec:             &api.DefaultRWConcern{ReadConcern: "local", WriteConcern: "1"},
+		"wtimeout overridden": {
+			spec:             &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "majority", WTimeout: 5000}},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: "majority",
+			wantWTimeout:     5000,
+		},
+		"empty writeConcern struct keeps defaults": {
+			spec:             &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{}},
+			wantReadConcern:  mongo.DefaultReadConcern,
+			wantWriteConcern: mongo.DefaultWriteConcern,
+		},
+		"all overridden": {
+			spec: &api.DefaultRWConcern{
+				ReadConcern:  "local",
+				WriteConcern: &api.DefaultWriteConcernSpec{W: "1", WTimeout: 250},
+			},
 			wantReadConcern:  "local",
 			wantWriteConcern: "1",
+			wantWTimeout:     250,
 		},
 	}
 
@@ -99,9 +115,10 @@ func TestDefaultRWConcern(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{DefaultRWConcern: tt.spec},
 			}
-			gotRead, gotWrite := defaultRWConcern(cr)
+			gotRead, gotWrite, gotWTimeout := defaultRWConcern(cr)
 			assert.Equal(t, tt.wantReadConcern, gotRead)
 			assert.Equal(t, tt.wantWriteConcern, gotWrite)
+			assert.Equal(t, tt.wantWTimeout, gotWTimeout)
 		})
 	}
 }
@@ -123,12 +140,12 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 			want:           true,
 		},
 		"PSS, custom concern": {
-			rwConcern: &api.DefaultRWConcern{WriteConcern: "1"},
+			rwConcern: &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			want:      true,
 		},
 		"PSA, custom concern": {
 			arbiterEnabled: true,
-			rwConcern:      &api.DefaultRWConcern{WriteConcern: "1"},
+			rwConcern:      &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			want:           true,
 		},
 		"sharded, PSA": {
@@ -138,7 +155,7 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 		},
 		"sharded, custom concern": {
 			shardingEnabled: true,
-			rwConcern:       &api.DefaultRWConcern{WriteConcern: "1"},
+			rwConcern:       &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			want:            false,
 		},
 	}
