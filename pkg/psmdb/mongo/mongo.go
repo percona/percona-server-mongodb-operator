@@ -156,9 +156,6 @@ func ToInterface(client *mongo.Client) Client {
 func Dial(ctx context.Context, conf *Config) (Client, error) {
 	opts := conf.Options()
 
-	tCtx, cancel := context.WithTimeout(ctx, *opts.ConnectTimeout)
-	defer cancel()
-
 	client, err := mongo.Connect(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo rs")
@@ -173,7 +170,7 @@ func Dial(ctx context.Context, conf *Config) (Client, error) {
 		}
 	}()
 
-	tCtx, cancel = context.WithTimeout(ctx, *opts.ConnectTimeout)
+	tCtx, cancel := context.WithTimeout(ctx, *opts.ConnectTimeout)
 	defer cancel()
 
 	err = client.Ping(tCtx, readpref.Primary())
