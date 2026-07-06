@@ -100,10 +100,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureTargetUserSecret(
 	err := r.client.Get(ctx, nn, existing)
 	switch {
 	case err == nil:
-		if _, ok := existing.Data[targetUserSecretUsernameKey]; !ok {
+		if v, ok := existing.Data[targetUserSecretUsernameKey]; !ok || len(v) == 0 {
 			return nil, errors.Errorf("target user secret %s missing %s key", nn, targetUserSecretUsernameKey)
 		}
-		if _, ok := existing.Data[targetUserSecretPasswordKey]; !ok {
+		if v, ok := existing.Data[targetUserSecretPasswordKey]; !ok || len(v) == 0 {
 			return nil, errors.Errorf("target user secret %s missing %s key", nn, targetUserSecretPasswordKey)
 		}
 		return existing, nil
