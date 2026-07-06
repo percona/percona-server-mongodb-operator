@@ -116,7 +116,7 @@ func IsErrNoDocuments(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, mongo.ErrNoDocuments) || strings.Contains(err.Error(), "no documents in result")
+	return errors.Is(err, mongo.ErrNoDocuments)
 }
 
 func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.PerconaServerMongoDB, addrs []string, tlsEnabled bool) (string, error) {
@@ -1047,7 +1047,7 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 var ErrNoOplogsForPITR = errors.New("there is no oplogs that can cover the date/time or no oplogs at all")
 
 func (b *pbmC) GetLastPITRChunk(ctx context.Context) (*oplog.OplogChunk, error) {
-	nodeInfo, err := topo.GetNodeInfo(context.TODO(), b.MongoClient())
+	nodeInfo, err := topo.GetNodeInfo(ctx, b.MongoClient())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting node information")
 	}
