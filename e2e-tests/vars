@@ -80,6 +80,12 @@ export conf_dir=$(realpath "$test_dir/../conf" || :)
 export src_dir=$(realpath "$test_dir/../..")
 export logs_dir="$test_dir/../logs"
 
+# Git information
+export GIT_COMMIT=$(git rev-parse HEAD)
+export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
+export API="psmdb.percona.com/v1"
+export OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
+
 # Images and registry definitions
 export REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
@@ -104,12 +110,6 @@ for image in \
 	IMAGE_LOGCOLLECTOR IMAGE_CLUSTERSYNC IMAGE_OPERATOR; do
 	qualify_image_var "$image"
 done
-
-# Git information
-export GIT_COMMIT=$(git rev-parse HEAD)
-export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-export API="psmdb.percona.com/v1"
-export OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
 
 # Platform information
 export KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
