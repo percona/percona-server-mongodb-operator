@@ -2,7 +2,9 @@ package perconaservermongodbclustersync
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,7 +29,8 @@ const (
 	targetUserSecretUsernameKey = "username"
 	targetUserSecretPasswordKey = "password"
 
-	targetUserPasswordHashAnnotation = "psmdb.percona.com/target-user-password-hash"
+	targetUserPasswordMACAnnotation = "psmdb.percona.com/target-user-password-mac"
+	targetUserPasswordMACKey        = "psmdb-target-user-password-annotation-v1"
 )
 
 var syncTargetUserRoles = []mongo.Role{
@@ -152,8 +155,8 @@ func ensureTargetMongoUser(ctx context.Context, mc mongo.Client, sec *corev1.Sec
 	}
 
 	mutated := false
-	newHash := sha256Hash(password)
-	if sec.Annotations[targetUserPasswordHashAnnotation] != newHash {
+	newMAC := passwordAnnotationMAC(password)
+	if sec.Annotations[targetUserPasswordMACAnnotation] != newMAC {
 		if err := mc.UpdateUserPass(ctx, "admin", username, string(password)); err != nil {
 			return false, errors.Wrapf(err, "sync target user password %q", username)
 		}
@@ -172,11 +175,13 @@ func setPasswordHashAnnotation(sec *corev1.Secret, password []byte) {
 	if sec.Annotations == nil {
 		sec.Annotations = make(map[string]string)
 	}
-	sec.Annotations[targetUserPasswordHashAnnotation] = sha256Hash(password)
+	sec.Annotations[targetUserPasswordMACAnnotation] = passwordAnnotationMAC(password)
 }
 
-func sha256Hash(data []byte) string {
-	return fmt.Sprintf("%x", sha256.Sum256(data))
+func passwordAnnotationMAC(data []byte) string {
+	mac := hmac.New(sha256.New, []byte(targetUserPasswordMACKey))
+	mac.Write(data)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func defaultTargetMongoClient(ctx context.Context, cl client.Client, target *psmdbv1.PerconaServerMongoDB) (mongo.Client, error) {

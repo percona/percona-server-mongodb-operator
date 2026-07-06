@@ -355,7 +355,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 		username = "clustersync-cr"
 		password = "new-password"
 	)
-	passwordHash := sha256Hash([]byte(password))
+	passwordMAC := passwordAnnotationMAC([]byte(password))
 
 	secretWith := func(annotations map[string]string) *corev1.Secret {
 		return &corev1.Secret{
@@ -384,12 +384,12 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				assert.Equal(t, password, m.lastCreatePass)
 				assert.Zero(t, m.updateUserPassCalls)
 				assert.Zero(t, m.updateRolesCalls)
-				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
 			},
 		},
 		"steady state converged does no writes": {
 			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
-			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
 			wantMutated: false,
 			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Zero(t, m.createUserCalls)
@@ -399,13 +399,13 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 		},
 		"password hash mismatch triggers UpdateUserPass and annotation refresh": {
 			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
-			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: "stale"}),
+			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: "stale"}),
 			wantMutated: true,
 			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Equal(t, 1, m.updateUserPassCalls)
 				assert.Equal(t, password, m.lastUpdatePass)
 				assert.Zero(t, m.updateRolesCalls)
-				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
 			},
 		},
 		"recreated secret with existing mongo user triggers UpdateUserPass and creates annotation map": {
@@ -417,7 +417,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				assert.Equal(t, password, m.lastUpdatePass)
 				assert.Zero(t, m.updateRolesCalls)
 				require.NotNil(t, s.Annotations)
-				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
 			},
 		},
 		"new cr reconcile against stale mongo user with drifted roles applies both password and roles": {
@@ -431,14 +431,14 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				assert.Equal(t, password, m.lastUpdatePass)
 				assert.Equal(t, 1, m.updateRolesCalls)
 				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
-				assert.Equal(t, passwordHash, s.Annotations[targetUserPasswordHashAnnotation])
+				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
 			},
 		},
 		"role drift triggers UpdateUserRoles without touching password": {
 			mc: &recordingMongoClient{
 				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}},
 			},
-			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
 			wantMutated: false,
 			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Zero(t, m.updateUserPassCalls)
@@ -455,7 +455,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 					{Role: "restore", DB: "admin"},
 				}},
 			},
-			sec:         secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
 			wantMutated: false,
 			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
 				assert.Zero(t, m.updateRolesCalls)
@@ -492,7 +492,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 				getUserInfoResp: &mongo.User{DB: "admin"},
 				updateRolesErr:  errors.New("error"),
 			},
-			sec:     secretWith(map[string]string{targetUserPasswordHashAnnotation: passwordHash}),
+			sec:     secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
 			wantErr: "sync target user roles",
 		},
 	}
