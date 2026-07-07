@@ -2,8 +2,13 @@ package perconaservermongodbclustersync
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,6 +28,11 @@ import (
 const (
 	targetUserSecretUsernameKey = "username"
 	targetUserSecretPasswordKey = "password"
+
+	adminDBName = "admin"
+
+	targetUserPasswordMACAnnotation = "psmdb.percona.com/target-user-password-mac"
+	targetUserPasswordMACKey        = "psmdb-target-user-password-annotation-v1"
 )
 
 var syncTargetUserRoles = []mongo.Role{
@@ -31,6 +41,13 @@ var syncTargetUserRoles = []mongo.Role{
 	{Role: "clusterManager", DB: "admin"},
 	{Role: "readWriteAnyDatabase", DB: "admin"},
 }
+
+var sortRolesOpt = cmpopts.SortSlices(func(a, b mongo.Role) bool {
+	if a.DB != b.DB {
+		return a.DB < b.DB
+	}
+	return a.Role < b.Role
+})
 
 // Scoped to the CR name so a new CR after a finalized one gets its own user.
 func syncTargetUsername(cr *psmdbv1.PerconaServerMongoDBClusterSync) string {
@@ -45,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureSyncTargetUser(
 	target *psmdbv1.PerconaServerMongoDB,
 ) (psmdb.Credentials, error) {
 	log := logf.FromContext(ctx)
-	creds, err := r.ensureTargetUserSecret(ctx, cr)
+	sec, err := r.ensureTargetUserSecret(ctx, cr)
 	if err != nil {
 		return psmdb.Credentials{}, errors.Wrap(err, "ensure target user secret")
 	}
@@ -61,35 +78,44 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureSyncTargetUser(
 		}
 	}(mc, ctx)
 
-	if err := ensureTargetMongoUser(ctx, mc, creds); err != nil {
+	mutated, err := ensureTargetMongoUser(ctx, mc, sec)
+	if err != nil {
 		return psmdb.Credentials{}, errors.Wrap(err, "ensure target mongo user")
 	}
-	return creds, nil
+	if mutated {
+		if err := r.client.Update(ctx, sec); err != nil {
+			return psmdb.Credentials{}, errors.Wrap(err, "update target user secret annotations")
+		}
+	}
+	return psmdb.Credentials{
+		Username: string(sec.Data[targetUserSecretUsernameKey]),
+		Password: string(sec.Data[targetUserSecretPasswordKey]),
+	}, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) ensureTargetUserSecret(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDBClusterSync,
-) (psmdb.Credentials, error) {
+) (*corev1.Secret, error) {
 	nn := types.NamespacedName{Name: clustersync.TargetUserSecretName(cr), Namespace: cr.Namespace}
 	existing := &corev1.Secret{}
 	err := r.client.Get(ctx, nn, existing)
 	switch {
 	case err == nil:
-		username := string(existing.Data[targetUserSecretUsernameKey])
-		password := string(existing.Data[targetUserSecretPasswordKey])
-		if username == "" || password == "" {
-			return psmdb.Credentials{}, errors.Errorf("target user secret %s missing %s/%s keys",
-				nn, targetUserSecretUsernameKey, targetUserSecretPasswordKey)
+		if v, ok := existing.Data[targetUserSecretUsernameKey]; !ok || len(v) == 0 {
+			return nil, errors.Errorf("target user secret %s missing %s key", nn, targetUserSecretUsernameKey)
 		}
-		return psmdb.Credentials{Username: username, Password: password}, nil
+		if v, ok := existing.Data[targetUserSecretPasswordKey]; !ok || len(v) == 0 {
+			return nil, errors.Errorf("target user secret %s missing %s key", nn, targetUserSecretPasswordKey)
+		}
+		return existing, nil
 	case !k8serrors.IsNotFound(err):
-		return psmdb.Credentials{}, errors.Wrapf(err, "get target user secret %s", nn)
+		return nil, errors.Wrapf(err, "get target user secret %s", nn)
 	}
 
 	password, err := secret.GeneratePassword()
 	if err != nil {
-		return psmdb.Credentials{}, errors.Wrap(err, "generate target user password")
+		return nil, errors.Wrap(err, "generate target user password")
 	}
 	username := syncTargetUsername(cr)
 
@@ -106,37 +132,58 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureTargetUserSecret(
 		},
 	}
 	if err := controllerutil.SetControllerReference(cr, newSecret, r.scheme); err != nil {
-		return psmdb.Credentials{}, errors.Wrap(err, "set owner reference on target user secret")
+		return nil, errors.Wrap(err, "set owner reference on target user secret")
 	}
 	if err := r.client.Create(ctx, newSecret); err != nil {
-		return psmdb.Credentials{}, errors.Wrapf(err, "create target user secret %s", nn)
+		return nil, errors.Wrapf(err, "create target user secret %s", nn)
 	}
-	return psmdb.Credentials{Username: username, Password: string(password)}, nil
+	return newSecret, nil
 }
 
-// ensureTargetMongoUser converges the sync user on the target cluster: it
-// creates the user when missing, and re-applies password and roles when it
-// already exists. The latter heals the case where the CR (and its owned
-// Secret) was deleted and recreated while the Mongo user, which has no owner
-// ref, kept its old password.
-func ensureTargetMongoUser(ctx context.Context, mc mongo.Client, creds psmdb.Credentials) error {
-	existing, err := mc.GetUserInfo(ctx, creds.Username, "admin")
+func ensureTargetMongoUser(ctx context.Context, mc mongo.Client, sec *corev1.Secret) (bool, error) {
+	username := string(sec.Data[targetUserSecretUsernameKey])
+	password := sec.Data[targetUserSecretPasswordKey]
+
+	existing, err := mc.GetUserInfo(ctx, username, adminDBName)
 	if err != nil {
-		return errors.Wrap(err, "look up target user")
+		return false, errors.Wrap(err, "look up target user")
 	}
 	if existing == nil {
-		if err := mc.CreateUser(ctx, "admin", creds.Username, creds.Password, syncTargetUserRoles...); err != nil {
-			return errors.Wrapf(err, "create target user %q", creds.Username)
+		if err := mc.CreateUser(ctx, adminDBName, username, string(password), syncTargetUserRoles...); err != nil {
+			return false, errors.Wrapf(err, "create target user %q", username)
 		}
-		return nil
+		setPasswordHashAnnotation(sec, password)
+		return true, nil
 	}
-	if err := mc.UpdateUserPass(ctx, "admin", creds.Username, creds.Password); err != nil {
-		return errors.Wrapf(err, "sync target user password %q", creds.Username)
+
+	mutated := false
+	newMAC := passwordAnnotationMAC(password)
+	if sec.Annotations[targetUserPasswordMACAnnotation] != newMAC {
+		if err := mc.UpdateUserPass(ctx, adminDBName, username, string(password)); err != nil {
+			return false, errors.Wrapf(err, "sync target user password %q", username)
+		}
+		setPasswordHashAnnotation(sec, password)
+		mutated = true
 	}
-	if err := mc.UpdateUserRoles(ctx, "admin", creds.Username, syncTargetUserRoles); err != nil {
-		return errors.Wrapf(err, "sync target user roles %q", creds.Username)
+	if !cmp.Equal(existing.Roles, syncTargetUserRoles, sortRolesOpt) {
+		if err := mc.UpdateUserRoles(ctx, adminDBName, username, syncTargetUserRoles); err != nil {
+			return false, errors.Wrapf(err, "sync target user roles %q", username)
+		}
 	}
-	return nil
+	return mutated, nil
+}
+
+func setPasswordHashAnnotation(sec *corev1.Secret, password []byte) {
+	if sec.Annotations == nil {
+		sec.Annotations = make(map[string]string)
+	}
+	sec.Annotations[targetUserPasswordMACAnnotation] = passwordAnnotationMAC(password)
+}
+
+func passwordAnnotationMAC(data []byte) string {
+	mac := hmac.New(sha256.New, []byte(targetUserPasswordMACKey))
+	mac.Write(data)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func defaultTargetMongoClient(ctx context.Context, cl client.Client, target *psmdbv1.PerconaServerMongoDB) (mongo.Client, error) {
