@@ -766,6 +766,7 @@ spec:
                       w:
                         type: string
                       wtimeout:
+                        minimum: 0
                         type: integer
                     type: object
                 type: object

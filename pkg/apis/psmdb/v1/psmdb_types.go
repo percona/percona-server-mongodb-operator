@@ -116,8 +116,9 @@ type DefaultRWConcern struct {
 }
 
 type DefaultWriteConcernSpec struct {
-	W        string `json:"w,omitempty"`
-	WTimeout int    `json:"wtimeout,omitempty"`
+	W string `json:"w,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	WTimeout int `json:"wtimeout,omitempty"`
 }
 
 type UserRole struct {
