@@ -95,7 +95,7 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	client    client.Client
 	apiReader client.Reader
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
