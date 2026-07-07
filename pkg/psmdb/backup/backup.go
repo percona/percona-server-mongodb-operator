@@ -2,7 +2,6 @@ package backup
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +31,7 @@ func NewBackupJob(name string) Job {
 }
 
 func IsPBMNotConfiguredError(err error) bool {
-	return strings.Contains(err.Error(), "mongo: no documents in result")
+	return IsErrNoDocuments(err)
 }
 
 // HasActiveJobs returns true if there are running backups or restores

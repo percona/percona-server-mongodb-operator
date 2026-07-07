@@ -15,6 +15,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
+	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 )
@@ -438,5 +439,6 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		client:     cl,
 		scheme:     s,
 		newPBMFunc: fakeBackup.NewPBM,
+		clientcmd:  fakeClientcmd.New(),
 	}
 }
