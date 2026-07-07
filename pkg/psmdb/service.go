@@ -69,10 +69,11 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 
 	if dns := replset.Expose.ExternalDNS; dns != nil {
 		hostname := BuildDNSHostname(dns, replset.Name, podName)
-		annotations["external-dns.alpha.kubernetes.io/hostname"] = hostname
+		annotations[naming.AnnotationExternalDNSHostname] = hostname
 		if dns.TTL > 0 {
-			annotations["external-dns.alpha.kubernetes.io/ttl"] = strconv.Itoa(dns.TTL)
+			annotations[naming.AnnotationExternalDNSTTL] = strconv.Itoa(dns.TTL)
 		}
+		annotations[naming.AnnotationExternalDNSManaged] = "true"
 	}
 
 	svc := &corev1.Service{

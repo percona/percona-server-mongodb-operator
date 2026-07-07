@@ -52,6 +52,7 @@ demand-backup-snapshot
 demand-backup-snapshot-vault
 disabled-auth
 expose-sharded
+external-dns
 finalizer
 ignore-labels-annotations
 init-deploy
