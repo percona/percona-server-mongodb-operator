@@ -111,7 +111,7 @@ type Client interface {
 	Database(name string, opts ...options.Lister[options.DatabaseOptions]) ClientDatabase
 	Ping(ctx context.Context, rp *readpref.ReadPref) error
 
-	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error
+	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error
 	ReadConfig(ctx context.Context) (RSConfig, error)
 	CreateRole(ctx context.Context, db string, role Role) error
 	UpdateRole(ctx context.Context, db string, role Role) error
@@ -181,11 +181,14 @@ func Dial(ctx context.Context, conf *Config) (Client, error) {
 	return ToInterface(client), nil
 }
 
-func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error {
+func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error {
 	cmd := bson.D{
 		{Key: "setDefaultRWConcern", Value: 1},
 		{Key: "defaultReadConcern", Value: bson.D{{Key: "level", Value: readConcern}}},
-		{Key: "defaultWriteConcern", Value: bson.D{{Key: "w", Value: parseWriteConcernW(writeConcern)}}},
+		{Key: "defaultWriteConcern", Value: bson.D{
+			{Key: "w", Value: parseWriteConcernW(writeConcernW)},
+			{Key: "wtimeout", Value: writeConcernWTimeout},
+		}},
 	}
 
 	res := client.Database("admin").RunCommand(ctx, cmd)

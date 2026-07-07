@@ -103,6 +103,28 @@ desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster2
 compare_kubectl service/$cluster2
 
+desc 'check defaultRWConcern is applied on the cluster'
+rwc=$(run_mongo 'JSON.stringify(db.adminCommand({getDefaultRWConcern:1}))' "clusterAdmin:clusterAdmin123456@$cluster2.$namespace" \
+	| grep -E '^\{.*\}$')
+read_concern_level=$(jq -r '.defaultReadConcern.level' <<<"$rwc")
+write_concern_w=$(jq -r '.defaultWriteConcern.w' <<<"$rwc")
+write_concern_wtimeout=$(jq -r '.defaultWriteConcern.wtimeout' <<<"$rwc")
+if [[ $read_concern_level != "majority" ]]; then
+	echo "error: expected defaultReadConcern.level to be 'majority', got '$read_concern_level'"
+	echo "getDefaultRWConcern response: $rwc"
+	exit 1
+fi
+if [[ $write_concern_w != "majority" ]]; then
+	echo "error: expected defaultWriteConcern.w to be 'majority', got '$write_concern_w'"
+	echo "getDefaultRWConcern response: $rwc"
+	exit 1
+fi
+if [[ $write_concern_wtimeout != "5000" ]]; then
+	echo "error: expected defaultWriteConcern.wtimeout to be '5000', got '$write_concern_wtimeout'"
+	echo "getDefaultRWConcern response: $rwc"
+	exit 1
+fi
+
 desc 'write data, read from all'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
