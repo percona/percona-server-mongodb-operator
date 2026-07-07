@@ -2878,11 +2878,15 @@ spec:
                     - local
                     - available
                     - majority
-                    - linearizable
-                    - snapshot
                     type: string
                   writeConcern:
-                    type: string
+                    properties:
+                      w:
+                        type: string
+                      wtimeout:
+                        minimum: 0
+                        type: integer
+                    type: object
                 type: object
               enableExternalVolumeAutoscaling:
                 type: boolean
@@ -30608,6 +30612,10 @@ spec:
             required:
             - image
             type: object
+            x-kubernetes-validations:
+            - message: pmm.querySource 'mongolog' requires logcollector to be enabled
+              rule: '!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue(''profiler'')
+                != ''mongolog'' || self.?logcollector.?enabled.orValue(false)'
           status:
             properties:
               backupConfigHash:
