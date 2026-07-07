@@ -313,4 +313,68 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	Context("PMM querySource validation", func() {
+		It("should reject mongolog query source when logcollector is disabled", func() {
+			cr, err := readDefaultCR("psmdb-mongolog-lc-disabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.PMM.Enabled = true
+			cr.Spec.PMM.QuerySource = "mongolog"
+			cr.Spec.LogCollector = &psmdbv1.LogCollectorSpec{Enabled: false}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("pmm.querySource 'mongolog' requires logcollector to be enabled"))
+		})
+
+		It("should reject mongolog query source when logcollector is not set", func() {
+			cr, err := readDefaultCR("psmdb-mongolog-no-lc", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.PMM.Enabled = true
+			cr.Spec.PMM.QuerySource = "mongolog"
+			cr.Spec.LogCollector = nil
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("pmm.querySource 'mongolog' requires logcollector to be enabled"))
+		})
+
+		It("should allow mongolog query source when logcollector is enabled", func() {
+			cr, err := readDefaultCR("psmdb-mongolog-lc-enabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.PMM.Enabled = true
+			cr.Spec.PMM.QuerySource = "mongolog"
+			cr.Spec.LogCollector = &psmdbv1.LogCollectorSpec{Enabled: true}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow profiler query source when logcollector is disabled", func() {
+			cr, err := readDefaultCR("psmdb-profiler-lc-disabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.PMM.Enabled = true
+			cr.Spec.PMM.QuerySource = "profiler"
+			cr.Spec.LogCollector = &psmdbv1.LogCollectorSpec{Enabled: false}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow mongolog query source when pmm is disabled", func() {
+			cr, err := readDefaultCR("psmdb-mongolog-pmm-disabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.PMM.Enabled = false
+			cr.Spec.PMM.QuerySource = "mongolog"
+			cr.Spec.LogCollector = &psmdbv1.LogCollectorSpec{Enabled: false}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })
