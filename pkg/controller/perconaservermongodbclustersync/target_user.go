@@ -29,6 +29,8 @@ const (
 	targetUserSecretUsernameKey = "username"
 	targetUserSecretPasswordKey = "password"
 
+	admin = "admin"
+
 	targetUserPasswordMACAnnotation = "psmdb.percona.com/target-user-password-mac"
 	targetUserPasswordMACKey        = "psmdb-target-user-password-annotation-v1"
 )
@@ -142,12 +144,12 @@ func ensureTargetMongoUser(ctx context.Context, mc mongo.Client, sec *corev1.Sec
 	username := string(sec.Data[targetUserSecretUsernameKey])
 	password := sec.Data[targetUserSecretPasswordKey]
 
-	existing, err := mc.GetUserInfo(ctx, username, "admin")
+	existing, err := mc.GetUserInfo(ctx, username, admin)
 	if err != nil {
 		return false, errors.Wrap(err, "look up target user")
 	}
 	if existing == nil {
-		if err := mc.CreateUser(ctx, "admin", username, string(password), syncTargetUserRoles...); err != nil {
+		if err := mc.CreateUser(ctx, admin, username, string(password), syncTargetUserRoles...); err != nil {
 			return false, errors.Wrapf(err, "create target user %q", username)
 		}
 		setPasswordHashAnnotation(sec, password)
@@ -157,14 +159,14 @@ func ensureTargetMongoUser(ctx context.Context, mc mongo.Client, sec *corev1.Sec
 	mutated := false
 	newMAC := passwordAnnotationMAC(password)
 	if sec.Annotations[targetUserPasswordMACAnnotation] != newMAC {
-		if err := mc.UpdateUserPass(ctx, "admin", username, string(password)); err != nil {
+		if err := mc.UpdateUserPass(ctx, admin, username, string(password)); err != nil {
 			return false, errors.Wrapf(err, "sync target user password %q", username)
 		}
 		setPasswordHashAnnotation(sec, password)
 		mutated = true
 	}
 	if !cmp.Equal(existing.Roles, syncTargetUserRoles, sortRolesOpt) {
-		if err := mc.UpdateUserRoles(ctx, "admin", username, syncTargetUserRoles); err != nil {
+		if err := mc.UpdateUserRoles(ctx, admin, username, syncTargetUserRoles); err != nil {
 			return false, errors.Wrapf(err, "sync target user roles %q", username)
 		}
 	}
