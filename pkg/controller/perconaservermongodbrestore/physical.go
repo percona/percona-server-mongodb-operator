@@ -5,14 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"gopkg.in/yaml.v2"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -677,66 +678,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Co
 	return creds, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, eval string) (*bytes.Buffer, *bytes.Buffer, error) {
-	log := logf.FromContext(ctx)
-
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
-	}
-
-	mongo60, err := cluster.CompareMongoDBVersion("6.0")
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
-	}
-
-	mongoClient := "mongo"
-	if mongo60 >= 0 {
-		mongoClient = "mongosh"
-	}
-
-	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
-
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "'%s' failed in %s (stdout: %s, stderr: %s)", eval, pod.Name, stdoutBuf.String(), stderrBuf.String())
-	}
-	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String(), "pod", pod.Name, "eval", eval)
-
-	return stdoutBuf, stderrBuf, nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) runIsMaster(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
-	stdoutBuf, _, err := r.runMongosh(ctx, cluster, pod, "db.hello().isWritablePrimary")
-	if err != nil {
-		return false, errors.Wrap(err, "run db.hello()")
-	}
-
-	return strings.TrimSuffix(stdoutBuf.String(), "\n") == "true", nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) stepDown(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) error {
-	_, _, err := r.runMongosh(ctx, cluster, pod, "rs.stepDown()")
-	if err != nil {
-		return errors.Wrap(err, "run rs.stepDown()")
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) makePrimary(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, targetPod string) error {
-	jsTempl := `cfg = rs.config(); podZero = cfg.members.find(member => member.tags.podName === "%s"); podZero.priority += 1; rs.reconfig(cfg)`
-
-	_, _, err := r.runMongosh(ctx, cluster, pod, fmt.Sprintf(jsTempl, targetPod))
-	if err != nil {
-		return errors.Wrapf(err, "reconfigure replset in %s", pod.Name)
-	}
-
-	return nil
-}
-
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
 // PBM masks the storage credentials when masking to YAML/JSON, but they are preserved in BSON.
 func yamlMarshalUnsafe(in any) ([]byte, error) {
@@ -745,8 +686,15 @@ func yamlMarshalUnsafe(in any) ([]byte, error) {
 		return nil, errors.Wrap(err, "marshal to bson")
 	}
 
+	// DefaultDocumentM is required so that nested documents decode into bson.M as
+	// well. Without it, the mongo-driver v2 decoder decodes nested documents into
+	// bson.D, which yaml.Marshal then renders as a list of {key, value} pairs
+	// instead of a proper YAML map.
+	dec := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(bsonBytes)))
+	dec.DefaultDocumentM()
+
 	var tmp bson.M
-	if err := bson.Unmarshal(bsonBytes, &tmp); err != nil {
+	if err := dec.Decode(&tmp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal to bson.M")
 	}
 	delete(tmp, "epoch")
@@ -772,7 +720,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get PBM config secret")
 	}
 
-	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
+	currentConf, err := r.getPBMConfigFromPod(ctx, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get current pbm config from pod")
+	}
+
+	pbmC, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
@@ -789,14 +742,29 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	pbmConfig.PITR.Enabled = false
+	if pbmConfig.PITR != nil {
+		pbmConfig.PITR.Enabled = false
+	}
 
-	confBytes, err := yamlMarshalUnsafe(pbmConfig)
+	newConfBytes, err := yamlMarshalUnsafe(pbmConfig)
 	if err != nil {
 		return errors.Wrap(err, "marshal PBM config to yaml")
 	}
 
-	if bytes.Equal(confBytes, secret.Data["pbm_config.yaml"]) {
+	newConf := make(map[string]any)
+	if err := yaml.Unmarshal(newConfBytes, newConf); err != nil {
+		return errors.Wrap(err, "unmarshal new PBM config to map")
+	}
+
+	// we need to do this to not break physical restores if PBM go module version
+	// differs from pbm-agent version in the running cluster. only known pbm config
+	// fields will be updated.
+	desiredConfBytes, err := yaml.Marshal(updateKnownFields(currentConf, newConf))
+	if err != nil {
+		return errors.Wrap(err, "marshal desired conf")
+	}
+
+	if bytes.Equal(desiredConfBytes, secret.Data["pbm_config.yaml"]) {
 		return nil
 	}
 
@@ -807,7 +775,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 			Labels:    naming.ClusterLabels(cluster),
 		},
 		Data: map[string][]byte{
-			"pbm_config.yaml": confBytes,
+			"pbm_config.yaml": desiredConfBytes,
 		},
 	}
 	if cluster.CompareVersion("1.17.0") < 0 {
@@ -819,6 +787,56 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	}
 
 	return nil
+}
+
+func updateKnownFields(a, b map[string]any) map[string]any {
+	out := make(map[string]any, len(a))
+	maps.Copy(out, a)
+	for k, v := range b {
+		// Ignore any field in b that does not exist in a.
+		bv, ok := out[k]
+		if !ok {
+			continue
+		}
+		if v, ok := v.(map[string]any); ok {
+			if bv, ok := bv.(map[string]any); ok {
+				out[k] = updateKnownFields(bv, v)
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) getPBMConfigFromPod(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) (map[string]any, error) {
+	conf := make(map[string]any)
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	pod := corev1.Pod{}
+	nn := types.NamespacedName{Name: cluster.Spec.Replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}
+	if err := r.client.Get(ctx, nn, &pod); err != nil {
+		return conf, errors.Wrap(err, "get pod")
+	}
+
+	container, pbmBinary := getPBMBinaryAndContainerForExec(&pod)
+
+	command := []string{pbmBinary, "config"}
+	err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
+	if err != nil {
+		return conf, errors.Wrap(err, "get pbm config")
+	}
+
+	if err := yaml.Unmarshal(stdoutBuf.Bytes(), &conf); err != nil {
+		return conf, errors.Wrap(err, "unmarshal pbm config output")
+	}
+
+	return conf, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(

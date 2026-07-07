@@ -69,6 +69,7 @@ const (
 )
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
+// +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
 type PerconaServerMongoDBSpec struct {
 	Pause                        bool                                 `json:"pause,omitempty"`
 	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`

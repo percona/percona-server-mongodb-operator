@@ -3,10 +3,10 @@ package fake
 import (
 	"context"
 
-	"go.mongodb.org/mongo-driver/bson"
-	mgo "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mgo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
@@ -23,7 +23,7 @@ func (c *fakeMongoClient) Disconnect(ctx context.Context) error {
 
 type fakeMongoClientDatabase struct{}
 
-func (c *fakeMongoClientDatabase) RunCommand(ctx context.Context, runCommand interface{}, opts ...*options.RunCmdOptions) *mgo.SingleResult {
+func (c *fakeMongoClientDatabase) RunCommand(ctx context.Context, runCommand interface{}, opts ...options.Lister[options.RunCmdOptions]) *mgo.SingleResult {
 	return singleResult(mongo.OKResponse{
 		OK: 1,
 	})
@@ -42,7 +42,7 @@ func singleResult(doc any) *mgo.SingleResult {
 	return mgo.NewSingleResultFromDocument(bsonD, nil, nil)
 }
 
-func (c *fakeMongoClient) Database(name string, opts ...*options.DatabaseOptions) mongo.ClientDatabase {
+func (c *fakeMongoClient) Database(name string, opts ...options.Lister[options.DatabaseOptions]) mongo.ClientDatabase {
 	return new(fakeMongoClientDatabase)
 }
 

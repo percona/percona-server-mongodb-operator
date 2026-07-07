@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"

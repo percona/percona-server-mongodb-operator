@@ -228,3 +228,112 @@ func regularS3Storage() map[string]psmdbv1.BackupStorageSpec {
 		},
 	}
 }
+
+func TestUpdateKnownFields(t *testing.T) {
+	tests := []struct {
+		name string
+		a    map[string]any
+		b    map[string]any
+		want map[string]any
+	}{
+		{
+			name: "updates value of existing field",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{"compression": "s2"},
+		},
+		{
+			name: "ignores field that does not exist in a",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{"compression": "s2", "newField": "value"},
+			want: map[string]any{"compression": "s2"},
+		},
+		{
+			name: "keeps field of a that is absent from b",
+			a:    map[string]any{"compression": "gzip", "level": 6},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{"compression": "s2", "level": 6},
+		},
+		{
+			name: "recurses into nested maps and ignores unknown nested fields",
+			a: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket": "old-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+			b: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket":         "new-bucket",
+						"region":         "us-east-1",
+						"maxUploadParts": 10000,
+					},
+				},
+			},
+			want: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket": "new-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+		},
+		{
+			name: "overrides when a value is a map but b value is scalar",
+			a:    map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+			b:    map[string]any{"restore": "scalar"},
+			want: map[string]any{"restore": "scalar"},
+		},
+		{
+			name: "overrides when a value is scalar but b value is a map",
+			a:    map[string]any{"restore": "scalar"},
+			b:    map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+			want: map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+		},
+		{
+			name: "empty b returns copy of a",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{},
+			want: map[string]any{"compression": "gzip"},
+		},
+		{
+			name: "empty a ignores everything in b",
+			a:    map[string]any{},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := updateKnownFields(tt.a, tt.b)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
+	a := map[string]any{
+		"storage": map[string]any{
+			"s3": map[string]any{"bucket": "old-bucket"},
+		},
+	}
+	b := map[string]any{
+		"storage": map[string]any{
+			"s3": map[string]any{"bucket": "new-bucket", "region": "us-east-1"},
+		},
+	}
+
+	_ = updateKnownFields(a, b)
+
+	assert.Equal(t, "old-bucket", a["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
+	assert.NotContains(t, a["storage"].(map[string]any)["s3"].(map[string]any), "region")
+	assert.Equal(t, "new-bucket", b["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
+}
