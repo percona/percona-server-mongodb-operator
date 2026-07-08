@@ -57,6 +57,11 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  defaultRWConcern:
+#    readConcern: majority
+#    writeConcern:
+#      w: majority
+#      wtimeout: 0
 #  vault:
 #    endpointURL: https://vault-service:8200
 #    tlsSecret: my-tls-vault-secret
