@@ -10,6 +10,11 @@ spec:
     tls: true
   tls:
     mode: disabled
+  defaultRWConcern:
+    readConcern: majority
+    writeConcern:
+      w: majority
+      wtimeout: 5000
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup

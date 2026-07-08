@@ -50,7 +50,7 @@ func (c *fakeMongoClient) Ping(ctx context.Context, rp *readpref.ReadPref) error
 	return nil
 }
 
-func (c *fakeMongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error {
+func (c *fakeMongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error {
 	return nil
 }
 

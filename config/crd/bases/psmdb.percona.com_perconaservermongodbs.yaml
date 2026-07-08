@@ -813,11 +813,15 @@ spec:
                     - local
                     - available
                     - majority
-                    - linearizable
-                    - snapshot
                     type: string
                   writeConcern:
-                    type: string
+                    properties:
+                      w:
+                        type: string
+                      wtimeout:
+                        minimum: 0
+                        type: integer
+                    type: object
                 type: object
               enableExternalVolumeAutoscaling:
                 type: boolean

@@ -111,9 +111,15 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type DefaultRWConcern struct {
-	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
-	ReadConcern  string `json:"readConcern,omitempty"`
-	WriteConcern string `json:"writeConcern,omitempty"`
+	// +kubebuilder:validation:Enum={local,available,majority}
+	ReadConcern  string                  `json:"readConcern,omitempty"`
+	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
+}
+
+type DefaultWriteConcernSpec struct {
+	W string `json:"w,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	WTimeout int `json:"wtimeout,omitempty"`
 }
 
 type UserRole struct {
