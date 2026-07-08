@@ -69,6 +69,7 @@ const (
 )
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
+// +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
 type PerconaServerMongoDBSpec struct {
 	Pause                        bool                                 `json:"pause,omitempty"`
 	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
@@ -110,9 +111,15 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type DefaultRWConcern struct {
-	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
-	ReadConcern  string `json:"readConcern,omitempty"`
-	WriteConcern string `json:"writeConcern,omitempty"`
+	// +kubebuilder:validation:Enum={local,available,majority}
+	ReadConcern  string                  `json:"readConcern,omitempty"`
+	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
+}
+
+type DefaultWriteConcernSpec struct {
+	W string `json:"w,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	WTimeout int `json:"wtimeout,omitempty"`
 }
 
 type UserRole struct {
