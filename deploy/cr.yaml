@@ -57,6 +57,11 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  defaultRWConcern:
+#    readConcern: majority
+#    writeConcern:
+#      w: majority
+#      wtimeout: 0
 #  vault:
 #    endpointURL: https://vault-service:8200
 #    tlsSecret: my-tls-vault-secret
@@ -1015,6 +1020,20 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    # Add a liveness/readiness probe for the logs (fluent-bit) container.
+#    # When not set, the container has no probes.
+#    # NOTE: a tcpSocket/httpGet probe on port 2020 requires the fluent-bit
+#    # HTTP server to be enabled via `configuration` ([HTTP_SERVER] On).
+#    livenessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#    readinessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
 #    logrotate:
 #      configuration: |
 #        /data/db/logs/mongod.full.log {
@@ -1035,6 +1054,20 @@ spec:
 #      extraConfig:
 #        name: logrotate-config
 #      schedule: "0 0 * * *"
+#      # Add a liveness/readiness probe for the logrotate container.
+#      # When not set, the container has no probes.
+#      livenessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 30
+#        periodSeconds: 15
+#      readinessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 5
+#        periodSeconds: 10
 #  search:
 #    enabled: true
 #    image: percona/percona-server-mongodb-search:<tag>

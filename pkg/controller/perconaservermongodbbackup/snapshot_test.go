@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -504,7 +504,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 					LastTransitionTS: startTime.Unix(),
 				}, nil)
 			},
-			cr:      newCR(),
+			cr: newCR(),
 			cluster: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					Backup: api.BackupSpec{
@@ -524,7 +524,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 					Status:           defs.StatusDone,
 					StartTS:          1234567890,
 					LastTransitionTS: 1234567900,
-					LastWriteTS:      primitive.Timestamp{T: 1234567950},
+					LastWriteTS:      bson.Timestamp{T: 1234567950},
 				}, nil)
 			},
 			cr:        newCR(),

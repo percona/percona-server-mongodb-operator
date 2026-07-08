@@ -69,6 +69,7 @@ const (
 )
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
+// +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
 type PerconaServerMongoDBSpec struct {
 	Pause                        bool                                 `json:"pause,omitempty"`
 	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
@@ -110,9 +111,15 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type DefaultRWConcern struct {
-	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
-	ReadConcern  string `json:"readConcern,omitempty"`
-	WriteConcern string `json:"writeConcern,omitempty"`
+	// +kubebuilder:validation:Enum={local,available,majority}
+	ReadConcern  string                  `json:"readConcern,omitempty"`
+	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
+}
+
+type DefaultWriteConcernSpec struct {
+	W string `json:"w,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	WTimeout int `json:"wtimeout,omitempty"`
 }
 
 type UserRole struct {
@@ -206,10 +213,10 @@ const (
 )
 
 type TLSSpec struct {
-	Mode                     TLSMode                 `json:"mode,omitempty"`
-	AllowInvalidCertificates *bool                   `json:"allowInvalidCertificates,omitempty"`
-	CertValidityDuration     metav1.Duration         `json:"certValidityDuration,omitempty"`
-	IssuerConf               *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	Mode                     TLSMode                `json:"mode,omitempty"`
+	AllowInvalidCertificates *bool                  `json:"allowInvalidCertificates,omitempty"`
+	CertValidityDuration     metav1.Duration        `json:"certValidityDuration,omitempty"`
+	IssuerConf               cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
@@ -2011,6 +2018,14 @@ type LogCollectorSpec struct {
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
 	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logs (fluent-bit) container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logs (fluent-bit) container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // LogRotateSpec defines the configuration for the logrotate container.
@@ -2027,6 +2042,14 @@ type LogRotateSpec struct {
 	// This should be a valid cron expression.
 	//+kubebuilder:default:="0 0 * * *"
 	Schedule string `json:"schedule,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logrotate container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logrotate container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

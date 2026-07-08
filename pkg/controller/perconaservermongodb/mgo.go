@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,17 +32,22 @@ import (
 
 var errReplsetLimit = fmt.Errorf("maximum replset member (%d) count reached", mongo.MaxMembers)
 
-func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string) {
-	readConcern, writeConcern := mongo.DefaultReadConcern, mongo.DefaultWriteConcern
-	if c := cr.Spec.DefaultRWConcern; c != nil {
-		if c.ReadConcern != "" {
-			readConcern = c.ReadConcern
-		}
-		if c.WriteConcern != "" {
-			writeConcern = c.WriteConcern
-		}
+func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string, int) {
+	readConcern, writeConcernW, writeConcernWTimeout := mongo.DefaultReadConcern, mongo.DefaultWriteConcern, 0
+	c := cr.Spec.DefaultRWConcern
+	if c == nil {
+		return readConcern, writeConcernW, writeConcernWTimeout
 	}
-	return readConcern, writeConcern
+	if c.ReadConcern != "" {
+		readConcern = c.ReadConcern
+	}
+	if c.WriteConcern != nil {
+		if c.WriteConcern.W != "" {
+			writeConcernW = c.WriteConcern.W
+		}
+		writeConcernWTimeout = c.WriteConcern.WTimeout
+	}
+	return readConcern, writeConcernW, writeConcernWTimeout
 }
 
 // PSA replsets need the explicit push since MongoDB's implicit default is w:1; user-set
@@ -119,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateInit, nil, nil
 		}
 		if cr.Status.Replsets[replset.Name].Initialized {
-			if errors.Is(err, topology.ErrServerSelectionTimeout) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
+			if errors.As(err, &topology.ServerSelectionError{}) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
 				log.Error(err, "FULL CLUSTER CRASH")
 
 				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)
@@ -227,8 +232,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 				}
 			}()
 
-			readConcern, writeConcern := defaultRWConcern(cr)
-			err = mongosSession.SetDefaultRWConcern(ctx, readConcern, writeConcern)
+			readConcern, writeConcernW, writeConcernWTimeout := defaultRWConcern(cr)
+			err = mongosSession.SetDefaultRWConcern(ctx, readConcern, writeConcernW, writeConcernWTimeout)
 			// SetDefaultRWConcern introduced in MongoDB 4.4
 			if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 				return api.AppStateError, nil, errors.Wrap(err, "set default RW concern")
@@ -263,8 +268,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	}
 
 	if shouldSetDefaultRWConcern(cr, replset) {
-		readConcern, writeConcern := defaultRWConcern(cr)
-		err := cli.SetDefaultRWConcern(ctx, readConcern, writeConcern)
+		readConcern, writeConcernW, writeConcernWTimeout := defaultRWConcern(cr)
+		err := cli.SetDefaultRWConcern(ctx, readConcern, writeConcernW, writeConcernWTimeout)
 		// SetDefaultRWConcern introduced in MongoDB 4.4
 		if err != nil && !strings.Contains(err.Error(), "CommandNotFound") {
 			return api.AppStateError, nil, errors.Wrap(err, "set default RW concern")

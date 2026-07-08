@@ -86,7 +86,7 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
@@ -191,19 +191,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
-	// Check the clustersync lease before any cluster-mutating step.
 	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
-		blocked, err := r.checkClusterSyncLease(ctx, cr, cluster)
-		if err != nil {
+		// Check the clustersync lease before any cluster-mutating step.
+		if blocked, err := r.checkClusterSyncLease(ctx, cr, cluster); err != nil {
 			return rr, errors.Wrap(err, "check clustersync lease")
-		}
-		if blocked {
+		} else if blocked {
 			status.State = psmdbv1.RestoreStateWaiting
 			return rr, nil
 		}
-	}
 
-	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
+		// Check the restore locks before any cluster-mutating step.
+		if locked, err := r.checkRestoreLocks(ctx, cluster); err != nil {
+			return rr, errors.Wrap(err, "check restore locks")
+		} else if locked {
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+
 		err = r.validate(ctx, cr, cluster)
 		if err != nil {
 			if errors.Is(err, errWaitingPBM) {
@@ -263,18 +267,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				log.Info("Waiting for mongos pods to terminate")
 				return rr, nil
 			}
-		}
-	}
-
-	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
-		locked, err := r.checkRestoreLocks(ctx, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "check restore locks")
-		}
-
-		if locked {
-			status.State = psmdbv1.RestoreStateWaiting
-			return rr, nil
 		}
 	}
 
