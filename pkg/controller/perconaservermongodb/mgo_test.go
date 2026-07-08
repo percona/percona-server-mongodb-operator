@@ -447,6 +447,29 @@ func TestLiveMembers(t *testing.T) {
 				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
 			},
 		},
+		{
+			name: "arbiter external node with port in host",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "arbiter.example.com:27017", ArbiterOnly: true},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "arbiter.example.com:27017", State: mongo.MemberStateArbiter, StateStr: "ARBITER"},
+			}},
+			rs: &api.ReplsetSpec{
+				ExternalNodes: []*api.ExternalNode{
+					{Host: "arbiter.example.com:27017", Port: 27017, ArbiterOnly: true},
+				},
+			},
+			expectedLive: 2,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
 	}
 
 	for _, tt := range tests {

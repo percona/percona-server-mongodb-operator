@@ -370,11 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 		member.Tags = mongo.ReplsetTags{"external": "true"}
 	}
 
-	if strings.Contains(extNode.Host, ":") {
-		member.Host = extNode.Host
-	} else {
-		member.Host = extNode.HostPort()
-	}
+	member.Host = extNode.HostPort()
 
 	for k, v := range extNode.Tags {
 		if member.Tags == nil {
