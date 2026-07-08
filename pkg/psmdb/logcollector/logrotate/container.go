@@ -105,6 +105,15 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 				Value: cr.Spec.LogCollector.LogRotate.Schedule,
 			})
 		}
+
+		if cr.CompareVersion("1.23.0") >= 0 {
+			if cr.Spec.LogCollector.LogRotate.LivenessProbe != nil {
+				container.LivenessProbe = cr.Spec.LogCollector.LogRotate.LivenessProbe
+			}
+			if cr.Spec.LogCollector.LogRotate.ReadinessProbe != nil {
+				container.ReadinessProbe = cr.Spec.LogCollector.LogRotate.ReadinessProbe
+			}
+		}
 	}
 
 	return &container, nil
