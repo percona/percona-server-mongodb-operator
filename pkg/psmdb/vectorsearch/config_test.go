@@ -348,8 +348,15 @@ func newDefaultExpectedConfig() mongot.Config {
 					"psmdb-rs0-1.psmdb-rs0.default.svc.cluster.local:27017",
 					"psmdb-rs0-2.psmdb-rs0.default.svc.cluster.local:27017",
 				},
-				Username:     "searchCoordinator",
-				PasswordFile: "/etc/users-secret/MONGODB_SEARCH_PASSWORD",
+				ScramAuth: &mongot.ConfigScramAuth{
+					Username:     "searchCoordinator",
+					PasswordFile: "/tmp/MONGODB_SEARCH_PASSWORD",
+					TLS: &mongot.ScramAuthTLS{
+						Enabled:                  true,
+						TLSCertificateKeyFile:    new(mongotTLSCertificatePath),
+						CertificateAuthorityFile: new(mongotTLSCAPath),
+					},
+				},
 			},
 		},
 		Storage: mongot.ConfigStorage{
@@ -427,10 +434,30 @@ net:
 			expected: func() mongot.Config {
 				cfg := newDefaultExpectedConfig()
 				cfg.SyncSource.Router = &mongot.ConfigRouter{
-					HostAndPort:  []string{"psmdb-mongos.default.svc.cluster.local:27017"},
-					Username:     "searchCoordinator",
-					PasswordFile: "/etc/users-secret/MONGODB_SEARCH_PASSWORD",
+					HostAndPort: []string{"psmdb-mongos.default.svc.cluster.local:27017"},
+					ScramAuth: &mongot.ConfigScramAuth{
+						Username:     "searchCoordinator",
+						PasswordFile: "/tmp/MONGODB_SEARCH_PASSWORD",
+						TLS: &mongot.ScramAuthTLS{
+							Enabled:                  true,
+							TLSCertificateKeyFile:    new(mongotTLSCertificatePath),
+							CertificateAuthorityFile: new(mongotTLSCAPath),
+						},
+					},
 				}
+				return cfg
+			}(),
+		},
+		"cluster TLS disabled leaves scramAuth and grpc TLS off": {
+			mutateCR: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+			},
+			expected: func() mongot.Config {
+				cfg := newDefaultExpectedConfig()
+				cfg.Server.Grpc.TLS = &mongot.ConfigGrpcTLS{
+					Mode: mongot.ConfigTLSModeDisabled,
+				}
+				cfg.SyncSource.ReplicaSet.ScramAuth.TLS = nil
 				return cfg
 			}(),
 		},

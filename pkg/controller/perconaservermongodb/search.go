@@ -25,6 +25,10 @@ import (
 // search disabled the function deletes any previously created objects
 // and returns.
 func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
+	if rs.ClusterRole == api.ClusterRoleConfigSvr {
+		return nil
+	}
+
 	if !cr.IsSearchEnabled() {
 		return r.deleteSearch(ctx, cr, rs)
 	}
