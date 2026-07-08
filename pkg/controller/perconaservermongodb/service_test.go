@@ -290,7 +290,7 @@ func yamlCompare(t *testing.T, ns string, filename string, compare any) {
 	}
 }
 
-func TestDropStaleExternalDNSAnnotations(t *testing.T) {
+func TestRemoveStaleExternalDNSAnnotations(t *testing.T) {
 	tests := map[string]struct {
 		old      map[string]string
 		desired  map[string]string
@@ -349,7 +349,7 @@ func TestDropStaleExternalDNSAnnotations(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			dropStaleExternalDNSAnnotations(tt.old, tt.desired)
+			removeStaleExternalDNSAnnotations(tt.old, tt.desired)
 			assert.Equal(t, tt.expected, tt.old)
 		})
 	}

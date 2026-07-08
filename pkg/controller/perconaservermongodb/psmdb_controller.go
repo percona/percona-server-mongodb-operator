@@ -1818,7 +1818,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, c
 
 	if saveOldMeta {
 		oldAnnotations := oldSvc.GetAnnotations()
-		dropStaleExternalDNSAnnotations(oldAnnotations, svc.GetAnnotations())
+		removeStaleExternalDNSAnnotations(oldAnnotations, svc.GetAnnotations())
 		svc.SetAnnotations(util.MapMerge(oldAnnotations, svc.GetAnnotations()))
 		svc.SetLabels(util.MapMerge(oldSvc.GetLabels(), svc.GetLabels()))
 	}
@@ -1827,7 +1827,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, c
 	return r.createOrUpdate(ctx, svc)
 }
 
-func dropStaleExternalDNSAnnotations(oldAnnotations, desired map[string]string) {
+func removeStaleExternalDNSAnnotations(oldAnnotations, desired map[string]string) {
 	if oldAnnotations[naming.AnnotationExternalDNSManaged] == "" && desired[naming.AnnotationExternalDNSManaged] == "" {
 		return
 	}
