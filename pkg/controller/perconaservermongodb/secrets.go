@@ -57,7 +57,6 @@ func ensureConnectionStringSecret(
 	cr *api.PerconaServerMongoDB,
 	secretName, keyPrefix string,
 	cred psmdb.Credentials,
-	owner metav1.Object,
 	includeReplsets bool,
 ) error {
 	connStrSecret := &corev1.Secret{
@@ -73,7 +72,7 @@ func ensureConnectionStringSecret(
 		if err := fillUserConnectionString(ctx, cl, connStrSecret.Data, cr, keyPrefix, cred, includeReplsets); err != nil {
 			return errors.Wrap(err, "fill user connection string")
 		}
-		if err := controllerutil.SetOwnerReference(owner, connStrSecret, cl.Scheme()); err != nil {
+		if err := controllerutil.SetOwnerReference(cr, connStrSecret, cl.Scheme()); err != nil {
 			return errors.Wrap(err, "set owner reference")
 		}
 		return nil

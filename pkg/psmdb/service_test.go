@@ -115,7 +115,7 @@ func TestMongosHost(t *testing.T) {
 			},
 			useInternal:  true,
 			exposeType:   corev1.ServiceTypeLoadBalancer,
-			expectedHost: "10.0.0.20:27018",
+			expectedHost: "test-cluster-mongos.default.svc.cluster.local:27018",
 		},
 		"err: clusterip service type and port not found": {
 			init: func(cl client.Client) {

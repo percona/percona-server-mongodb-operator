@@ -143,7 +143,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 			},
 			expected: map[string][]byte{
-				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@10.0.0.20:27017/?authSource=application"),
+				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@cluster-mongos-0.database.svc.cluster.local:27017/?authSource=application"),
 				"app_user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com:27017/?authSource=application"),
 			},
 		},
@@ -173,7 +173,6 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 					Password:   "p@ss/word",
 					AuthSource: "application",
 				},
-				owner,
 				tt.includeReplsets,
 			)
 			require.NoError(t, err)
@@ -188,8 +187,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				assert.Empty(t, validation.IsConfigMapKey(key))
 			}
 			require.Len(t, actual.OwnerReferences, 1)
-			assert.Equal(t, owner.UID, actual.OwnerReferences[0].UID)
-			assert.Equal(t, "Secret", actual.OwnerReferences[0].Kind)
+			assert.Equal(t, cr.UID, actual.OwnerReferences[0].UID)
+			assert.Equal(t, "PerconaServerMongoDB", actual.OwnerReferences[0].Kind)
 		})
 	}
 }
@@ -231,7 +230,8 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 		Namespace: cr.Namespace,
 	}
 	require.NoError(t, r.client.Get(t.Context(), key, actual))
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		[]byte("mongodb://databaseAdmin:password@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=admin&replicaSet=rs0"),
 		actual.Data["databaseAdmin_rs0_connectionString"],
 	)
