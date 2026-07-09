@@ -85,8 +85,10 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 	cfg := mongot.Config{
 		SyncSource: mongot.ConfigSyncSource{
 			ReplicaSet: mongot.ConfigReplicaSet{
-				Username:     string(api.RoleSearch),
-				PasswordFile: usersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
+				ScramAuth: &mongot.ConfigScramAuth{
+					Username:     string(api.RoleSearch),
+					PasswordFile: "/tmp/" + api.EnvMongoDBSearchPassword,
+				},
 			},
 		},
 		Logging: mongot.ConfigLogging{
@@ -111,14 +113,6 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 		},
 	}
 
-	if cr.TLSEnabled() {
-		cfg.Server.Grpc.TLS = &mongot.ConfigGrpcTLS{
-			Mode:                     mongot.ConfigTLSModeMTLS,
-			CertificateKeyFile:       new(mongotTLSCertificatePath),
-			CertificateAuthorityFile: new(mongotTLSCAPath),
-		}
-	}
-
 	hosts := make([]string, rs.Size)
 	for i := range rs.Size {
 		hosts[i] = mongodHostAndPort(cr, rs, i)
@@ -127,9 +121,33 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 
 	if sharding := cr.Spec.Sharding; sharding.Enabled && sharding.Mongos != nil {
 		cfg.SyncSource.Router = &mongot.ConfigRouter{
-			HostAndPort:  mongosHostAndPort(cr),
-			Username:     string(api.RoleSearch),
-			PasswordFile: usersSecretMountPath + "/" + api.EnvMongoDBSearchPassword,
+			HostAndPort: mongosHostAndPort(cr),
+			ScramAuth: &mongot.ConfigScramAuth{
+				Username:     string(api.RoleSearch),
+				PasswordFile: "/tmp/" + api.EnvMongoDBSearchPassword,
+			},
+		}
+	}
+
+	if cr.TLSEnabled() {
+		cfg.Server.Grpc.TLS = &mongot.ConfigGrpcTLS{
+			Mode:                     mongot.ConfigTLSModeMTLS,
+			CertificateKeyFile:       new(mongotTLSCertificatePath),
+			CertificateAuthorityFile: new(mongotTLSCAPath),
+		}
+
+		cfg.SyncSource.ReplicaSet.ScramAuth.TLS = &mongot.ScramAuthTLS{
+			Enabled:                  true,
+			TLSCertificateKeyFile:    new(mongotTLSCertificatePath),
+			CertificateAuthorityFile: new(mongotTLSCAPath),
+		}
+
+		if cfg.SyncSource.Router != nil {
+			cfg.SyncSource.Router.ScramAuth.TLS = &mongot.ScramAuthTLS{
+				Enabled:                  true,
+				TLSCertificateKeyFile:    new(mongotTLSCertificatePath),
+				CertificateAuthorityFile: new(mongotTLSCAPath),
+			}
 		}
 	}
 
