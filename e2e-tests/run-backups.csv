@@ -25,6 +25,7 @@ demand-backup-physical-gcp-s3
 demand-backup-physical-gcp-native
 demand-backup-physical-oss-s3
 demand-backup-physical-oss-native
+demand-backup-physical-oci
 demand-backup-physical-minio
 demand-backup-physical-minio-native
 demand-backup-physical-sharded-parallel

@@ -202,6 +202,17 @@ func (b *managedBackups) Start(
 	case api.BackupStorageFilesystem:
 		status.Filesystem = &stg.Filesystem
 		status.Destination = strings.TrimSuffix(stg.Filesystem.Path, "/")
+	case api.BackupStorageOCI:
+		status.OCI = &stg.OCI
+
+		status.Destination = stg.OCI.Bucket
+
+		if stg.OCI.Prefix != "" {
+			status.Destination = stg.OCI.Bucket + "/" + stg.OCI.Prefix
+		}
+		if !strings.HasPrefix(stg.OCI.Bucket, "oci://") {
+			status.Destination = "oci://" + status.Destination
+		}
 	}
 	status.Destination += "/" + status.PBMname
 

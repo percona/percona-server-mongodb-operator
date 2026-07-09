@@ -53,6 +53,7 @@ type PerconaServerMongoDBBackupStatus struct {
 	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
 	OSS          *BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	OCI          *BackupStorageOCISpec        `json:"oci,omitempty"`
 	ReplsetNames []string                     `json:"replsetNames,omitempty"`
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
