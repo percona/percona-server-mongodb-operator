@@ -19,6 +19,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
@@ -547,6 +548,238 @@ func TestPBMStorageConfig(t *testing.T) {
 						EncryptionMethod:    "sse",
 						EncryptionAlgorithm: "KMS",
 						EncryptionKeyID:     "some-key-id",
+					},
+				},
+			},
+		},
+		"oci with user principal credentials": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_TENANCY":                []byte("some-tenancy"),
+						"OCI_USER":                   []byte("some-user"),
+						"OCI_FINGERPRINT":            []byte("some-fingerprint"),
+						"OCI_PRIVATE_KEY":            []byte("some-private-key"),
+						"OCI_PRIVATE_KEY_PASSPHRASE": []byte("some-passphrase"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+					UploadPartSize:    1024 * 1024 * 10,
+					UploadConcurrency: 5,
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:              "some-tenancy",
+							User:                 "some-user",
+							Fingerprint:          "some-fingerprint",
+							PrivateKey:           "some-private-key",
+							PrivateKeyPassphrase: "some-passphrase",
+						},
+					},
+					UploadPartSize:    1024 * 1024 * 10,
+					UploadConcurrency: 5,
+				},
+			},
+		},
+		"oci with user principal credentials without passphrase": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_TENANCY":     []byte("some-tenancy"),
+						"OCI_USER":        []byte("some-user"),
+						"OCI_FINGERPRINT": []byte("some-fingerprint"),
+						"OCI_PRIVATE_KEY": []byte("some-private-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:     "some-tenancy",
+							User:        "some-user",
+							Fingerprint: "some-fingerprint",
+							PrivateKey:  "some-private-key",
+						},
+					},
+				},
+			},
+		},
+		"oci with instance principal credentials": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+				},
+			},
+		},
+		"oci with retryer": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeOkeWorkloadIdentity,
+					},
+					Retryer: &api.OCIRetryerSpec{
+						MaxAttempts: 10,
+						MaxBackoff:  30 * time.Second,
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeOkeWorkloadIdentity,
+					},
+					Retryer: &oci.Retryer{
+						MaxAttempts: 10,
+						MaxBackoff:  30 * time.Second,
+					},
+				},
+			},
+		},
+		"oci with SSE KMS key": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: api.OCIServerSideEncryptionSpec{
+						KmsKeyID: "some-kms-key-id",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: oci.SSE{
+						KmsKeyID: "some-kms-key-id",
+					},
+				},
+			},
+		},
+		"oci with SSE customer key": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-sse-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_SSE_CUSTOMER_KEY": []byte("some-customer-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: api.OCIServerSideEncryptionSpec{
+						SecretName: "test-sse-secret",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: oci.SSE{
+						SseCustomerKey: "some-customer-key",
 					},
 				},
 			},

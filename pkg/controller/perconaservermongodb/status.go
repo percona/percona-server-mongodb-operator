@@ -254,6 +254,16 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		if cr.Spec.Sharding.Enabled && cr.Status.Mongos.Status != api.AppStateReady {
 			state = cr.Status.Mongos.Status
 		}
+
+		if cr.IsSearchEnabled() {
+			for rs, status := range cr.Status.Search {
+				if status.Status != api.AppStateReady {
+					state = status.Status
+					log.V(1).Info("Mongot is not ready", "replset", rs, "state", state)
+					break
+				}
+			}
+		}
 	}
 
 	if state != api.AppStateReady {

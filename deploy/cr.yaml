@@ -896,6 +896,25 @@ spec:
 #            encryptionMethod: sse
 #            encryptionAlgorithm: KMS
 #            encryptionKeyId: OSS-KMS-KEY-ID-HERE
+#      oci:
+#        type: oci
+#        oci:
+#          bucket: OCI-BACKUP-BUCKET-NAME-HERE
+#          namespace: OCI-OBJECT-STORAGE-NAMESPACE-HERE
+#          region: us-ashburn-1
+#          prefix: ""
+#          credentials:
+#            type: userPrincipal
+#            secretName: my-cluster-name-backup-oci
+#          serverSideEncryption:
+#            kmsKeyID: OCI-KMS-KEY-OCID-HERE
+#            secretName: my-cluster-name-backup-oci-sse
+#          retryer:
+#            maxAttempts: 3
+#            maxBackoff: 5m
+#          uploadPartSize: 10485760
+#          maxObjSizeGB: 10
+#          uploadConcurrency: 1
 #      minio:
 #        type: minio
 #        minio:
@@ -1020,6 +1039,20 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    # Add a liveness/readiness probe for the logs (fluent-bit) container.
+#    # When not set, the container has no probes.
+#    # NOTE: a tcpSocket/httpGet probe on port 2020 requires the fluent-bit
+#    # HTTP server to be enabled via `configuration` ([HTTP_SERVER] On).
+#    livenessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#    readinessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
 #    logrotate:
 #      configuration: |
 #        /data/db/logs/mongod.full.log {
@@ -1040,6 +1073,20 @@ spec:
 #      extraConfig:
 #        name: logrotate-config
 #      schedule: "0 0 * * *"
+#      # Add a liveness/readiness probe for the logrotate container.
+#      # When not set, the container has no probes.
+#      livenessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 30
+#        periodSeconds: 15
+#      readinessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 5
+#        periodSeconds: 10
 #  search:
 #    enabled: true
 #    image: percona/percona-server-mongodb-search:<tag>

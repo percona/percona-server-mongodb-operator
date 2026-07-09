@@ -698,6 +698,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		return errors.New("MCS is not available on this cluster")
 	}
 
+	cr.setSearchDefaults(platform)
+
 	return nil
 }
 
@@ -1282,5 +1284,32 @@ func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
 
 	if spec.GrowthStep.IsZero() {
 		spec.GrowthStep = resource.MustParse("2Gi")
+	}
+}
+
+func (cr *PerconaServerMongoDB) setSearchDefaults(platform version.Platform) {
+	if cr.Spec.Search == nil {
+		return
+	}
+
+	var userId *int64
+	if platform == version.PlatformKubernetes {
+		userId = new(int64(1001))
+	}
+
+	if cr.Spec.Search.ContainerSecurityContext == nil {
+		cr.Spec.Search.ContainerSecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot: new(true),
+			RunAsGroup:   userId,
+			RunAsUser:    userId,
+		}
+	}
+
+	if cr.Spec.Search.PodSecurityContext == nil {
+		cr.Spec.Search.PodSecurityContext = &corev1.PodSecurityContext{
+			RunAsUser:  userId,
+			RunAsGroup: userId,
+			FSGroup:    userId,
+		}
 	}
 }

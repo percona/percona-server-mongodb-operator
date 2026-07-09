@@ -140,6 +140,50 @@ func TestIsCloningNamespace(t *testing.T) {
 	}
 }
 
+func TestCheckFieldsBackupSourceStorage(t *testing.T) {
+	tests := map[string]struct {
+		backupSource *PerconaServerMongoDBBackupStatus
+		expectErr    string
+	}{
+		"oci backup source": {
+			backupSource: &PerconaServerMongoDBBackupStatus{
+				Destination: "some-bucket/some-prefix/some-backup",
+				OCI:         &BackupStorageOCISpec{Bucket: "some-bucket"},
+			},
+		},
+		"s3 backup source": {
+			backupSource: &PerconaServerMongoDBBackupStatus{
+				Destination: "s3://some-bucket/some-backup",
+				S3:          &BackupStorageS3Spec{Bucket: "some-bucket"},
+			},
+		},
+		"backup source without storage": {
+			backupSource: &PerconaServerMongoDBBackupStatus{
+				Destination: "some-bucket/some-backup",
+			},
+			expectErr: "one of storageName, backupSource.minio, backupSource.s3, backupSource.gcs, backupSource.azure, backupSource.oss, backupSource.oci or backupSource.filesystem is required",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					ClusterName:  "some-cluster",
+					BackupSource: tc.backupSource,
+				},
+			}
+			err := r.CheckFields(defs.LogicalBackup)
+			if tc.expectErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.EqualError(t, err, tc.expectErr)
+		})
+	}
+}
+
 func TestCheckFieldsCloningNamespace(t *testing.T) {
 	tests := map[string]struct {
 		backupType defs.BackupType

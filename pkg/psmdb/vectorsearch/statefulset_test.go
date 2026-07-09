@@ -421,7 +421,7 @@ func TestMongotContainer_JVMFlagsArg(t *testing.T) {
 
 			wantArgs := append(
 				[]string{
-					"mongot-community/mongot",
+					"mongot",
 					"--config=" + configMountPath + "/" + configFileName,
 				},
 				tt.wantJVMArgs...,
