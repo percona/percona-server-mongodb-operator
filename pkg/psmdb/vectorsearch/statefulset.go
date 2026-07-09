@@ -191,11 +191,6 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 			MountPath: dataMountPath,
 		},
 		{
-			Name:      cr.Spec.Secrets.GetInternalKey(cr),
-			MountPath: config.MongodSecretsDir,
-			ReadOnly:  true,
-		},
-		{
 			Name:      configVolumeName,
 			MountPath: configMountPath,
 			ReadOnly:  true,
@@ -216,8 +211,7 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 	}
 
 	mongotCmd := []string{
-		"mongot-community/mongot",
-		"--config=" + configMountPath + "/" + configFileName,
+		"mongot", "--config=" + configMountPath + "/" + configFileName,
 	}
 
 	if flags := jvmFlags(search); len(flags) > 0 {
@@ -279,23 +273,11 @@ func mongotProbe(override *corev1.Probe) *corev1.Probe {
 // it falls back to the inline EmptyDir / HostPath source, matching how
 // pkg/psmdb handles mongod's data volume.
 func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.SearchSpec) ([]corev1.Volume, []corev1.PersistentVolumeClaim) {
-	fvar := false
-
 	volumes := []corev1.Volume{
 		{
 			Name: config.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-					DefaultMode: new(secretFileMode),
-					Optional:    &fvar,
-				},
 			},
 		},
 		{

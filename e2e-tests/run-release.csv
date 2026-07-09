@@ -37,6 +37,7 @@ demand-backup-gcs-workload-identity
 demand-backup-physical-gcp-native
 demand-backup-physical-oss-s3
 demand-backup-physical-oss-native
+demand-backup-physical-oci
 demand-backup-physical-minio
 demand-backup-physical-minio-native
 demand-backup-physical-minio-native-tls

@@ -377,4 +377,75 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	Context("OCI storage credentials validation", func() {
+		crWithOCIStorage := func(name string, creds psmdbv1.OCICredentialsSpec) *psmdbv1.PerconaServerMongoDB {
+			cr, err := readDefaultCR(name, ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"oci-storage": {
+					Type: psmdbv1.BackupStorageOCI,
+					OCI: psmdbv1.BackupStorageOCISpec{
+						Region:      "us-ashburn-1",
+						Namespace:   "some-namespace",
+						Bucket:      "operator-testing",
+						Credentials: creds,
+					},
+				},
+			}
+
+			return cr
+		}
+
+		It("should reject userPrincipal credentials without secretName", func() {
+			cr := crWithOCIStorage("psmdb-oci-no-secret-name", psmdbv1.OCICredentialsSpec{
+				Type: psmdbv1.AuthTypeUserPrincipal,
+			})
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("secretName must be set when credentials type is userPrincipal"))
+		})
+
+		It("should allow userPrincipal credentials with secretName", func() {
+			cr := crWithOCIStorage("psmdb-oci-with-secret-name", psmdbv1.OCICredentialsSpec{
+				Type:       psmdbv1.AuthTypeUserPrincipal,
+				SecretName: "oci-secret",
+			})
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow instancePrincipal credentials without secretName", func() {
+			cr := crWithOCIStorage("psmdb-oci-instance-principal", psmdbv1.OCICredentialsSpec{
+				Type: psmdbv1.AuthTypeInstancePrincipal,
+			})
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should not trigger for non-OCI storages", func() {
+			cr, err := readDefaultCR("psmdb-s3-storage", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			// OCI is a value field in BackupStorageSpec, so an S3 storage still
+			// serializes an empty oci.credentials object the CEL rule runs against.
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"s3-storage": {
+					Type: psmdbv1.BackupStorageS3,
+					S3: psmdbv1.BackupStorageS3Spec{
+						Region:            "us-east-1",
+						Bucket:            "operator-testing",
+						CredentialsSecret: "s3-secret",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })
