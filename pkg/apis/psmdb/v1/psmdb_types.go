@@ -112,7 +112,7 @@ type PerconaServerMongoDBSpec struct {
 
 type DefaultRWConcern struct {
 	// +kubebuilder:validation:Enum={local,available,majority}
-	ReadConcern  string                  `json:"readConcern,omitempty"`
+	ReadConcern  string                   `json:"readConcern,omitempty"`
 	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
 }
 
@@ -645,6 +645,10 @@ type ExternalNode struct {
 }
 
 func (e *ExternalNode) HostPort() string {
+	if strings.Contains(e.Host, ":") {
+		return e.Host
+	}
+
 	return e.Host + ":" + strconv.Itoa(e.Port)
 }
 
@@ -1400,6 +1404,51 @@ type BackupStorageFilesystemSpec struct {
 	Path string `json:"path"`
 }
 
+type OCIAuthType string
+
+const (
+	AuthTypeUserPrincipal       OCIAuthType = "userPrincipal"
+	AuthTypeInstancePrincipal   OCIAuthType = "instancePrincipal"
+	AuthTypeOkeWorkloadIdentity OCIAuthType = "okeWorkloadIdentity"
+)
+
+// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'userPrincipal' || (has(self.secretName) && self.secretName != '')",message="secretName must be set when credentials type is userPrincipal"
+type OCICredentialsSpec struct {
+	Type       OCIAuthType `json:"type,omitempty"`
+	SecretName string      `json:"secretName,omitempty"`
+}
+
+type OCIRetryerSpec struct {
+	// MaxAttempts is the total number of attempts, including the first call.
+	// 0 means use the PBM default; 1 disables retries. Unlimited retries are not supported.
+	MaxAttempts int `json:"maxAttempts"`
+	// MaxBackoff caps the exponential retry backoff. 0 means use the PBM default.
+	MaxBackoff time.Duration `json:"maxBackoff"`
+}
+
+type OCIServerSideEncryptionSpec struct {
+	KmsKeyID   string `json:"kmsKeyID,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
+}
+
+type BackupStorageOCISpec struct {
+	Region      string             `json:"region"`
+	Namespace   string             `json:"namespace"`
+	Bucket      string             `json:"bucket"`
+	Prefix      string             `json:"prefix,omitempty"`
+	Credentials OCICredentialsSpec `json:"credentials"`
+	Retryer     *OCIRetryerSpec    `json:"retryer,omitempty"`
+
+	ServerSideEncryption OCIServerSideEncryptionSpec `json:"serverSideEncryption,omitempty"`
+
+	UploadPartSize int64    `json:"uploadPartSize,omitempty"`
+	MaxObjSizeGB   *float64 `json:"maxObjSizeGB,omitempty"`
+
+	// Increasing upload concurrency is not recommended by the OCI SDK because it can cause
+	// 409 responses or client timeouts.
+	UploadConcurrency int `json:"uploadConcurrency,omitempty"`
+}
+
 type BackupStorageType string
 
 const (
@@ -1409,6 +1458,7 @@ const (
 	BackupStorageAzure      BackupStorageType = "azure"
 	BackupStorageMinio      BackupStorageType = "minio"
 	BackupStorageOSS        BackupStorageType = "oss"
+	BackupStorageOCI        BackupStorageType = "oci"
 )
 
 type BackupStorageSpec struct {
@@ -1423,6 +1473,7 @@ type BackupStorageSpec struct {
 	Azure      BackupStorageAzureSpec      `json:"azure,omitempty"`
 	OSS        BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	OCI        BackupStorageOCISpec        `json:"oci,omitempty"`
 }
 
 type PITRSpec struct {
@@ -2018,6 +2069,14 @@ type LogCollectorSpec struct {
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
 	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logs (fluent-bit) container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logs (fluent-bit) container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // LogRotateSpec defines the configuration for the logrotate container.
@@ -2034,6 +2093,14 @@ type LogRotateSpec struct {
 	// This should be a valid cron expression.
 	//+kubebuilder:default:="0 0 * * *"
 	Schedule string `json:"schedule,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logrotate container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logrotate container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
