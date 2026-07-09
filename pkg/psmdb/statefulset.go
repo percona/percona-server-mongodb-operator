@@ -726,8 +726,8 @@ func ShouldSetAWSSDKChecksumEnvVars(cr *api.PerconaServerMongoDB) bool {
 }
 
 func ShouldSetOCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) bool {
-	pbm2150OrOlder, err := cr.ComparePBMAgentVersion("2.15.0")
-	if err != nil || pbm2150OrOlder < 0 {
+	pbm2150OrNewer, err := cr.ComparePBMAgentVersion("2.15.0")
+	if err != nil || pbm2150OrNewer < 0 {
 		return false
 	}
 
@@ -740,18 +740,21 @@ func ShouldSetOCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) bool {
 	return false
 }
 
+const OCIResourcePrincipalVersion = "2.2"
+
 func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	var oci api.BackupStorageOCISpec
 	for _, storage := range cr.Spec.Backup.Storages {
 		if storage.Type == api.BackupStorageOCI && storage.OCI.Credentials.Type == api.AuthTypeOkeWorkloadIdentity {
 			oci = storage.OCI
+			break
 		}
 	}
 
 	return []corev1.EnvVar{
 		{
 			Name:  "OCI_RESOURCE_PRINCIPAL_VERSION",
-			Value: "2.2",
+			Value: OCIResourcePrincipalVersion,
 		},
 		{
 			// if user defines more than one OCI storages and tries to use okeWorkloadIdentity for them
