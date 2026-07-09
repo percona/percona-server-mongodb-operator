@@ -43,6 +43,24 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				"app_user_rs0_connectionStringSrv": []byte("mongodb+srv://app-user:p%40ss%2Fword@cluster-rs0.database.svc.cluster.local/?authSource=application&replicaSet=rs0"),
 			},
 		},
+		"replset without pods": {
+			includeReplsets: true,
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				return []client.Object{
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "app-user-conn-str",
+							Namespace: cr.Namespace,
+						},
+						Data: map[string][]byte{
+							"app_user_rs0_connectionString":    []byte("stale"),
+							"app_user_rs0_connectionStringSrv": []byte("stale"),
+						},
+					},
+				}
+			},
+			expected: nil,
+		},
 		"exposed replset": {
 			includeReplsets: true,
 			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
@@ -146,6 +164,29 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				"app_user_mongos_connectionString":        []byte("mongodb://app-user:p%40ss%2Fword@cluster-mongos-0.database.svc.cluster.local:27017/?authSource=application"),
 				"app_user_mongos_connectionStringExposed": []byte("mongodb://app-user:p%40ss%2Fword@mongos.example.com:27017/?authSource=application"),
 			},
+		},
+		"service per pod mongos without pods": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Sharding = api.Sharding{
+					Enabled: true,
+					Mongos: &api.MongosSpec{
+						Expose: api.MongosExpose{ServicePerPod: true},
+					},
+				}
+				return []client.Object{
+					&corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "app-user-conn-str",
+							Namespace: cr.Namespace,
+						},
+						Data: map[string][]byte{
+							"app_user_mongos_connectionString":        []byte("stale"),
+							"app_user_mongos_connectionStringExposed": []byte("stale"),
+						},
+					},
+				}
+			},
+			expected: nil,
 		},
 	}
 

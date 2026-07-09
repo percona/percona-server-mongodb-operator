@@ -157,21 +157,23 @@ func fillUserConnectionString(ctx context.Context, cl client.Client, data map[st
 				return errors.Wrap(err, "mongo config")
 			}
 
-			connStr := cfg.URI()
 			key := keyPrefix + "_" + rs.Name
-			data[key+"_connectionString"] = []byte(connStr)
-			data[key+"_connectionStringSrv"] = []byte(cfg.SRVURI(strings.Join([]string{
-				naming.ServiceName(cr, rs),
-				cr.Namespace,
-				cr.Spec.ClusterServiceDNSSuffix,
-			}, ".")))
+			connStr := cfg.URI()
+			if connStr != "" {
+				data[key+"_connectionString"] = []byte(connStr)
+				data[key+"_connectionStringSrv"] = []byte(cfg.SRVURI(strings.Join([]string{
+					naming.ServiceName(cr, rs),
+					cr.Namespace,
+					cr.Spec.ClusterServiceDNSSuffix,
+				}, ".")))
+			}
 
 			if rs.Expose.Enabled {
 				cfg, err := psmdb.MongoConfig(ctx, cl, cr, api.DNSModeExternal, rs, cred, true)
 				if err != nil {
 					return errors.Wrap(err, "mongo config")
 				}
-				if exposedConnStr := cfg.URI(); exposedConnStr != connStr {
+				if exposedConnStr := cfg.URI(); exposedConnStr != "" && exposedConnStr != connStr {
 					data[key+"_connectionStringExposed"] = []byte(exposedConnStr)
 				}
 			}
@@ -184,14 +186,20 @@ func fillUserConnectionString(ctx context.Context, cl client.Client, data map[st
 		if err != nil {
 			return errors.Wrap(err, "mongos config")
 		}
-		data[keyPrefix+"_mongos_connectionString"] = []byte(mongosCfg.URI())
+		connStr := mongosCfg.URI()
+		if connStr != "" {
+			data[keyPrefix+"_mongos_connectionString"] = []byte(mongosCfg.URI())
+		}
 
 		if servicePerPod {
 			mongosCfg, err := psmdb.MongosConfig(ctx, cl, cr, cred, false, true)
 			if err != nil {
 				return errors.Wrap(err, "mongos config")
 			}
-			data[keyPrefix+"_mongos_connectionStringExposed"] = []byte(mongosCfg.URI())
+			connStr := mongosCfg.URI()
+			if connStr != "" {
+				data[keyPrefix+"_mongos_connectionStringExposed"] = []byte(mongosCfg.URI())
+			}
 		}
 	}
 	return nil
