@@ -648,3 +648,29 @@ func TestCanRestore(t *testing.T) {
 		})
 	}
 }
+
+func TestExternalNode_HostPort(t *testing.T) {
+	tests := map[string]struct {
+		node     ExternalNode
+		expected string
+	}{
+		"host and port set": {
+			node:     ExternalNode{Host: "mongodb.example.com", Port: 27017},
+			expected: "mongodb.example.com:27017",
+		},
+		"host already contains port": {
+			node:     ExternalNode{Host: "mongodb.example.com:27018", Port: 27017},
+			expected: "mongodb.example.com:27018",
+		},
+		"IPv4 host with port": {
+			node:     ExternalNode{Host: "10.0.0.1", Port: 27017},
+			expected: "10.0.0.1:27017",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.node.HostPort())
+		})
+	}
+}
