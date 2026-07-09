@@ -111,9 +111,15 @@ type PerconaServerMongoDBSpec struct {
 }
 
 type DefaultRWConcern struct {
-	// +kubebuilder:validation:Enum={local,available,majority,linearizable,snapshot}
-	ReadConcern  string `json:"readConcern,omitempty"`
-	WriteConcern string `json:"writeConcern,omitempty"`
+	// +kubebuilder:validation:Enum={local,available,majority}
+	ReadConcern  string                  `json:"readConcern,omitempty"`
+	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
+}
+
+type DefaultWriteConcernSpec struct {
+	W string `json:"w,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	WTimeout int `json:"wtimeout,omitempty"`
 }
 
 type UserRole struct {
@@ -2012,6 +2018,14 @@ type LogCollectorSpec struct {
 	Env                      []corev1.EnvVar             `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource      `json:"envFrom,omitempty"`
 	LogRotate                *LogRotateSpec              `json:"logrotate,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logs (fluent-bit) container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logs (fluent-bit) container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // LogRotateSpec defines the configuration for the logrotate container.
@@ -2028,6 +2042,14 @@ type LogRotateSpec struct {
 	// This should be a valid cron expression.
 	//+kubebuilder:default:="0 0 * * *"
 	Schedule string `json:"schedule,omitempty"`
+
+	// LivenessProbe sets a liveness probe for the logrotate container.
+	// When not set the container has no liveness probe.
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets a readiness probe for the logrotate container.
+	// When not set the container has no readiness probe.
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {

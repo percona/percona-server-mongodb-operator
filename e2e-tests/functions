@@ -1472,35 +1472,50 @@ execute_curl() {
 		-n "$namespace" \
 		--restart=Never \
 		--image="$image" \
-		--command -- sleep 3600 >/dev/null
+		--attach \
+		--rm \
+		--quiet \
+		--command -- curl "$@"
+}
 
-	if ! kubectl_bin wait pod/"$name" \
-		-n "$namespace" \
-		--for=condition=Ready \
-		--timeout=60s >/dev/null; then
-		kubectl_bin delete pod "$name" -n "$namespace" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-		return 1
-	fi
+curl_metric_values() {
+	local metric=$1
+	local instance=$2
+	local endpoint=$3
+	local encoded_user_pass=$4
+	local start
+	local end
 
-	local exit_status=0
-	kubectl_bin exec "$name" -n "$namespace" -- curl "$@" || exit_status=$?
-	kubectl_bin delete pod "$name" -n "$namespace" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-	return $exit_status
+	start=$($date -u "+%s" -d "-1 minute")
+	end=$($date -u "+%s")
+
+	execute_curl -s -k \
+		"https://${encoded_user_pass}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60" \
+		| jq -r '.data.result[0].values[][1]' \
+		| grep '^[0-9]'
 }
 
 get_metric_values() {
 	local metric=$1
 	local instance=$2
 	local user_pass=$3
-	local start=$($date -u "+%s" -d "-1 minute")
-	local end=$($date -u "+%s")
-	local endpoint=$(get_service_endpoint monitoring-service)
+	local endpoint
+	local encoded_user_pass
 
-	execute_curl -s -k \
-		-u "$user_pass" \
-		"https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60" \
-		| jq -r '.data.result[0].values[][1]' \
-		| grep '^[0-9]'
+	endpoint=$(get_service_endpoint monitoring-service)
+	encoded_user_pass=$(urlencode_userinfo "$user_pass")
+
+	retry 30 2 curl_metric_values "$metric" "$instance" "$endpoint" "$encoded_user_pass"
+}
+
+curl_qan_values() {
+	local payload_file=$1
+	local endpoint=$2
+	local encoded_user_pass=$3
+
+	execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "https://${encoded_user_pass}@$endpoint/v0/qan/GetReport" \
+		| jq -r '.rows[].sparkline' \
+		| grep -qv '^null$'
 }
 
 get_qan_values() {
@@ -1510,9 +1525,11 @@ get_qan_values() {
 	local start
 	local end
 	local endpoint
+	local encoded_user_pass
 	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
 	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
 	endpoint=$(get_service_endpoint monitoring-service)
+	encoded_user_pass=$(urlencode_userinfo "$user_pass")
 
 	cat >payload.json <<EOF
 {
@@ -1546,20 +1563,7 @@ get_qan_values() {
 }
 EOF
 
-	local response
-
-	retry=0
-
-	until [[ "$(execute_curl -s -k -XPOST -d "$(cat payload.json)" "https://${user_pass}@$endpoint/v0/qan/GetReport" \
-		| jq '.rows[].sparkline')" != "null" ]]; do
-		let retry+=1
-		if [ $retry -ge 10 ]; then
-			echo max retry count $retry reached. "No data for $service_type service type in QAN"
-			exit 1
-		fi
-		echo -n .
-		sleep 5
-	done
+	retry 10 5 curl_qan_values payload.json "$endpoint" "$encoded_user_pass"
 	rm -f payload.json
 }
 
@@ -2322,6 +2326,14 @@ wait_for_cluster_state() {
 urlencode() {
 	uri="$1"
 	echo -n "$uri" | jq -s -R -r @uri
+}
+
+urlencode_userinfo() {
+	local user_pass="$1"
+	local username="${user_pass%%:*}"
+	local password="${user_pass#*:}"
+
+	printf '%s:%s' "$(urlencode "$username")" "$(urlencode "$password")"
 }
 
 getUserData() {

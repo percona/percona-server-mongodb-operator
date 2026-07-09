@@ -91,10 +91,11 @@ export REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
 export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
 export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
-IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
+export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
+export IMAGE_SEARCH=${IMAGE_SEARCH:-"perconalab/percona-server-mongodb-operator:main-mongot"}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
