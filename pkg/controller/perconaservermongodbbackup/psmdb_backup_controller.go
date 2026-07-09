@@ -3,12 +3,14 @@ package perconaservermongodbbackup
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -283,14 +285,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
-	log.Info("Acquiring the backup lock")
-	lease, err := k8s.AcquireLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
+	acquired, err := r.tryAcquireLease(ctx, cr, cluster)
 	if err != nil {
-		return status, errors.Wrap(err, "acquire backup lock")
+		return status, err
 	}
-
-	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != naming.BackupHolderId(cr) {
-		log.Info("Another backup is holding the lock", "holder", *lease.Spec.HolderIdentity)
+	if !acquired {
 		status.State = psmdbv1.BackupStateWaiting
 		return status, nil
 	}
@@ -337,6 +336,58 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
 		cluster.Name, csLeaseName)
 	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) tryAcquireLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	log := logf.FromContext(ctx)
+	leaseName := naming.BackupLeaseName(cluster.Name)
+	holderID := naming.BackupHolderId(cr)
+
+	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity == "" {
+			return true, nil
+		}
+
+		holder := *lease.Spec.HolderIdentity
+		backups := &psmdbv1.PerconaServerMongoDBBackupList{}
+		if err := r.client.List(ctx, backups, client.InNamespace(cr.Namespace)); err != nil {
+			return false, errors.Wrap(err, "list backups")
+		}
+
+		for i := range backups.Items {
+			backup := &backups.Items[i]
+			if naming.BackupHolderId(backup) != holder {
+				continue
+			}
+			return backupStateTerminal(backup.Status.State), nil
+		}
+
+		log.Info("Backup lease holder was not found, acquiring stale lease", "lease", leaseName, "holder", holder)
+		return true, nil
+	}
+
+	log.Info("Acquiring the backup lock", "lease", leaseName)
+	lease, err := k8s.AcquireLease(ctx, r.client, leaseName, cr.Namespace, holderID, checkStale)
+	if err != nil {
+		if stderrors.Is(err, k8s.ErrLeaseAlreadyHeld) ||
+			k8serrors.IsAlreadyExists(errors.Cause(err)) ||
+			k8serrors.IsConflict(errors.Cause(err)) {
+			log.Info("Another backup is holding the lock", "lease", leaseName)
+			return false, nil
+		}
+		return false, errors.Wrap(err, "acquire backup lock")
+	}
+
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != holderID {
+		log.Info("Another backup is holding the lock", "lease", leaseName, "holder", *lease.Spec.HolderIdentity)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func backupStateTerminal(state psmdbv1.BackupState) bool {
+	return state == psmdbv1.BackupStateReady || state == psmdbv1.BackupStateError
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(

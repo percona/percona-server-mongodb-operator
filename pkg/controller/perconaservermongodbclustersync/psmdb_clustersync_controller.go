@@ -312,6 +312,18 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) acquireClusterSyncLease(ctx c
 		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
 		naming.ClusterSyncHolderId(cr))
 	if err != nil {
+		if stderrors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+			leaseName := naming.ClusterSyncLeaseName(cr.Spec.ClusterName)
+			lease, err := k8s.GetLease(ctx, r.client, leaseName, cr.Namespace)
+			if err != nil {
+				return "", err
+			}
+			holder := "<unknown>"
+			if lease.Spec.HolderIdentity != nil {
+				holder = *lease.Spec.HolderIdentity
+			}
+			return holder, nil
+		}
 		return "", err
 	}
 	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != naming.ClusterSyncHolderId(cr) {
