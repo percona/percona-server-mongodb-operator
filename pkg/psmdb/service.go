@@ -233,21 +233,15 @@ func getServiceIngressAddr(ctx context.Context, cl client.Client, serviceNN type
 	return "", ErrNoIngressPoints
 }
 
-func getServiceClusterIP(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
-	svc := &corev1.Service{}
-	err := cl.Get(ctx, serviceNN, svc)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to fetch service")
-	}
-
-	return svc.Spec.ClusterIP, nil
-}
-
 // GetReplsetAddrs returns a slice of replset host:port addresses
 func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rs *api.ReplsetSpec, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
 		host, err := MongoHost(ctx, cl, cr, dnsMode, rs, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
@@ -275,6 +269,10 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 	addrs := make([]string, 0, len(list.Items))
 	for _, pod := range list.Items {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
 		host, err := MongosHost(ctx, cl, cr, &pod, useInternalAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
@@ -375,16 +373,8 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 	}
 
 	mongos := cr.Spec.Sharding.Mongos
-	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		var host string
-		var err error
-
-		if useInternalAddr {
-			host, err = getServiceClusterIP(ctx, cl, nn)
-		} else {
-			host, err = getServiceIngressAddr(ctx, cl, nn)
-		}
-
+	if !useInternalAddr && mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		host, err := getServiceIngressAddr(ctx, cl, nn)
 		if err != nil {
 			return "", errors.Wrap(err, "get ingress endpoint")
 		}
