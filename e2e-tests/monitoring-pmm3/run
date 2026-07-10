@@ -23,7 +23,7 @@ does_node_id_exists() {
 	encoded_admin_userinfo=$(urlencode_userinfo "admin:${admin_pass}")
 
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@$(get_service_endpoint monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
