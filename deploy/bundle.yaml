@@ -199,6 +199,58 @@ spec:
                   secure:
                     type: boolean
                 type: object
+              oci:
+                properties:
+                  bucket:
+                    type: string
+                  credentials:
+                    properties:
+                      secretName:
+                        type: string
+                      type:
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: secretName must be set when credentials type is userPrincipal
+                      rule: '!has(self.type) || self.type != ''userPrincipal'' ||
+                        (has(self.secretName) && self.secretName != '''')'
+                  maxObjSizeGB:
+                    type: number
+                  namespace:
+                    type: string
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  retryer:
+                    properties:
+                      maxAttempts:
+                        type: integer
+                      maxBackoff:
+                        format: int64
+                        type: integer
+                    required:
+                    - maxAttempts
+                    - maxBackoff
+                    type: object
+                  serverSideEncryption:
+                    properties:
+                      kmsKeyID:
+                        type: string
+                      secretName:
+                        type: string
+                    type: object
+                  uploadConcurrency:
+                    type: integer
+                  uploadPartSize:
+                    format: int64
+                    type: integer
+                required:
+                - bucket
+                - credentials
+                - namespace
+                - region
+                type: object
               oss:
                 properties:
                   bucket:
@@ -1564,6 +1616,59 @@ spec:
                       secure:
                         type: boolean
                     type: object
+                  oci:
+                    properties:
+                      bucket:
+                        type: string
+                      credentials:
+                        properties:
+                          secretName:
+                            type: string
+                          type:
+                            type: string
+                        type: object
+                        x-kubernetes-validations:
+                        - message: secretName must be set when credentials type is
+                            userPrincipal
+                          rule: '!has(self.type) || self.type != ''userPrincipal''
+                            || (has(self.secretName) && self.secretName != '''')'
+                      maxObjSizeGB:
+                        type: number
+                      namespace:
+                        type: string
+                      prefix:
+                        type: string
+                      region:
+                        type: string
+                      retryer:
+                        properties:
+                          maxAttempts:
+                            type: integer
+                          maxBackoff:
+                            format: int64
+                            type: integer
+                        required:
+                        - maxAttempts
+                        - maxBackoff
+                        type: object
+                      serverSideEncryption:
+                        properties:
+                          kmsKeyID:
+                            type: string
+                          secretName:
+                            type: string
+                        type: object
+                      uploadConcurrency:
+                        type: integer
+                      uploadPartSize:
+                        format: int64
+                        type: integer
+                    required:
+                    - bucket
+                    - credentials
+                    - namespace
+                    - region
+                    type: object
                   oss:
                     properties:
                       bucket:
@@ -2689,6 +2794,59 @@ spec:
                               type: object
                             secure:
                               type: boolean
+                          type: object
+                        oci:
+                          properties:
+                            bucket:
+                              type: string
+                            credentials:
+                              properties:
+                                secretName:
+                                  type: string
+                                type:
+                                  type: string
+                              type: object
+                              x-kubernetes-validations:
+                              - message: secretName must be set when credentials type
+                                  is userPrincipal
+                                rule: '!has(self.type) || self.type != ''userPrincipal''
+                                  || (has(self.secretName) && self.secretName != '''')'
+                            maxObjSizeGB:
+                              type: number
+                            namespace:
+                              type: string
+                            prefix:
+                              type: string
+                            region:
+                              type: string
+                            retryer:
+                              properties:
+                                maxAttempts:
+                                  type: integer
+                                maxBackoff:
+                                  format: int64
+                                  type: integer
+                              required:
+                              - maxAttempts
+                              - maxBackoff
+                              type: object
+                            serverSideEncryption:
+                              properties:
+                                kmsKeyID:
+                                  type: string
+                                secretName:
+                                  type: string
+                              type: object
+                            uploadConcurrency:
+                              type: integer
+                            uploadPartSize:
+                              format: int64
+                              type: integer
+                          required:
+                          - bucket
+                          - credentials
+                          - namespace
+                          - region
                           type: object
                         oss:
                           properties:

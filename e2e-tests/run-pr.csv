@@ -36,6 +36,7 @@ demand-backup-gcs-workload-identity
 demand-backup-physical-gcp-native
 demand-backup-physical-oss-s3
 demand-backup-physical-oss-native
+demand-backup-physical-oci
 demand-backup-physical-minio
 demand-backup-physical-minio-native
 demand-backup-physical-minio-native-tls
@@ -52,6 +53,7 @@ demand-backup-snapshot
 demand-backup-snapshot-vault
 disabled-auth
 expose-sharded
+external-dns
 finalizer
 ignore-labels-annotations
 init-deploy

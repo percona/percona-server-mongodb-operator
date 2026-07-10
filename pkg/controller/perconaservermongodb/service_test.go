@@ -289,3 +289,68 @@ func yamlCompare(t *testing.T, ns string, filename string, compare any) {
 		t.Fatalf("yaml resources doesn't match:\nexpected:\n%s\ngot:\n%s", string(expected), string(data))
 	}
 }
+
+func TestRemoveStaleExternalDNSAnnotations(t *testing.T) {
+	tests := map[string]struct {
+		old      map[string]string
+		desired  map[string]string
+		expected map[string]string
+	}{
+		"externalDNS removed from CR: managed annotations dropped": {
+			old: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+				"external-dns.alpha.kubernetes.io/ttl":      "300",
+				"percona.com/external-dns-managed":          "true",
+				"cloud.google.com/neg":                      `{"ingress":true}`,
+			},
+			desired: map[string]string{},
+			expected: map[string]string{
+				"cloud.google.com/neg": `{"ingress":true}`,
+			},
+		},
+		"ttl removed from CR: stale ttl dropped, hostname kept": {
+			old: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+				"external-dns.alpha.kubernetes.io/ttl":      "300",
+				"percona.com/external-dns-managed":          "true",
+			},
+			desired: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+				"percona.com/external-dns-managed":          "true",
+			},
+			expected: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+				"percona.com/external-dns-managed":          "true",
+			},
+		},
+		"manually added external-dns annotations (no marker) are preserved": {
+			old: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "manual.example.com",
+				"external-dns.alpha.kubernetes.io/ttl":      "60",
+			},
+			desired: map[string]string{},
+			expected: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "manual.example.com",
+				"external-dns.alpha.kubernetes.io/ttl":      "60",
+			},
+		},
+		"externalDNS enabled over manual annotations: operator takes ownership": {
+			old: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "manual.example.com",
+			},
+			desired: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+				"percona.com/external-dns-managed":          "true",
+			},
+			expected: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "manual.example.com",
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			removeStaleExternalDNSAnnotations(tt.old, tt.desired)
+			assert.Equal(t, tt.expected, tt.old)
+		})
+	}
+}
