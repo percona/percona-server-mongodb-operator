@@ -18,12 +18,13 @@ get_node_id_from_pmm() {
 does_node_id_exists() {
 	local -a nodeList=("$@")
 	local -a nodeList_from_pmm=()
-	local admin_pass encoded_admin_userinfo
+	local admin_pass endpoint encoded_admin_userinfo
 	admin_pass=$(kubectl_bin get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+	endpoint=$(get_service_endpoint monitoring-service)
 	encoded_admin_userinfo=$(urlencode_userinfo "admin:${admin_pass}")
 
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@$(get_service_endpoint monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@${endpoint}/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
@@ -285,13 +286,14 @@ get_pmm_server_token() {
 		return 1
 	fi
 
-	local encoded_user_credentials
+	local endpoint encoded_user_credentials
+	endpoint=$(get_service_endpoint monitoring-service)
 	encoded_user_credentials=$(urlencode_userinfo "admin:${ADMIN_PASSWORD}")
 
 	local create_response create_status_code create_json_response
 	create_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
 		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
-		"https://${encoded_user_credentials}@$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts" \
 		-w "\n%{http_code}")
 
 	create_status_code=$(echo "$create_response" | tail -n1)
@@ -314,7 +316,7 @@ get_pmm_server_token() {
 	local token_response token_status_code token_json_response
 	token_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' \
 		-d "{\"name\":\"${key_name}\"}" \
-		"https://${encoded_user_credentials}@$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	token_status_code=$(echo "$token_response" | tail -n1)
@@ -344,12 +346,13 @@ delete_pmm_server_token() {
 		return 1
 	fi
 
-	local encoded_user_credentials
+	local endpoint encoded_user_credentials
+	endpoint=$(get_service_endpoint monitoring-service)
 	encoded_user_credentials=$(urlencode_userinfo "admin:${ADMIN_PASSWORD}")
 
 	local service_accounts_response service_accounts_status
 	service_accounts_response=$(execute_curl --insecure -s -X GET \
-		"https://${encoded_user_credentials}@$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/search" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/search" \
 		-w "\n%{http_code}")
 
 	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
@@ -371,7 +374,7 @@ delete_pmm_server_token() {
 
 	local tokens_response tokens_status tokens_json
 	tokens_response=$(execute_curl --insecure -s -X GET \
-		"https://${encoded_user_credentials}@$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	tokens_status=$(echo "$tokens_response" | tail -n1)
@@ -393,7 +396,7 @@ delete_pmm_server_token() {
 
 	local delete_response delete_status
 	delete_response=$(execute_curl --insecure -s -X DELETE \
-		"https://${encoded_user_credentials}@$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
 		-w "\n%{http_code}")
 
 	delete_status=$(echo "$delete_response" | tail -n1)

@@ -18,11 +18,13 @@ get_node_id_from_pmm() {
 does_node_id_exists() {
 	local -a nodeList=("$@")
 	local -a nodeList_from_pmm=()
+	local endpoint
 	local encoded_admin_userinfo
+	endpoint=$(get_service_endpoint monitoring-service)
 	encoded_admin_userinfo=$(urlencode_userinfo "admin:admin")
 
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@$(get_service_endpoint monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@${endpoint}/ --server-insecure-tls inventory list nodes --node-type=CONTAINER_NODE | grep $node_id | awk '{print $4}'))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
@@ -92,8 +94,9 @@ insert_data_mongos "100700" "myApp" \
 	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 
 desc 'add PMM_SERVER_API_KEY for secret some-users'
+monitoring_endpoint=$(get_service_endpoint monitoring-service)
 encoded_admin_userinfo=$(urlencode_userinfo "admin:admin")
-API_KEY=$(execute_curl --insecure -sS -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://${encoded_admin_userinfo}@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq -r .key)
+API_KEY=$(execute_curl --insecure -sS -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://${encoded_admin_userinfo}@${monitoring_endpoint}/graph/api/auth/keys" | jq -r .key)
 kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": "'$API_KEY'"}}'
 
 desc 'check if all 3 Pods started'
@@ -162,7 +165,7 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pa
 wait_for_running $cluster-rs0 3
 
 # get services list from pmm server
-execute_curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://${encoded_admin_userinfo}@"$(get_service_endpoint monitoring-service)"/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
+execute_curl -s -k -d '{"service_type":"MONGODB_SERVICE"}' "https://${encoded_admin_userinfo}@${monitoring_endpoint}/v1/inventory/Services/List" >${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-mongos-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-rs0-0 ${tmp_dir}/pmm_service_list.json
 check_custom_cluster_name ${namespace}-${cluster}-cfg-0 ${tmp_dir}/pmm_service_list.json

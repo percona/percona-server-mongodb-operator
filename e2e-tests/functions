@@ -1748,18 +1748,31 @@ get_service_endpoint() {
 execute_curl() {
 	local name="curl-${RANDOM}"
 	local image="${CURL_IMAGE:-docker.io/alpine/curl:latest}"
+	local phase=""
+	local exit_status=0
 
-	{
-		kubectl_bin run "$name" \
+	kubectl_bin run "$name" \
 		-n "$namespace" \
 		--restart=Never \
 		--image="$image" \
-		--attach \
-		--quiet \
-		--rm \
-		--pod-running-timeout=60s \
-		--command -- curl -sS "$@"
-	} 2>/dev/null
+		--command -- curl -sS "$@" >/dev/null
+
+	for _ in $(seq 1 60); do
+		phase=$(kubectl_bin get pod "$name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+		if [[ "$phase" == "Succeeded" || "$phase" == "Failed" ]]; then
+			break
+		fi
+		sleep 1
+	done
+
+	kubectl_bin logs "$name" -n "$namespace" || exit_status=$?
+	kubectl_bin delete pod "$name" -n "$namespace" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+
+	if [[ "$phase" != "Succeeded" ]]; then
+		return 1
+	fi
+
+	return $exit_status
 }
 
 curl_metric_values() {
