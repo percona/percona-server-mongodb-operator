@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBClusterSync
 metadata:
-  name: my-cluster-sync2
+  name: my-cluster-sync
 spec:
   clusterName: my-target-cluster-name
   image: percona/percona-clustersync-mongodb:0.9.0
@@ -11,7 +11,7 @@ spec:
   #   finalized - stop replication and tear down owned resources
   mode: running
   source:
-    uri: mongodb://my-source-cluster-name-mongos.kech2.svc.cluster.local:27017
+    uri: mongodb://source-cluster-mongos.source-namespace.svc.cluster.local:27017
     credentialsSecret: my-cluster-sync-source
   # excludeNamespaces lists MongoDB namespaces (db or db.collection) to skip.
   # excludeNamespaces:
@@ -24,3 +24,12 @@ spec:
   #   limits:
   #     cpu: "2"
   #     memory: 2Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cluster-sync-source
+type: Opaque
+stringData:
+  username: source
+  password: mys3cretpAss

@@ -49,13 +49,19 @@ func New(k8s k8sclient.Client, cc clientcmd.Client, cr *psmdbv1.PerconaServerMon
 }
 
 func (c *Client) Status(ctx context.Context) (Status, error) {
-	raw, err := c.run(ctx, "status")
-	if err != nil {
-		return Status{}, err
-	}
+	raw, runErr := c.run(ctx, "status")
+	// pcsm status exits non-zero when state=failed but still prints a valid
+	// JSON payload on stdout. Parse first so the reconciler sees the failed
+	// state and can trigger `resume --from-failure`.
 	var s Status
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return Status{}, errors.Wrapf(err, "decode pcsm status output: %s", string(raw))
+	if decodeErr := json.Unmarshal(raw, &s); decodeErr != nil {
+		if runErr != nil {
+			return Status{}, runErr
+		}
+		return Status{}, errors.Wrapf(decodeErr, "decode pcsm status output: %s", string(raw))
+	}
+	if s.State == "" && runErr != nil {
+		return Status{}, runErr
 	}
 	return s, nil
 }
@@ -100,8 +106,9 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := append([]string{pcsmBinary}, args...)
 
 	var stdout, stderr bytes.Buffer
-	if execErr := c.exec.Exec(ctx, pod, clustersync.ContainerName, cmd, nil, &stdout, &stderr, false); execErr != nil {
-		return nil, errors.Wrapf(execErr, "exec pcsm %s: %s", strings.Join(args, " "), trimOutput(stderr.String()))
+	execErr := c.exec.Exec(ctx, pod, clustersync.ContainerName, cmd, nil, &stdout, &stderr, false)
+	if execErr != nil {
+		return stdout.Bytes(), errors.Wrapf(execErr, "exec pcsm %s: %s", strings.Join(args, " "), trimOutput(stderr.String()))
 	}
 	return stdout.Bytes(), nil
 }
