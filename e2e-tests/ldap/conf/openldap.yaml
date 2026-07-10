@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: ldap-setup
-          image: osixia/openldap:latest
+          image: docker.io/osixia/openldap:latest
           command: ["/bin/bash"]
           args:
             - -c
@@ -64,7 +64,7 @@ spec:
                   key: adminpassword
                   name: openldap
         - name: openldap
-          image: osixia/openldap:latest
+          image: docker.io/osixia/openldap:latest
           imagePullPolicy: "Always"
           args: ["--copy-service"]
           env:

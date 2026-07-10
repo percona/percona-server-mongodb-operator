@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -22,6 +23,40 @@ func TestCertificate(t *testing.T) {
 	}
 
 	t.Run("CA certificate", func(t *testing.T) {
+		t.Run("name", func(t *testing.T) {
+			tests := []struct {
+				name     string
+				version  string
+				tls      *api.TLSSpec
+				expected string
+			}{
+				{
+					name:     "ClusterIssuer",
+					version:  version.Version(),
+					tls:      &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Kind: cm.ClusterIssuerKind}},
+					expected: "psmdb-mock-psmdb-ca-cert",
+				},
+				{
+					name:     "Issuer",
+					version:  version.Version(),
+					tls:      &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Kind: cm.IssuerKind}},
+					expected: "psmdb-mock-ca-cert",
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					cr := cr.DeepCopy()
+					cr.Spec.CRVersion = tt.version
+					cr.Spec.TLS = tt.tls
+
+					ca := CertificateCA(cr)
+					assert.Equal(t, tt.expected, ca.Name())
+					assert.Equal(t, tt.expected, ca.SecretName())
+				})
+			}
+		})
+
 		t.Run("IssuerKind", func(t *testing.T) {
 			cr := cr.DeepCopy()
 			ca := CertificateCA(cr)

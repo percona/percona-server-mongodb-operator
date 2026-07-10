@@ -83,7 +83,8 @@ if [[ $GKE != 1 ]]; then
 	fi
 
 	nfs_ip=$(kubectl_bin -n storage get svc nfs-service -o jsonpath={.spec.clusterIP})
-	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${cluster_yaml} | kubectl_bin apply -f -
+	sed "s/nfs-service.storage.svc.cluster.local/${nfs_ip}/g" ${cluster_yaml} >"${tmp_dir}/cluster.yml"
+	cat_config "${tmp_dir}/cluster.yml" | kubectl_bin apply -f -
 else
 	apply_cluster ${test_dir}/conf/${cluster}.yml
 fi

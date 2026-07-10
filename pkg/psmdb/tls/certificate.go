@@ -29,7 +29,11 @@ func CertificateCA(cr *api.PerconaServerMongoDB) Certificate {
 }
 
 func (c *caCert) Name() string {
-	return c.cr.Name + "-ca-cert"
+	prefix := c.cr.Name
+	if c.cr.CompareVersion("1.23.0") >= 0 && c.cr.Spec.TLS != nil && c.cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
+		prefix = c.cr.Name + "-" + c.cr.Namespace
+	}
+	return prefix + "-ca-cert"
 }
 
 func (c *caCert) Namespace() string {

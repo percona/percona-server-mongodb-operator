@@ -101,7 +101,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		naming.SecretDatabaseAdminConnStrName(cr),
 		string(api.RoleDatabaseAdmin),
 		cred,
-		&sysUsersSecretObj,
 		true,
 	); err != nil {
 		return errors.Wrap(err, "ensure connection string secret")
