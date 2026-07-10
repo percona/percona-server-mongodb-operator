@@ -1817,12 +1817,29 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSvc(ctx context.Context, c
 	}
 
 	if saveOldMeta {
-		svc.SetAnnotations(util.MapMerge(oldSvc.GetAnnotations(), svc.GetAnnotations()))
+		oldAnnotations := oldSvc.GetAnnotations()
+		removeStaleExternalDNSAnnotations(oldAnnotations, svc.GetAnnotations())
+		svc.SetAnnotations(util.MapMerge(oldAnnotations, svc.GetAnnotations()))
 		svc.SetLabels(util.MapMerge(oldSvc.GetLabels(), svc.GetLabels()))
 	}
 	setIgnoredAnnotations(cr, svc, oldSvc)
 	setIgnoredLabels(cr, svc, oldSvc)
 	return r.createOrUpdate(ctx, svc)
+}
+
+func removeStaleExternalDNSAnnotations(oldAnnotations, desired map[string]string) {
+	if oldAnnotations[naming.AnnotationExternalDNSManaged] == "" && desired[naming.AnnotationExternalDNSManaged] == "" {
+		return
+	}
+	for _, k := range []string{
+		naming.AnnotationExternalDNSHostname,
+		naming.AnnotationExternalDNSTTL,
+		naming.AnnotationExternalDNSManaged,
+	} {
+		if _, ok := desired[k]; !ok {
+			delete(oldAnnotations, k)
+		}
+	}
 }
 
 func setIgnoredAnnotations(cr *api.PerconaServerMongoDB, obj, oldObject client.Object) {

@@ -652,6 +652,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
+
+		if err := validateOCIStorages(cr); err != nil {
+			return errors.Wrap(err, "validate oci storages")
+		}
 	}
 
 	if !cr.Spec.Backup.Enabled {
@@ -1312,4 +1316,24 @@ func (cr *PerconaServerMongoDB) setSearchDefaults(platform version.Platform) {
 			FSGroup:    userId,
 		}
 	}
+}
+
+func validateOCIStorages(cr *PerconaServerMongoDB) error {
+	var okeWorkloadIdentityRegion string
+
+	for _, stg := range cr.Spec.Backup.Storages {
+		if stg.Type != BackupStorageOCI {
+			continue
+		}
+
+		if stg.OCI.Credentials.Type == AuthTypeOkeWorkloadIdentity {
+			if okeWorkloadIdentityRegion == "" {
+				okeWorkloadIdentityRegion = stg.OCI.Region
+			} else if okeWorkloadIdentityRegion != stg.OCI.Region {
+				return errors.New("all OCI storages using okeWorkloadIdentity need to be in the same region")
+			}
+		}
+	}
+
+	return nil
 }
