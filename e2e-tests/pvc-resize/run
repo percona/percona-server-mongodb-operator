@@ -92,6 +92,9 @@ function wait_pvc_request_revert() {
 
 set_debug
 
+size_unit=$(if version_gt "1.34" || [[ $AKS == 1 ]] || [[ $EKS == 1 ]]; then echo 'G'; else echo 'Gi'; fi)
+echo "Size unit: $size_unit"
+
 if [ "$EKS" == 1 ]; then
 	echo "EKS environment detected, creating storageclass for EBS volumes"
 	kubectl_bin apply -f "${test_dir}/conf/eks-storageclass.yml"
@@ -118,7 +121,7 @@ patch_pvc_request "${cluster}" "2G"
 wait_cluster_consistency "$cluster"
 echo
 
-if wait_all_pvc_resize "2Gi" 120 1; then
+if wait_all_pvc_resize "2$size_unit" 120 1; then
 	echo "PVC was resized, but resize.expansion is disabled"
 	exit 1
 fi
@@ -128,7 +131,7 @@ kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/sp
 sleep 10
 
 wait_cluster_consistency "$cluster"
-wait_all_pvc_resize "2Gi"
+wait_all_pvc_resize "2$size_unit"
 
 echo
 
@@ -161,7 +164,7 @@ patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster"
 echo
 
-wait_pvc_resize "persistentvolumeclaim/mongod-data-some-name-rs0-0" "3Gi"
+wait_pvc_resize "persistentvolumeclaim/mongod-data-some-name-rs0-0" "3$size_unit"
 
 # We're setting the quota to 9Gi, so we can resize all PVCs to 3Gi
 
@@ -170,7 +173,7 @@ patch_pvc_request "${cluster}" "3G"
 wait_cluster_consistency "$cluster" 42
 echo
 
-wait_all_pvc_resize "3Gi"
+wait_all_pvc_resize "3$size_unit"
 
 desc "test downscale"
 
@@ -207,7 +210,7 @@ restarted_at_before=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spe
 [ -z "$restarted_at_before" ] && { echo "ERROR: restartedAt not found"; exit 1; }
 
 patch_pvc_request "${cluster}" "4G"
-wait_all_pvc_resize "4Gi"
+wait_all_pvc_resize "4$size_unit"
 
 sleep_with_log 30 "wait for StatefulSet recreation after orphan delete during PVC resize"
 

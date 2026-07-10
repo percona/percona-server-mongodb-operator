@@ -139,6 +139,12 @@ else
 	EKS=0
 fi
 
+if kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' | grep -q "azmk8s.io"; then
+	AKS=1
+else
+	AKS=0
+fi
+
 if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "gke") ]; then
 	GKE=1
 else
