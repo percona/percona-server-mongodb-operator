@@ -1728,30 +1728,34 @@ get_backup_dest() {
 		| sed -e 's/.json$//' | sed "s|s3://||" | sed "s|azure://||" | sed "s|gs://||" | sed "s|oss://||" | sed "s|oci://||"
 }
 
+get_load_balancer_endpoint() {
+	local service=$1
+	local endpoint
+
+	endpoint=$(
+		kubectl_bin get service/$service -o json \
+			| jq -r '[.status.loadBalancer.ingress[]?.hostname, .status.loadBalancer.ingress[]?.ip] | map(select(. != null and . != "")) | first // empty'
+	)
+	if [ -n "$endpoint" -a "$endpoint" != "null" ]; then
+		echo "$endpoint"
+		return
+	fi
+
+	return 1
+}
+
 get_service_endpoint() {
 	local service=$1
+	local endpoint
+	local service_type
 
-	local hostname=$(
-		kubectl_bin get service/$service -o json \
-			| jq '.status.loadBalancer.ingress[].hostname' \
-			| sed -e 's/^"//; s/"$//;'
-	)
-	if [ -n "$hostname" -a "$hostname" != "null" ]; then
-		echo $hostname
+	service_type=$(kubectl_bin get service/$service -o jsonpath='{.spec.type}')
+	if [[ "$service_type" == "LoadBalancer" ]] && endpoint=$(retry 10 3 get_load_balancer_endpoint "$service"); then
+		echo "$endpoint"
 		return
 	fi
 
-	local ip=$(
-		kubectl_bin get service/$service -o json \
-			| jq '.status.loadBalancer.ingress[].ip' \
-			| sed -e 's/^"//; s/"$//;'
-	)
-	if [ -n "$ip" -a "$ip" != "null" ]; then
-		echo $ip
-		return
-	fi
-
-	exit 1
+	kubectl_bin get service/$service -o jsonpath='{.spec.clusterIP}'
 }
 
 execute_curl() {
