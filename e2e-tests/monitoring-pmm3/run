@@ -350,7 +350,7 @@ delete_pmm_server_token() {
 	fi
 
 	local service_account_id
-	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+	service_account_id=$(echo -n "$service_accounts_json" | jq -r --arg key_name "$key_name" '.serviceAccounts[] | select(.name == $key_name).id' | head -n1)
 
 	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
 		echo "Service account '${key_name}' not found."
@@ -372,7 +372,7 @@ delete_pmm_server_token() {
 	fi
 
 	local token_id
-	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
+	token_id=$(echo -n "$tokens_json" | jq -r --arg key_name "$key_name" '.[] | select(.name == $key_name).id' | head -n1)
 
 	if [[ -z $token_id || $token_id == "null" ]]; then
 		echo "Token for service account '${key_name}' not found."
