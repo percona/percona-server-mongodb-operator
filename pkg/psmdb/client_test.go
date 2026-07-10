@@ -210,6 +210,54 @@ func TestMongoConfigReturnsServiceImportLookupError(t *testing.T) {
 	}
 }
 
+func TestMongoConfigSkipsTerminatingPods(t *testing.T) {
+	cr := clientTestCluster()
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 2
+
+	stsLabels := naming.RSLabels(cr, rs)
+	stsLabels[naming.LabelKubernetesComponent] = naming.ComponentMongod
+
+	pod0 := clientTestPod(cr, "cluster-rs0-0", naming.RSLabels(cr, rs))
+	pod0.Labels[naming.LabelKubernetesComponent] = naming.ComponentMongod
+
+	pod1 := clientTestPod(cr, "cluster-rs0-1", naming.RSLabels(cr, rs))
+	pod1.Labels[naming.LabelKubernetesComponent] = naming.ComponentMongod
+	now := metav1.Now()
+	pod1.DeletionTimestamp = &now
+	pod1.Finalizers = []string{"test/finalizer"}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(clientTestScheme(t)).
+		WithObjects(
+			&appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-rs0",
+					Namespace: cr.Namespace,
+					Labels:    stsLabels,
+				},
+			},
+			pod0,
+			pod1,
+		).
+		Build()
+
+	cfg, err := MongoConfig(
+		t.Context(),
+		cl,
+		cr,
+		api.DNSModeInternal,
+		rs,
+		clientTestCredentials(),
+		false,
+	)
+	require.NoError(t, err)
+	assert.Equal(t,
+		"mongodb://app-user:p%40ss%2Fword@cluster-rs0-0.cluster-rs0.database.svc.cluster.local:27017/?authSource=application&replicaSet=rs0",
+		cfg.URI(),
+	)
+}
+
 func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 	tests := map[string]struct {
 		servicePerPod   bool
@@ -239,6 +287,25 @@ func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 			},
 			expectedURI: "mongodb://app-user:p%40ss%2Fword@cluster-mongos-0.database.svc.cluster.local:27017,cluster-mongos-1.database.svc.cluster.local:27017/?authSource=application",
 		},
+		"service per pod skips terminating pods": {
+			servicePerPod:   true,
+			useInternalAddr: true,
+			objects: func(cr *api.PerconaServerMongoDB) []client.Object {
+				labels := naming.MongosLabels(cr)
+				pod0 := clientTestPod(cr, "cluster-mongos-0", labels)
+				pod1 := clientTestPod(cr, "cluster-mongos-1", labels)
+				now := metav1.Now()
+				pod1.DeletionTimestamp = &now
+				pod1.Finalizers = []string{"test/finalizer"}
+				return []client.Object{
+					pod0,
+					pod1,
+					clientTestMongosService(cr, "cluster-mongos-0"),
+					clientTestMongosService(cr, "cluster-mongos-1"),
+				}
+			},
+			expectedURI: "mongodb://app-user:p%40ss%2Fword@cluster-mongos-0.database.svc.cluster.local:27017/?authSource=application",
+		},
 		"load balancer internal address": {
 			exposeType:      corev1.ServiceTypeLoadBalancer,
 			useInternalAddr: true,
@@ -248,7 +315,7 @@ func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 				svc.Spec.ClusterIP = "10.0.0.20"
 				return []client.Object{svc}
 			},
-			expectedURI: "mongodb://app-user:p%40ss%2Fword@10.0.0.20:27017/?authSource=application",
+			expectedURI: "mongodb://app-user:p%40ss%2Fword@cluster-mongos.database.svc.cluster.local:27017/?authSource=application",
 		},
 		"load balancer external address": {
 			exposeType: corev1.ServiceTypeLoadBalancer,
