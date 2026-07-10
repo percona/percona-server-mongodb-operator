@@ -112,7 +112,7 @@ type PerconaServerMongoDBSpec struct {
 
 type DefaultRWConcern struct {
 	// +kubebuilder:validation:Enum={local,available,majority}
-	ReadConcern  string                  `json:"readConcern,omitempty"`
+	ReadConcern  string                   `json:"readConcern,omitempty"`
 	WriteConcern *DefaultWriteConcernSpec `json:"writeConcern,omitempty"`
 }
 
@@ -645,6 +645,10 @@ type ExternalNode struct {
 }
 
 func (e *ExternalNode) HostPort() string {
+	if strings.Contains(e.Host, ":") {
+		return e.Host
+	}
+
 	return e.Host + ":" + strconv.Itoa(e.Port)
 }
 
