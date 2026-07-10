@@ -253,15 +253,19 @@ void runTest(Integer TEST_ID) {
             tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
-                sh """
-                    if [ $retryCount -eq 0 ]; then
-                        export DEBUG_TESTS=0
-                    else
-                        export DEBUG_TESTS=1
-                    fi
-                    export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-                    time ./e2e-tests/$testName/run
-                """
+                withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT')]) {
+                    sh """
+                        if [ $retryCount -eq 0 ]; then
+                            export DEBUG_TESTS=0
+                        else
+                            export DEBUG_TESTS=1
+                        fi
+                        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                        export GCP_PROJECT=\$GCP_PROJECT
+                        export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
+                        time ./e2e-tests/$testName/run
+                    """
+                }
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
             tests[TEST_ID]["result"] = "passed"
