@@ -61,13 +61,12 @@ kubectl_bin apply \
 	-f $conf_dir/secrets.yml \
 	-f $test_dir/conf/secrets.yml
 
-yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
-	"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
-sleep 90
-
 desc "create first PSMDB cluster $cluster"
 apply_cluster "$test_dir/conf/$cluster-rs0.yml"
 wait_for_running $cluster-rs0 3
+
+# Create client after the cluster cause the TLS secret is created during the cluster creation
+apply_client_with_tls "$cluster"
 
 desc 'check if pmm-client container is not enabled'
 compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
@@ -90,8 +89,8 @@ insert_data_mongos "100700" "myApp" \
 	"--tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tls" "$custom_port"
 
 desc 'add PMM_SERVER_API_KEY for secret some-users'
-API_KEY=$(execute_curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq .key)
-kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": '$API_KEY'}}'
+API_KEY=$(execute_curl --insecure -sS -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:admin@"$(get_service_endpoint monitoring-service)"/graph/api/auth/keys" | jq -r .key)
+kubectl_bin patch secret some-users --type merge --patch '{"stringData": {"PMM_SERVER_API_KEY": "'$API_KEY'"}}'
 
 desc 'check if all 3 Pods started'
 wait_for_running $cluster-rs0 3

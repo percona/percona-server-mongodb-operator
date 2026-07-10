@@ -940,6 +940,15 @@ run_recovery_check() {
 	log "Restore logs are preserved: OK"
 }
 
+apply_client_with_tls() {
+	local cluster="$1"
+
+	yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
+		"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
+
+	kubectl_bin rollout status deployment/psmdb-client --timeout=360s
+}
+
 run_mongo() {
 	local command="$1"
 	local uri="$2"
@@ -1468,14 +1477,17 @@ execute_curl() {
 	local name="curl-${RANDOM}"
 	local image="${CURL_IMAGE:-docker.io/alpine/curl:latest}"
 
-	kubectl_bin run "$name" \
+	{
+		kubectl_bin run "$name" \
 		-n "$namespace" \
 		--restart=Never \
 		--image="$image" \
 		--attach \
-		--rm \
 		--quiet \
-		--command -- curl "$@"
+		--rm \
+		--pod-running-timeout=60s \
+		--command -- curl -sS "$@"
+	} 2>/dev/null
 }
 
 curl_metric_values() {
