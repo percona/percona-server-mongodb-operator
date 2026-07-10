@@ -1,26 +1,5 @@
 #!/bin/bash
 
-# GCS backups via GKE Workload Identity (K8SPSMDB-1602).
-#
-# The test uses a FIXED namespace: Workload Identity IAM bindings are
-# pre-provisioned once for the members below (same pattern as the PG operator,
-# see percona-postgresql-operator-wi GSA), so the test itself needs no gcloud:
-#   PROJECT.svc.id.goog[demand-backup-gcs-wi/default]
-#   PROJECT.svc.id.goog[demand-backup-gcs-wi/percona-server-mongodb-operator]
-#   PROJECT.svc.id.goog[psmdb-operator/percona-server-mongodb-operator]   # CLUSTER_WIDE
-#
-# Both Kubernetes SAs get the GSA annotation:
-#   - default      — replset pods (backup-agent does the data transfer)
-#   - operator SA  — the operator validates backups in storage on restore and
-#     cleans up storage in the delete-backup finalizer
-#
-# Scenario also covers migration from key-based credentials to Workload Identity:
-#   1. backup with gcs.credentialsSecret (service account keys) — the old way
-#   2. remove credentialsSecret from the CR -> operator switches PBM to
-#      workloadIdentity: true (ADC via GKE metadata server)
-#   3. backup without any credentials — the WI way
-#   4. restore the key-era backup while running under WI (cross check)
-
 set -o errexit
 
 test_dir=$(realpath "$(dirname "$0")")
@@ -42,8 +21,6 @@ if [ -z "$GCP_PROJECT" ] || [ -z "$GCS_WI_SERVICE_ACCOUNT" ]; then
 	exit 0
 fi
 
-# Fixed namespace: Workload Identity bindings are pre-provisioned for it,
-# see the header comment.
 namespace="demand-backup-gcs-wi"
 
 create_infra "${namespace}"
