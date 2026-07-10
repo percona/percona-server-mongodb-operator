@@ -4,8 +4,11 @@ set -o errexit
 set -o xtrace
 
 test_dir="$(dirname $0)"
-. $(dirname $0)/functions
 src_dir="$(realpath ${test_dir}/..)"
+
+GIT_COMMIT=$(git rev-parse HEAD)
+GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
+IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 IMAGE=$(echo "$IMAGE" | sed -e 's#percona/#perconalab/#')
 
 if [[ ${DOCKER_NOCACHE:-0} == 1 ]]; then

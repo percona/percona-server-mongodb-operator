@@ -9,7 +9,7 @@ spec:
   clusterServiceDNSMode: "Internal"
   tls:
     mode: allowTLS
-  image: percona/percona-server-mongodb:6.0.4-3
+  image:
   imagePullPolicy: Always
   secrets:
     users: mydb-custom-users
