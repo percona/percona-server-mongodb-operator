@@ -1775,7 +1775,7 @@ curl_metric_values() {
 	local metric=$1
 	local instance=$2
 	local endpoint=$3
-	local encoded_user_pass=$4
+	local encoded_userinfo=$4
 	local start
 	local end
 
@@ -1783,7 +1783,7 @@ curl_metric_values() {
 	end=$($date -u "+%s")
 
 	execute_curl -s -k \
-		"https://${encoded_user_pass}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60" \
+		"https://${encoded_userinfo}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60" \
 		| jq -r '.data.result[0].values[][1]' \
 		| grep '^[0-9]'
 }
@@ -1793,20 +1793,20 @@ get_metric_values() {
 	local instance=$2
 	local user_pass=$3
 	local endpoint
-	local encoded_user_pass
+	local encoded_userinfo
 
 	endpoint=$(get_service_endpoint monitoring-service)
-	encoded_user_pass=$(urlencode_userinfo "$user_pass")
+	encoded_userinfo=$(urlencode_userinfo "$user_pass")
 
-	retry 30 2 curl_metric_values "$metric" "$instance" "$endpoint" "$encoded_user_pass"
+	retry 30 2 curl_metric_values "$metric" "$instance" "$endpoint" "$encoded_userinfo"
 }
 
 curl_qan_values() {
 	local payload_file=$1
 	local endpoint=$2
-	local encoded_user_pass=$3
+	local encoded_userinfo=$3
 
-	execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "https://${encoded_user_pass}@$endpoint/v0/qan/GetReport" \
+	execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "https://${encoded_userinfo}@$endpoint/v0/qan/GetReport" \
 		| jq -r '.rows[].sparkline' \
 		| grep -qv '^null$'
 }
@@ -1818,11 +1818,11 @@ get_qan_values() {
 	local start
 	local end
 	local endpoint
-	local encoded_user_pass
+	local encoded_userinfo
 	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
 	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
 	endpoint=$(get_service_endpoint monitoring-service)
-	encoded_user_pass=$(urlencode_userinfo "$user_pass")
+	encoded_userinfo=$(urlencode_userinfo "$user_pass")
 
 	cat >payload.json <<EOF
 {
@@ -1856,7 +1856,7 @@ get_qan_values() {
 }
 EOF
 
-	retry 10 5 curl_qan_values payload.json "$endpoint" "$encoded_user_pass"
+	retry 10 5 curl_qan_values payload.json "$endpoint" "$encoded_userinfo"
 	rm -f payload.json
 }
 
