@@ -637,8 +637,13 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
 	}
+
 	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetAWSSDKChecksumEnvVars(cr) {
 		c.Env = append(c.Env, AWSSDKChecksumEnvVars()...)
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetOCIResourcePrincipalEnvVars(cr) {
+		c.Env = append(c.Env, OCIResourcePrincipalEnvVars(cr)...)
 	}
 
 	if cr.Spec.Sharding.Enabled {
@@ -718,6 +723,46 @@ func ShouldSetAWSSDKChecksumEnvVars(cr *api.PerconaServerMongoDB) bool {
 	}
 
 	return false
+}
+
+func ShouldSetOCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) bool {
+	pbm2150OrNewer, err := cr.ComparePBMAgentVersion("2.15.0")
+	if err != nil || pbm2150OrNewer < 0 {
+		return false
+	}
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageOCI && storage.OCI.Credentials.Type == api.AuthTypeOkeWorkloadIdentity {
+			return true
+		}
+	}
+
+	return false
+}
+
+const OCIResourcePrincipalVersion = "2.2"
+
+func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
+	var oci api.BackupStorageOCISpec
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageOCI && storage.OCI.Credentials.Type == api.AuthTypeOkeWorkloadIdentity {
+			oci = storage.OCI
+			break
+		}
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "OCI_RESOURCE_PRINCIPAL_VERSION",
+			Value: OCIResourcePrincipalVersion,
+		},
+		{
+			// if user defines more than one OCI storages and tries to use okeWorkloadIdentity for them
+			// all storages need to be in same region
+			Name:  "OCI_RESOURCE_PRINCIPAL_REGION",
+			Value: oci.Region,
+		},
+	}
 }
 
 func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {

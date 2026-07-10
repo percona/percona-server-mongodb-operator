@@ -1008,6 +1008,16 @@ func (b *pbmC) ValidateBackupInStorage(ctx context.Context, cfg *config.Config, 
 		return nil
 	}
 
+	if cfg.Storage.Type == storage.OCI && cfg.Storage.OCI != nil && cfg.Storage.OCI.Credentials.Type == oci.AuthTypeOkeWorkloadIdentity {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_VERSION", psmdb.OCIResourcePrincipalVersion); err != nil {
+			return errors.Wrap(err, "set OCI_RESOURCE_PRINCIPAL_VERSION")
+		}
+
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_REGION", cfg.Storage.OCI.Region); err != nil {
+			return errors.Wrap(err, "set OCI_RESOURCE_PRINCIPAL_REGION")
+		}
+	}
+
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", bson.Timestamp{})
 	stg, err := util.StorageFromConfig(&cfg.Storage, "", e)
 	if err != nil {
