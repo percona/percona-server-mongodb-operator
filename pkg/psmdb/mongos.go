@@ -464,10 +464,11 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 			} else {
 				hostname = BuildDNSHostnameWithoutIndex(dns, "mongos")
 			}
-			annotations["external-dns.alpha.kubernetes.io/hostname"] = hostname
+			annotations[naming.AnnotationExternalDNSHostname] = hostname
 			if dns.TTL > 0 {
-				annotations["external-dns.alpha.kubernetes.io/ttl"] = strconv.Itoa(dns.TTL)
+				annotations[naming.AnnotationExternalDNSTTL] = strconv.Itoa(dns.TTL)
 			}
+			annotations[naming.AnnotationExternalDNSManaged] = "true"
 		}
 
 		svc.Annotations = annotations

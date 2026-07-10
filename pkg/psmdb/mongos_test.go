@@ -268,3 +268,81 @@ func readDefaultCR(name, namespace string) (*api.PerconaServerMongoDB, error) {
 	cr.Spec.InitImage = "perconalab/percona-server-mongodb-operator:main"
 	return cr, nil
 }
+
+func TestMongosServiceAnnotations(t *testing.T) {
+	tests := map[string]struct {
+		expose              api.MongosExpose
+		svcName             string
+		expectedAnnotations map[string]string
+	}{
+		"externalDNS single service: hostname without pod index": {
+			expose: api.MongosExpose{
+				Expose: api.Expose{
+					ExposeType: corev1.ServiceTypeLoadBalancer,
+					ExternalDNS: &api.ExternalDNSConfig{
+						Prefix: "prod",
+						Domain: "mongo.example.com",
+						TTL:    120,
+					},
+				},
+			},
+			svcName: "test-cr-mongos",
+			expectedAnnotations: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-mongos.mongo.example.com",
+				"external-dns.alpha.kubernetes.io/ttl":      "120",
+				"percona.com/external-dns-managed":          "true",
+			},
+		},
+		"externalDNS servicePerPod: hostname with pod index": {
+			expose: api.MongosExpose{
+				ServicePerPod: true,
+				Expose: api.Expose{
+					ExposeType: corev1.ServiceTypeLoadBalancer,
+					ExternalDNS: &api.ExternalDNSConfig{
+						Prefix: "prod",
+						Domain: "mongo.example.com",
+					},
+				},
+			},
+			svcName: "test-cr-mongos-2",
+			expectedAnnotations: map[string]string{
+				"external-dns.alpha.kubernetes.io/hostname": "prod-mongos-2.mongo.example.com",
+				"percona.com/external-dns-managed":          "true",
+			},
+		},
+		"no externalDNS: only user annotations": {
+			expose: api.MongosExpose{
+				Expose: api.Expose{
+					ExposeType: corev1.ServiceTypeLoadBalancer,
+					ServiceAnnotations: map[string]string{
+						"percona.com/test": "annotation",
+					},
+				},
+			},
+			svcName: "test-cr-mongos",
+			expectedAnnotations: map[string]string{
+				"percona.com/test": "annotation",
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "test-ns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Sharding: api.Sharding{
+						Mongos: &api.MongosSpec{
+							Expose: tt.expose,
+						},
+					},
+				},
+			}
+			svc := MongosService(cr, tt.svcName)
+			assert.Equal(t, tt.expectedAnnotations, svc.Annotations)
+		})
+	}
+}
