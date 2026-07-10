@@ -117,6 +117,13 @@ export KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + ".
 export PLATFORM=$(detect_k8s_env)
 # Exports GKE, EKS, AKS, OPENSHIFT, KIND, MINIKUBE, RANCHER variables based on detected platform
 export "$(echo "${PLATFORM}" | tr '[:lower:]' '[:upper:]')=1"
+export ARCH=${ARCH:-}
+if [[ -z ${ARCH} ]]; then
+	node_arches=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}' 2>/dev/null | sort -u)
+	if [[ ${node_arches} == "arm64" ]]; then
+		export ARCH=arm64
+	fi
+fi
 
 # Dependencies versions
 export CERT_MANAGER_VER="1.19.3"

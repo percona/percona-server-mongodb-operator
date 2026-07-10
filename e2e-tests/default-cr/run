@@ -77,6 +77,7 @@ function main() {
 		.spec.replsets[].arbiter.affinity.antiAffinityTopologyKey = "none" |
 		.spec.sharding.configsvrReplSet.affinity.antiAffinityTopologyKey = "none" |
 		.spec.sharding.mongos.affinity.antiAffinityTopologyKey = "none"' $deploy_dir/cr.yaml \
+		| add_arch_to_psmdb - \
 		| kubectl_bin apply -f -
 
 	desc 'check if all 3 Pods started'
@@ -120,7 +121,7 @@ function main() {
 	cluster="minimal-cluster"
 	yq eval '.metadata.name = "'${cluster}'"' $deploy_dir/secrets.yaml | kubectl_bin apply -f -
 
-	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | kubectl_bin apply -f -
+	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | add_arch_to_psmdb - | kubectl_bin apply -f -
 	desc 'check if all Pods started'
 	wait_cluster_consistency "${cluster}"
 
