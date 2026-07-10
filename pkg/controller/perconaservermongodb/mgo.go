@@ -370,11 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 		member.Tags = mongo.ReplsetTags{"external": "true"}
 	}
 
-	if strings.Contains(extNode.Host, ":") {
-		member.Host = extNode.Host
-	} else {
-		member.Host = extNode.HostPort()
-	}
+	member.Host = extNode.HostPort()
 
 	for k, v := range extNode.Tags {
 		if member.Tags == nil {
@@ -540,22 +536,37 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		return rsMembers, 0, errors.Wrap(err, "unable to get replset members")
 	}
 
-	liveMembers := 0
+	liveMembers := countLiveMembers(rsStatus, cnf, rs, rsMembers)
+
+	return rsMembers, liveMembers, nil
+}
+
+// countLiveMembers counts the members reported as live (primary, secondary or
+// arbiter) in the replset status, ignoring external members and external
+// arbiters. It also populates rsMembers with the status of every member that
+// maps to an operator-managed pod (identified by the podName tag).
+func countLiveMembers(rsStatus mongo.Status, cnf mongo.RSConfig, rs *api.ReplsetSpec, rsMembers map[string]api.ReplsetMemberStatus) int {
+	count := 0
 	for _, member := range rsStatus.Members {
-		var tags mongo.ReplsetTags
+		var cm mongo.ConfigMember
 
 		for i := range cnf.Members {
 			if member.Id == cnf.Members[i].ID {
-				tags = cnf.Members[i].Tags
+				cm = cnf.Members[i]
 				break
 			}
 		}
 
-		if _, ok := tags["external"]; ok {
+		if _, ok := cm.Tags["external"]; ok {
 			continue
 		}
 
-		if podName, ok := tags["podName"]; ok {
+		// arbiters can't have tags
+		if cm.ArbiterOnly && isExternalArbiter(cm, rs) {
+			continue
+		}
+
+		if podName, ok := cm.Tags["podName"]; ok {
 			rsMembers[podName] = api.ReplsetMemberStatus{
 				Name:     member.Name,
 				State:    member.State,
@@ -565,11 +576,25 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
-			liveMembers++
+			count++
 		}
 	}
 
-	return rsMembers, liveMembers, nil
+	return count
+}
+
+func isExternalArbiter(cm mongo.ConfigMember, rs *api.ReplsetSpec) bool {
+	for _, extNode := range rs.ExternalNodes {
+		if !extNode.ArbiterOnly {
+			continue
+		}
+
+		if cm.Host == extNode.HostPort() {
+			return true
+		}
+	}
+
+	return false
 }
 
 func inShard(ctx context.Context, client mongo.Client, rsName string) (bool, error) {
