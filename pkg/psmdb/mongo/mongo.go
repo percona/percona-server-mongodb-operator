@@ -42,6 +42,9 @@ func (conf *Config) SRVURI(hostname string) string {
 }
 
 func (conf *Config) uri(scheme, hostname string) string {
+	if len(conf.Hosts) == 0 {
+		return ""
+	}
 	u := url.URL{
 		Scheme: scheme,
 		Host:   strings.Join(conf.Hosts, ","),
@@ -141,6 +144,7 @@ type Client interface {
 type ClientDatabase interface {
 	RunCommand(ctx context.Context, runCommand any, opts ...options.Lister[options.RunCmdOptions]) *mongo.SingleResult
 }
+
 type mongoClient struct {
 	*mongo.Client
 }

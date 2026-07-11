@@ -115,7 +115,7 @@ func TestMongosHost(t *testing.T) {
 			},
 			useInternal:  true,
 			exposeType:   corev1.ServiceTypeLoadBalancer,
-			expectedHost: "10.0.0.20:27018",
+			expectedHost: "test-cluster-mongos.default.svc.cluster.local:27018",
 		},
 		"err: clusterip service type and port not found": {
 			init: func(cl client.Client) {
@@ -388,6 +388,7 @@ func TestExternalService(t *testing.T) {
 						"percona.com/test":                          "annotation",
 						"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
 						"external-dns.alpha.kubernetes.io/ttl":      "300",
+						"percona.com/external-dns-managed":          "true",
 					},
 				},
 				Spec: corev1.ServiceSpec{
@@ -439,6 +440,7 @@ func TestExternalService(t *testing.T) {
 					},
 					Annotations: map[string]string{
 						"external-dns.alpha.kubernetes.io/hostname": "staging-rs0-2.db.example.com",
+						"percona.com/external-dns-managed":          "true",
 					},
 				},
 				Spec: corev1.ServiceSpec{
