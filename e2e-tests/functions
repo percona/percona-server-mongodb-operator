@@ -2104,7 +2104,7 @@ function check_backup_deletion_oss() {
 	storage_name="oss-native"
 	retry=0
 
-	setup_alibaba_cloud_s3_credentials "$region"
+#	setup_alibaba_cloud_s3_credentials "$region"
 
 	while aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
 		if [ $retry -ge 15 ]; then
@@ -3081,14 +3081,14 @@ check_backup_in_storage() {
 		alibaba-s3)
 			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_s3_field "$backup" "region")
-			setup_alibaba_cloud_s3_credentials "$region"
+#			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
 			;;
 		oss)
 			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_oss_field "$backup" "region")
 			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
-			setup_alibaba_cloud_s3_credentials "$region"
+#			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
 			;;
 		oci)
