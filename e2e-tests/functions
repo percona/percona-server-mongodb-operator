@@ -2241,8 +2241,7 @@ function setup_alibaba_cloud_s3_credentials() {
 
     echo "$AWS_ACCESS_KEY_ID"
     echo "$AWS_SECRET_ACCESS_KEY"
-set +o xtrace
-
+set -o xtrace
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 #		[[ $trace_was_on -eq 1 ]] && set -x
 		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret"
