@@ -2239,6 +2239,10 @@ function setup_alibaba_cloud_s3_credentials() {
 	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null)
 	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null)
 
+    echo "$AWS_ACCESS_KEY_ID"
+    echo "$AWS_SECRET_ACCESS_KEY"
+set +o xtrace
+
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 #		[[ $trace_was_on -eq 1 ]] && set -x
 		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret"
