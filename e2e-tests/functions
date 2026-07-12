@@ -2199,8 +2199,8 @@ function setup_aws_credentials() {
 		set +x
 	fi
 
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AWS_ACCESS_KEY_ID" | base64decode}}' 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AWS_SECRET_ACCESS_KEY" | base64decode}}' 2>/dev/null)
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		# Re-enable tracing before error message if it was on
@@ -2224,29 +2224,17 @@ function setup_alibaba_cloud_s3_credentials() {
 
 	echo "Setting up Alibaba Cloud S3-compatible credentials from secret: $secret_name"
 
-#	# Disable tracing while credentials are read and exported.
-#	local trace_was_on=0
-#	if [[ $- == *x* ]]; then
-#		trace_was_on=1
-#		set +x
-#	fi
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
 
-    kubectl get secret -n ${namespace}
-    kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null
-    kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "ALIBABA_ACCESS_KEY_ID" | base64decode}}' 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "ALIBABA_ACCESS_KEY_SECRET" | base64decode}}' 2>/dev/null)
 
-    kubectl get secret "$secret_name" -o yaml
-
-    trace_was_on=1
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null || true)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' -n ${namespace} 2>/dev/null | base64 -d 2>/dev/null || true)
-
-    echo "$AWS_ACCESS_KEY_ID\n"
-    echo "-----1---\n"
-    echo "$AWS_SECRET_ACCESS_KEY\n"
-set -o xtrace
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
-#		[[ $trace_was_on -eq 1 ]] && set -x
+		[[ $trace_was_on -eq 1 ]] && set -x
 		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret"
 		return 1
 	fi
@@ -2267,15 +2255,14 @@ function setup_oci_s3_credentials() {
 
 	echo "Setting up OCI S3-compatible credentials from secret: $secret_name"
 
-	# Disable tracing while credentials are read and exported.
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
 		set +x
 	fi
 
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "OCI_ACCESS_KEY_ID" | base64decode}}' 2>/dev/null)
+	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "OCI_SECRET_ACCESS_KEY" | base64decode}}' 2>/dev/null)
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
@@ -2303,15 +2290,14 @@ function setup_gcs_credentials() {
 
 	echo "Setting up GCS credentials from K8s secret: $secret_name"
 
-	# Disable tracing for the entire credential section
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
 		set +x
 	fi
 
-	ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AWS_ACCESS_KEY_ID" | base64decode}}' 2>/dev/null)
+	SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AWS_SECRET_ACCESS_KEY" | base64decode}}' 2>/dev/null)
 
 	if [[ -z $ACCESS_KEY_ID ]] || [[ -z $SECRET_ACCESS_KEY ]]; then
 		# Re-enable tracing before error message if it was on
@@ -2351,8 +2337,8 @@ function setup_azure_credentials() {
 		set +x
 	fi
 
-	AZURE_STORAGE_ACCOUNT=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_NAME}' 2>/dev/null | base64 -d 2>/dev/null)
-	AZURE_STORAGE_KEY=$(kubectl_bin get secret "$secret_name" -o jsonpath='{.data.AZURE_STORAGE_ACCOUNT_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	AZURE_STORAGE_ACCOUNT=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AZURE_STORAGE_ACCOUNT_NAME" | base64decode}}' 2>/dev/null)
+	AZURE_STORAGE_KEY=$(kubectl get secret "$secret_name" -n "$namespace" -o go-template='{{index .data "AZURE_STORAGE_ACCOUNT_KEY" | base64decode}}' 2>/dev/null)
 
 	if [[ -z $AZURE_STORAGE_ACCOUNT ]] || [[ -z $AZURE_STORAGE_KEY ]]; then
 		# Re-enable tracing before error message if it was on
