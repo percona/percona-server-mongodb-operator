@@ -5,7 +5,7 @@ metadata:
   - percona.com/delete-psmdb-pvc
   name: some-name-target
 spec:
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image:
   imagePullPolicy: Always
   updateStrategy: SmartUpdate
   secrets:
