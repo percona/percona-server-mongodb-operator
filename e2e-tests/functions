@@ -1821,7 +1821,6 @@ curl_qan_values() {
 	local auth_type=${4:-basic}
 	local url
 	local curl_args=()
-	local response
 
 	if [[ "$auth_type" == "bearer" ]]; then
 		url="https://$endpoint/v1/qan/metrics:getReport"
@@ -1832,10 +1831,8 @@ curl_qan_values() {
 		curl_args=("https://${credentials}@${url#https://}")
 	fi
 
-	response=$(execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "${curl_args[@]}")
-
-	echo "$response" \
-		| jq -r '(.rows // []) | length | select(. > 0)'
+	execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "${curl_args[@]}" \
+		| jq -e 'any(.rows[]?; .sparkline != null)'
 }
 
 get_qan_values() {
