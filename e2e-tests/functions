@@ -2232,20 +2232,36 @@ function setup_alibaba_cloud_s3_credentials() {
 	local region=${1:-"us-east-1"}
 	local secret_name="alibaba-cloud-secret"
 
+	echo "[alibaba-creds] namespace=$namespace secret=$secret_name set_flags=$-"
+
+	local kubectl_exit
+	kubectl get secret "$secret_name" -n "$namespace" &>/dev/null
+	kubectl_exit=$?
+	echo "[alibaba-creds] secret exists: $([[ $kubectl_exit -eq 0 ]] && echo yes || echo NO) (kubectl exit=$kubectl_exit)"
+
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
 		set +x
 	fi
 
-	local _raw_id _raw_secret
+	local _raw_id _raw_secret _id_exit _secret_exit
 	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_id_exit=$?
 	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null) || true
+	_secret_exit=$?
+
+	[[ $trace_was_on -eq 1 ]] && set -x
+	echo "[alibaba-creds] raw_id present=$([[ -n $_raw_id ]] && echo yes || echo NO) len=${#_raw_id} kubectl_exit=$_id_exit"
+	echo "[alibaba-creds] raw_secret present=$([[ -n $_raw_secret ]] && echo yes || echo NO) len=${#_raw_secret} kubectl_exit=$_secret_exit"
+	[[ $trace_was_on -eq 1 ]] && set +x
+
 	AWS_ACCESS_KEY_ID=$(echo "$_raw_id" | base64 -d 2>/dev/null) || true
 	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_secret" | base64 -d 2>/dev/null) || true
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "[alibaba-creds] FAILED: key_id=$([[ -n $AWS_ACCESS_KEY_ID ]] && echo set || echo EMPTY) key_secret=$([[ -n $AWS_SECRET_ACCESS_KEY ]] && echo set || echo EMPTY)"
 		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret '$secret_name'"
 		return 1
 	fi
@@ -2255,6 +2271,7 @@ function setup_alibaba_cloud_s3_credentials() {
 	export AWS_DEFAULT_REGION="$region"
 	export AWS_REGION="$region"
 	[[ $trace_was_on -eq 1 ]] && set -x
+	echo "[alibaba-creds] OK"
 }
 
 function setup_oci_s3_credentials() {
