@@ -178,99 +178,6 @@ deploy_pmm3_server() {
 		--force
 }
 
-get_qan_values() {
-	local service_type=$1
-	local environment=$2
-	local token=$3
-	local start
-	local end
-	local endpoint
-	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
-	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
-	endpoint=$(get_service_endpoint monitoring-service)
-
-	cat >payload.json <<EOF
-{
-  "period_start_from": "$start",
-  "period_start_to": "$end",
-  "group_by": "queryid",
-  "labels": [
-    {
-      "key": "service_type",
-      "value": [
-        "$service_type"
-      ]
-    },
-    {
-      "key": "environment",
-      "value": [
-        "$environment"
-      ]
-    }
-  ],
-  "columns": [
-    "load",
-    "num_queries",
-    "query_time"
-  ],
-  "order_by": "-load",
-  "offset": 0,
-  "limit": 10,
-  "main_metric": "load",
-  "search": ""
-}
-EOF
-
-	local response
-
-	local wait_count=30
-	local retry=0
-	until [[ "$(execute_curl -s -k -H "Authorization: Bearer ${token}" -XPOST -d "$(cat payload.json)" "https://$endpoint/v1/qan/metrics:getReport" \
-		| jq -r '(.rows // [])[]? | .fingerprint // empty')" ]]; do
-		sleep 2
-		local start=$($date -u "+%s" -d "-1 minute")
-		local end=$($date -u "+%s")
-		let retry+=1
-		if [[ $retry -ge $wait_count ]]; then
-			exit 1
-		fi
-	done
-	rm -f payload.json
-}
-
-get_metric_values() {
-	local metric=$1
-	local instance=$2
-	local token=$3
-	local start=$($date -u "+%s" -d "-1 minute")
-	local end=$($date -u "+%s")
-	local endpoint=$(get_service_endpoint monitoring-service)
-
-	if [ -z "$metric" ]; then
-		echo "Error: metric is required"
-		exit 1
-	fi
-
-	if [ -z "$token" ]; then
-		echo "Error: token is required"
-		exit 1
-	fi
-
-	local wait_count=30
-	local retry=0
-	until [[ $(execute_curl -s -k -H "Authorization: Bearer ${token}" "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
-		| jq '.data.result[0].values[][1]' \
-		| grep '^"[0-9]') ]]; do
-		sleep 2
-		local start=$($date -u "+%s" -d "-1 minute")
-		local end=$($date -u "+%s")
-		let retry+=1
-		if [[ $retry -ge $wait_count ]]; then
-			exit 1
-		fi
-	done
-}
-
 get_pmm_server_token() {
 	local key_name=$1
 
@@ -506,23 +413,23 @@ for pod in $pods; do
 done
 
 desc 'check mongod metrics'
-get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 $NEW_TOKEN
-get_metric_values mongodb_connections $namespace-$cluster-rs0-1 $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 $NEW_TOKEN bearer
+get_metric_values mongodb_connections $namespace-$cluster-rs0-1 $NEW_TOKEN bearer
 
 desc 'check mongo config metrics'
-get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 $NEW_TOKEN
-get_metric_values mongodb_connections $namespace-$cluster-cfg-1 $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 $NEW_TOKEN bearer
+get_metric_values mongodb_connections $namespace-$cluster-cfg-1 $NEW_TOKEN bearer
 
 desc 'check mongos metrics'
 MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
-get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME $NEW_TOKEN bearer
 
 #wait for QAN
 sleep 90
 
 desc 'check QAN data'
-get_qan_values mongodb "dev-mongod" $NEW_TOKEN
-get_qan_values mongodb "dev-mongos" $NEW_TOKEN
+get_qan_values mongodb "dev-mongod" $NEW_TOKEN bearer
+get_qan_values mongodb "dev-mongos" $NEW_TOKEN bearer
 
 desc 'verify that the custom cluster name is configured'
 verify_custom_cluster_name $custom_cluster_name $NEW_TOKEN ${namespace}-${cluster}-mongos-0 ${namespace}-${cluster}-cfg-0 ${namespace}-${cluster}-rs0-0
@@ -547,7 +454,7 @@ wait_for_running $cluster-rs0 3
 sleep 90
 
 desc 'check mongolog QAN data'
-get_qan_values mongodb "dev-mongod-mongolog" $NEW_TOKEN
+get_qan_values mongodb "dev-mongod-mongolog" $NEW_TOKEN bearer
 
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
 wait_for_delete "pod/${cluster}-mongos-0"

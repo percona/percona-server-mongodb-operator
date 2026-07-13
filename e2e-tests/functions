@@ -1737,7 +1737,7 @@ get_service_endpoint() {
 	local service_type
 
 	service_type=$(kubectl_bin get service/$service -o jsonpath='{.spec.type}')
-	if [[ "$service_type" == "LoadBalancer" ]] && endpoint=$(retry 10 3 get_load_balancer_endpoint "$service"); then
+	if [[ "$service_type" == "LoadBalancer" ]] && endpoint=$(get_load_balancer_endpoint "$service"); then
 		echo "$endpoint"
 		return
 	fi
@@ -1779,16 +1779,26 @@ curl_metric_values() {
 	local metric=$1
 	local instance=$2
 	local endpoint=$3
-	local encoded_userinfo=$4
+	local credentials=$4
+	local auth_type=${5:-basic}
 	local start
 	local end
+	local url
+	local curl_args=()
 
 	start=$($date -u "+%s" -d "-1 minute")
 	end=$($date -u "+%s")
+	url="https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60"
 
-	execute_curl -s -k \
-		"https://${encoded_userinfo}@$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%20or%20${metric}%7Bnode_name%3D%7E%22${instance}%22%7D%29&start=${start}&end=${end}&step=60" \
-		| jq -r '.data.result[0].values[][1]' \
+	if [[ "$auth_type" == "bearer" ]]; then
+		curl_args=(-H "Authorization: Bearer ${credentials}" "$url")
+	else
+		credentials=$(urlencode_userinfo "$credentials")
+		curl_args=("https://${credentials}@${url#https://}")
+	fi
+
+	execute_curl -s -k "${curl_args[@]}" \
+		| jq -r '(.data.result[0].values // [])[] | .[1] // empty' \
 		| grep '^[0-9]'
 }
 
@@ -1796,37 +1806,49 @@ get_metric_values() {
 	local metric=$1
 	local instance=$2
 	local user_pass=$3
+	local auth_type=${4:-basic}
 	local endpoint
-	local encoded_userinfo
 
 	endpoint=$(get_service_endpoint monitoring-service)
-	encoded_userinfo=$(urlencode_userinfo "$user_pass")
 
-	retry 30 2 curl_metric_values "$metric" "$instance" "$endpoint" "$encoded_userinfo"
+	retry 30 2 curl_metric_values "$metric" "$instance" "$endpoint" "$user_pass" "$auth_type"
 }
 
 curl_qan_values() {
 	local payload_file=$1
 	local endpoint=$2
-	local encoded_userinfo=$3
+	local credentials=$3
+	local auth_type=${4:-basic}
+	local url
+	local curl_args=()
+	local response
 
-	execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "https://${encoded_userinfo}@$endpoint/v0/qan/GetReport" \
-		| jq -r '.rows[].sparkline' \
-		| grep -qv '^null$'
+	if [[ "$auth_type" == "bearer" ]]; then
+		url="https://$endpoint/v1/qan/metrics:getReport"
+		curl_args=(-H "Authorization: Bearer ${credentials}" "$url")
+	else
+		url="https://$endpoint/v0/qan/GetReport"
+		credentials=$(urlencode_userinfo "$credentials")
+		curl_args=("https://${credentials}@${url#https://}")
+	fi
+
+	response=$(execute_curl -s -k -XPOST -d "$(cat "$payload_file")" "${curl_args[@]}")
+
+	echo "$response" \
+		| jq -r '(.rows // []) | length | select(. > 0)'
 }
 
 get_qan_values() {
 	local service_type=$1
 	local environment=$2
 	local user_pass=$3
+	local auth_type=${4:-basic}
 	local start
 	local end
 	local endpoint
-	local encoded_userinfo
 	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
 	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
 	endpoint=$(get_service_endpoint monitoring-service)
-	encoded_userinfo=$(urlencode_userinfo "$user_pass")
 
 	cat >payload.json <<EOF
 {
@@ -1860,7 +1882,7 @@ get_qan_values() {
 }
 EOF
 
-	retry 10 5 curl_qan_values payload.json "$endpoint" "$encoded_userinfo"
+	retry 30 2 curl_qan_values payload.json "$endpoint" "$user_pass" "$auth_type"
 	rm -f payload.json
 }
 
