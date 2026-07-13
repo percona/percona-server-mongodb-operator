@@ -42,7 +42,7 @@ func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder 
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, c, lease, func() error {
-		if lease.Spec.HolderIdentity != nil {
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
 			if *lease.Spec.HolderIdentity == holder {
 				return nil
 			}
