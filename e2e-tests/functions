@@ -2255,6 +2255,7 @@ function setup_alibaba_cloud_s3_credentials() {
 	export AWS_DEFAULT_REGION="$region"
 	export AWS_REGION="$region"
 	[[ $trace_was_on -eq 1 ]] && set -x
+	return 0
 }
 
 function setup_oci_s3_credentials() {
