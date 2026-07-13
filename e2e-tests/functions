@@ -2232,41 +2232,6 @@ function setup_alibaba_cloud_s3_credentials() {
 	local region=${1:-"us-east-1"}
 	local secret_name="alibaba-cloud-secret"
 
-	echo "Setting up Alibaba Cloud S3-compatible credentials from secret: $secret_name"
-	echo "  namespace : ${namespace}"
-	echo "  base64 bin: $(command -v base64) ($(base64 --version 2>&1 | head -1))"
-	echo "  kubectl   : $(kubectl version --client --short 2>/dev/null || kubectl version --client 2>&1 | head -1)"
-	echo "  set flags : $-"
-
-	# --- secret existence check ---
-	if ! kubectl get secret "$secret_name" -n "$namespace" &>/dev/null; then
-		echo "ERROR: secret '$secret_name' not found in namespace '$namespace'"
-		kubectl get secrets -n "$namespace" 2>&1 || true
-		return 1
-	fi
-
-	# --- raw base64 values from the secret ---
-	local raw_id raw_secret
-	raw_id=$(kubectl get secret "$secret_name" -n "$namespace" \
-		-o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>&1)
-	raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" \
-		-o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>&1)
-
-	echo "  raw ALIBABA_ACCESS_KEY_ID    present: $([[ -n $raw_id ]] && echo yes || echo NO)"
-	echo "  raw ALIBABA_ACCESS_KEY_SECRET present: $([[ -n $raw_secret ]] && echo yes || echo NO)"
-	echo "  raw ALIBABA_ACCESS_KEY_ID    length : ${#raw_id}"
-	echo "  raw ALIBABA_ACCESS_KEY_SECRET length : ${#raw_secret}"
-
-	# --- decode check (before assignment, visible in log) ---
-	local decoded_id decoded_secret decode_exit
-	decoded_id=$(echo "$raw_id" | base64 -d 2>&1)
-	decode_exit=$?
-	echo "  base64 -d ALIBABA_ACCESS_KEY_ID    exit=$decode_exit length=${#decoded_id}"
-
-	decoded_secret=$(echo "$raw_secret" | base64 -d 2>&1)
-	decode_exit=$?
-	echo "  base64 -d ALIBABA_ACCESS_KEY_SECRET exit=$decode_exit length=${#decoded_secret}"
-
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
@@ -2276,22 +2241,12 @@ function setup_alibaba_cloud_s3_credentials() {
 	local _raw_id _raw_secret
 	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null)
 	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null)
-	echo "  _raw_id    length (two-step): ${#_raw_id}"
-	echo "  _raw_secret length (two-step): ${#_raw_secret}"
 	AWS_ACCESS_KEY_ID=$(echo "$_raw_id" | base64 -d 2>/dev/null) || true
 	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_secret" | base64 -d 2>/dev/null) || true
 
-	[[ $trace_was_on -eq 1 ]] && set -x
-
-	echo "  AWS_ACCESS_KEY_ID    assigned: $([[ -n $AWS_ACCESS_KEY_ID ]] && echo yes || echo NO)"
-	echo "  AWS_SECRET_ACCESS_KEY assigned: $([[ -n $AWS_SECRET_ACCESS_KEY ]] && echo yes || echo NO)"
-
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
-		echo "ERROR: Failed to extract Alibaba Cloud S3-compatible credentials from secret '$secret_name'"
-		echo "  Possible causes:"
-		echo "    - ALIBABA_ACCESS_KEY_ID or ALIBABA_ACCESS_KEY_SECRET key missing in secret"
-		echo "    - base64 decode failed (exit code above)"
-		echo "    - set -e fired during pipe (see set flags above)"
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret '$secret_name'"
 		return 1
 	fi
 
@@ -2299,8 +2254,7 @@ function setup_alibaba_cloud_s3_credentials() {
 	export AWS_SECRET_ACCESS_KEY
 	export AWS_DEFAULT_REGION="$region"
 	export AWS_REGION="$region"
-
-	echo "Alibaba Cloud S3-compatible credentials configured successfully"
+	[[ $trace_was_on -eq 1 ]] && set -x
 }
 
 function setup_oci_s3_credentials() {
