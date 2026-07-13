@@ -428,18 +428,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		applyObservedStatus(newStatus, observed)
 	}
 
-	// StartedAt==nil + observed finalized means the state belongs to a
-	// previous sync on the same target — PCSM persists lifecycle state
-	// on the target cluster. Surface, don't keep retrying /start.
-	if newStatus.State == psmdbv1.ClusterSyncStateFinalized &&
-		newStatus.StartedAt == nil &&
-		cr.Spec.Mode != psmdbv1.ClusterSyncModeFinalized {
-		newStatus.Error = "PCSM reports state=finalized inherited from a previous ClusterSync against this target; PCSM lifecycle state must be reset on the target cluster before a new ClusterSync can start"
-		r.recorder.Eventf(cr, corev1.EventTypeWarning, "PCSMTargetAlreadyFinalized",
-			"target cluster %q has PCSM state=finalized from a previous ClusterSync; reset PCSM state on the target before starting a new sync", cr.Spec.ClusterName)
-		return r.writeStatus(ctx, cr, *newStatus)
-	}
-
 	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
 	if action != actionNone {
 		if skipAction(action, newStatus.State) {
