@@ -2207,8 +2207,8 @@ function setup_aws_credentials() {
 	fi
 
 	local _raw_aws_id _raw_aws_secret
-	_raw_aws_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null)
-	_raw_aws_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null)
+	_raw_aws_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_aws_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null) || true
 	AWS_ACCESS_KEY_ID=$(echo "$_raw_aws_id" | base64 -d 2>/dev/null) || true
 	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_aws_secret" | base64 -d 2>/dev/null) || true
 
@@ -2239,8 +2239,8 @@ function setup_alibaba_cloud_s3_credentials() {
 	fi
 
 	local _raw_id _raw_secret
-	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null)
-	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null)
+	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null) || true
 	AWS_ACCESS_KEY_ID=$(echo "$_raw_id" | base64 -d 2>/dev/null) || true
 	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_secret" | base64 -d 2>/dev/null) || true
 
@@ -2270,8 +2270,8 @@ function setup_oci_s3_credentials() {
 	fi
 
 	local _raw_oci_id _raw_oci_secret
-	_raw_oci_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null)
-	_raw_oci_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null)
+	_raw_oci_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_oci_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null) || true
 	AWS_ACCESS_KEY_ID=$(echo "$_raw_oci_id" | base64 -d 2>/dev/null) || true
 	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_oci_secret" | base64 -d 2>/dev/null) || true
 
