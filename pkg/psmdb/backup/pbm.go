@@ -33,6 +33,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
@@ -56,6 +57,12 @@ const (
 	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
 	GCSClientEmailSecretKey          = "GCS_CLIENT_EMAIL"
 	GCSPrivateKeySecretKey           = "GCS_PRIVATE_KEY"
+	OCITenancySecretKey              = "OCI_TENANCY"
+	OCIUserSecretKey                 = "OCI_USER"
+	OCIFingerprintSecretKey          = "OCI_FINGERPRINT"
+	OCIPrivateKeySecretKey           = "OCI_PRIVATE_KEY"
+	OCIPrivateKeyPassphraseSecretKey = "OCI_PRIVATE_KEY_PASSPHRASE"
+	OCISSECustomerKeySecretKey       = "OCI_SSE_CUSTOMER_KEY"
 )
 
 type pbmC struct {
@@ -710,6 +717,93 @@ func GetPBMStorageOSSConfig(
 	return storageConf, nil
 }
 
+func GetPBMStorageOCIConfig(
+	ctx context.Context,
+	k8sclient client.Client,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	stg psmdbv1.BackupStorageSpec,
+) (config.StorageConf, error) {
+	storageConf := config.StorageConf{
+		Type: storage.OCI,
+		OCI: &oci.Config{
+			Region:    stg.OCI.Region,
+			Namespace: stg.OCI.Namespace,
+			Bucket:    stg.OCI.Bucket,
+			Prefix:    stg.OCI.Prefix,
+			Credentials: oci.Credentials{
+				Type: oci.AuthType(stg.OCI.Credentials.Type),
+			},
+			ServerSideEncryption: oci.SSE{
+				KmsKeyID: stg.OCI.ServerSideEncryption.KmsKeyID,
+			},
+			UploadPartSize:    stg.OCI.UploadPartSize,
+			MaxObjSizeGB:      stg.OCI.MaxObjSizeGB,
+			UploadConcurrency: stg.OCI.UploadConcurrency,
+		},
+	}
+
+	if stg.OCI.Credentials.Type == psmdbv1.AuthTypeUserPrincipal {
+		creds := &oci.UserPrincipalCredentials{}
+
+		ociSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.OCI.Credentials.SecretName)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "get OCI private key secret")
+		}
+
+		tenancy, ok := ociSecret.Data[OCITenancySecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.Errorf("%s not found in OCI secret", OCITenancySecretKey)
+		}
+		creds.Tenancy = storage.MaskedString(tenancy)
+
+		user, ok := ociSecret.Data[OCIUserSecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.Errorf("%s not found in OCI secret", OCIUserSecretKey)
+		}
+		creds.User = storage.MaskedString(user)
+
+		fingerprint, ok := ociSecret.Data[OCIFingerprintSecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.Errorf("%s not found in OCI secret", OCIFingerprintSecretKey)
+		}
+		creds.Fingerprint = storage.MaskedString(fingerprint)
+
+		privateKey, ok := ociSecret.Data[OCIPrivateKeySecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.Errorf("%s not found in OCI secret", OCIPrivateKeySecretKey)
+		}
+		creds.PrivateKey = storage.MaskedString(privateKey)
+
+		if passphrase, ok := ociSecret.Data[OCIPrivateKeyPassphraseSecretKey]; ok {
+			creds.PrivateKeyPassphrase = storage.MaskedString(passphrase)
+		}
+
+		storageConf.OCI.Credentials.UserPrincipal = creds
+	}
+
+	if stg.OCI.Retryer != nil {
+		storageConf.OCI.Retryer = &oci.Retryer{
+			MaxAttempts: stg.OCI.Retryer.MaxAttempts,
+			MaxBackoff:  stg.OCI.Retryer.MaxBackoff,
+		}
+	}
+
+	if stg.OCI.ServerSideEncryption.SecretName != "" {
+		sseSecret, err := getSecret(ctx, k8sclient, cluster.Namespace, stg.OCI.ServerSideEncryption.SecretName)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "get OCI SSE customer key secret")
+		}
+
+		customerKey, ok := sseSecret.Data[OCISSECustomerKeySecretKey]
+		if !ok {
+			return config.StorageConf{}, errors.Errorf("%s not found in OCI SSE customer key secret", OCISSECustomerKeySecretKey)
+		}
+		storageConf.OCI.ServerSideEncryption.SseCustomerKey = storage.MaskedString(customerKey)
+	}
+
+	return storageConf, nil
+}
+
 func GetPBMStorageConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -752,6 +846,9 @@ func GetPBMStorageConfig(
 		}
 		conf, err := GetPBMStorageOSSConfig(ctx, k8sclient, cluster, stg)
 		return conf, errors.Wrap(err, "get oss config")
+	case psmdbv1.BackupStorageOCI:
+		conf, err := GetPBMStorageOCIConfig(ctx, k8sclient, cluster, stg)
+		return conf, errors.Wrap(err, "get oci config")
 	case psmdbv1.BackupStorageFilesystem:
 		return config.StorageConf{
 			Type: storage.Filesystem,
@@ -909,6 +1006,16 @@ func (b *pbmC) ValidateBackupInMetadata(ctx context.Context, bcp *psmdbv1.Percon
 func (b *pbmC) ValidateBackupInStorage(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error {
 	if cfg.Storage.Type == storage.Filesystem {
 		return nil
+	}
+
+	if cfg.Storage.Type == storage.OCI && cfg.Storage.OCI != nil && cfg.Storage.OCI.Credentials.Type == oci.AuthTypeOkeWorkloadIdentity {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_VERSION", psmdb.OCIResourcePrincipalVersion); err != nil {
+			return errors.Wrap(err, "set OCI_RESOURCE_PRINCIPAL_VERSION")
+		}
+
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_REGION", cfg.Storage.OCI.Region); err != nil {
+			return errors.Wrap(err, "set OCI_RESOURCE_PRINCIPAL_REGION")
+		}
 	}
 
 	e := b.Logger().NewEvent(string(ctrl.CmdRestore), "", "", bson.Timestamp{})

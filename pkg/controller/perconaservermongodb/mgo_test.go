@@ -303,3 +303,181 @@ func TestCompareRoles(t *testing.T) {
 		})
 	}
 }
+
+func TestLiveMembers(t *testing.T) {
+	t.Parallel()
+
+	managed := func(id int, host, podName string) mongo.ConfigMember {
+		return mongo.ConfigMember{
+			ID:   id,
+			Host: host,
+			Tags: mongo.ReplsetTags{"podName": podName},
+		}
+	}
+
+	tests := []struct {
+		name              string
+		rsStatus          mongo.Status
+		cnf               mongo.RSConfig
+		rs                *api.ReplsetSpec
+		expectedLive      int
+		expectedRSMembers map[string]api.ReplsetMemberStatus
+	}{
+		{
+			name: "primary secondary secondary all live",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				managed(2, "rs0-2:27017", "rs0-2"),
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "rs0-2:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			}},
+			rs:           &api.ReplsetSpec{},
+			expectedLive: 3,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				"rs0-2": {Name: "rs0-2:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+		{
+			name: "non-live states are not counted",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				managed(2, "rs0-2:27017", "rs0-2"),
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateRecovering, StateStr: "RECOVERING"},
+				{Id: 2, Name: "rs0-2:27017", State: mongo.MemberStateDown, StateStr: "(not reachable/healthy)"},
+			}},
+			rs:           &api.ReplsetSpec{},
+			expectedLive: 1,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateRecovering, StateStr: "RECOVERING"},
+				"rs0-2": {Name: "rs0-2:27017", State: mongo.MemberStateDown, StateStr: "(not reachable/healthy)"},
+			},
+		},
+		{
+			name: "in-cluster arbiter is counted",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "rs0-arbiter-0:27017", ArbiterOnly: true},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "rs0-arbiter-0:27017", State: mongo.MemberStateArbiter, StateStr: "ARBITER"},
+			}},
+			rs:           &api.ReplsetSpec{},
+			expectedLive: 3,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+		{
+			name: "external member is skipped",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "external.example.com:27017", Tags: mongo.ReplsetTags{"external": "true"}},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "external.example.com:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			}},
+			rs:           &api.ReplsetSpec{},
+			expectedLive: 2,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+		{
+			name: "external arbiter is skipped",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "arbiter.example.com:27017", ArbiterOnly: true},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "arbiter.example.com:27017", State: mongo.MemberStateArbiter, StateStr: "ARBITER"},
+			}},
+			rs: &api.ReplsetSpec{
+				ExternalNodes: []*api.ExternalNode{
+					{Host: "arbiter.example.com", Port: 27017, ArbiterOnly: true},
+				},
+			},
+			expectedLive: 2,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+		{
+			name: "non-arbiter external node does not skip in-cluster arbiter",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "rs0-arbiter-0:27017", ArbiterOnly: true},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "rs0-arbiter-0:27017", State: mongo.MemberStateArbiter, StateStr: "ARBITER"},
+			}},
+			rs: &api.ReplsetSpec{
+				ExternalNodes: []*api.ExternalNode{
+					{Host: "data.example.com", Port: 27017, ArbiterOnly: false},
+				},
+			},
+			expectedLive: 3,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+		{
+			name: "arbiter external node with port in host",
+			cnf: mongo.RSConfig{Members: mongo.ConfigMembers{
+				managed(0, "rs0-0:27017", "rs0-0"),
+				managed(1, "rs0-1:27017", "rs0-1"),
+				{ID: 2, Host: "arbiter.example.com:27017", ArbiterOnly: true},
+			}},
+			rsStatus: mongo.Status{Members: []*mongo.Member{
+				{Id: 0, Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				{Id: 1, Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+				{Id: 2, Name: "arbiter.example.com:27017", State: mongo.MemberStateArbiter, StateStr: "ARBITER"},
+			}},
+			rs: &api.ReplsetSpec{
+				ExternalNodes: []*api.ExternalNode{
+					{Host: "arbiter.example.com:27017", Port: 27017, ArbiterOnly: true},
+				},
+			},
+			expectedLive: 2,
+			expectedRSMembers: map[string]api.ReplsetMemberStatus{
+				"rs0-0": {Name: "rs0-0:27017", State: mongo.MemberStatePrimary, StateStr: "PRIMARY"},
+				"rs0-1": {Name: "rs0-1:27017", State: mongo.MemberStateSecondary, StateStr: "SECONDARY"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rsMembers := make(map[string]api.ReplsetMemberStatus)
+			live := countLiveMembers(tt.rsStatus, tt.cnf, tt.rs, rsMembers)
+			assert.Equal(t, tt.expectedLive, live)
+			assert.Equal(t, tt.expectedRSMembers, rsMembers)
+		})
+	}
+}

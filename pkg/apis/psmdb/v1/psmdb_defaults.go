@@ -652,6 +652,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
+
+		if err := validateOCIStorages(cr); err != nil {
+			return errors.Wrap(err, "validate oci storages")
+		}
 	}
 
 	if !cr.Spec.Backup.Enabled {
@@ -697,6 +701,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	if !mcs.IsAvailable() && cr.Spec.MultiCluster.Enabled {
 		return errors.New("MCS is not available on this cluster")
 	}
+
+	cr.setSearchDefaults(platform)
 
 	return nil
 }
@@ -1283,4 +1289,51 @@ func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
 	if spec.GrowthStep.IsZero() {
 		spec.GrowthStep = resource.MustParse("2Gi")
 	}
+}
+
+func (cr *PerconaServerMongoDB) setSearchDefaults(platform version.Platform) {
+	if cr.Spec.Search == nil {
+		return
+	}
+
+	var userId *int64
+	if platform == version.PlatformKubernetes {
+		userId = new(int64(1001))
+	}
+
+	if cr.Spec.Search.ContainerSecurityContext == nil {
+		cr.Spec.Search.ContainerSecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot: new(true),
+			RunAsGroup:   userId,
+			RunAsUser:    userId,
+		}
+	}
+
+	if cr.Spec.Search.PodSecurityContext == nil {
+		cr.Spec.Search.PodSecurityContext = &corev1.PodSecurityContext{
+			RunAsUser:  userId,
+			RunAsGroup: userId,
+			FSGroup:    userId,
+		}
+	}
+}
+
+func validateOCIStorages(cr *PerconaServerMongoDB) error {
+	var okeWorkloadIdentityRegion string
+
+	for _, stg := range cr.Spec.Backup.Storages {
+		if stg.Type != BackupStorageOCI {
+			continue
+		}
+
+		if stg.OCI.Credentials.Type == AuthTypeOkeWorkloadIdentity {
+			if okeWorkloadIdentityRegion == "" {
+				okeWorkloadIdentityRegion = stg.OCI.Region
+			} else if okeWorkloadIdentityRegion != stg.OCI.Region {
+				return errors.New("all OCI storages using okeWorkloadIdentity need to be in the same region")
+			}
+		}
+	}
+
+	return nil
 }
