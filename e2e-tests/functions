@@ -29,11 +29,11 @@ detect_k8s_env() {
 	local provider="unknown"
 	if kubectl_bin api-resources | grep -q 'openshift.io' 2>/dev/null; then
 		provider="openshift"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^aws://'; then
 		provider="eks"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^gce://'; then
 		provider="gke"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
+	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^azure://'; then
 		provider="aks"
 	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
 		provider="kind"
@@ -3171,8 +3171,14 @@ deploy_volume_snapshot_class() {
 	k8s_env=$(detect_k8s_env)
 
 	case "$k8s_env" in
+		aks)
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-aks.yaml"
+			;;
+		eks|openshift)
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-ebs.yaml"
+			;;
 		gke)
-			snapshot_class_file="${conf_dir}/gke-volume-snapshot-class.yaml"
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-gke.yaml"
 			;;
 		*)
 			echo "Unsupported Kubernetes environment for volume snapshot class: $k8s_env" >&2
