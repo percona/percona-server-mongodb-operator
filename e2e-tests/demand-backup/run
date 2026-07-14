@@ -301,8 +301,19 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+	_orig_aws_key_id="${AWS_ACCESS_KEY_ID:-}"
+	_orig_aws_secret="${AWS_SECRET_ACCESS_KEY:-}"
+	_orig_aws_default_region="${AWS_DEFAULT_REGION:-}"
+	_orig_aws_region="${AWS_REGION:-}"
 	setup_aws_credentials
 	check_backup_existence_aws ${backup_dest_aws} '/rs0/myApp.test.gz'
+	# Restore original AWS credentials so kubectl EKS auth is not broken
+	# by S3 credential setup that overwrites AWS_* env vars.
+	AWS_ACCESS_KEY_ID="$_orig_aws_key_id"
+	AWS_SECRET_ACCESS_KEY="$_orig_aws_secret"
+	AWS_DEFAULT_REGION="$_orig_aws_default_region"
+	AWS_REGION="$_orig_aws_region"
+	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-s3'
