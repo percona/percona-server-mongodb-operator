@@ -2192,11 +2192,6 @@ check_backup_deletion() {
 function setup_aws_credentials() {
 	local secret_name="aws-s3-secret"
 
-	if [[ -n $AWS_ACCESS_KEY_ID ]] && [[ -n $AWS_SECRET_ACCESS_KEY ]]; then
-		echo "AWS credentials already set in environment"
-		return 0
-	fi
-
 	echo "Setting up AWS credentials from secret: $secret_name"
 
 	# Disable tracing for the entire credential section
@@ -3080,34 +3075,65 @@ check_backup_in_storage() {
 	local protocol=${5:-"http"}
 
 	local endpoint
-	local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 	backup_dest=$(get_backup_dest "$backup" | $sed 's|https://engk8soperators.blob.core.windows.net/||')
 	case ${storage_type} in
 		s3)
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			endpoint="s3.amazonaws.com"
 			setup_aws_credentials
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
+			# Restore original AWS credentials so kubectl EKS auth is not broken
+			# by S3 credential setup that overwrites AWS_* env vars.
+			AWS_ACCESS_KEY_ID="$_orig_key_id"
+			AWS_SECRET_ACCESS_KEY="$_orig_secret"
+			AWS_DEFAULT_REGION="$_orig_default_region"
+			AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		alibaba-s3)
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_s3_field "$backup" "region")
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
+			# Restore original AWS credentials so kubectl EKS auth is not broken
+			# by Alibaba credential setup that overwrites AWS_* env vars.
+			AWS_ACCESS_KEY_ID="$_orig_key_id"
+			AWS_SECRET_ACCESS_KEY="$_orig_secret"
+			AWS_DEFAULT_REGION="$_orig_default_region"
+			AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oss)
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_oss_field "$backup" "region")
 			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
+			# Restore original AWS credentials so kubectl EKS auth is not broken
+			# by Alibaba credential setup that overwrites AWS_* env vars.
+			AWS_ACCESS_KEY_ID="$_orig_key_id"
+			AWS_SECRET_ACCESS_KEY="$_orig_secret"
+			AWS_DEFAULT_REGION="$_orig_default_region"
+			AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oci)
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			local oci_namespace region
 			oci_namespace=$(get_backup_storage_oci_field "$backup" "namespace")
 			region=$(get_backup_storage_oci_field "$backup" "region")
 			endpoint="https://${oci_namespace}.compat.objectstorage.${region}.oraclecloud.com"
 			setup_oci_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oci"
+			# Restore original AWS credentials so kubectl EKS auth is not broken
+			# by OCI credential setup that overwrites AWS_* env vars.
+			AWS_ACCESS_KEY_ID="$_orig_key_id"
+			AWS_SECRET_ACCESS_KEY="$_orig_secret"
+			AWS_DEFAULT_REGION="$_orig_default_region"
+			AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
@@ -3136,14 +3162,6 @@ check_backup_in_storage() {
 			exit 1
 			;;
 	esac
-
-	# Restore original AWS credentials so kubectl EKS auth is not broken
-	# by Alibaba/OCI credential setup that overwrites AWS_* env vars.
-	AWS_ACCESS_KEY_ID="$_orig_key_id"
-	AWS_SECRET_ACCESS_KEY="$_orig_secret"
-	AWS_DEFAULT_REGION="$_orig_default_region"
-	AWS_REGION="$_orig_aws_region"
-	export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 }
 
 function wait_all_pvc_resize() {
