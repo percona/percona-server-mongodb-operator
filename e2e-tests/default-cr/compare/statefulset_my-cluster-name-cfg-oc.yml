@@ -130,9 +130,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: my-cluster-name-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -290,11 +287,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: my-cluster-name-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: my-cluster-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}
