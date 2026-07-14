@@ -1265,7 +1265,7 @@ run_mongo() {
 
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | mongo $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
 
 run_mongosh() {
@@ -1278,7 +1278,7 @@ run_mongosh() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client-mongosh -o 'jsonpath={.items[].metadata.name}')
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false\&replicaSet=$replica_set $mongo_flag"
 }
 
 run_mongo_tls() {
@@ -1297,7 +1297,7 @@ run_mongo_tls() {
 
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | mongo $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -1317,7 +1317,7 @@ run_mongosh_tls() {
 
 	[[ $uri == *cfg* ]] && replica_set='cfg' || replica_set='rs0'
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | mongosh $driver://$uri$suffix/admin?replicaSet=$replica_set --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 
 }
 
@@ -1338,7 +1338,7 @@ run_mongos() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag"
 }
 
 run_mongosh_mongos() {
@@ -1358,7 +1358,7 @@ run_mongosh_mongos() {
 
 	# mongos is not a replica set, so no replicaSet query parameter here.
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | mongosh --quiet $driver://$uri$suffix/admin?ssl=false $mongo_flag"
 }
 
 run_mongos_tls() {
@@ -1378,7 +1378,7 @@ run_mongos_tls() {
 	local client_container=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
 
 	kubectl_bin exec ${client_container} -- \
-		bash -c "printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
+		bash -c "export HOME=/tmp; printf '$command\n' | ${mongo_bin} $driver://$uri$suffix/admin --tls --tlsCAFile /etc/mongodb-ssl/ca.crt  --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidHostnames $mongo_flag"
 }
 
 run_script_mongosh_mongos() {
@@ -1393,7 +1393,7 @@ run_script_mongosh_mongos() {
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "mongosh $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "export HOME=/tmp; mongosh $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 run_script_mongos() {
@@ -1409,7 +1409,7 @@ run_script_mongos() {
 	name="$(basename $script)"
 	kubectl_bin cp ${script} $namespace/${client_container}:/tmp
 	kubectl_bin exec ${client_container} -- \
-		bash -c "${mongo_bin} $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
+		bash -c "export HOME=/tmp; ${mongo_bin} $driver://$uri$suffix/admin $mongo_flag /tmp/${name}"
 }
 
 get_pmm_service_ip() {

@@ -18,7 +18,7 @@ mongosh_on_mongos() {
 	local pass="$3"
 	local script="$4"
 
-	kubectl_bin exec "${cluster}-mongos-0" -c mongos -- \
+	kubectl_bin exec "${cluster}-mongos-0" -c mongos -- env HOME=/data/db \
 		mongosh "mongodb://${user}:${pass}@%2Ftmp%2Fmongodb-27017.sock/admin" --quiet --eval "${script}"
 }
 
