@@ -58,7 +58,7 @@ if [[ $GKE != 1 ]]; then
 fi
 
 uid=1001
-if [[ "${OPENSHIFT}" ]]; then
+if [[ -n "$OPENSHIFT" ]]; then
 	uid=1001210000
 fi
 
@@ -70,7 +70,7 @@ kubectl_bin apply \
 	-f "${conf_dir}/secrets.yml" \
 	-f "${conf_dir}/client.yml"
 
-if [[ "${OPENSHIFT}" ]]; then
+if [[ -n "$OPENSHIFT" ]]; then
 	log "creating custom security context constraints to allow NFS volumes"
 	kubectl_bin apply -f ${test_dir}/conf/rbac-oc.yml
 fi
@@ -78,7 +78,7 @@ fi
 log "creating PSMDB cluster ${cluster}"
 if [[ $GKE != 1 ]]; then
 	cluster_yaml=${test_dir}/conf/${cluster}.yml
-	if [[ "${OPENSHIFT}" ]]; then
+	if [[ -n "$OPENSHIFT" ]]; then
 		cluster_yaml=${test_dir}/conf/${cluster}-oc.yml
 	fi
 

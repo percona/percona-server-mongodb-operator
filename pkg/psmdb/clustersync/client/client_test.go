@@ -155,28 +155,51 @@ func TestClient_Verbs(t *testing.T) {
 
 func TestClient_Status(t *testing.T) {
 	tests := map[string]struct {
-		stdout  []byte
+		stub    stubExec
 		want    Status
 		wantErr string
 	}{
 		"replicating decodes all fields": {
-			stdout: []byte(`{"state":"replicating","lagTimeSeconds":3,"info":"ok"}`),
-			want:   Status{State: "replicating", LagTimeSeconds: 3, Info: "ok"},
+			stub: stubExec{stdout: []byte(`{"state":"replicating","lagTimeSeconds":3,"info":"ok"}`)},
+			want: Status{State: "replicating", LagTimeSeconds: 3, Info: "ok"},
 		},
 		"failed surfaces error field": {
-			stdout: []byte(`{"state":"failed","error":"source unreachable"}`),
-			want:   Status{State: "failed", Error: "source unreachable"},
+			stub: stubExec{stdout: []byte(`{"state":"failed","error":"source unreachable"}`)},
+			want: Status{State: "failed", Error: "source unreachable"},
+		},
+		"failed with non-zero exit still returns parsed status": {
+			stub: stubExec{
+				stdout: []byte(`{"state":"failed","error":"connection refused"}`),
+				stderr: []byte("Error: connection refused"),
+				err:    stderrors.New("exit status 1"),
+			},
+			want: Status{State: "failed", Error: "connection refused"},
+		},
+		"non-zero exit with empty stdout returns exec error": {
+			stub: stubExec{
+				stderr: []byte("boom"),
+				err:    stderrors.New("exit status 1"),
+			},
+			wantErr: "exec pcsm status: boom: exit status 1",
+		},
+		"non-zero exit with non-JSON stdout returns exec error": {
+			stub: stubExec{
+				stdout: []byte("panic: runtime error"),
+				stderr: []byte("boom"),
+				err:    stderrors.New("exit status 2"),
+			},
+			wantErr: "exec pcsm status: boom: exit status 2",
 		},
 		"bad JSON wraps decode error": {
-			stdout:  []byte(`not-json`),
+			stub:    stubExec{stdout: []byte(`not-json`)},
 			wantErr: "decode pcsm status output",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			stub := &stubExec{stdout: tc.stdout}
-			got, err := newClient(stub, readyPod()).Status(t.Context())
+			stub := tc.stub
+			got, err := newClient(&stub, readyPod()).Status(t.Context())
 
 			if tc.wantErr != "" {
 				require.Error(t, err)

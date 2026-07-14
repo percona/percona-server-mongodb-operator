@@ -34,7 +34,7 @@ spec:
         storageClassName: gp2-resizable
         resources:
           requests:
-            storage: 1G
+            storage: 1Gi
     size: 3
   secrets:
     users: some-users

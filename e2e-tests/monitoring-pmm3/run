@@ -18,13 +18,13 @@ get_node_id_from_pmm() {
 does_node_id_exists() {
 	local -a nodeList=("$@")
 	local -a nodeList_from_pmm=()
-	local admin_pass admin_pass_encoded
+	local admin_pass endpoint encoded_admin_userinfo
 	admin_pass=$(kubectl_bin get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
-	# The password may contain URL-reserved characters, percent-encode it so it
-	# can be safely embedded in the --server-url userinfo.
-	admin_pass_encoded=$(jq -rn --arg x "$admin_pass" '$x|@uri')
+	endpoint=$(get_service_endpoint monitoring-service)
+	encoded_admin_userinfo=$(urlencode_userinfo "admin:${admin_pass}")
+
 	for node_id in "${nodeList[@]}"; do
-		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://admin:${admin_pass_encoded}@$(get_pmm_service_ip monitoring-service)/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
+		nodeList_from_pmm+=($(kubectl_bin exec -n "${namespace}" monitoring-server-0 -- pmm-admin --server-url=https://${encoded_admin_userinfo}@${endpoint}/ --server-insecure-tls inventory list nodes --node-type=container | grep $node_id | awk '{print $4}'))
 	done
 
 	echo "${nodeList_from_pmm[@]}"
@@ -40,7 +40,7 @@ verify_custom_cluster_name() {
 	endpoint=$(get_service_endpoint monitoring-service)
 
 	local response
-	response=$(curl -s -k \
+	response=$(execute_curl -s -k \
 		-H "Authorization: Bearer ${token}" \
 		"https://$endpoint/v1/inventory/services?service_type=SERVICE_TYPE_MONGODB_SERVICE")
 
@@ -143,7 +143,7 @@ deploy_pmm3_server() {
 	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm repo update
 
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n "$OPENSHIFT" ]]; then
 		oc create sa pmm-server
 		oc adm policy add-scc-to-user privileged -z pmm-server
 		if [[ $OPERATOR_NS ]]; then
@@ -178,99 +178,6 @@ deploy_pmm3_server() {
 		--force
 }
 
-get_qan_values() {
-	local service_type=$1
-	local environment=$2
-	local token=$3
-	local start
-	local end
-	local endpoint
-	start=$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')
-	end=$($date -u '+%Y-%m-%dT%H:%M:%S%:z')
-	endpoint=$(get_service_endpoint monitoring-service)
-
-	cat >payload.json <<EOF
-{
-  "period_start_from": "$start",
-  "period_start_to": "$end",
-  "group_by": "queryid",
-  "labels": [
-    {
-      "key": "service_type",
-      "value": [
-        "$service_type"
-      ]
-    },
-    {
-      "key": "environment",
-      "value": [
-        "$environment"
-      ]
-    }
-  ],
-  "columns": [
-    "load",
-    "num_queries",
-    "query_time"
-  ],
-  "order_by": "-load",
-  "offset": 0,
-  "limit": 10,
-  "main_metric": "load",
-  "search": ""
-}
-EOF
-
-	local response
-
-	local wait_count=30
-	local retry=0
-	until [[ "$(curl -s -k -H "Authorization: Bearer ${token}" -XPOST -d @payload.json "https://$endpoint/v1/qan/metrics:getReport" \
-		| jq '.rows[].fingerprint')" ]]; do
-		sleep 2
-		local start=$($date -u "+%s" -d "-1 minute")
-		local end=$($date -u "+%s")
-		let retry+=1
-		if [[ $retry -ge $wait_count ]]; then
-			exit 1
-		fi
-	done
-	rm -f payload.json
-}
-
-get_metric_values() {
-	local metric=$1
-	local instance=$2
-	local token=$3
-	local start=$($date -u "+%s" -d "-1 minute")
-	local end=$($date -u "+%s")
-	local endpoint=$(get_service_endpoint monitoring-service)
-
-	if [ -z "$metric" ]; then
-		echo "Error: metric is required"
-		exit 1
-	fi
-
-	if [ -z "$token" ]; then
-		echo "Error: token is required"
-		exit 1
-	fi
-
-	local wait_count=30
-	local retry=0
-	until [[ $(curl -s -k -H "Authorization: Bearer ${token}" "https://$endpoint/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
-		| jq '.data.result[0].values[][1]' \
-		| grep '^"[0-9]') ]]; do
-		sleep 2
-		local start=$($date -u "+%s" -d "-1 minute")
-		local end=$($date -u "+%s")
-		let retry+=1
-		if [[ $retry -ge $wait_count ]]; then
-			exit 1
-		fi
-	done
-}
-
 get_pmm_server_token() {
 	local key_name=$1
 
@@ -286,11 +193,14 @@ get_pmm_server_token() {
 		return 1
 	fi
 
+	local endpoint encoded_user_credentials
+	endpoint=$(get_service_endpoint monitoring-service)
+	encoded_user_credentials=$(urlencode_userinfo "admin:${ADMIN_PASSWORD}")
+
 	local create_response create_status_code create_json_response
-	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+	create_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
 		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts" \
 		-w "\n%{http_code}")
 
 	create_status_code=$(echo "$create_response" | tail -n1)
@@ -311,10 +221,9 @@ get_pmm_server_token() {
 	fi
 
 	local token_response token_status_code token_json_response
-	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+	token_response=$(execute_curl --insecure -s -X POST -H 'Content-Type: application/json' \
 		-d "{\"name\":\"${key_name}\"}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	token_status_code=$(echo "$token_response" | tail -n1)
@@ -344,11 +253,13 @@ delete_pmm_server_token() {
 		return 1
 	fi
 
-	local user_credentials="admin:${ADMIN_PASSWORD}"
+	local endpoint encoded_user_credentials
+	endpoint=$(get_service_endpoint monitoring-service)
+	encoded_user_credentials=$(urlencode_userinfo "admin:${ADMIN_PASSWORD}")
 
 	local service_accounts_response service_accounts_status
-	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/search" \
+	service_accounts_response=$(execute_curl --insecure -s -X GET \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/search" \
 		-w "\n%{http_code}")
 
 	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
@@ -361,7 +272,7 @@ delete_pmm_server_token() {
 	fi
 
 	local service_account_id
-	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+	service_account_id=$(echo -n "$service_accounts_json" | jq -r --arg key_name "$key_name" '.serviceAccounts[] | select(.name == $key_name).id' | head -n1)
 
 	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
 		echo "Service account '${key_name}' not found."
@@ -369,8 +280,8 @@ delete_pmm_server_token() {
 	fi
 
 	local tokens_response tokens_status tokens_json
-	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+	tokens_response=$(execute_curl --insecure -s -X GET \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	tokens_status=$(echo "$tokens_response" | tail -n1)
@@ -383,7 +294,7 @@ delete_pmm_server_token() {
 	fi
 
 	local token_id
-	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
+	token_id=$(echo -n "$tokens_json" | jq -r --arg key_name "$key_name" '.[] | select(.name == $key_name).id' | head -n1)
 
 	if [[ -z $token_id || $token_id == "null" ]]; then
 		echo "Token for service account '${key_name}' not found."
@@ -391,8 +302,8 @@ delete_pmm_server_token() {
 	fi
 
 	local delete_response delete_status
-	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
-		"https://$(get_service_endpoint monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
+	delete_response=$(execute_curl --insecure -s -X DELETE \
+		"https://${encoded_user_credentials}@${endpoint}/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
 		-w "\n%{http_code}")
 
 	delete_status=$(echo "$delete_response" | tail -n1)
@@ -427,10 +338,6 @@ kubectl_bin apply \
 	-f $conf_dir/secrets.yml \
 	-f $test_dir/conf/secrets.yml
 
-yq ".spec.template.spec.volumes[0].secret.secretName=\"$cluster-ssl\"" \
-	"$conf_dir/client_with_tls.yml" | kubectl_bin apply -f -
-sleep 90
-
 desc "create first PSMDB cluster $cluster"
 custom_cluster_name="super-custom"
 yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' "$test_dir/conf/$cluster-rs0.yml" \
@@ -443,6 +350,9 @@ yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' "$test_di
 	| kubectl_bin apply -f -
 
 wait_for_running $cluster-rs0 3
+
+# Create client after the cluster cause the TLS secret is created during the cluster creation
+apply_client_with_tls "$cluster"
 
 desc 'check if pmm-client container is not enabled'
 compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
@@ -503,23 +413,23 @@ for pod in $pods; do
 done
 
 desc 'check mongod metrics'
-get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 $NEW_TOKEN
-get_metric_values mongodb_connections $namespace-$cluster-rs0-1 $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$cluster-rs0-1 $NEW_TOKEN bearer
+get_metric_values mongodb_connections $namespace-$cluster-rs0-1 $NEW_TOKEN bearer
 
 desc 'check mongo config metrics'
-get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 $NEW_TOKEN
-get_metric_values mongodb_connections $namespace-$cluster-cfg-1 $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$cluster-cfg-1 $NEW_TOKEN bearer
+get_metric_values mongodb_connections $namespace-$cluster-cfg-1 $NEW_TOKEN bearer
 
 desc 'check mongos metrics'
 MONGOS_POD_NAME=$(kubectl get pod -l app.kubernetes.io/component=mongos -o jsonpath="{.items[0].metadata.name}")
-get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME $NEW_TOKEN
+get_metric_values node_boot_time_seconds $namespace-$MONGOS_POD_NAME $NEW_TOKEN bearer
 
 #wait for QAN
 sleep 90
 
 desc 'check QAN data'
-get_qan_values mongodb "dev-mongod" $NEW_TOKEN
-get_qan_values mongodb "dev-mongos" $NEW_TOKEN
+get_qan_values mongodb "dev-mongod" $NEW_TOKEN bearer
+get_qan_values mongodb "dev-mongos" $NEW_TOKEN bearer
 
 desc 'verify that the custom cluster name is configured'
 verify_custom_cluster_name $custom_cluster_name $NEW_TOKEN ${namespace}-${cluster}-mongos-0 ${namespace}-${cluster}-cfg-0 ${namespace}-${cluster}-rs0-0
@@ -544,7 +454,7 @@ wait_for_running $cluster-rs0 3
 sleep 90
 
 desc 'check mongolog QAN data'
-get_qan_values mongodb "dev-mongod-mongolog" $NEW_TOKEN
+get_qan_values mongodb "dev-mongod-mongolog" $NEW_TOKEN bearer
 
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/pause","value":true}]'
 wait_for_delete "pod/${cluster}-mongos-0"
@@ -565,9 +475,9 @@ for instance in "${does_node_id_exists_in_pmm[@]}"; do
 	fi
 done
 
-if [[ -n ${OPENSHIFT} ]]; then
+if [[ -n "$OPENSHIFT" ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server
-	if [ -n "$OPERATOR_NS" ]; then
+	if [[ -n "$OPERATOR_NS" ]]; then
 		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
 	else
 		oc delete rolebinding pmm-psmdb-operator-namespace-only
