@@ -56,7 +56,16 @@ func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, replset *api.Replse
 	if cr.Spec.Sharding.Enabled {
 		return false
 	}
-	return replset.Arbiter.Enabled || cr.Spec.DefaultRWConcern != nil
+
+	externalArbiterFound := false
+	for _, ext := range replset.ExternalNodes {
+		if ext.ArbiterOnly {
+			externalArbiterFound = true
+			break
+		}
+	}
+
+	return replset.Arbiter.Enabled || externalArbiterFound || cr.Spec.DefaultRWConcern != nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
