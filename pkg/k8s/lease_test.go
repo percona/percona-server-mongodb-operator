@@ -29,8 +29,7 @@ func TestAcquireLease(t *testing.T) {
 		lease, err := k8s.AcquireLease(ctx, cl, name, namespace, holder, nil)
 		require.NoError(t, err)
 
-		freshLease := new(coordv1.Lease)
-		err = cl.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, freshLease)
+		freshLease, err := k8s.GetLease(ctx, cl, name, namespace)
 		require.NoError(t, err)
 		require.NotNil(t, freshLease.Spec.AcquireTime)
 		assert.Equal(t, lease.Spec.HolderIdentity, freshLease.Spec.HolderIdentity)

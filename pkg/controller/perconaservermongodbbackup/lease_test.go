@@ -38,7 +38,7 @@ func TestCheckClusterSyncLease(t *testing.T) {
 		},
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
-			HolderIdentity: stringPtr("sync-uid"),
+			HolderIdentity: new("sync-uid"),
 		},
 	}
 
@@ -183,7 +183,7 @@ func TestTryAcquireLease(t *testing.T) {
 					},
 					Spec: coordv1.LeaseSpec{
 						AcquireTime:    &metav1.MicroTime{Time: time.Now()},
-						HolderIdentity: stringPtr(holder),
+						HolderIdentity: new(holder),
 					},
 				})
 			}
@@ -191,7 +191,7 @@ func TestTryAcquireLease(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(backupScheme(t)).WithRuntimeObjects(objs...).Build()
 			r := &ReconcilePerconaServerMongoDBBackup{client: cl}
 
-			acquired, err := r.tryAcquireLease(context.Background(), newBackup.DeepCopy(), cluster)
+			acquired, err := r.tryAcquireLease(t.Context(), newBackup.DeepCopy(), cluster)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantAcquired, acquired)
 
