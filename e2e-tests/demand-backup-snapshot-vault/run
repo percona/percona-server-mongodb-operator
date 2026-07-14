@@ -8,8 +8,6 @@ set_debug
 
 vault_name="vault-service"
 
-VOLUME_SNAPSHOT_CLASS=$(deploy_volume_snapshot_class)
-
 create_tls_secret() {
 	local name=$1
 	local service_name=$2
@@ -140,10 +138,10 @@ vault_append() {
 
 run_snapshot_backup() {
 	local backup_name=$1
+	local snapshot_class=$(get_volume_snapshot_class)
 
 	log "running snapshot backup $backup_name"
-
-	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${VOLUME_SNAPSHOT_CLASS}'"' \
+	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${snapshot_class}'"' \
 		"${test_dir}/conf/backup.yml" \
 		| kubectl_bin apply -f -
 }
@@ -171,6 +169,7 @@ cluster="some-name"
 create_infra "${namespace}"
 deploy_minio
 apply_s3_storage_secrets
+deploy_volume_snapshot_class
 
 desc 'Setting up Vault'
 setup_vault
