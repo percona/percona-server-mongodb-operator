@@ -3082,23 +3082,32 @@ check_backup_in_storage() {
 		alibaba-s3)
 			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_s3_field "$backup" "region")
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oss)
 			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_oss_field "$backup" "region")
 			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oci)
 			local oci_namespace region
 			oci_namespace=$(get_backup_storage_oci_field "$backup" "namespace")
 			region=$(get_backup_storage_oci_field "$backup" "region")
 			endpoint="https://${oci_namespace}.compat.objectstorage.${region}.oraclecloud.com"
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_oci_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oci"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
