@@ -28,7 +28,7 @@ func GetLease(ctx context.Context, c client.Client, name, namespace string) (*co
 	return lease, nil
 }
 
-func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder string, checkStale ...IsHolderStaleFunc) (*coordv1.Lease, error) {
+func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder string, checkStale IsHolderStaleFunc) (*coordv1.Lease, error) {
 	lease := &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -36,20 +36,15 @@ func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder 
 		},
 	}
 
-	var staleCheck IsHolderStaleFunc
-	if len(checkStale) > 0 {
-		staleCheck = checkStale[0]
-	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, c, lease, func() error {
 		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
 			if *lease.Spec.HolderIdentity == holder {
 				return nil
 			}
-			if staleCheck == nil {
+			if checkStale == nil {
 				return ErrLeaseAlreadyHeld
 			}
-			stale, err := staleCheck(ctx, lease)
+			stale, err := checkStale(ctx, lease)
 			if err != nil {
 				return errors.Wrap(err, "check if lease holder is stale")
 			}

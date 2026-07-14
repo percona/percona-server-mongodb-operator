@@ -310,7 +310,7 @@ func restoreInFlight(s psmdbv1.RestoreState) bool {
 func (r *ReconcilePerconaServerMongoDBClusterSync) acquireClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (string, error) {
 	lease, err := k8s.AcquireLease(ctx, r.client,
 		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
-		naming.ClusterSyncHolderId(cr))
+		naming.ClusterSyncHolderId(cr), nil)
 	if err != nil {
 		if stderrors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 			leaseName := naming.ClusterSyncLeaseName(cr.Spec.ClusterName)
