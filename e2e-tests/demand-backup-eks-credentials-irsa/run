@@ -8,7 +8,7 @@ set_debug
 # EKS cluster should be run without the policy AmazonS3FullAccess
 # This policy makes the test false passed.
 
-if [ $EKS -ne 1 ]; then
+if [[ "$EKS" -ne 1 ]]; then
 	echo "Skip the test. We run it for EKS only "
 	exit 0
 fi

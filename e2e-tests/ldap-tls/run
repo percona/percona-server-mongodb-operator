@@ -7,7 +7,7 @@ test_dir=$(realpath "$(dirname "$0")")
 set_debug
 
 deploy_openldap() {
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n "$OPENSHIFT" ]]; then
 		yq 'select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.drop[0]="ALL" |
 			select(.kind=="Deployment").spec.template.spec.containers[0].securityContext.capabilities.add[0]="NET_BIND_SERVICE" |
 			select(.metadata.name == "ldap-ca").spec.dnsNames[0]="openldap.'$namespace'.svc.cluster.local"' "$test_dir/conf/openldap.yaml" \
