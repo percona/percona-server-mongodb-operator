@@ -123,6 +123,7 @@ release: manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOGCOLLECTOR)#}" \
+		-e "/^#  search:/,/^    image:/{s#image: .*#image: $(IMAGE_SEARCH)#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM3_CLIENT)#}" deploy/cr.yaml
 	$(SED) -i \
 		-e "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" \
@@ -147,6 +148,7 @@ after-release: update-version manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-backup#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mongodb-operator:main#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
+		-e "/^#  search:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongot#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" deploy/cr.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" \
