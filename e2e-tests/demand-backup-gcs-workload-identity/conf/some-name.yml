@@ -18,6 +18,9 @@ spec:
         gcs:
           bucket: operator-testing
           prefix: psmdb-demand-backup-gcs-wi
+          # pre-migration state: key-based credentials (HMAC); the test removes
+          # this field to migrate the storage to Workload Identity
+          credentialsSecret: gcp-cs-secret
   replsets:
   - name: rs0
     affinity:
