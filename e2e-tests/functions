@@ -2174,12 +2174,15 @@ setup_alibaba_cloud_s3_credentials() {
 		set +x
 	fi
 
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null | base64 -d 2>/dev/null)
+	local _raw_id _raw_secret
+	_raw_id=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_secret=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null) || true
+	AWS_ACCESS_KEY_ID=$(echo -n "$_raw_id" | base64 -d 2>/dev/null) || true
+	AWS_SECRET_ACCESS_KEY=$(echo -n "$_raw_secret" | base64 -d 2>/dev/null) || true
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
-		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret"
+		echo "Failed to extract Alibaba Cloud S3-compatible credentials from secret '$secret_name'"
 		return 1
 	fi
 
@@ -2187,10 +2190,8 @@ setup_alibaba_cloud_s3_credentials() {
 	export AWS_SECRET_ACCESS_KEY
 	export AWS_DEFAULT_REGION="$region"
 	export AWS_REGION="$region"
-
 	[[ $trace_was_on -eq 1 ]] && set -x
-
-	echo "Alibaba Cloud S3-compatible credentials configured successfully"
+	return 0
 }
 
 setup_oci_s3_credentials() {
@@ -2206,12 +2207,15 @@ setup_oci_s3_credentials() {
 		set +x
 	fi
 
-	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
-	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+	local _raw_id _raw_secret
+	_raw_id=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_secret=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null) || true
+	AWS_ACCESS_KEY_ID=$(echo -n "$_raw_id" | base64 -d 2>/dev/null) || true
+	AWS_SECRET_ACCESS_KEY=$(echo -n "$_raw_secret" | base64 -d 2>/dev/null) || true
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
-		echo "Failed to extract OCI S3-compatible credentials from secret"
+		echo "Failed to extract OCI S3-compatible credentials from secret '$secret_name'"
 		return 1
 	fi
 
@@ -3032,23 +3036,32 @@ check_backup_in_storage() {
 		alibaba-s3)
 			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_s3_field "$backup" "region")
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oss)
 			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_oss_field "$backup" "region")
 			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		oci)
 			local oci_namespace region
 			oci_namespace=$(get_backup_storage_oci_field "$backup" "namespace")
 			region=$(get_backup_storage_oci_field "$backup" "region")
 			endpoint="https://${oci_namespace}.compat.objectstorage.${region}.oraclecloud.com"
+			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
 			setup_oci_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oci"
+			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
+			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
