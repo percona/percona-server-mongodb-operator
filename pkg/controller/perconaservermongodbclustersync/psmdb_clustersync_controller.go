@@ -310,8 +310,20 @@ func restoreInFlight(s psmdbv1.RestoreState) bool {
 func (r *ReconcilePerconaServerMongoDBClusterSync) acquireClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (string, error) {
 	lease, err := k8s.AcquireLease(ctx, r.client,
 		naming.ClusterSyncLeaseName(cr.Spec.ClusterName), cr.Namespace,
-		naming.ClusterSyncHolderId(cr))
+		naming.ClusterSyncHolderId(cr), nil)
 	if err != nil {
+		if stderrors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+			leaseName := naming.ClusterSyncLeaseName(cr.Spec.ClusterName)
+			lease, err := k8s.GetLease(ctx, r.client, leaseName, cr.Namespace)
+			if err != nil {
+				return "", err
+			}
+			holder := "<unknown>"
+			if lease.Spec.HolderIdentity != nil {
+				holder = *lease.Spec.HolderIdentity
+			}
+			return holder, nil
+		}
 		return "", err
 	}
 	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != naming.ClusterSyncHolderId(cr) {
@@ -414,18 +426,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		log.Error(statusErr, "pcsm status failed")
 	} else {
 		applyObservedStatus(newStatus, observed)
-	}
-
-	// StartedAt==nil + observed finalized means the state belongs to a
-	// previous sync on the same target — PCSM persists lifecycle state
-	// on the target cluster. Surface, don't keep retrying /start.
-	if newStatus.State == psmdbv1.ClusterSyncStateFinalized &&
-		newStatus.StartedAt == nil &&
-		cr.Spec.Mode != psmdbv1.ClusterSyncModeFinalized {
-		newStatus.Error = "PCSM reports state=finalized inherited from a previous ClusterSync against this target; PCSM lifecycle state must be reset on the target cluster before a new ClusterSync can start"
-		r.recorder.Eventf(cr, corev1.EventTypeWarning, "PCSMTargetAlreadyFinalized",
-			"target cluster %q has PCSM state=finalized from a previous ClusterSync; reset PCSM state on the target before starting a new sync", cr.Spec.ClusterName)
-		return r.writeStatus(ctx, cr, *newStatus)
 	}
 
 	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
