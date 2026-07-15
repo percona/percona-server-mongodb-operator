@@ -41,17 +41,17 @@ detect_k8s_env() {
 	local provider="unknown"
 	if kubectl api-resources | grep -q 'openshift.io' 2>/dev/null; then
 		provider="openshift"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^aws://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^aws://'; then
 		provider="eks"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^gce://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^gce://'; then
 		provider="gke"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^azure://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^azure://'; then
 		provider="aks"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^kind://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^kind://'; then
 		provider="kind"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^minikube://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^minikube://'; then
 		provider="minikube"
-	elif kubectl_bin get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^rke2://'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi '^rke2://'; then
 		provider="rancher"
 	fi
 
