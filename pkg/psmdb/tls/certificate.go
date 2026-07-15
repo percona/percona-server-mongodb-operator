@@ -28,12 +28,20 @@ func CertificateCA(cr *api.PerconaServerMongoDB) Certificate {
 	}
 }
 
-func (c *caCert) Name() string {
+func (c *caCert) namePrefix() string {
 	prefix := c.cr.Name
-	if c.cr.CompareVersion("1.23.0") >= 0 && c.cr.Spec.TLS != nil && c.cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
+	if tls := c.cr.Spec.TLS; c.cr.CompareVersion("1.23.0") >= 0 && tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
 		prefix = c.cr.Name + "-" + c.cr.Namespace
+
+		if isSharedClusterIssuer(c.cr) {
+			prefix = tls.IssuerConf.Name
+		}
 	}
-	return prefix + "-ca-cert"
+	return prefix
+}
+
+func (c *caCert) Name() string {
+	return c.namePrefix() + "-ca-cert"
 }
 
 func (c *caCert) Namespace() string {
@@ -55,6 +63,9 @@ func (c *caCert) Object() *cm.Certificate {
 	if cr.CompareVersion("1.17.0") < 0 {
 		labels = nil
 	}
+	if isSharedClusterIssuer(cr) {
+		delete(labels, naming.LabelKubernetesInstance)
+	}
 
 	issuerKind := cm.IssuerKind
 	issuerGroup := ""
@@ -70,7 +81,7 @@ func (c *caCert) Object() *cm.Certificate {
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
-			CommonName: cr.Name + "-ca",
+			CommonName: c.namePrefix() + "-ca",
 			IsCA:       true,
 			IssuerRef: cmmeta.ObjectReference{
 				Name:  caIssuerName(cr),
