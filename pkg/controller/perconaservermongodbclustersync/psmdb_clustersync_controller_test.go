@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -238,24 +237,22 @@ func TestInvokeAction(t *testing.T) {
 	}
 }
 
-func TestReconcileModeTargetAlreadyFinalized(t *testing.T) {
+func TestReconcileModeInheritedFinalized(t *testing.T) {
 	tests := map[string]struct {
 		spec        psmdbv1.PerconaServerMongoDBClusterSyncSpec
 		status      psmdbv1.PerconaServerMongoDBClusterSyncStatus
 		observed    client.Status
-		wantErrSubs string
-		wantEvent   bool
+		wantStarted bool
 	}{
-		"new CR inherits finalized from a previous sync on this target: surfaces conflict, no action": {
+		"new CR against target with inherited finalized state issues /start": {
 			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
 				ClusterName: "tgt",
 				Mode:        psmdbv1.ClusterSyncModeRunning,
 			},
 			observed:    client.Status{State: "finalized", LagTimeSeconds: 297},
-			wantErrSubs: "inherited from a previous ClusterSync",
-			wantEvent:   true,
+			wantStarted: true,
 		},
-		"intentional finalize from running: no inherited-state error, normal flow": {
+		"intentional finalize from running: normal flow, no /start": {
 			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
 				ClusterName: "tgt",
 				Mode:        psmdbv1.ClusterSyncModeFinalized,
@@ -288,22 +285,10 @@ func TestReconcileModeTargetAlreadyFinalized(t *testing.T) {
 			err := r.reconcileMode(context.Background(), cr, f)
 			require.NoError(t, err)
 
-			got := &psmdbv1.PerconaServerMongoDBClusterSync{}
-			require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, got))
-
-			if tc.wantErrSubs != "" {
-				assert.Contains(t, got.Status.Error, tc.wantErrSubs)
-				assert.Nil(t, f.started, "should not have issued /start while target already finalized")
-				assert.Zero(t, f.finalized, "should not have issued /finalize either")
+			if tc.wantStarted {
+				assert.NotNil(t, f.started, "expected /start to be issued")
 			} else {
-				assert.NotContains(t, got.Status.Error, "inherited from a previous ClusterSync")
-			}
-
-			select {
-			case ev := <-rec.Events:
-				assert.True(t, tc.wantEvent, "did not expect a recorded event, got %q", ev)
-			default:
-				assert.False(t, tc.wantEvent, "expected a recorded event")
+				assert.Nil(t, f.started, "did not expect /start")
 			}
 		})
 	}

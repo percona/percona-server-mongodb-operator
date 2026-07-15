@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
@@ -464,7 +465,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 			err = nil
 			return rr, nil
 		}
-		err = errors.Errorf(`TLS secrets handler: "%v". Please create your TLS secret `+api.SSLSecretName(cr)+` manually or setup cert-manager correctly`, err)
+		errString := `TLS secrets handler: "%v". Please create your TLS secret ` + api.SSLSecretName(cr) + ` manually or setup cert-manager correctly`
+		if cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
+			errString += ". Make sure the operator has permissions for ClusterIssuer resources, or create the ClusterIssuer manually."
+		}
+		err = errors.Errorf(errString, err)
 		return reconcile.Result{}, err
 	}
 
@@ -1635,7 +1640,8 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 	}
 
 	sfsList := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &sfsList,
+	if err := r.client.List(
+		ctx, &sfsList,
 		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{

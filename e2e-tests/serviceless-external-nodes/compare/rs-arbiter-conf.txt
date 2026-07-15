@@ -1,0 +1,3 @@
+"mydb-rs0-arbiter-0.mydb-rs0.external.svc.cluster.local:27017"
+true
+{ }

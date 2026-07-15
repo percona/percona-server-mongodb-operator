@@ -10,39 +10,54 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 var (
-	ErrNotTheHolder = errors.New("not the holder")
+	ErrNotTheHolder     = errors.New("not the holder")
+	ErrLeaseAlreadyHeld = errors.New("lease held by another holder")
 )
 
-func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder string) (*coordv1.Lease, error) {
+type IsHolderStaleFunc func(ctx context.Context, lease *coordv1.Lease) (bool, error)
+
+func GetLease(ctx context.Context, c client.Client, name, namespace string) (*coordv1.Lease, error) {
 	lease := new(coordv1.Lease)
-
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, lease); err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return lease, errors.Wrap(err, "get lease")
-		}
+		return nil, err
+	}
+	return lease, nil
+}
 
-		lease := &coordv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
-			Spec: coordv1.LeaseSpec{
-				AcquireTime:    &metav1.MicroTime{Time: time.Now()},
-				HolderIdentity: &holder,
-			},
-		}
-
-		if err := c.Create(ctx, lease); err != nil {
-			return lease, errors.Wrap(err, "create lease")
-		}
-
-		return lease, nil
+func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder string, checkStale IsHolderStaleFunc) (*coordv1.Lease, error) {
+	lease := &coordv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
 	}
 
-	return lease, nil
+	_, err := controllerutil.CreateOrUpdate(ctx, c, lease, func() error {
+		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
+			if *lease.Spec.HolderIdentity == holder {
+				return nil
+			}
+			if checkStale == nil {
+				return ErrLeaseAlreadyHeld
+			}
+			stale, err := checkStale(ctx, lease)
+			if err != nil {
+				return errors.Wrap(err, "check if lease holder is stale")
+			}
+			if !stale {
+				return ErrLeaseAlreadyHeld
+			}
+		}
+
+		lease.Spec.HolderIdentity = &holder
+		lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
+		return nil
+	})
+	return lease, err
 }
 
 func IsLeaseActive(ctx context.Context, c client.Client, name, namespace string) (bool, error) {
@@ -60,9 +75,10 @@ func IsLeaseActive(ctx context.Context, c client.Client, name, namespace string)
 }
 
 func ReleaseLease(ctx context.Context, c client.Client, name, namespace, holder string) error {
-	lease := new(coordv1.Lease)
-
-	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, lease); err != nil {
+	lease, err := GetLease(ctx, c, name, namespace)
+	if k8serrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
 		return errors.Wrap(err, "get lease")
 	}
 
@@ -71,7 +87,15 @@ func ReleaseLease(ctx context.Context, c client.Client, name, namespace, holder 
 		return ErrNotTheHolder
 	}
 
-	if err := c.Delete(ctx, lease); err != nil {
+	if err := c.Delete(ctx, lease, &client.DeleteOptions{
+		Preconditions: &metav1.Preconditions{
+			UID:             &lease.UID,
+			ResourceVersion: &lease.ResourceVersion,
+		},
+	}); err != nil {
+		if k8serrors.IsNotFound(err) || k8serrors.IsConflict(err) {
+			return nil
+		}
 		return errors.Wrap(err, "delete lease")
 	}
 
