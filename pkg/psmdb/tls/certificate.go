@@ -83,7 +83,7 @@ func (c *caCert) Object() *cm.Certificate {
 			SecretName: c.SecretName(),
 			CommonName: c.namePrefix() + "-ca",
 			IsCA:       true,
-			IssuerRef: cmmeta.ObjectReference{
+			IssuerRef: cmmeta.IssuerReference{
 				Name:  caIssuerName(cr),
 				Kind:  issuerKind,
 				Group: issuerGroup,
