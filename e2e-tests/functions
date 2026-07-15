@@ -2161,10 +2161,10 @@ setup_alibaba_cloud_s3_credentials() {
 	fi
 
 	local _raw_id _raw_secret
-	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null) || true
-	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null) || true
-	AWS_ACCESS_KEY_ID=$(echo "$_raw_id" | base64 -d 2>/dev/null) || true
-	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_secret" | base64 -d 2>/dev/null) || true
+	_raw_id=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_secret=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.ALIBABA_ACCESS_KEY_SECRET}' 2>/dev/null) || true
+	AWS_ACCESS_KEY_ID=$(echo -n "$_raw_id" | base64 -d 2>/dev/null) || true
+	AWS_SECRET_ACCESS_KEY=$(echo -n "$_raw_secret" | base64 -d 2>/dev/null) || true
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
@@ -2194,10 +2194,10 @@ setup_oci_s3_credentials() {
 	fi
 
 	local _raw_id _raw_secret
-	_raw_id=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null) || true
-	_raw_secret=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null) || true
-	AWS_ACCESS_KEY_ID=$(echo "$_raw_id" | base64 -d 2>/dev/null) || true
-	AWS_SECRET_ACCESS_KEY=$(echo "$_raw_secret" | base64 -d 2>/dev/null) || true
+	_raw_id=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_ACCESS_KEY_ID}' 2>/dev/null) || true
+	_raw_secret=$(kubectl_bin get secret "$secret_name" -n "$namespace" -o jsonpath='{.data.OCI_SECRET_ACCESS_KEY}' 2>/dev/null) || true
+	AWS_ACCESS_KEY_ID=$(echo -n "$_raw_id" | base64 -d 2>/dev/null) || true
+	AWS_SECRET_ACCESS_KEY=$(echo -n "$_raw_secret" | base64 -d 2>/dev/null) || true
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
 		[[ $trace_was_on -eq 1 ]] && set -x
