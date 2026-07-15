@@ -129,6 +129,7 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 	tests := map[string]struct {
 		shardingEnabled bool
 		arbiterEnabled  bool
+		externalNodes   []*api.ExternalNode
 		rwConcern       *api.DefaultRWConcern
 		want            bool
 	}{
@@ -148,9 +149,31 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 			rwConcern:      &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			want:           true,
 		},
+		"external arbiter, no custom concern": {
+			externalNodes: []*api.ExternalNode{{ArbiterOnly: true}},
+			want:          true,
+		},
+		"external node without arbiter, no custom concern": {
+			externalNodes: []*api.ExternalNode{{ArbiterOnly: false}},
+			want:          false,
+		},
+		"external arbiter among data-bearing external nodes": {
+			externalNodes: []*api.ExternalNode{{ArbiterOnly: false}, {ArbiterOnly: true}},
+			want:          true,
+		},
+		"external arbiter, custom concern": {
+			externalNodes: []*api.ExternalNode{{ArbiterOnly: true}},
+			rwConcern:     &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
+			want:          true,
+		},
 		"sharded, PSA": {
 			shardingEnabled: true,
 			arbiterEnabled:  true,
+			want:            false,
+		},
+		"sharded, external arbiter": {
+			shardingEnabled: true,
+			externalNodes:   []*api.ExternalNode{{ArbiterOnly: true}},
 			want:            false,
 		},
 		"sharded, custom concern": {
@@ -169,7 +192,8 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 				},
 			}
 			rs := &api.ReplsetSpec{
-				Arbiter: api.Arbiter{Enabled: tc.arbiterEnabled},
+				Arbiter:       api.Arbiter{Enabled: tc.arbiterEnabled},
+				ExternalNodes: tc.externalNodes,
 			}
 			assert.Equal(t, tc.want, shouldSetDefaultRWConcern(cr, rs))
 		})
