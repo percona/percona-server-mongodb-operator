@@ -271,6 +271,7 @@ wait_backup "initial-backup" "ready"
 desc "apply ClusterSync CR with mode=running"
 cat "${test_dir}/conf/clustersync.yml" \
 	| $sed -e "s|CLUSTERSYNC_IMAGE|${IMAGE_CLUSTERSYNC}|g" -e "s|NAME_SPACE|${namespace}|g" \
+	| add_arch_to_clustersync - \
 	| kubectl_bin apply -f -
 
 desc 'wait for PCSM deployment to become available'

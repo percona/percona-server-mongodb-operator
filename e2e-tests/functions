@@ -211,6 +211,20 @@ add_arch_to_psmdb() {
 	' "$@"
 }
 
+add_arch_to_clustersync() {
+	if ! arch_scheduling_enabled; then
+		cat "$@"
+		return
+	fi
+
+	ARCH="${ARCH}" yq eval '
+		(select(.kind == "PerconaServerMongoDBClusterSync")) |= (
+			.spec.nodeSelector."kubernetes.io/arch" = strenv(ARCH) |
+			.spec.tolerations = ((.spec.tolerations // []) + [{"key": "kubernetes.io/arch", "operator": "Equal", "value": strenv(ARCH), "effect": "NoSchedule"}] | unique_by(.key + "|" + .operator + "|" + (.value // "") + "|" + .effect))
+		)
+	' "$@"
+}
+
 arch_run_overrides() {
 	printf '{"spec":{"nodeSelector":{"kubernetes.io/arch":"%s"},"tolerations":[{"key":"kubernetes.io/arch","operator":"Equal","value":"%s","effect":"NoSchedule"}]}}' "${ARCH}" "${ARCH}"
 }
