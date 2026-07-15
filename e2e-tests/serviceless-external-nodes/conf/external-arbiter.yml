@@ -1,0 +1,70 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: mydb
+spec:
+  updateStrategy: RollingUpdate
+  tls:
+    mode: allowTLS
+  unmanaged: true
+  unsafeFlags:
+    replsetSize: true
+    mongosSize: true
+  clusterServiceDNSMode: "Internal"
+  image:
+  imagePullPolicy: Always
+  secrets:
+    users: mydb-custom-users
+    ssl: mydb-custom-ssl
+    sslInternal: mydb-custom-ssl-internal
+    encryptionKey: mydb-custom-encryption-key
+    keyFile: mydb-custom-mongodb-keyfile
+  replsets:
+  - name: rs0
+    size: 0
+    affinity:
+      antiAffinityTopologyKey: none
+    podDisruptionBudget:
+      maxUnavailable: 1
+    expose:
+      enabled: false
+      type: ClusterIp
+    resources:
+      limits:
+        cpu: "300m"
+        memory: "0.5G"
+      requests:
+        cpu: "300m"
+        memory: "0.5G"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3Gi
+    nonvoting:
+      enabled: false
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "1G"
+        requests:
+          cpu: "300m"
+          memory: "0.5G"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+    arbiter:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+
+  sharding:
+    enabled: false

@@ -2,5 +2,5 @@
 "PRIMARY"
 "mydb-rs0-0.mydb-rs0.external.svc.cluster.local:27017"
 "SECONDARY"
-"mydb-rs0-arbiter-0.mydb-rs0.external.svc.cluster.local:27017"
+"mydb-rs0-arbiter-0.mydb-rs0.external-arbiter.svc.cluster.local:27017"
 "ARBITER"
