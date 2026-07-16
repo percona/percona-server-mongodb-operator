@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
-  name: my-target-cluster-name
+  name: my-cluster-name
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 #    - percona.com/delete-psmdb-pvc
