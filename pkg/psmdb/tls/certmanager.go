@@ -84,10 +84,24 @@ func issuerName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + suffix
 }
 
+func isSharedClusterIssuer(cr *api.PerconaServerMongoDB) bool {
+	tls := cr.Spec.TLS
+	return cr.CompareVersion("1.23.0") >= 0 &&
+		tls != nil &&
+		tls.IssuerConf.Kind == cm.ClusterIssuerKind &&
+		tls.IssuerConf.Name != ""
+}
+
 func caIssuerName(cr *api.PerconaServerMongoDB) string {
 	const suffix = "-psmdb-ca-issuer"
-	if tls := cr.Spec.TLS; cr.CompareVersion("1.23.0") >= 0 && tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
-		return cr.Name + "-" + cr.Namespace + suffix
+	tls := cr.Spec.TLS
+	if cr.CompareVersion("1.23.0") >= 0 {
+		switch {
+		case isSharedClusterIssuer(cr):
+			return tls.IssuerConf.Name + suffix
+		case tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
+			return cr.Name + "-" + cr.Namespace + suffix
+		}
 	}
 	return cr.Name + suffix
 }
@@ -132,6 +146,9 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		}
 		issuer.SetNamespace(cr.Namespace)
 	case cm.ClusterIssuerKind:
+		if isSharedClusterIssuer(cr) {
+			delete(meta.Labels, naming.LabelKubernetesInstance)
+		}
 		issuer = &cm.ClusterIssuer{
 			ObjectMeta: meta,
 			Spec:       spec,
@@ -170,6 +187,9 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 		}
 		issuer.SetNamespace(cr.Namespace)
 	case cm.ClusterIssuerKind:
+		if isSharedClusterIssuer(cr) {
+			delete(meta.Labels, naming.LabelKubernetesInstance)
+		}
 		issuer = &cm.ClusterIssuer{
 			ObjectMeta: meta,
 			Spec:       spec,

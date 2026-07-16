@@ -37,6 +37,12 @@ func TestCertificate(t *testing.T) {
 					expected: "psmdb-mock-psmdb-ca-cert",
 				},
 				{
+					name:     "shared ClusterIssuer",
+					version:  version.Version(),
+					tls:      &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "shared", Kind: cm.ClusterIssuerKind}},
+					expected: "shared-ca-cert",
+				},
+				{
 					name:     "Issuer",
 					version:  version.Version(),
 					tls:      &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Kind: cm.IssuerKind}},
