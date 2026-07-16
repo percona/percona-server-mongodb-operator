@@ -21,7 +21,7 @@ spec:
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
   crVersion: 1.23.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image: percona/percona-server-mongodb:8.0.26-11
   imagePullPolicy: Always
 #  tls:
 #    mode: preferTLS
@@ -35,7 +35,7 @@ spec:
 #      group: cert-manager.io
 #  imagePullSecrets:
 #    - name: private-registry-credentials
-#  initImage: perconalab/percona-server-mongodb-operator:main
+#  initImage: percona/percona-server-mongodb-operator:1.23.0
 #  initContainerSecurityContext: {}
 #  unsafeFlags:
 #    tls: false
@@ -81,7 +81,7 @@ spec:
 #    sse: my-cluster-name-sse
   pmm:
     enabled: false
-    image: perconalab/pmm-client:3-dev-latest
+    image: percona/pmm-client:3.8.1
     serverHost: monitoring-service
 #    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
@@ -810,7 +810,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mongodb-operator:main-backup
+    image: percona/percona-backup-mongodb:2.15.0
 #    startingDeadlineSeconds: 300
 #    hookScript:
 #      configMapRef:
@@ -1029,7 +1029,7 @@ spec:
 #        volumeSnapshotClass: YOUR-VOLUME-SNAPSHOT-CLASS
   logcollector:
     enabled: true
-    image: perconalab/fluentbit:main-logcollector
+    image: percona/fluentbit:5.0.9-1
 #    configuration: |
 #      [SERVICE]
 #          Flush        1
@@ -1089,7 +1089,7 @@ spec:
 #        periodSeconds: 10
 #  search:
 #    enabled: true
-#    image: perconalab/percona-server-mongodb-operator:main-mongot
+#    image: 
 #    size: 1
 #    storage:
 #      persistentVolumeClaim:
