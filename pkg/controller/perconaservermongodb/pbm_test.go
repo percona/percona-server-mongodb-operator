@@ -628,4 +628,38 @@ func TestHashPBMConfiguration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, hash1, hash2)
 	})
+
+	// storage.MaskedString marshals any non-empty value to "***", so rotating
+	// credentials between two non-empty values produces an identical hash.
+	// This is why isResyncNeeded must compare credentials directly.
+	t.Run("rotating non-empty credentials does not change hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket:      "operator-testing",
+						Region:      "us-east-1",
+						EndpointURL: "https://s3.amazonaws.com",
+						Prefix:      "prefix",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_KEY",
+			SecretAccessKey: "NEW_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.Equal(t, hash1, hash2)
+	})
 }
