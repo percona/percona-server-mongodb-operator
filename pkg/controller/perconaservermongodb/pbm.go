@@ -21,6 +21,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
+	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -215,7 +216,50 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	return !currentCfg.Storage.IsSameStorage(&newCfg.Storage)
+	if !currentCfg.Storage.IsSameStorage(&newCfg.Storage) {
+		return true
+	}
+	return !sameStorageCredentials(&currentCfg.Storage, &newCfg.Storage)
+}
+
+func sameStorageCredentials(a, b *config.StorageConf) bool {
+	if a.Type != b.Type {
+		return false
+	}
+	switch a.Type {
+	case storage.S3:
+		if a.S3 == nil || b.S3 == nil {
+			return a.S3 == b.S3
+		}
+		return reflect.DeepEqual(a.S3.Credentials, b.S3.Credentials)
+	case storage.Minio:
+		if a.Minio == nil || b.Minio == nil {
+			return a.Minio == b.Minio
+		}
+		return reflect.DeepEqual(a.Minio.Credentials, b.Minio.Credentials)
+	case storage.Azure:
+		if a.Azure == nil || b.Azure == nil {
+			return a.Azure == b.Azure
+		}
+		return reflect.DeepEqual(a.Azure.Credentials, b.Azure.Credentials)
+	case storage.GCS:
+		if a.GCS == nil || b.GCS == nil {
+			return a.GCS == b.GCS
+		}
+		return reflect.DeepEqual(a.GCS.Credentials, b.GCS.Credentials)
+	case storage.OSS:
+		if a.OSS == nil || b.OSS == nil {
+			return a.OSS == b.OSS
+		}
+		return reflect.DeepEqual(a.OSS.Credentials, b.OSS.Credentials)
+	case storage.OCI:
+		if a.OCI == nil || b.OCI == nil {
+			return a.OCI == b.OCI
+		}
+		return reflect.DeepEqual(a.OCI.Credentials, b.OCI.Credentials)
+	default:
+		return true
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
@@ -231,21 +275,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
 	}
 
 	// if PiTR is enabled user can configure only one storage
-	var storage psmdbv1.BackupStorageSpec
-	for name, stg := range cr.Spec.Backup.Storages {
-		storage = stg
+	var stg psmdbv1.BackupStorageSpec
+	for name, s := range cr.Spec.Backup.Storages {
+		stg = s
 		log.Info("Configuring PBM with storage", "storage", name)
 		break
 	}
 
 	var secretName string
-	switch storage.Type {
+	switch stg.Type {
 	case psmdbv1.BackupStorageS3:
-		secretName = storage.S3.CredentialsSecret
+		secretName = stg.S3.CredentialsSecret
 	case psmdbv1.BackupStorageAzure:
-		secretName = storage.Azure.CredentialsSecret
+		secretName = stg.Azure.CredentialsSecret
 	case psmdbv1.BackupStorageOSS:
-		secretName = storage.OSS.CredentialsSecret
+		secretName = stg.OSS.CredentialsSecret
 	}
 
 	if secretName != "" {
@@ -260,7 +304,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
 		}
 	}
 
-	err := pbm.GetNSetConfigLegacy(ctx, r.client, cr, storage)
+	err := pbm.GetNSetConfigLegacy(ctx, r.client, cr, stg)
 	if err != nil {
 		return errors.Wrap(err, "set PBM config")
 	}

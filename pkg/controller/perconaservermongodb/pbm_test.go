@@ -9,6 +9,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	"github.com/stretchr/testify/require"
 
@@ -420,6 +422,170 @@ func TestIsResyncNeeded(t *testing.T) {
 				},
 			},
 			expected: false,
+		},
+		{
+			name: "s3: access key rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.S3,
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.S3,
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "NEW_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "minio: secret key rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Credentials: mio.Credentials{
+							AccessKeyID:     "KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Minio,
+					Minio: &mio.Config{
+						Bucket: "operator-testing",
+						Credentials: mio.Credentials{
+							AccessKeyID:     "KEY",
+							SecretAccessKey: "NEW_SECRET",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "azure: key rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Azure,
+					Azure: &azure.Config{
+						Account:     "operator-account",
+						Container:   "operator-testing",
+						Credentials: azure.Credentials{Key: "OLD_KEY"},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.Azure,
+					Azure: &azure.Config{
+						Account:     "operator-account",
+						Container:   "operator-testing",
+						Credentials: azure.Credentials{Key: "NEW_KEY"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "gcs: hmac secret rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing",
+						Credentials: gcs.Credentials{
+							HMACAccessKey: "KEY",
+							HMACSecret:    "OLD_SECRET",
+						},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.GCS,
+					GCS: &gcs.Config{
+						Bucket: "operator-testing",
+						Credentials: gcs.Credentials{
+							HMACAccessKey: "KEY",
+							HMACSecret:    "NEW_SECRET",
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "oss: access key rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.OSS,
+					OSS: &oss.Config{
+						Bucket:      "operator-testing",
+						Credentials: oss.Credentials{AccessKeyID: "OLD_KEY", AccessKeySecret: "S"},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.OSS,
+					OSS: &oss.Config{
+						Bucket:      "operator-testing",
+						Credentials: oss.Credentials{AccessKeyID: "NEW_KEY", AccessKeySecret: "S"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "oci: user principal private key rotated",
+			currentCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.OCI,
+					OCI: &oci.Config{
+						Bucket: "operator-testing",
+						Credentials: oci.Credentials{
+							UserPrincipal: &oci.UserPrincipalCredentials{
+								Tenancy: "t", User: "u", Fingerprint: "f",
+								PrivateKey: "OLD_KEY",
+							},
+						},
+					},
+				},
+			},
+			newCfg: &config.Config{
+				Storage: config.StorageConf{
+					Type: storage.OCI,
+					OCI: &oci.Config{
+						Bucket: "operator-testing",
+						Credentials: oci.Credentials{
+							UserPrincipal: &oci.UserPrincipalCredentials{
+								Tenancy: "t", User: "u", Fingerprint: "f",
+								PrivateKey: "NEW_KEY",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
 		},
 	}
 
