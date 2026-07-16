@@ -10,7 +10,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def run_bash_test(test_name: str) -> None:
-    """Run bash script with live output and capture for error reporting"""
+    """Run bash script with stdout/stderr inherited from the pytest process."""
     script_path = Path(__file__).parent.parent / test_name / "run"
 
     if not script_path.exists():
@@ -21,21 +21,10 @@ def run_bash_test(test_name: str) -> None:
 
     try:
         os.chdir(script_dir)
-        process = subprocess.Popen(
-            ["bash", "run"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-        )
+        result = subprocess.run(["bash", "run"])
 
-        output = []
-        if process.stdout is not None:
-            for line in iter(process.stdout.readline, ""):
-                print(line, end="")
-                output.append(line)
-
-        process.wait()
-
-        if process.returncode != 0:
-            error_msg = f"Test {test_name} failed with exit code {process.returncode}\n\nOUTPUT:\n{''.join(output)}"
-            pytest.fail(error_msg)
+        if result.returncode != 0:
+            pytest.fail(f"Test {test_name} failed with exit code {result.returncode}")
 
     finally:
         os.chdir(original_cwd)

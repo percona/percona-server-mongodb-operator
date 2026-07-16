@@ -1,6 +1,6 @@
 import groovy.transform.Field
 
-@Field def region = 'us-central1-a'
+@Field def region = 'us-central1'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
 
@@ -21,8 +21,8 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
                 echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
                 gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
-                    --preemptible \
-                    --zone=${region} \
+                    --spot \
+                    --region=${region} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
                     --num-nodes=3 \
@@ -30,7 +30,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --disk-size=30 \
                     --network=jenkins-vpc \
                     --subnetwork=jenkins-${CLUSTER_SUFFIX} \
-                    --cluster-ipv4-cidr=/21 \
+                    --cluster-ipv4-cidr=/20 \
                     --enable-ip-alias \
                     --no-enable-autoupgrade \
                     --monitoring=NONE \
@@ -43,7 +43,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --region ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --region ${region} --quiet || true
                 exit 1
             fi
         """
@@ -65,7 +65,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --region ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         """
    }
 }
@@ -89,7 +89,7 @@ void deleteOldClusters(String FILTER) {
                             break
                         fi
                     done
-                    gcloud container clusters delete --async --zone ${region} --quiet \$GKE_CLUSTER || true
+                    gcloud container clusters delete --async --region ${region} --quiet \$GKE_CLUSTER || true
                 done
             fi
         """
@@ -299,7 +299,7 @@ void runTest(Integer TEST_ID) {
         echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
         tests[TEST_ID]["result"] = "failure"
 
-        timeout(time: 90, unit: 'MINUTES') {
+        timeout(time: 100, unit: 'MINUTES') {
             sh """
                 export DEBUG_TESTS=1
                 export SKIP_DELETE=0

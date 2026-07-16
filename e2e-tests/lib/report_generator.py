@@ -72,14 +72,15 @@ def pytest_html_results_table_header(cells: MutableSequence[str]) -> None:
 
 
 def pytest_html_results_table_row(report: Any, cells: MutableSequence[str]) -> None:
-    """Populate Class column in HTML report."""
+    """Populate Class column with the e2e-tests subdir (test name) for both python and bash."""
     nodeid = report.nodeid
     if "test_bash_wrapper[" in nodeid:
-        # Extract test name from: test_pytest_wrapper.py::test_bash_wrapper[test-name]
+        # test_pytest_wrapper.py::test_bash_wrapper[test-name]
         class_name = nodeid.split("[")[1].rstrip("]")
     else:
-        parts = nodeid.split("::")
-        class_name = parts[1].replace("Test", "") if len(parts) > 2 else "-"
+        # e2e-tests/<test-name>/test_*.py::Class::method -> <test-name>
+        path_parts = nodeid.split("::")[0].split("/")
+        class_name = path_parts[-2] if len(path_parts) >= 2 else "-"
     cells.insert(1, f"<td>{class_name}</td>")
 
 
