@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+from pathlib import Path
 
 import yaml
 from deepdiff import DeepDiff
@@ -115,17 +116,42 @@ def filter_yaml(
     return filtered_yaml
 
 
-def compare_kubectl(test_dir: str, resource: str, namespace: str, postfix: str = "") -> None:
+def _expected_compare_path(test_dir: str, resource: str, postfix: str = "") -> Path:
+    expected_path = Path(test_dir) / "compare" / f"{resource.replace('/', '_')}{postfix}.yml"
+    if not os.environ.get("OPENSHIFT"):
+        return expected_path
+
+    oc_path = expected_path.with_name(f"{expected_path.stem}-oc{expected_path.suffix}")
+    if not oc_path.exists():
+        return expected_path
+
+    oc4_path = expected_path.with_name(f"{expected_path.stem}-4-oc{expected_path.suffix}")
+    if os.environ.get("OPENSHIFT") == "4" and oc4_path.exists():
+        return oc4_path
+
+    return oc_path
+
+
+def compare_kubectl(
+    test_dir: str,
+    resource: str,
+    namespace: str,
+    postfix: str = "",
+    skip_generation_check: bool = False,
+) -> None:
     """Compare kubectl resource with expected output using yq filtering"""
-    expected_result = f"{test_dir}/compare/{resource.replace('/', '_')}{postfix}.yml"
+    expected_result = _expected_compare_path(test_dir, resource, postfix)
 
     try:
         actual_yaml = kubectl_bin("get", resource, "-o", "yaml")
-        with open(expected_result, "r") as f:
-            expected_yaml = f.read()
+        expected_yaml = expected_result.read_text()
 
-        filtered_actual = filter_yaml(actual_yaml, namespace)
-        filtered_expected = filter_yaml(expected_yaml, namespace)
+        filtered_actual = filter_yaml(actual_yaml, namespace, resource, skip_generation_check)
+        filtered_expected = filter_yaml(expected_yaml, namespace, resource, skip_generation_check)
+
+        if os.environ.get("UPDATE_COMPARE_FILES") == "1":
+            expected_result.write_text(filtered_actual)
+            return
 
         actual_data = yaml.safe_load(filtered_actual)
         expected_data = yaml.safe_load(filtered_expected)

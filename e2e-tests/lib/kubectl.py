@@ -6,16 +6,23 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def kubectl_bin(*args: str, check: bool = True, input_data: str = "") -> str:
+def kubectl_bin(
+    *args: str, check: bool = True, input_data: str = "", return_stderr: bool = False
+) -> str:
     """Execute kubectl command"""
     cmd = ["kubectl"] + list(args)
     logger.debug(" ".join(map(str, cmd)))
-    result = subprocess.run(cmd, check=check, capture_output=True, text=True, input=input_data)
+    result = subprocess.run(cmd, capture_output=True, text=True, input=input_data)
 
     if result.stderr:
         logger.warning(f"kubectl error: {result.stderr}")
 
-    if result.returncode != 0 and not result.stdout:
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, cmd, output=result.stdout, stderr=result.stderr
+        )
+
+    if result.returncode != 0 and return_stderr and not result.stdout:
         return result.stderr
 
     return result.stdout
@@ -49,6 +56,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
             "-o",
             "jsonpath={.status.phase} (Ready={.status.conditions[?(@.type=='Ready')].status})",
             check=False,
+            return_stderr=True,
         ).strip()
         or "not found"
     )
@@ -68,7 +76,7 @@ def wait_for_running(
         else:
             wait_pod(f"{cluster_name}-{i}")
 
-    for pod_type, path_prefix in [("nv", "non_voting"), ("hidden", "hidden")]:
+    for pod_type, path_prefix in [("nv", "nonvoting"), ("hidden", "hidden")]:
         if get_jsonpath(cluster_name, rs_name, f"{path_prefix}.enabled") == "true":
             size = get_jsonpath(cluster_name, rs_name, f"{path_prefix}.size")
             if size:
@@ -99,6 +107,7 @@ def wait_for_running(
                 "-o",
                 "jsonpath={.status.state}",
                 check=False,
+                return_stderr=True,
             ).strip("'")
             or "unknown"
         )
@@ -114,6 +123,22 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     except subprocess.CalledProcessError as e:
         raise TimeoutError(f"Resource {resource} was not deleted within {timeout}s") from e
     logger.info(f"{resource} was deleted")
+
+
+def wait_cluster_consistency(cluster_name: str, wait_time: int = 32) -> None:
+    """Wait for the PSMDB cluster status to settle back to ready."""
+    time.sleep(7)
+    logger.info(f"Waiting for cluster {cluster_name} consistency")
+    for _ in range(wait_time):
+        state = kubectl_bin(
+            "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
+        ).strip("'")
+        if state == "ready":
+            logger.info(f"Cluster {cluster_name} is consistent")
+            return
+        time.sleep(5)
+
+    raise TimeoutError(f"Cluster {cluster_name} did not become ready within {wait_time} retries")
 
 
 def get_jsonpath(cluster_name: str, rs_name: str, path: str) -> str:

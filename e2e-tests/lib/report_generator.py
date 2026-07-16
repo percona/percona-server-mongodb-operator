@@ -1,3 +1,4 @@
+import html
 import os
 import re
 from typing import Any, List, MutableSequence
@@ -91,10 +92,10 @@ LOG_LEVEL_PATTERN = re.compile(r"\b(" + "|".join(LOG_LEVEL_COLORS.keys()) + r")\
 
 
 def highlight_log_levels(logs: str) -> str:
-    """Add basic color highlighting for common log levels"""
+    """HTML-escape logs and add basic color highlighting for common log levels"""
     return LOG_LEVEL_PATTERN.sub(
         lambda m: f'<span style="color: {LOG_LEVEL_COLORS[m.group(1)]};">{m.group(1)}</span>',
-        logs,
+        html.escape(logs),
     )
 
 
@@ -135,7 +136,9 @@ def generate_report(namespace: str) -> List[Any]:
         extras.html(
             create_collapsible_section("Operator Pod Logs", highlight_log_levels(summary["logs"]))
         ),
-        extras.html(create_collapsible_section("Kubernetes Resources", summary["resources"])),
+        extras.html(
+            create_collapsible_section("Kubernetes Resources", html.escape(summary["resources"]))
+        ),
         extras.html(
             create_collapsible_section(
                 "Kubernetes Events", highlight_log_levels(summary["events"])

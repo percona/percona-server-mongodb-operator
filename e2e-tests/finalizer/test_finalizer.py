@@ -3,7 +3,7 @@ from typing import Callable, Dict, TypedDict
 
 import pytest
 from lib.config import apply_cluster
-from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running
+from lib.kubectl import kubectl_bin, wait_cluster_consistency, wait_for_delete, wait_for_running
 from lib.mongo import MongoManager
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class TestFinalizer:
         apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}.yml")
         wait_for_running(f"{config['cluster']}-rs0", 3, False)
         wait_for_running(f"{config['cluster']}-cfg", 3)
+        wait_cluster_consistency(config["cluster"])
 
     @pytest.mark.dependency(depends=["TestFinalizer::test_create_cluster"])
     def test_kill_primary_should_elect_new_one(
@@ -49,11 +50,12 @@ class TestFinalizer:
         if primary == f"{config['cluster']}-rs0-0":
             kubectl_bin("delete", "pod", "--grace-period=0", "--force", primary)
             wait_for_running(f"{config['cluster']}-rs0", 3)
+            wait_cluster_consistency(config["cluster"])
         new_primary = psmdb_client.get_mongo_primary(
             f"clusterAdmin:clusterAdmin123456@{config['cluster']}-rs0.{config['namespace']}",
             config["cluster"],
         )
-        assert new_primary != primary, "Primary did not change after killing the pod"
+        assert new_primary != f"{config['cluster']}-rs0-0", "Primary is the same as before"
 
     @pytest.mark.dependency(depends=["TestFinalizer::test_kill_primary_should_elect_new_one"])
     def test_delete_cluster(self, config: FinalizerConfig) -> None:

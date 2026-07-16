@@ -97,8 +97,16 @@ void pushLogFile(String FILE_NAME) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            if [ ! -f ${LOG_FILE_PATH} ]; then
+                mkdir -p e2e-tests/logs
+                cat > ${LOG_FILE_PATH} <<EOF
+Log file ${LOG_FILE_NAME} was not found in Jenkins workspace.
+The test may have timed out or terminated before the test runner created/flushed the log.
+Build URL: ${BUILD_URL}
+EOF
+            fi
             aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
-            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME}
         """
     }
 }
@@ -219,10 +227,10 @@ void generateMissingReports() {
         def xmlFile = "e2e-tests/reports/${testName}.xml"
         def htmlFile = "e2e-tests/reports/${testName}.html"
 
-        if (!fileExists(xmlFile)) {
+        if (testResult == "failure" || !fileExists(xmlFile)) {
             def failures = testResult == "failure" ? 1 : 0
             def failureElement = testResult == "failure" ?
-                '<failure message="Missing report">Test did not produce a report</failure>' : ''
+                '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. The original pytest report may be missing, incomplete, or stale.</failure>' : ''
 
             writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
 <testsuites name="pytest tests">
@@ -289,18 +297,23 @@ void runTest(Integer TEST_ID) {
         timeout(time: 90, unit: 'MINUTES') {
             sh """
                 export DEBUG_TESTS=1
+                export SKIP_DELETE=0
                 export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
                 export PATH="\$HOME/.local/bin:\$PATH"
-                mkdir -p e2e-tests/reports
+                mkdir -p e2e-tests/reports e2e-tests/logs
 
                 REPORT_OPTS="--html=e2e-tests/reports/${testName}.html --junitxml=e2e-tests/reports/${testName}.xml"
 
                 # Run native pytest if test_*.py exists, otherwise run bash via wrapper
-                if ls e2e-tests/$testName/test_*.py 1>/dev/null 2>&1; then
-                    uv run pytest e2e-tests/$testName/ \$REPORT_OPTS
-                else
-                    uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$testName \$REPORT_OPTS
-                fi
+                bash -o pipefail <<BASH
+                {
+                    if ls e2e-tests/${testName}/test_*.py 1>/dev/null 2>&1; then
+                        uv run pytest e2e-tests/${testName}/ \$REPORT_OPTS
+                    else
+                        uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=${testName} \$REPORT_OPTS
+                    fi
+                } 2>&1 | tee e2e-tests/logs/${testName}.log
+BASH
             """
         }
         pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -472,7 +485,6 @@ pipeline {
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", returnStdout: true).trim()
-        ENABLE_LOGGING = "true"
     }
     agent {
         label 'docker-x64-min'

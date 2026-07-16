@@ -25,12 +25,11 @@ class MongoManager:
         suffix: str = ".svc.cluster.local",
         mongo_flag: str = "",
         timeout: int = 30,
+        check: bool = True,
     ) -> str:
         """Execute mongosh command in PSMDB client container."""
         replica_set = "cfg" if "cfg" in uri else "rs0"
         connection_string = f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
-        if mongo_flag:
-            connection_string += f" {mongo_flag}"
 
         result = kubectl_bin(
             "exec",
@@ -39,11 +38,13 @@ class MongoManager:
             "timeout",
             str(timeout),
             "mongosh",
-            f"{connection_string}",
+            connection_string,
+            *mongo_flag.split(),
             "--eval",
             command,
             "--quiet",
-            check=False,
+            check=check,
+            return_stderr=not check,
         )
         return result
 
@@ -113,8 +114,6 @@ class MongoManager:
         self,
         command: str,
         uri: str,
-        postfix: str = "",
-        suffix: str = "",
         database: str = "myApp",
         collection: str = "test",
         sort: str = "",

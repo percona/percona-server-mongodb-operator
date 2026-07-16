@@ -23,11 +23,11 @@ class K8sCollector:
 
     def kubectl(self, *args: str) -> str:
         """Run kubectl command and return stdout"""
-        return kubectl_bin(*args, check=False)
+        return kubectl_bin(*args, check=False, return_stderr=True)
 
     def kubectl_ns(self, *args: str) -> str:
         """Run kubectl command with namespace flag"""
-        return kubectl_bin(*args, "-n", self.namespace, check=False)
+        return kubectl_bin(*args, "-n", self.namespace, check=False, return_stderr=True)
 
     def get_names(self, resource_type: str) -> List[str]:
         """Get list of resource names"""

@@ -192,7 +192,6 @@ class TestInitDeploy:
             psmdb_client.compare_mongo_cmd(
                 "find({}, { _id: 0 }).toArray()",
                 f"myApp:myPass@{config['cluster']}-{i}.{config['cluster']}.{config['namespace']}",
-                "-2nd",
                 test_file=f"{test_paths['test_dir']}/compare/find-2.json",
             )
 
@@ -237,7 +236,6 @@ class TestInitDeploy:
             psmdb_client.compare_mongo_cmd(
                 "find({}, { _id: 0 }).toArray()",
                 f"myApp:myPass@{config['cluster2']}-{i}.{config['cluster2']}.{config['namespace']}",
-                "-3rd",
                 test_file=f"{test_paths['test_dir']}/compare/find-3.json",
             )
 

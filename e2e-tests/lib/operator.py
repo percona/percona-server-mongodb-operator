@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def deploy_operator(test_dir: str, src_dir: str) -> None:
-    """Deploy the operator with simplified logic."""
+    """Deploy the operator"""
     logger.info("Start PSMDB operator")
     operator_ns = os.environ.get("OPERATOR_NS")
 
