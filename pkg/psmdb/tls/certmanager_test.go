@@ -17,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -142,6 +144,123 @@ func TestCreateCAIssuer(t *testing.T) {
 	err = r.GetClient().Get(t.Context(), types.NamespacedName{Name: caIssuerName(cr)}, issuer)
 	require.NoError(t, err)
 	assert.Empty(t, issuer.Namespace)
+}
+
+func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
+	const issuerName = "shared-cluster-issuer"
+
+	newCR := func(name, namespace string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &api.SecretsSpec{},
+				TLS: &api.TLSSpec{
+					IssuerConf: cmmeta.IssuerReference{
+						Name:  issuerName,
+						Kind:  cm.ClusterIssuerKind,
+						Group: cm.SchemeGroupVersion.Group,
+					},
+				},
+			},
+		}
+	}
+
+	clusters := []*api.PerconaServerMongoDB{
+		newCR("cluster-one", "namespace-one"),
+		newCR("cluster-two", "namespace-two"),
+	}
+	cl := buildFakeClient(clusters[0], clusters[1])
+
+	resources := []struct {
+		name   string
+		shared bool
+		apply  func(context.Context, *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	}{
+		{
+			name:   "CA issuer",
+			shared: true,
+			apply:  cl.ApplyCAIssuer,
+		},
+		{
+			name:   "CA certificate",
+			shared: true,
+			apply: func(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+				return cl.ApplyCertificate(ctx, cr, CertificateCA(cr))
+			},
+		},
+		{
+			name:   "issuer",
+			shared: true,
+			apply:  cl.ApplyIssuer,
+		},
+		{
+			name: "TLS certificate",
+			apply: func(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+				return cl.ApplyCertificate(ctx, cr, CertificateTLS(cr, false))
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		cluster          *api.PerconaServerMongoDB
+		sharedStatus     util.ApplyStatus
+		namespacedStatus util.ApplyStatus
+	}{
+		{
+			name:             "first cluster creates resources",
+			cluster:          clusters[0],
+			sharedStatus:     util.ApplyStatusCreated,
+			namespacedStatus: util.ApplyStatusCreated,
+		},
+		{
+			name:             "second cluster reuses shared resources",
+			cluster:          clusters[1],
+			sharedStatus:     util.ApplyStatusUnchanged,
+			namespacedStatus: util.ApplyStatusCreated,
+		},
+		{
+			name:             "first cluster does not overwrite shared resources",
+			cluster:          clusters[0],
+			sharedStatus:     util.ApplyStatusUnchanged,
+			namespacedStatus: util.ApplyStatusUnchanged,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, resource := range resources {
+				t.Run(resource.name, func(t *testing.T) {
+					expectedStatus := tt.namespacedStatus
+					if resource.shared {
+						expectedStatus = tt.sharedStatus
+					}
+
+					status, err := resource.apply(t.Context(), tt.cluster)
+					require.NoError(t, err)
+					assert.Equal(t, expectedStatus, status)
+				})
+			}
+		})
+	}
+
+	caCertificate := new(cm.Certificate)
+	require.NoError(t, cl.GetClient().Get(t.Context(), types.NamespacedName{
+		Name:      issuerName + "-ca-cert",
+		Namespace: "cert-manager",
+	}, caCertificate))
+	assert.Equal(t, issuerName+"-ca", caCertificate.Spec.CommonName)
+	assert.NotContains(t, caCertificate.Labels, naming.LabelKubernetesInstance)
+
+	for _, cr := range clusters {
+		certificate := new(cm.Certificate)
+		require.NoError(t, cl.GetClient().Get(t.Context(), types.NamespacedName{
+			Name:      CertificateTLS(cr, false).Name(),
+			Namespace: cr.Namespace,
+		}, certificate))
+		assert.Equal(t, issuerName, certificate.Spec.IssuerRef.Name)
+	}
 }
 
 func TestCreateCertificate(t *testing.T) {
