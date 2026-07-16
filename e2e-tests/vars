@@ -41,7 +41,7 @@ detect_k8s_env() {
 	local provider="unknown"
 	if kubectl api-resources | grep -q 'openshift.io' 2>/dev/null; then
 		provider="openshift"
-	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eks.amazonaws.com'; then
+	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eksctl.io'; then
 		provider="eks"
 	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
 		provider="gke"
