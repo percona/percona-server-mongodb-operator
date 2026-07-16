@@ -1,8 +1,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  annotations: {}
-  generation: 1
+  annotations:
+    percona.com/restore-in-progress: "true"
+  generation: 2
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -51,14 +52,14 @@ spec:
             - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
-            - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
             - --wiredTigerCacheSizeGB=0.25
             - --wiredTigerIndexPrefixCompression=true
+            - --config=/etc/mongodb-config/mongod.conf
             - --quiet
           command:
-            - /opt/percona/ps-entry.sh
+            - /opt/percona/physical-restore-ps-entry.sh
           env:
             - name: SERVICE_NAME
               value: some-name
@@ -66,6 +67,33 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: PBM_AGENT_MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_USER_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_AGENT_MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_BACKUP_PASSWORD_ESCAPED
+                  name: internal-some-name-users
+                  optional: false
+            - name: PBM_AGENT_SIDECAR
+              value: "true"
+            - name: PBM_AGENT_SIDECAR_SLEEP
+              value: "5"
+            - name: PBM_AGENT_TLS_ENABLED
+              value: "true"
+            - name: PBM_MONGODB_PORT
+              value: "27017"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: PBM_MONGODB_URI
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -134,6 +162,8 @@ spec:
             - mountPath: /etc/mongodb-ssl-internal
               name: ssl-internal
               readOnly: true
+            - mountPath: /etc/mongodb-config
+              name: config
             - mountPath: /opt/percona
               name: bin
             - mountPath: /.mongodb
@@ -143,6 +173,9 @@ spec:
               readOnly: true
             - mountPath: /etc/users-secret
               name: users-secret-file
+            - mountPath: /etc/pbm/
+              name: pbm-config
+              readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -162,6 +195,18 @@ spec:
           volumeMounts:
             - mountPath: /opt/percona
               name: bin
+        - command:
+            - bash
+            - -c
+            - install -D /usr/bin/pbm /opt/percona/pbm && install -D /usr/bin/pbm-agent /opt/percona/pbm-agent && install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint
+          imagePullPolicy: Always
+          name: pbm-init
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /opt/percona
+              name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
@@ -173,6 +218,11 @@ spec:
           name: bin
         - emptyDir: {}
           name: mongosh
+        - configMap:
+            defaultMode: 420
+            name: some-name-rs0-mongod
+            optional: true
+          name: config
         - name: some-name-mongodb-encryption-key
           secret:
             defaultMode: 288
@@ -192,6 +242,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-config
+          secret:
+            defaultMode: 420
+            secretName: some-name-pbm-config
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
@@ -202,6 +256,6 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 3Gi
       status:
         phase: Pending
