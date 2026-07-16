@@ -218,7 +218,7 @@ void makeReport() {
     TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
 }
 
-void generateMissingReports() {
+void normalizeReports() {
     sh "mkdir -p e2e-tests/reports"
 
     for (int i = 0; i < tests.size(); i++) {
@@ -233,12 +233,13 @@ void generateMissingReports() {
         def xmlFile = "e2e-tests/reports/${testName}.xml"
         def htmlFile = "e2e-tests/reports/${testName}.html"
 
-        if (testResult == "failure" || !fileExists(xmlFile)) {
-            def failures = testResult == "failure" ? 1 : 0
-            def failureElement = testResult == "failure" ?
-                '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. The original pytest report may be missing, incomplete, or stale.</failure>' : ''
+        // Always collapse to a single testcase per test so python (multi-method) and
+        // bash-wrapper tests are counted identically in JUnit. Detail stays in the HTML.
+        def failures = testResult == "failure" ? 1 : 0
+        def failureElement = testResult == "failure" ?
+            '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. See the HTML report for details.</failure>' : ''
 
-            writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
+        writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
 <testsuites name="pytest tests">
 <testsuite name="psmdb-e2e" errors="0" failures="${failures}" skipped="0" tests="1" time="${testTime}">
 <testcase classname="e2e-tests.${testName}" name="${testName}" time="${testTime}">
@@ -246,7 +247,6 @@ ${failureElement}
 </testcase>
 </testsuite>
 </testsuites>"""
-        }
 
         if (!fileExists(htmlFile)) {
             def resultCapitalized = testResult == "failure" ? "Failed" : "Passed"
@@ -740,7 +740,7 @@ pipeline {
                             }
                         }
                         makeReport()
-                        generateMissingReports()
+                        normalizeReports()
                         
                         sh """
                             export PATH="\$HOME/.local/bin:\$PATH"

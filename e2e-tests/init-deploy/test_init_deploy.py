@@ -107,6 +107,7 @@ class TestInitDeploy:
         result = psmdb_client.run_mongosh(
             "db.runCommand({connectionStatus:1,showPrivileges:true})",
             f"test:test@{config['cluster']}.{config['namespace']}",
+            check=False,
         )
         assert "Authentication failed" in result
 

@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'e2e-tests/**/*.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
 
 permissions:
   contents: read

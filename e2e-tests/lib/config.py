@@ -164,10 +164,13 @@ def compare_kubectl(
 
 
 def apply_runtime_class(test_dir: str) -> None:
-    """Apply runtime class configuration"""
-    logger.info("Applying runc runtime class")
+    """Create RuntimeClass with the runc handler."""
+    kubectl_bin("delete", "runtimeclass", "container-rc", "--ignore-not-found")
+
     with open(f"{test_dir}/../conf/container-rc.yaml", "r") as f:
-        content = f.read()
-    if os.environ.get("EKS"):
-        content = content.replace("docker", "runc")
-    kubectl_bin("apply", "-f", "-", input_data=content)
+        config = yaml.safe_load(f)
+
+    handler = "runc"
+    logger.info(f"Create RuntimeClass with handler {handler}")
+    config["handler"] = handler
+    kubectl_bin("apply", "-f", "-", input_data=yaml.dump(config))

@@ -60,6 +60,18 @@ def retry(
     raise Exception(f"Max attempts ({max_attempts}) reached")
 
 
+def qualify_image(ref: str, registry_full: str) -> str:
+    """Prefix percona/perconalab images with the registry (mirrors bash with_registry)."""
+    if not ref:
+        return ref
+    host = ref.split("/")[0]
+    if "." in host or ":" in host or host == "localhost":
+        return ref
+    if ref.startswith(("percona/", "perconalab/")):
+        return f"{registry_full}{ref}"
+    return ref
+
+
 def get_git_commit() -> str:
     result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
     return result.stdout.strip()

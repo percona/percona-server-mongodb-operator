@@ -130,9 +130,9 @@ def wait_cluster_consistency(cluster_name: str, wait_time: int = 32) -> None:
     time.sleep(7)
     logger.info(f"Waiting for cluster {cluster_name} consistency")
     for _ in range(wait_time):
-        state = kubectl_bin(
-            "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
-        ).strip("'")
+        state = kubectl_bin("get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}").strip(
+            "'"
+        )
         if state == "ready":
             logger.info(f"Cluster {cluster_name} is consistent")
             return

@@ -26,6 +26,7 @@ from lib.utils import (
     get_git_branch,
     get_git_commit,
     k8s_theme,
+    qualify_image,
     retry,
 )
 from rich.console import Console
@@ -124,6 +125,7 @@ def setup_env_vars() -> None:
         "OPENSHIFT": is_openshift(),
         "MINIKUBE": is_minikube(),
         "API": "psmdb.percona.com/v1",
+        "REGISTRY_NAME": "docker.io",
         "GIT_COMMIT": get_git_commit(),
         "GIT_BRANCH": git_branch,
         "OPERATOR_VERSION": get_cr_version(),
@@ -134,17 +136,20 @@ def setup_env_vars() -> None:
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
             "perconalab/percona-server-mongodb-operator:main-mongod8.0"
         ),
+        "IMAGE_SEARCH": "perconalab/percona-server-mongodb-operator:main-mongot",
         "IMAGE_BACKUP": "perconalab/percona-server-mongodb-operator:main-backup",
         "IMAGE_PMM_CLIENT": "percona/pmm-client:2.44.1-1",
         "IMAGE_PMM_SERVER": "perconalab/pmm-server:dev-latest",
         "IMAGE_PMM3_CLIENT": "perconalab/pmm-client:3-dev-latest",
         "IMAGE_PMM3_SERVER": "perconalab/pmm-server:3-dev-latest",
-        "CERT_MANAGER_VER": "1.19.1",
+        "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
+        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
+        "CERT_MANAGER_VER": "1.19.3",
         "CHAOS_MESH_VER": "2.7.1",
         "MINIO_VER": "5.4.0",
         "PMM_SERVER_VER": "9.9.9",
         "CLEAN_NAMESPACE": "0",
-        "DELETE_CRD_ON_START": "0",
+        "DELETE_CRD_ON_START": "1",
         "SKIP_DELETE": "1",
         "SKIP_BACKUPS_TO_AWS_GCP_AZURE": get_cloud_secret_default(),
         "UPDATE_COMPARE_FILES": "0",
@@ -152,6 +157,26 @@ def setup_env_vars() -> None:
 
     for key, value in defaults.items():
         os.environ.setdefault(key, value)
+
+    registry_full = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
+    image_vars = [
+        "IMAGE",
+        "IMAGE_MONGOD",
+        "IMAGE_MONGOD_CHAIN",
+        "IMAGE_BACKUP",
+        "IMAGE_PMM_CLIENT",
+        "IMAGE_PMM_SERVER",
+        "IMAGE_PMM3_CLIENT",
+        "IMAGE_PMM3_SERVER",
+        "IMAGE_LOGCOLLECTOR",
+        "IMAGE_CLUSTERSYNC",
+    ]
+    for var in image_vars:
+        value = os.environ.get(var)
+        if value:
+            os.environ[var] = "\n".join(
+                qualify_image(line, registry_full) for line in value.splitlines() if line
+            )
 
     env_lines = [f"{key}={os.environ.get(key)}" for key in defaults]
     logger.info("Environment variables:\n" + "\n".join(env_lines))
@@ -536,11 +561,13 @@ def psmdb_client(test_paths: Dict[str, str]) -> MongoManager:
         lambda: kubectl_bin(
             "get",
             "pods",
-            "--selector=name=psmdb-client",
+            "--selector=name=psmdb-client-mongosh",
             "-o",
-            "jsonpath={.items[].metadata.name}",
+            "jsonpath={range .items[*]}{.metadata.name}{end}",
         ),
-        condition=lambda result: "container not found" not in result,
+        max_attempts=30,
+        delay=2,
+        condition=lambda result: result.strip() != "",
     )
 
     pod_name = result.strip()

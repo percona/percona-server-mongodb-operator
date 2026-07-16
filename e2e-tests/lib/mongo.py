@@ -37,6 +37,8 @@ class MongoManager:
             "--",
             "timeout",
             str(timeout),
+            "env",
+            "HOME=/tmp",
             "mongosh",
             connection_string,
             *mongo_flag.split(),
