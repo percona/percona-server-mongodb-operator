@@ -75,6 +75,7 @@ export sed=$(command -v gsed || command -v sed)
 export date=$(command -v gdate || command -v date)
 export test_name=$(basename "$test_dir")
 export namespace="${test_name}-${RANDOM}"
+export arbiter_namespace="${test_name}-arbiter-${RANDOM}"
 export replica_namespace="${test_name}-replica-${RANDOM}"
 export conf_dir=$(realpath "$test_dir/../conf" || :)
 export src_dir=$(realpath "$test_dir/../..")
