@@ -102,7 +102,7 @@ void pushLogFile(String FILE_NAME) {
     echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
-            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
             if [ ! -f ${LOG_FILE_PATH} ]; then
                 mkdir -p e2e-tests/logs
                 cat > ${LOG_FILE_PATH} <<EOF
@@ -121,7 +121,7 @@ void pushReportFile() {
     echo "Push final_report.html to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
-            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
             aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
         """
     }
@@ -133,7 +133,7 @@ void pushArtifactFile(String FILE_NAME) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             touch ${FILE_NAME}
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
             aws s3 ls \$S3_PATH/${FILE_NAME} || :
             aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
         """
@@ -156,16 +156,15 @@ void markPassedTests() {
     echo "Marking passed tests in the tests map!"
 
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-        sh """
-            aws s3 ls "s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/" || :
-        """
+        def listing = sh(
+            script: "aws s3 ls s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/ || :",
+            returnStdout: true
+        )
+        def existingFiles = listing.split('\n').collect { it.trim().split(/\s+/).last() } as Set
 
         for (int i=0; i<tests.size(); i++) {
-            def testName = tests[i]["name"]
-            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
-            def retFileExists = sh(script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1", returnStatus: true)
-
-            if (retFileExists == 0) {
+            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-${tests[i]['name']}"
+            if (existingFiles.contains(file)) {
                 tests[i]["result"] = "passed"
             }
         }
@@ -636,7 +635,7 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 4, unit: 'HOURS')
+                timeout(time: 5, unit: 'HOURS')
             }
             parallel {
                 stage('cluster1') {

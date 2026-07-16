@@ -172,10 +172,10 @@ def setup_env_vars() -> None:
         "IMAGE_CLUSTERSYNC",
     ]
     for var in image_vars:
-        value = os.environ.get(var)
-        if value:
+        raw_value = os.environ.get(var)
+        if raw_value:
             os.environ[var] = "\n".join(
-                qualify_image(line, registry_full) for line in value.splitlines() if line
+                qualify_image(line, registry_full) for line in raw_value.splitlines() if line
             )
 
     env_lines = [f"{key}={os.environ.get(key)}" for key in defaults]
