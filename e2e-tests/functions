@@ -3152,6 +3152,12 @@ deploy_volume_snapshot_class() {
 	local snapshot_class_file
 
 	case "$PLATFORM" in
+		aks)
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-aks.yaml"
+			;;
+		eks|openshift)
+			snapshot_class_file="${conf_dir}/volume-snapshot-class-ebs.yaml"
+			;;
 		gke)
 			snapshot_class_file="${conf_dir}/volume-snapshot-class-gke.yaml"
 			;;
