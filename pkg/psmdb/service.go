@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.Name + "-" + replset.Name,
+			Name:        naming.ServiceName(cr, replset),
 			Namespace:   cr.Namespace,
 			Annotations: replset.Expose.ServiceAnnotations,
 		},
@@ -50,9 +51,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 	}
 
 	svc.Labels = make(map[string]string)
-	for k, v := range ls {
-		svc.Labels[k] = v
-	}
+	maps.Copy(svc.Labels, ls)
 	for k, v := range replset.Expose.ServiceLabels {
 		if _, ok := svc.Labels[k]; !ok {
 			svc.Labels[k] = v
@@ -63,6 +62,20 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 
 // ExternalService returns a Service object needs to serve external connections
 func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podName string) *corev1.Service {
+	annotations := make(map[string]string)
+	for k, v := range replset.Expose.ServiceAnnotations {
+		annotations[k] = v
+	}
+
+	if dns := replset.Expose.ExternalDNS; dns != nil {
+		hostname := BuildDNSHostname(dns, replset.Name, podName)
+		annotations[naming.AnnotationExternalDNSHostname] = hostname
+		if dns.TTL > 0 {
+			annotations[naming.AnnotationExternalDNSTTL] = strconv.Itoa(dns.TTL)
+		}
+		annotations[naming.AnnotationExternalDNSManaged] = "true"
+	}
+
 	svc := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -71,7 +84,7 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        podName,
 			Namespace:   cr.Namespace,
-			Annotations: replset.Expose.ServiceAnnotations,
+			Annotations: annotations,
 		},
 	}
 
@@ -220,21 +233,15 @@ func getServiceIngressAddr(ctx context.Context, cl client.Client, serviceNN type
 	return "", ErrNoIngressPoints
 }
 
-func getServiceClusterIP(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
-	svc := &corev1.Service{}
-	err := cl.Get(ctx, serviceNN, svc)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to fetch service")
-	}
-
-	return svc.Spec.ClusterIP, nil
-}
-
 // GetReplsetAddrs returns a slice of replset host:port addresses
 func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rs *api.ReplsetSpec, rsExposed bool, pods []corev1.Pod) ([]string, error) {
 	addrs := make([]string, 0)
 
 	for _, pod := range pods {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
 		host, err := MongoHost(ctx, cl, cr, dnsMode, rs, rsExposed, pod)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get external hostname for pod %s", pod.Name)
@@ -246,8 +253,8 @@ func GetReplsetAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServe
 }
 
 // GetMongosAddrs returns a slice of mongos addresses
-func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, useInternalAddr bool) ([]string, error) {
-	if !cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, useInternalAddr bool, servicePerPod bool) ([]string, error) {
+	if !servicePerPod {
 		host, err := MongosHost(ctx, cl, cr, nil, useInternalAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
@@ -262,6 +269,10 @@ func GetMongosAddrs(ctx context.Context, cl client.Client, cr *api.PerconaServer
 
 	addrs := make([]string, 0, len(list.Items))
 	for _, pod := range list.Items {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
 		host, err := MongosHost(ctx, cl, cr, &pod, useInternalAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get mongos host")
@@ -327,8 +338,11 @@ func MongoHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 
 // MongosHost returns the mongos host for given pod
 func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, pod *corev1.Pod, useInternalAddr bool) (string, error) {
-	svcName := cr.Name + "-mongos"
+	svcName := naming.MongosServiceName(cr)
 	if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+		if pod == nil {
+			return "", errors.New("mongos pod is required for service-per-pod exposure")
+		}
 		svcName = pod.Name
 	}
 
@@ -359,20 +373,12 @@ func MongosHost(ctx context.Context, cl client.Client, cr *api.PerconaServerMong
 	}
 
 	mongos := cr.Spec.Sharding.Mongos
-	if mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		var host string
-		var err error
-
-		if useInternalAddr {
-			host, err = getServiceClusterIP(ctx, cl, nn)
-		} else {
-			host, err = getServiceIngressAddr(ctx, cl, nn)
-		}
-
+	if !useInternalAddr && mongos.Expose.ExposeType == corev1.ServiceTypeLoadBalancer && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		host, err := getServiceIngressAddr(ctx, cl, nn)
 		if err != nil {
 			return "", errors.Wrap(err, "get ingress endpoint")
 		}
-		return host, nil
+		return fmt.Sprintf("%s:%d", host, mongosPort), nil
 	}
 
 	return fmt.Sprintf("%s.%s.%s:%d", svc.Name, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, mongosPort), nil
@@ -414,7 +420,7 @@ var ErrServiceNotExists = errors.New("service doesn't exist")
 func getExtServices(ctx context.Context, cl client.Client, namespace, podName string) (*corev1.Service, error) {
 	svcMeta := &corev1.Service{}
 
-	for retries := 0; retries < 6; retries++ {
+	for range 6 {
 		err := cl.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, svcMeta)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
@@ -438,4 +444,16 @@ func IsServiceImported(ctx context.Context, k8sclient client.Client, cr *api.Per
 		return false, client.IgnoreNotFound(err)
 	}
 	return true, nil
+}
+
+// BuildDNSHostname builds a DNS hostname in the format: prefix-component-podIndex.domain
+func BuildDNSHostname(dns *api.ExternalDNSConfig, component, podName string) string {
+	parts := strings.Split(podName, "-")
+	podIndex := parts[len(parts)-1]
+	return fmt.Sprintf("%s-%s-%s.%s", dns.Prefix, component, podIndex, dns.Domain)
+}
+
+// BuildDNSHostnameWithoutIndex builds a DNS hostname in the format: prefix-component.domain
+func BuildDNSHostnameWithoutIndex(dns *api.ExternalDNSConfig, component string) string {
+	return fmt.Sprintf("%s-%s.%s", dns.Prefix, component, dns.Domain)
 }

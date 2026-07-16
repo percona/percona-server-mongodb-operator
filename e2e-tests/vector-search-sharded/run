@@ -1,0 +1,188 @@
+#!/bin/bash
+
+# This test verifies MongoDB Vector Search (mongot) on a sharded
+# cluster:
+#   1. deploy a sharded cluster (mongos + cfg + rs0 shard) with vector
+#      search enabled
+#   2. write documents holding vector embeddings through mongos
+#   3. create a vectorSearch index
+#   4. run a $vectorSearch query and assert the nearest neighbours
+#   5. take a logical backup
+#   6. restore the logical backup and re-verify data and search
+#
+# NOTE: Vector search (mongot) requires a MongoDB 8.3+ server, so this
+# test must be run with an 8.3+ IMAGE_MONGOD. The mongot container image
+# is controlled by IMAGE_SEARCH (see e2e-tests/functions).
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+echo "Skipping this test until https://perconadev.atlassian.net/browse/PBM-1764 is resolved."
+exit 0
+
+cluster="some-name"
+search_index="vector_search_index"
+
+insert_vector_data() {
+	local uri=$1
+
+	run_mongos \
+		'use myApp\n db.vectors.insertMany([
+			{ name: "apple",  embedding: [1.0, 0.0, 0.0] },
+			{ name: "banana", embedding: [0.8, 0.2, 0.0] },
+			{ name: "carrot", embedding: [0.6, 0.4, 0.0] },
+			{ name: "dill",   embedding: [0.2, 0.8, 0.0] },
+			{ name: "egg",    embedding: [0.0, 1.0, 0.0] }
+		])' \
+		"$uri"
+}
+
+create_search_index() {
+	local uri=$1
+
+	run_mongosh_mongos \
+		'use myApp\n db.vectors.createSearchIndex("'${search_index}'", "vectorSearch", { fields: [{ type: "vector", path: "embedding", numDimensions: 3, similarity: "cosine" }] })' \
+		"$uri"
+}
+
+search_index_ready() {
+	local uri=$1
+
+	# An index is ready to serve queries when it reports queryable: true.
+	# Some mongot versions surface readiness only through status: READY, so
+	# accept either signal.
+	run_mongosh_mongos \
+		'use myApp\n db.vectors.getSearchIndexes("'${search_index}'").forEach(function(i){ print("STATE:" + i.queryable + ":" + i.status) })' \
+		"$uri" 2>/dev/null \
+		| grep -E 'STATE:(true|.*:READY)' | head -1
+}
+
+wait_search_index() {
+	local uri=$1
+
+	local retry=0
+	echo -n "waiting for search index ${search_index} to become queryable"
+	until [[ -n "$(search_index_ready "$uri")" ]]; do
+		echo -n .
+		sleep 10
+		let retry+=1
+		if [[ ${retry} -ge 60 ]]; then
+			echo "search index ${search_index} did not become queryable in time"
+			kubectl_bin logs ${cluster}-rs0-search-0 || :
+			exit 1
+		fi
+	done
+	echo ".OK"
+	set_debug
+}
+
+run_vector_search() {
+	local uri=$1
+
+	# first empty print() is load-bearing
+	run_mongosh_mongos \
+		'use myApp\n db.vectors.aggregate([{ $vectorSearch: { index: "'${search_index}'", path: "embedding", queryVector: [1.0, 0.0, 0.0], numCandidates: 5, limit: 3 } }]).forEach(function(d){ print(); print("RESULT:" + d.name) })' \
+		"$uri" 2>/dev/null \
+		| grep 'RESULT:' | cut -d: -f2 | tr -d '\r'
+}
+
+check_vector_search() {
+	local uri=$1
+
+	desc 'run vector search query'
+	local result
+	result=$(run_vector_search "$uri")
+	local expected
+	expected=$'apple\nbanana\ncarrot'
+
+	if [[ ${result} != "${expected}" ]]; then
+		echo "unexpected vector search result"
+		echo "got:"
+		echo "${result}"
+		echo "expected:"
+		echo "${expected}"
+		exit 1
+	fi
+	echo "vector search returned expected nearest neighbours: OK"
+}
+
+main() {
+	create_infra "${namespace}"
+	deploy_minio
+	apply_s3_storage_secrets
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+	kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+	kubectl_bin apply -f "${conf_dir}/client-70.yml"
+
+	desc 'create PSMDB sharded cluster with vector search enabled'
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+	desc 'check if all pods started'
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-cfg" 3 "false"
+	wait_for_running "${cluster}-mongos" 1
+	wait_cluster_consistency "${cluster}"
+
+	desc 'check if mongot (search) pod started'
+	wait_pod "${cluster}-rs0-search-0"
+
+	desc 'create user and write data through mongos'
+	run_mongos \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"},{db:"myApp",role:"dbAdmin"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+	sleep 2
+	run_mongos \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@${cluster}-mongos.${namespace}"
+	insert_vector_data "myApp:myPass@${cluster}-mongos.${namespace}"
+	sleep 5
+
+	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'create search index'
+	create_search_index "myApp:myPass@${cluster}-mongos.${namespace}"
+	wait_search_index "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	check_vector_search "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'wait for pbm to be ready'
+	sleep 60 # give time for resync to start
+	wait_for_pbm_operations "${cluster}"
+
+	desc 'run logical backup'
+	backup_name="backup-minio"
+	run_backup minio "${backup_name}" 'logical'
+	wait_backup "${backup_name}"
+	check_backup_in_storage "${backup_name}" minio rs0 'myApp.test.gz'
+
+	desc 'drop collections'
+	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+	run_mongos 'use myApp\n db.vectors.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
+
+	desc 'restore logical backup'
+	run_restore "${backup_name}"
+	wait_restore "${backup_name}" "${cluster}"
+	log "Logical restore finished: OK"
+
+	wait_for_pbm_operations "${cluster}"
+
+	desc 'check data and vector search after restore'
+	compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}"
+	log "Data restored: OK"
+
+	wait_pod "${cluster}-rs0-search-0"
+	wait_search_index "myApp:myPass@${cluster}-mongos.${namespace}"
+	check_vector_search "myApp:myPass@${cluster}-mongos.${namespace}"
+	log "Vector search works after restore: OK"
+
+	destroy "${namespace}"
+
+	desc 'test passed'
+}
+
+main

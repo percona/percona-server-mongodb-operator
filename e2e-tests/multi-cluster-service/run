@@ -12,7 +12,7 @@ set -o xtrace
 test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 
-if [ $GKE -ne 1 ]; then
+if [[ "$GKE" -ne 1 ]]; then
 	echo "Skip the test. We run it for GKE only"
 	exit 0
 fi
@@ -70,7 +70,7 @@ wait_service_export() {
 
 desc "Register Kubernetes cluster"
 
-cat <<EOF | kubectl -n default apply -f -
+cat <<EOF | add_arch_to_podspecs - | kubectl_bin -n default apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -80,7 +80,7 @@ spec:
   terminationGracePeriodSeconds: 1
   containers:
     - name: curl
-      image: appropriate/curl
+      image: docker.io/alpine/curl:latest
       imagePullPolicy: Always
       command: ["sh"]
       args:
@@ -111,13 +111,7 @@ kubectl_bin apply \
 	-f "$conf_dir/client.yml"
 
 apply_s3_storage_secrets
-if version_gt "1.19" && [ $EKS -ne 1 ]; then
-	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-elif version_gt "1.24" && [ $EKS -eq 1 ]; then
-	cat "$conf_dir/container-rc.yaml" | $sed 's/docker/runc/g' | kubectl_bin apply -f -
-else
-	kubectl_bin apply -f "$conf_dir/container-rc.yaml"
-fi
+create_runtime_class
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'

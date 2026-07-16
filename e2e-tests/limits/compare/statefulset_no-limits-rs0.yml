@@ -137,9 +137,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: no-limits-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -171,8 +168,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
@@ -183,11 +178,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: no-limits-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: no-limits-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}

@@ -52,6 +52,7 @@ spec:
             prefixCompression: true
     containerSecurityContext:
       privileged: false
+      readOnlyRootFilesystem: true
     podSecurityContext:
       fsGroup: 1001
       supplementalGroups: [1001, 1003]
@@ -62,6 +63,7 @@ spec:
       privileged: false
       runAsNonRoot: true
       runAsUser: 1001
+      readOnlyRootFilesystem: true
     podSecurityContext:
       fsGroup: 1001
       supplementalGroups: [1001, 1002, 1003]

@@ -44,6 +44,14 @@ spec:
           prefix: psmdb-demand-backup
           endpointUrl: https://engk8soperators.blob.core.windows.net
           credentialsSecret: azure-secret
+      oss-native:
+        type: oss
+        oss:
+          credentialsSecret: alibaba-cloud-secret
+          region: eu-central-1
+          bucket: operator-testing
+          prefix: psmdb-demand-backup-oss-native
+          endpointUrl: https://oss-eu-central-1.aliyuncs.com
       gcp-cs-sa:
         type: gcs
         gcs:

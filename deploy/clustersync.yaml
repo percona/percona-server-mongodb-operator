@@ -1,0 +1,35 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBClusterSync
+metadata:
+  name: my-cluster-sync
+spec:
+  clusterName: my-target-cluster-name
+  image: percona/percona-clustersync-mongodb:0.9.0
+  # mode controls the PCSM lifecycle intent. Allowed values:
+  #   running   - start/resume replication (default)
+  #   paused    - pause an active replication
+  #   finalized - stop replication and tear down owned resources
+  mode: running
+  source:
+    uri: mongodb://source-cluster-mongos.source-namespace.svc.cluster.local:27017
+    credentialsSecret: my-cluster-sync-source
+  # excludeNamespaces lists MongoDB namespaces (db or db.collection) to skip.
+  # excludeNamespaces:
+  #   - admin
+  #   - local
+  # resources:
+  #   requests:
+  #     cpu: 500m
+  #     memory: 512Mi
+  #   limits:
+  #     cpu: "2"
+  #     memory: 2Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-cluster-sync-source
+type: Opaque
+stringData:
+  username: source
+  password: mys3cretpAss

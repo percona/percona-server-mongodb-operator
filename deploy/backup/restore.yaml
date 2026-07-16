@@ -9,6 +9,8 @@ spec:
 #    withUsersAndRoles: true
 #    namespaces:
 #    - "db.collection"
+#    nsFrom: "db1.col1"
+#    nsTo: "db1.col2"
 #  replsetRemapping:
 #    rs0: shard0
 #    rs1: shard1

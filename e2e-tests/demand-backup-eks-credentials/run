@@ -6,7 +6,7 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
-if [ $EKS -ne 1 ]; then
+if [[ "$EKS" -ne 1 ]]; then
 	echo "Skip the test. We run it for EKS only"
 	exit 0
 fi

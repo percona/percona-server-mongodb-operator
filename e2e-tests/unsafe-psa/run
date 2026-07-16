@@ -65,7 +65,7 @@ function main() {
 	# PVC resize did not work for PSA deployment and it was fixed in 1.22
 	if default_sc_allows_expansion; then
 		desc 'resizing PVCs'
-		patch_pvc_request "$psmdb" "2G"
+		patch_pvc_request "$psmdb" "2Gi"
 		wait_cluster_consistency "$psmdb"
 		wait_all_pvc_resize "2Gi"
 	else

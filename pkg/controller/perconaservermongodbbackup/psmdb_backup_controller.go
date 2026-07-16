@@ -3,17 +3,20 @@ package perconaservermongodbbackup
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,6 +32,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
 	"github.com/percona/percona-server-mongodb-operator/clientcmd"
@@ -63,6 +67,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:     mgr.GetScheme(),
 		newPBMFunc: backup.NewPBM,
 		clientcmd:  cli,
+		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
 	}, nil
 }
 
@@ -92,7 +97,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	client    client.Client
 	apiReader client.Reader
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
+	recorder  record.EventRecorder
 
 	newPBMFunc backup.NewPBMFunc
 }
@@ -272,14 +278,18 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, nil
 	}
 
-	log.Info("Acquiring the backup lock")
-	lease, err := k8s.AcquireLease(ctx, r.client, naming.BackupLeaseName(cluster.Name), cr.Namespace, naming.BackupHolderId(cr))
-	if err != nil {
-		return status, errors.Wrap(err, "acquire backup lock")
+	if blocked, err := r.checkClusterSyncLease(ctx, cr, cluster); err != nil {
+		return status, err
+	} else if blocked {
+		status.State = psmdbv1.BackupStateWaiting
+		return status, nil
 	}
 
-	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != naming.BackupHolderId(cr) {
-		log.Info("Another backup is holding the lock", "holder", *lease.Spec.HolderIdentity)
+	acquired, err := r.tryAcquireLease(ctx, cr, cluster)
+	if err != nil {
+		return status, err
+	}
+	if !acquired {
 		status.State = psmdbv1.BackupStateWaiting
 		return status, nil
 	}
@@ -302,6 +312,82 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	})
 
 	return status, err
+}
+
+// checkClusterSyncLease blocks a fresh backup from starting while a
+// ClusterSync CR owns the target cluster. PCSM continuously applies
+// source writes, which pins the WiredTiger history (open backup
+// cursor) and grows disk usage unboundedly. Only gates New/Waiting;
+// in-flight backups (Running/Ready/Error) keep going.
+func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	if cr.Status.State != psmdbv1.BackupStateNew && cr.Status.State != psmdbv1.BackupStateWaiting {
+		return false, nil
+	}
+	csLeaseName := naming.ClusterSyncLeaseName(cluster.Name)
+	active, err := k8s.IsLeaseActive(ctx, r.client, csLeaseName, cr.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "check clustersync lease")
+	}
+	if !active {
+		return false, nil
+	}
+	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
+	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+		cluster.Name, csLeaseName)
+	return true, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) tryAcquireLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	log := logf.FromContext(ctx)
+	leaseName := naming.BackupLeaseName(cluster.Name)
+	holderID := naming.BackupHolderId(cr)
+
+	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity == "" {
+			return true, nil
+		}
+
+		holder := *lease.Spec.HolderIdentity
+		backups := &psmdbv1.PerconaServerMongoDBBackupList{}
+		if err := r.client.List(ctx, backups, client.InNamespace(cr.Namespace)); err != nil {
+			return false, errors.Wrap(err, "list backups")
+		}
+
+		for i := range backups.Items {
+			backup := &backups.Items[i]
+			if naming.BackupHolderId(backup) != holder {
+				continue
+			}
+			return backupStateTerminal(backup.Status.State), nil
+		}
+
+		log.Info("Backup lease holder was not found, acquiring stale lease", "lease", leaseName, "holder", holder)
+		return true, nil
+	}
+
+	log.Info("Acquiring the backup lock", "lease", leaseName)
+	lease, err := k8s.AcquireLease(ctx, r.client, leaseName, cr.Namespace, holderID, checkStale)
+	if err != nil {
+		if stderrors.Is(err, k8s.ErrLeaseAlreadyHeld) ||
+			k8serrors.IsAlreadyExists(errors.Cause(err)) ||
+			k8serrors.IsConflict(errors.Cause(err)) {
+			log.Info("Another backup is holding the lock", "lease", leaseName)
+			return false, nil
+		}
+		return false, errors.Wrap(err, "acquire backup lock")
+	}
+
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != holderID {
+		log.Info("Another backup is holding the lock", "lease", leaseName, "holder", *lease.Spec.HolderIdentity)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func backupStateTerminal(state psmdbv1.BackupState) bool {
+	return state == psmdbv1.BackupStateReady || state == psmdbv1.BackupStateError
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
@@ -341,7 +427,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])),
+				Key: storage.MaskedString(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -358,8 +444,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get gcs credentials secret")
 			}
 			gcsConf.Credentials = gcs.Credentials{
-				ClientEmail: storage.MaskedString(string(gcsSecret.Data[backup.GCSClientEmailSecretKey])),
-				PrivateKey:  storage.MaskedString(string(gcsSecret.Data[backup.GCSPrivateKeySecretKey])),
+				ClientEmail: storage.MaskedString(gcsSecret.Data[backup.GCSClientEmailSecretKey]),
+				PrivateKey:  storage.MaskedString(gcsSecret.Data[backup.GCSPrivateKeySecretKey]),
 			}
 		}
 
@@ -383,8 +469,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get s3 credentials secret")
 			}
 			s3Conf.Credentials = s3.Credentials{
-				AccessKeyID:     storage.MaskedString(string(s3secret.Data[backup.AWSAccessKeySecretKey])),
-				SecretAccessKey: storage.MaskedString(string(s3secret.Data[backup.AWSSecretAccessKeySecretKey])),
+				AccessKeyID:     storage.MaskedString(s3secret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: storage.MaskedString(s3secret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
 		}
 
@@ -402,8 +488,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 
 				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: storage.MaskedString(string(gcsSecret.Data[backup.AWSAccessKeySecretKey])),
-					HMACSecret:    storage.MaskedString(string(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey])),
+					HMACAccessKey: storage.MaskedString(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
+					HMACSecret:    storage.MaskedString(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
 				}
 			}
 
@@ -424,7 +510,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				}
 				s3Conf.ServerSideEncryption = &s3.AWSsse{
 					SseCustomerAlgorithm: cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm,
-					SseCustomerKey:       storage.MaskedString(string(sseSecret.Data[backup.SSECustomerKey])),
+					SseCustomerKey:       storage.MaskedString(sseSecret.Data[backup.SSECustomerKey]),
 				}
 			default:
 				return nil, errors.New("no SseCustomerKey specified")
@@ -487,11 +573,62 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 				return nil, errors.Wrap(err, "get minio credentials secret")
 			}
 			minioConf.Credentials = mio.Credentials{
-				AccessKeyID:     storage.MaskedString(string(minioSecret.Data[backup.AWSAccessKeySecretKey])),
-				SecretAccessKey: storage.MaskedString(string(minioSecret.Data[backup.AWSSecretAccessKeySecretKey])),
+				AccessKeyID:     storage.MaskedString(minioSecret.Data[backup.AWSAccessKeySecretKey]),
+				SecretAccessKey: storage.MaskedString(minioSecret.Data[backup.AWSSecretAccessKeySecretKey]),
 			}
 		}
 		return mio.New(minioConf, "", nil)
+	case cr.Status.OSS != nil:
+		if cr.Status.OSS.CredentialsSecret == "" {
+			return nil, errors.New("no oss credentials specified for the secret name")
+		}
+		ossSecret, err := secret(ctx, r.client, cr.GetNamespace(), cr.Status.OSS.CredentialsSecret)
+		if err != nil {
+			return nil, errors.Wrap(err, "get oss credentials secret")
+		}
+		ossConf := &oss.Config{
+			Region:         cr.Status.OSS.Region,
+			EndpointURL:    cr.Status.OSS.EndpointURL,
+			Bucket:         cr.Status.OSS.Bucket,
+			Prefix:         cr.Status.OSS.Prefix,
+			UploadPartSize: cr.Status.OSS.UploadPartSize,
+			MaxUploadParts: cr.Status.OSS.MaxUploadParts,
+			ConnectTimeout: cr.Status.OSS.ConnectTimeout.Duration,
+			Credentials: oss.Credentials{
+				AccessKeyID:     storage.MaskedString(ossSecret.Data[backup.OSSAccessKeySecretKey]),
+				AccessKeySecret: storage.MaskedString(ossSecret.Data[backup.OSSSecretAccessKeySecretKey]),
+			},
+		}
+		if cr.Status.OSS.Retryer != nil {
+			ossConf.Retryer = &oss.Retryer{
+				MaxAttempts: cr.Status.OSS.Retryer.MaxAttempts,
+				MaxBackoff:  cr.Status.OSS.Retryer.MaxBackoff.Duration,
+				BaseDelay:   cr.Status.OSS.Retryer.BaseDelay.Duration,
+			}
+		}
+		if sse := cr.Status.OSS.ServerSideEncryption; len(sse.EncryptionAlgorithm) != 0 {
+			switch {
+			case len(sse.EncryptionKeyID) != 0:
+				ossConf.ServerSideEncryption = &oss.SSE{
+					EncryptionMethod:    sse.EncryptionMethod,
+					EncryptionAlgorithm: sse.EncryptionAlgorithm,
+					EncryptionKeyID:     storage.MaskedString(sse.EncryptionKeyID),
+				}
+			case len(sse.SecretName) != 0:
+				sseSecret, err := secret(ctx, r.client, cluster.Namespace, sse.SecretName)
+				if err != nil {
+					return nil, errors.Wrap(err, "get sse credentials secret")
+				}
+				ossConf.ServerSideEncryption = &oss.SSE{
+					EncryptionMethod:    sse.EncryptionMethod,
+					EncryptionAlgorithm: sse.EncryptionAlgorithm,
+					EncryptionKeyID:     storage.MaskedString(sseSecret.Data[backup.SSECustomerKey]),
+				}
+			default:
+				return nil, errors.New("no encryptionKeyId or SSE secret specified")
+			}
+		}
+		return oss.New(ossConf, "", nil)
 	default:
 		return nil, errors.New("no storage info in backup status")
 	}
@@ -633,6 +770,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 	case cr.Status.Azure != nil:
 		storage.Type = psmdbv1.BackupStorageAzure
 		storage.Azure = *cr.Status.Azure
+	case cr.Status.OSS != nil:
+		storage.Type = psmdbv1.BackupStorageOSS
+		storage.OSS = *cr.Status.OSS
 	case cr.Status.Filesystem != nil:
 		err := r.deleteFilesystemBackup(ctx, cluster, cr)
 		if err != nil {

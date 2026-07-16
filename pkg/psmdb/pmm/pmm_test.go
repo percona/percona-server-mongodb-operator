@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -89,6 +90,50 @@ func TestContainer(t *testing.T) {
 			},
 			assert: assertNoAuthMechanism(),
 		},
+		"pmm enabled - query-source=mongolog is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "mongolog"
+			},
+			assert: assertQuerySource("mongolog"),
+		},
+		"pmm enabled - query-source=profiler is set": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.PMM.QuerySource = "profiler"
+			},
+			assert: assertQuerySource("profiler"),
+		},
+		"pmm enabled - query-source not set omits flag": {
+			secret: tokenSecret,
+			assert: assertNoQuerySource(),
+		},
+		"pmm3 enabled - default probes: built-in liveness, no readiness": {
+			secret: tokenSecret,
+			assert: assertDefaultProbes(),
+		},
+		"pmm2 enabled - default probes: built-in liveness, no readiness": {
+			secret: pmm2Secret,
+			assert: assertDefaultProbes(),
+		},
+		"pmm3 enabled - custom liveness and readiness probes honored": {
+			secret: tokenSecret,
+			setup:  setupCustomProbes,
+			assert: assertCustomProbes(),
+		},
+		"pmm2 enabled - custom liveness and readiness probes honored": {
+			secret: pmm2Secret,
+			setup:  setupCustomProbes,
+			assert: assertCustomProbes(),
+		},
+		"pmm enabled - custom probes ignored on <1.23.0": {
+			secret: tokenSecret,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				setupCustomProbes(cr)
+			},
+			assert: assertDefaultProbes(),
+		},
 	}
 
 	for name, tt := range tests {
@@ -136,6 +181,60 @@ func assertNilContainer(t *testing.T, container *corev1.Container) {
 	assert.Nil(t, container)
 }
 
+func customLivenessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		InitialDelaySeconds: 15,
+		PeriodSeconds:       7,
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.FromInt(7777),
+				Path: "/custom/Liveness",
+			},
+		},
+	}
+}
+
+func customReadinessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       3,
+		ProbeHandler: corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{
+				Port: intstr.FromInt(7777),
+			},
+		},
+	}
+}
+
+func setupCustomProbes(cr *api.PerconaServerMongoDB) {
+	cr.Spec.PMM.LivenessProbe = customLivenessProbe()
+	cr.Spec.PMM.ReadinessProbe = customReadinessProbe()
+}
+
+// assertDefaultProbes checks the Operator keeps its built-in liveness probe
+// and sets no readiness probe when nothing is configured in the CR.
+func assertDefaultProbes() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		assert.Nil(t, container.ReadinessProbe)
+		if assert.NotNil(t, container.LivenessProbe) && assert.NotNil(t, container.LivenessProbe.HTTPGet) {
+			assert.Equal(t, "/local/Status", container.LivenessProbe.HTTPGet.Path)
+		}
+	}
+}
+
+func assertCustomProbes() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		assert.Equal(t, customLivenessProbe(), container.LivenessProbe)
+		assert.Equal(t, customReadinessProbe(), container.ReadinessProbe)
+	}
+}
+
 func assertAuthMechanism(want string) func(t *testing.T, container *corev1.Container) {
 	return func(t *testing.T, container *corev1.Container) {
 		if !assert.NotNil(t, container) {
@@ -149,6 +248,38 @@ func assertAuthMechanism(want string) func(t *testing.T, container *corev1.Conta
 			}
 		}
 		assert.Contains(t, prerun, "--authentication-mechanism="+want)
+	}
+}
+
+func assertQuerySource(want string) func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.Contains(t, prerun, "--query-source="+want)
+	}
+}
+
+func assertNoQuerySource() func(t *testing.T, container *corev1.Container) {
+	return func(t *testing.T, container *corev1.Container) {
+		if !assert.NotNil(t, container) {
+			return
+		}
+		var prerun string
+		for _, ev := range container.Env {
+			if ev.Name == "PMM_AGENT_PRERUN_SCRIPT" {
+				prerun = ev.Value
+				break
+			}
+		}
+		assert.NotContains(t, prerun, "--query-source")
 	}
 }
 

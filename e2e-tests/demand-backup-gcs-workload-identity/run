@@ -1,0 +1,100 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+if [ -z "$GKE" ]; then
+	desc 'Skip test. Set GKE=1 to run on GKE cluster.'
+	exit 0
+fi
+
+if [ -n "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
+	desc 'Skip tests related to GCP Cloud Storage'
+	exit 0
+fi
+
+if [ -z "$GCP_PROJECT" ] || [ -z "$GCS_WI_SERVICE_ACCOUNT" ]; then
+	desc 'Skip test. Set GCP_PROJECT and GCS_WI_SERVICE_ACCOUNT for GCS Workload Identity test.'
+	exit 0
+fi
+
+namespace="demand-backup-gcs-wi"
+
+create_infra "${namespace}"
+
+desc 'annotate Kubernetes service accounts for Workload Identity'
+kubectl_bin annotate serviceaccount --namespace "${namespace}" default \
+	"iam.gke.io/gcp-service-account=${GCS_WI_SERVICE_ACCOUNT}" --overwrite
+kubectl_bin annotate serviceaccount --namespace "${OPERATOR_NS:-$namespace}" percona-server-mongodb-operator \
+	"iam.gke.io/gcp-service-account=${GCS_WI_SERVICE_ACCOUNT}" --overwrite
+
+desc 'create PSMDB cluster with GCS credentialsSecret (key-based, pre-migration)'
+cluster="some-name"
+kubectl_bin apply -f "${conf_dir}/secrets.yml" -f "${conf_dir}/cloud-secret.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+desc 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60
+wait_for_pbm_operations "${cluster}"
+
+desc 'write test data'
+run_mongo \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+
+desc 'run GCS backup with credentialsSecret (pre-migration)'
+backup_secret="backup-gcs-secret"
+run_backup gcs-wi "${backup_secret}" 'physical'
+wait_backup "${backup_secret}"
+check_backup_in_storage "${backup_secret}" gcs rs0
+
+desc 'migrate to Workload Identity: remove credentialsSecret from the CR'
+kubectl_bin patch psmdb "${cluster}" --type=json \
+	-p '[{"op":"remove","path":"/spec/backup/storages/gcs-wi/gcs/credentialsSecret"}]'
+
+desc 'wait for PBM config to switch to workloadIdentity'
+wi_timeout=0
+until kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm config 2>/dev/null | grep -q 'workloadIdentity: true'; do
+	sleep 5
+	wi_timeout=$((wi_timeout + 5))
+	if [[ ${wi_timeout} -gt 300 ]]; then
+		echo "PBM config did not switch to workloadIdentity in 300s. Exiting..."
+		exit 1
+	fi
+done
+wait_for_pbm_operations "${cluster}"
+
+desc 'run GCS backup with workload identity (post-migration)'
+backup_wi="backup-gcs-wi"
+run_backup gcs-wi "${backup_wi}" 'physical'
+wait_backup "${backup_wi}"
+check_backup_in_storage "${backup_wi}" gcs rs0
+
+desc 'drop data and restore the key-era backup while running under WI'
+run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_secret}"
+run_recovery_check "${backup_secret}"
+
+desc 'drop data and restore the WI backup'
+run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_wi}"
+run_recovery_check "${backup_wi}"
+
+destroy "$namespace"
+
+desc 'test passed'

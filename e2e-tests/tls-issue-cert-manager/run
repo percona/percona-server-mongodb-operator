@@ -18,8 +18,9 @@ check_secret_data_key() {
 	local data_key=$2
 	local secret_data
 
-	secret_data=$(kubectl_bin get "secrets/${secret_name}" -o json | jq ".data[\"${data_key}\"]")
+	secret_data=$(kubectl_bin get "secrets/${secret_name}" -o json | jq -r ".data[\"${data_key}\"] // empty")
 	if [ -z "$secret_data" ]; then
+		echo "Secret ${secret_name} missing data key ${data_key}" >&2
 		exit 1
 	fi
 }

@@ -38,15 +38,11 @@ no_storage() {
 	local cluster="no-storage-rs0"
 
 	desc "create PSMDB cluster $cluster"
-	apply_cluster $test_dir/conf/$cluster.yml
-	sleep 20
-
-	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) \
-		| grep "volumeSpec should be specified"
-
-	desc "delete PSMDB cluster $cluster"
-	kubectl_bin delete \
-		-f $test_dir/conf/$cluster.yml
+	# volumeSpec is a required field, so the API server must reject a CR without it
+	local apply_out
+	apply_out=$(cat_config $test_dir/conf/$cluster.yml | kubectl apply -f - 2>&1 || :)
+	echo "$apply_out"
+	echo "$apply_out" | grep "volumeSpec: Required value"
 }
 
 main() {
@@ -64,7 +60,7 @@ main() {
 	desc 'check if possible to create cluster without CPU/Memory requests and limits'
 	check_cr_config "no-requests-no-limits-rs0"
 
-	desc 'check if possible to create cluster without storage size'
+	desc 'check that creating a cluster without storage size is rejected'
 	no_storage
 
 	destroy $namespace

@@ -3,7 +3,7 @@ package mongo
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const (
@@ -57,7 +57,7 @@ type Settings struct {
 	CatchUpTimeoutMillis    int64                              `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
 	GetLastErrorModes       map[string]WriteConcernReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
 	GetLastErrorDefaults    WriteConcern                       `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
-	ReplicaSetID            primitive.ObjectID                 `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
+	ReplicaSetID            bson.ObjectID                      `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
 }
 
 // Response document from 'replSetGetConfig': https://docs.mongodb.com/manual/reference/command/replSetGetConfig/#dbcmd.replSetGetConfig
@@ -148,25 +148,25 @@ type Status struct {
 }
 
 type Member struct {
-	Id                int                 `bson:"_id" json:"_id"`
-	Name              string              `bson:"name" json:"name"`
-	Health            MemberHealth        `bson:"health" json:"health"`
-	State             MemberState         `bson:"state" json:"state"`
-	StateStr          string              `bson:"stateStr" json:"stateStr"`
-	Uptime            int64               `bson:"uptime" json:"uptime"`
-	Optime            *Optime             `bson:"optime" json:"optime"`
-	OptimeDate        time.Time           `bson:"optimeDate" json:"optimeDate"`
-	ConfigVersion     int                 `bson:"configVersion" json:"configVersion"`
-	ElectionTime      primitive.Timestamp `bson:"electionTime,omitempty" json:"electionTime,omitempty"`
-	ElectionDate      time.Time           `bson:"electionDate,omitempty" json:"electionDate,omitempty"`
-	InfoMessage       string              `bson:"infoMessage,omitempty" json:"infoMessage,omitempty"`
-	OptimeDurable     *Optime             `bson:"optimeDurable,omitempty" json:"optimeDurable,omitempty"`
-	OptimeDurableDate time.Time           `bson:"optimeDurableDate,omitempty" json:"optimeDurableDate,omitempty"`
-	LastHeartbeat     time.Time           `bson:"lastHeartbeat,omitempty" json:"lastHeartbeat,omitempty"`
-	LastHeartbeatRecv time.Time           `bson:"lastHeartbeatRecv,omitempty" json:"lastHeartbeatRecv,omitempty"`
-	PingMs            int64               `bson:"pingMs,omitempty" json:"pingMs,omitempty"`
-	Self              bool                `bson:"self,omitempty" json:"self,omitempty"`
-	SyncingTo         string              `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
+	Id                int            `bson:"_id" json:"_id"`
+	Name              string         `bson:"name" json:"name"`
+	Health            MemberHealth   `bson:"health" json:"health"`
+	State             MemberState    `bson:"state" json:"state"`
+	StateStr          string         `bson:"stateStr" json:"stateStr"`
+	Uptime            int64          `bson:"uptime" json:"uptime"`
+	Optime            *Optime        `bson:"optime" json:"optime"`
+	OptimeDate        time.Time      `bson:"optimeDate" json:"optimeDate"`
+	ConfigVersion     int            `bson:"configVersion" json:"configVersion"`
+	ElectionTime      bson.Timestamp `bson:"electionTime,omitempty" json:"electionTime,omitempty"`
+	ElectionDate      time.Time      `bson:"electionDate,omitempty" json:"electionDate,omitempty"`
+	InfoMessage       string         `bson:"infoMessage,omitempty" json:"infoMessage,omitempty"`
+	OptimeDurable     *Optime        `bson:"optimeDurable,omitempty" json:"optimeDurable,omitempty"`
+	OptimeDurableDate time.Time      `bson:"optimeDurableDate,omitempty" json:"optimeDurableDate,omitempty"`
+	LastHeartbeat     time.Time      `bson:"lastHeartbeat,omitempty" json:"lastHeartbeat,omitempty"`
+	LastHeartbeatRecv time.Time      `bson:"lastHeartbeatRecv,omitempty" json:"lastHeartbeatRecv,omitempty"`
+	PingMs            int64          `bson:"pingMs,omitempty" json:"pingMs,omitempty"`
+	Self              bool           `bson:"self,omitempty" json:"self,omitempty"`
+	SyncingTo         string         `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
 }
 
 func (s *Status) GetSelf() *Member {
@@ -179,8 +179,8 @@ func (s *Status) GetSelf() *Member {
 }
 
 type Optime struct {
-	Timestamp primitive.Timestamp `bson:"ts" json:"ts"`
-	Term      int64               `bson:"t" json:"t"`
+	Timestamp bson.Timestamp `bson:"ts" json:"ts"`
+	Term      int64          `bson:"t" json:"t"`
 }
 
 type StatusOptimes struct {

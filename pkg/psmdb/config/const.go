@@ -163,6 +163,12 @@ func (s *hashableSecret) GetHashHex() (string, error) {
 	return getCustomConfigHashHex(s.StringData, s.Data)
 }
 
+// HashConfigMap returns a stable MD5 hex digest of the ConfigMap's data.
+// Use it as a pod-template annotation so a content change rolls the pods.
+func HashConfigMap(cm *corev1.ConfigMap) (string, error) {
+	return getCustomConfigHashHex(cm.Data, cm.BinaryData)
+}
+
 func getCustomConfigHashHex(strData map[string]string, binData map[string][]byte) (string, error) {
 	content := struct {
 		StrData map[string]string `json:"str_data,omitempty"`

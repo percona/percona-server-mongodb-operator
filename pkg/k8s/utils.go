@@ -1,11 +1,15 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -40,4 +44,22 @@ func IsPodReady(pod corev1.Pod) bool {
 	}
 
 	return false
+}
+
+func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) error {
+	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); k8serrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrapf(err, "failed to get %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
+	}
+
+	// Deletion was already requested
+	if obj.GetDeletionTimestamp() != nil {
+		return nil
+	}
+
+	if err := c.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "failed to delete %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
+	}
+	return nil
 }

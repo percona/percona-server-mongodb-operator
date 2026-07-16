@@ -106,5 +106,14 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		container.EnvFrom = append(container.EnvFrom, cr.Spec.LogCollector.EnvFrom...)
 	}
 
+	if cr.CompareVersion("1.23.0") >= 0 {
+		if cr.Spec.LogCollector.LivenessProbe != nil {
+			container.LivenessProbe = cr.Spec.LogCollector.LivenessProbe
+		}
+		if cr.Spec.LogCollector.ReadinessProbe != nil {
+			container.ReadinessProbe = cr.Spec.LogCollector.ReadinessProbe
+		}
+	}
+
 	return &container, nil
 }

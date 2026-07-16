@@ -19,8 +19,8 @@ import (
 	topo "github.com/percona/percona-backup-mongodb/pbm/topo"
 	v1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	backup0 "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	primitive "go.mongodb.org/mongo-driver/bson/primitive"
-	mongo "go.mongodb.org/mongo-driver/mongo"
+	bson "go.mongodb.org/mongo-driver/v2/bson"
+	mongo "go.mongodb.org/mongo-driver/v2/mongo"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -133,7 +133,7 @@ func (mr *MockPBMMockRecorder) DeleteBackupMeta(ctx, name interface{}) *gomock.C
 }
 
 // DeletePITRChunks mocks base method.
-func (m *MockPBM) DeletePITRChunks(ctx context.Context, until primitive.Timestamp) error {
+func (m *MockPBM) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeletePITRChunks", ctx, until)
 	ret0, _ := ret[0].(error)
@@ -372,7 +372,7 @@ func (mr *MockPBMMockRecorder) PITRChunksCollection() *gomock.Call {
 }
 
 // PITRGetChunksSlice mocks base method.
-func (m *MockPBM) PITRGetChunksSlice(ctx context.Context, rs string, from, to primitive.Timestamp) ([]oplog.OplogChunk, error) {
+func (m *MockPBM) PITRGetChunksSlice(ctx context.Context, rs string, from, to bson.Timestamp) ([]oplog.OplogChunk, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PITRGetChunksSlice", ctx, rs, from, to)
 	ret0, _ := ret[0].([]oplog.OplogChunk)

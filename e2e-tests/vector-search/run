@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# This test verifies MongoDB Vector Search (mongot) on a non-sharded
+# (single replset) cluster:
+#   1. deploy a single replset cluster with vector search enabled
+#   2. write documents holding vector embeddings
+#   3. create a vectorSearch index
+#   4. run a $vectorSearch query and assert the nearest neighbours
+#   5. take a physical backup
+#   6. restore the physical backup and re-verify data and search
+#
+# NOTE: Vector search (mongot) requires a MongoDB 8.3+ server, so this
+# test must be run with an 8.3+ IMAGE_MONGOD. The mongot container image
+# is controlled by IMAGE_SEARCH (see e2e-tests/functions).
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+
+if [[ ! $IMAGE_MONGOD =~ 8\.3 ]]; then
+	echo "vector-search test only works with MongoDB 8.3. Skipping."
+	exit 0
+fi
+
+
+cluster="some-name"
+search_index="vector_search_index"
+
+insert_vector_data() {
+	local uri=$1
+
+	run_mongo \
+		'use myApp\n db.vectors.insertMany([
+			{ name: "apple",  embedding: [1.0, 0.0, 0.0] },
+			{ name: "banana", embedding: [0.8, 0.2, 0.0] },
+			{ name: "carrot", embedding: [0.6, 0.4, 0.0] },
+			{ name: "dill",   embedding: [0.2, 0.8, 0.0] },
+			{ name: "egg",    embedding: [0.0, 1.0, 0.0] }
+		])' \
+		"$uri"
+}
+
+create_search_index() {
+	local uri=$1
+
+	run_mongosh \
+		'use myApp\n db.vectors.createSearchIndex("'${search_index}'", "vectorSearch", { fields: [{ type: "vector", path: "embedding", numDimensions: 3, similarity: "cosine" }] })' \
+		"$uri"
+}
+
+search_index_ready() {
+	local uri=$1
+
+	# An index is ready to serve queries when it reports queryable: true.
+	# Some mongot versions surface readiness only through status: READY, so
+	# accept either signal.
+	run_mongosh \
+		'use myApp\n db.vectors.getSearchIndexes("'${search_index}'").forEach(function(i){ print("STATE:" + i.queryable + ":" + i.status) })' \
+		"$uri" 2>/dev/null \
+		| grep -E 'STATE:(true|.*:READY)' | head -1
+}
+
+wait_search_index() {
+	local uri=$1
+
+	local retry=0
+	echo -n "waiting for search index ${search_index} to become queryable"
+	until [[ -n "$(search_index_ready "$uri")" ]]; do
+		echo -n .
+		sleep 10
+		let retry+=1
+		if [[ ${retry} -ge 60 ]]; then
+			echo "search index ${search_index} did not become queryable in time"
+			kubectl_bin logs ${cluster}-rs0-search-0 || :
+			exit 1
+		fi
+	done
+	echo ".OK"
+	set_debug
+}
+
+run_vector_search() {
+	local uri=$1
+
+	run_mongosh \
+		'use myApp\n db.vectors.aggregate([{ $vectorSearch: { index: "'${search_index}'", path: "embedding", queryVector: [1.0, 0.0, 0.0], numCandidates: 5, limit: 3 } }]).forEach(function(d){ print("RESULT:" + d.name) })' \
+		"$uri" 2>/dev/null \
+		| grep 'RESULT:' | cut -d: -f2 | tr -d '\r'
+}
+
+check_vector_search() {
+	local uri=$1
+
+	desc 'run vector search query'
+	local result
+	result=$(run_vector_search "$uri")
+	local expected
+	expected=$'apple\nbanana\ncarrot'
+
+	if [[ ${result} != "${expected}" ]]; then
+		echo "unexpected vector search result"
+		echo "got:"
+		echo "${result}"
+		echo "expected:"
+		echo "${expected}"
+		exit 1
+	fi
+	echo "vector search returned expected nearest neighbours: OK"
+}
+
+main() {
+	create_infra "${namespace}"
+	deploy_minio
+	apply_s3_storage_secrets
+
+	desc 'create secrets and start client'
+	kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+	kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+	kubectl_bin apply -f "${conf_dir}/client-70.yml"
+
+	desc 'create PSMDB cluster with vector search enabled'
+	apply_cluster "${test_dir}/conf/${cluster}.yml"
+
+	desc 'check if all pods started'
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency "${cluster}"
+
+	desc 'check if mongot (search) pod started'
+	wait_pod "${cluster}-rs0-search-0"
+
+	desc 'create user and write data'
+	run_mongo \
+		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"},{db:"myApp",role:"dbAdmin"}]})' \
+		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+	sleep 2
+	run_mongo \
+		'use myApp\n db.test.insert({ x: 100500 })' \
+		"myApp:myPass@${cluster}-rs0.${namespace}"
+	insert_vector_data "myApp:myPass@${cluster}-rs0.${namespace}"
+	sleep 5
+
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+
+	desc 'create search index'
+	create_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	desc 'wait for pbm to be ready'
+	sleep 60 # give time for resync to start
+	wait_for_pbm_operations "${cluster}"
+
+	desc 'run physical backup'
+	backup_name="backup-minio"
+	run_backup minio "${backup_name}" 'physical'
+	wait_backup "${backup_name}"
+	check_backup_in_storage "${backup_name}" minio rs0
+
+	desc 'drop collections'
+	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+	run_mongo 'use myApp\n db.vectors.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	desc 'restore physical backup'
+	run_restore "${backup_name}"
+	wait_restore "${backup_name}" "${cluster}" "requested" "0" "3000"
+	echo
+	wait_restore "${backup_name}" "${cluster}" "ready" "0" "3000"
+	log "Physical restore finished: OK"
+
+	if [ "$(kubectl_bin get psmdb ${cluster} -o yaml | yq '.metadata.annotations."percona.com/resync-pbm"')" == null ]; then
+		echo "psmdb/${cluster} should be annotated with percona.com/resync-pbm after a physical restore"
+		exit 1
+	fi
+
+	wait_cluster_consistency "${cluster}"
+	wait_for_pbm_operations "${cluster}"
+	log "Operator triggered PBM resync: OK"
+
+	desc 'check data and vector search after restore'
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}"
+	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}"
+	log "Data restored: OK"
+
+	wait_pod "${cluster}-rs0-search-0"
+	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+	log "Vector search works after restore: OK"
+
+	destroy "${namespace}"
+
+	desc 'test passed'
+}
+
+main

@@ -4,12 +4,11 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	// "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -20,6 +19,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
@@ -121,7 +122,7 @@ func TestPBMStorageConfig(t *testing.T) {
 			CRVersion: version.Version(),
 		},
 		Status: api.PerconaServerMongoDBStatus{
-			BackupVersion: pbmVersion.Current().Version,
+			BackupVersion: MinPBMVersionOSS,
 		},
 	}
 
@@ -346,6 +347,28 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"gcs without credentials (ADC / Workload Identity)": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					ChunkSize: 1024 * 1024 * 10,
+				},
+			},
+			config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					ChunkSize: 1024 * 1024 * 10,
+					Credentials: gcs.Credentials{
+						WorkloadIdentity: true,
+					},
+				},
+			},
+		},
 		"gcs s3 compatibility": {
 			[]client.Object{
 				&corev1.Secret{
@@ -386,6 +409,47 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"oss s3 compatibility": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
+						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					Bucket:            "operator-testing",
+					Prefix:            "psmdb",
+					Region:            "oss-eu-central-1",
+					EndpointURL:       "https://s3.oss-eu-central-1.aliyuncs.com",
+					CredentialsSecret: "test-secret",
+					UploadPartSize:    1024 * 1024 * 10,
+					MaxUploadParts:    5000,
+				},
+			},
+			config.StorageConf{
+				Type: storage.OSS,
+				OSS: &oss.Config{
+					Region:         "oss-eu-central-1",
+					EndpointURL:    "https://s3.oss-eu-central-1.aliyuncs.com",
+					Bucket:         "operator-testing",
+					Prefix:         "psmdb",
+					UploadPartSize: 1024 * 1024 * 10,
+					MaxUploadParts: 5000,
+					Credentials: oss.Credentials{
+						AccessKeyID:     "some-access-key",
+						AccessKeySecret: "some-secret-key",
+					},
+				},
+			},
+		},
 		"azure": {
 			[]client.Object{
 				&corev1.Secret{
@@ -419,6 +483,307 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"oss": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
+						"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOSS,
+				OSS: api.BackupStorageOSSSpec{
+					Bucket:            "operator-testing",
+					Prefix:            "psmdb",
+					Region:            "oss-eu-central-1",
+					EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
+					CredentialsSecret: "test-secret",
+					ConnectTimeout: metav1.Duration{
+						Duration: 5 * time.Second,
+					},
+					UploadPartSize: 1024 * 1024 * 10,
+					MaxUploadParts: 5000,
+					Retryer: &api.OSSRetryer{
+						MaxAttempts: 7,
+						MaxBackoff: metav1.Duration{
+							Duration: 10 * time.Second,
+						},
+						BaseDelay: metav1.Duration{
+							Duration: 100 * time.Millisecond,
+						},
+					},
+					ServerSideEncryption: api.OSSServerSideEncryption{
+						EncryptionMethod:    "sse",
+						EncryptionAlgorithm: "KMS",
+						EncryptionKeyID:     "some-key-id",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OSS,
+				OSS: &oss.Config{
+					Region:         "oss-eu-central-1",
+					EndpointURL:    "https://oss-eu-central-1.aliyuncs.com",
+					Bucket:         "operator-testing",
+					Prefix:         "psmdb",
+					ConnectTimeout: 5 * time.Second,
+					UploadPartSize: 1024 * 1024 * 10,
+					MaxUploadParts: 5000,
+					Credentials: oss.Credentials{
+						AccessKeyID:     "some-access-key",
+						AccessKeySecret: "some-secret-key",
+					},
+					Retryer: &oss.Retryer{
+						MaxAttempts: 7,
+						MaxBackoff:  10 * time.Second,
+						BaseDelay:   100 * time.Millisecond,
+					},
+					ServerSideEncryption: &oss.SSE{
+						EncryptionMethod:    "sse",
+						EncryptionAlgorithm: "KMS",
+						EncryptionKeyID:     "some-key-id",
+					},
+				},
+			},
+		},
+		"oci with user principal credentials": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_TENANCY":                []byte("some-tenancy"),
+						"OCI_USER":                   []byte("some-user"),
+						"OCI_FINGERPRINT":            []byte("some-fingerprint"),
+						"OCI_PRIVATE_KEY":            []byte("some-private-key"),
+						"OCI_PRIVATE_KEY_PASSPHRASE": []byte("some-passphrase"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+					UploadPartSize:    1024 * 1024 * 10,
+					UploadConcurrency: 5,
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:              "some-tenancy",
+							User:                 "some-user",
+							Fingerprint:          "some-fingerprint",
+							PrivateKey:           "some-private-key",
+							PrivateKeyPassphrase: "some-passphrase",
+						},
+					},
+					UploadPartSize:    1024 * 1024 * 10,
+					UploadConcurrency: 5,
+				},
+			},
+		},
+		"oci with user principal credentials without passphrase": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_TENANCY":     []byte("some-tenancy"),
+						"OCI_USER":        []byte("some-user"),
+						"OCI_FINGERPRINT": []byte("some-fingerprint"),
+						"OCI_PRIVATE_KEY": []byte("some-private-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:     "some-tenancy",
+							User:        "some-user",
+							Fingerprint: "some-fingerprint",
+							PrivateKey:  "some-private-key",
+						},
+					},
+				},
+			},
+		},
+		"oci with instance principal credentials": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Bucket:    "operator-testing",
+					Prefix:    "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+				},
+			},
+		},
+		"oci with retryer": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeOkeWorkloadIdentity,
+					},
+					Retryer: &api.OCIRetryerSpec{
+						MaxAttempts: 10,
+						MaxBackoff:  30 * time.Second,
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeOkeWorkloadIdentity,
+					},
+					Retryer: &oci.Retryer{
+						MaxAttempts: 10,
+						MaxBackoff:  30 * time.Second,
+					},
+				},
+			},
+		},
+		"oci with SSE KMS key": {
+			[]client.Object{},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: api.OCIServerSideEncryptionSpec{
+						KmsKeyID: "some-kms-key-id",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: oci.SSE{
+						KmsKeyID: "some-kms-key-id",
+					},
+				},
+			},
+		},
+		"oci with SSE customer key": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-sse-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"OCI_SSE_CUSTOMER_KEY": []byte("some-customer-key"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: api.OCICredentialsSpec{
+						Type: api.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: api.OCIServerSideEncryptionSpec{
+						SecretName: "test-sse-secret",
+					},
+				},
+			},
+			config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Region: "us-ashburn-1",
+					Bucket: "operator-testing",
+					Prefix: "psmdb",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeInstancePrincipal,
+					},
+					ServerSideEncryption: oci.SSE{
+						SseCustomerKey: "some-customer-key",
+					},
+				},
+			},
+		},
 		"filesystem": {
 			[]client.Object{},
 			api.BackupStorageSpec{
@@ -444,6 +809,97 @@ func TestPBMStorageConfig(t *testing.T) {
 			require.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "test-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: MinPBMVersionOSS,
+		},
+	}
+	cl := buildFakeClient(
+		t,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test-namespace",
+			},
+			Data: map[string][]byte{
+				"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
+				"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
+			},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oss-sse-secret",
+				Namespace: "test-namespace",
+			},
+			Data: map[string][]byte{
+				SSECustomerKey: []byte("oss-key-id"),
+			},
+		},
+	)
+
+	got, err := GetPBMStorageConfig(context.Background(), cl, cr, api.BackupStorageSpec{
+		Type: api.BackupStorageOSS,
+		OSS: api.BackupStorageOSSSpec{
+			Bucket:            "operator-testing",
+			Region:            "oss-eu-central-1",
+			EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
+			CredentialsSecret: "test-secret",
+			ServerSideEncryption: api.OSSServerSideEncryption{
+				SecretName:          "oss-sse-secret",
+				EncryptionMethod:    "sse",
+				EncryptionAlgorithm: "KMS",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got.OSS.ServerSideEncryption)
+	require.Equal(t, storage.MaskedString("oss-key-id"), got.OSS.ServerSideEncryption.EncryptionKeyID)
+}
+
+func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "test-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: "2.11.0",
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+		},
+		Data: map[string][]byte{
+			"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
+			"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
+		},
+	}
+	cl := buildFakeClient(t, secret)
+
+	_, err := GetPBMStorageConfig(context.Background(), cl, cr, api.BackupStorageSpec{
+		Type: api.BackupStorageOSS,
+		OSS: api.BackupStorageOSSSpec{
+			Bucket:            "operator-testing",
+			CredentialsSecret: "test-secret",
+		},
+	})
+
+	require.EqualError(t, err, "oss storage requires PBM 2.12.0 or newer")
 }
 
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {

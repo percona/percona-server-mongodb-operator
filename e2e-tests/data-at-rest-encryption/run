@@ -23,6 +23,12 @@ wait_for_running $cluster-rs0 3 "false"
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 
+desc 'check vault security secrets'
+if kubectl_bin get secret "$cluster-mongodb-encryption-key"; then
+	echo "Encryption key secret should not be created when vault is used"
+	exit 1
+fi
+
 desc 'check if service and statefulset created with expected config'
 compare_kubectl statefulset/$cluster-rs0
 compare_kubectl statefulset/$cluster-cfg

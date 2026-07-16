@@ -13,7 +13,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
-var _ = Describe("PerconaServerMongoDB", Ordered, func() {
+var _ = Describe("PerconaServerMongoDBRestore CEL validations", Ordered, func() {
 	ctx := context.Background()
 
 	const ns = "psmdb-restore"
@@ -87,6 +87,53 @@ var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 			Expect(unstructured.SetNestedField(obj.Object, "2020-01-01 10:10:10", "spec", "pitr", "date")).To(Succeed())
 
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+		})
+	})
+
+	Context("Selective restore validations", func() {
+		cr := readDefaultRestore(GinkgoT(), "ns-validation", ns)
+
+		It("should not create restore when only nsFrom is set", func() {
+			cr.Spec.Selective = &psmdbv1.SelectiveRestoreOpts{
+				NamespaceFrom: "ns.col",
+			}
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err.Error()).To(ContainSubstring("nsFrom and nsTo need to be set together"))
+		})
+
+		It("should not create restore when only nsTo is set", func() {
+			cr.Spec.Selective = &psmdbv1.SelectiveRestoreOpts{
+				NamespaceTo: "ns.col",
+			}
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err.Error()).To(ContainSubstring("nsFrom and nsTo need to be set together"))
+		})
+
+		It("should not create restore when nsFrom and nsTo is equal", func() {
+			cr.Spec.Selective = &psmdbv1.SelectiveRestoreOpts{
+				NamespaceFrom: "ns.col",
+				NamespaceTo:   "ns.col",
+			}
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err.Error()).To(ContainSubstring("nsFrom and nsTo can't be the same"))
+		})
+
+		It("should create restore without nsFrom and nsTo", func() {
+			cr := readDefaultRestore(GinkgoT(), "ns-validation-empty", ns)
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+		})
+
+		It("should create restore with nsFrom and nsTo", func() {
+			cr := readDefaultRestore(GinkgoT(), "ns-validation-set", ns)
+			cr.Spec.Selective = &psmdbv1.SelectiveRestoreOpts{
+				NamespaceFrom: "ns1.col",
+				NamespaceTo:   "ns2.col",
+			}
+
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 		})
 	})
 })

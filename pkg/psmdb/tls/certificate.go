@@ -13,6 +13,7 @@ import (
 
 type Certificate interface {
 	Name() string
+	Namespace() string
 	SecretName() string
 	Object() *cm.Certificate
 }
@@ -27,8 +28,28 @@ func CertificateCA(cr *api.PerconaServerMongoDB) Certificate {
 	}
 }
 
+func (c *caCert) namePrefix() string {
+	prefix := c.cr.Name
+	if tls := c.cr.Spec.TLS; c.cr.CompareVersion("1.23.0") >= 0 && tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind {
+		prefix = c.cr.Name + "-" + c.cr.Namespace
+
+		if isSharedClusterIssuer(c.cr) {
+			prefix = tls.IssuerConf.Name
+		}
+	}
+	return prefix
+}
+
 func (c *caCert) Name() string {
-	return c.cr.Name + "-ca-cert"
+	return c.namePrefix() + "-ca-cert"
+}
+
+func (c *caCert) Namespace() string {
+	if c.cr.CompareVersion("1.23.0") >= 0 && c.cr.Spec.TLS != nil && c.cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind {
+		return certManagerNamespace()
+	}
+
+	return c.cr.Namespace
 }
 
 func (c *caCert) SecretName() string {
@@ -42,19 +63,30 @@ func (c *caCert) Object() *cm.Certificate {
 	if cr.CompareVersion("1.17.0") < 0 {
 		labels = nil
 	}
+	if isSharedClusterIssuer(cr) {
+		delete(labels, naming.LabelKubernetesInstance)
+	}
+
+	issuerKind := cm.IssuerKind
+	issuerGroup := ""
+	if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.TLS != nil {
+		issuerKind = cr.Spec.TLS.IssuerConf.Kind
+		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+	}
 	return &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.Name(),
-			Namespace: cr.Namespace,
+			Namespace: c.Namespace(),
 			Labels:    labels,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
-			CommonName: cr.Name + "-ca",
+			CommonName: c.namePrefix() + "-ca",
 			IsCA:       true,
-			IssuerRef: cmmeta.ObjectReference{
-				Name: caIssuerName(cr),
-				Kind: cm.IssuerKind,
+			IssuerRef: cmmeta.IssuerReference{
+				Name:  caIssuerName(cr),
+				Kind:  issuerKind,
+				Group: issuerGroup,
 			},
 			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
@@ -82,6 +114,10 @@ func (c *tlsCert) Name() string {
 	return c.cr.Name + "-ssl"
 }
 
+func (c *tlsCert) Namespace() string {
+	return c.cr.Namespace
+}
+
 func (c *tlsCert) SecretName() string {
 	if c.internal {
 		return api.SSLInternalSecretName(c.cr)
@@ -95,26 +131,16 @@ func (c *tlsCert) Object() *cm.Certificate {
 
 	issuerKind := cm.IssuerKind
 	issuerGroup := ""
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+	if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.TLS != nil {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
-
-	}
-	isCA := false
-	if cr.CompareVersion("1.15.0") < 0 {
-		isCA = true
-	}
-
-	labels := naming.ClusterLabels(cr)
-	if cr.CompareVersion("1.17.0") < 0 {
-		labels = nil
 	}
 
 	return &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.Name(),
 			Namespace: cr.Namespace,
-			Labels:    labels,
+			Labels:    naming.ClusterLabels(cr),
 		},
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
@@ -123,9 +149,9 @@ func (c *tlsCert) Object() *cm.Certificate {
 			CommonName: cr.Name,
 			SecretName: c.SecretName(),
 			DNSNames:   GetCertificateSans(cr),
-			IsCA:       isCA,
+			IsCA:       false,
 			Duration:   &cr.Spec.TLS.CertValidityDuration,
-			IssuerRef: cmmeta.ObjectReference{
+			IssuerRef: cmmeta.IssuerReference{
 				Name:  issuerName(cr),
 				Kind:  issuerKind,
 				Group: issuerGroup,

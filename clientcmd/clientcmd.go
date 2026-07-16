@@ -11,25 +11,30 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-type Client struct {
+type client struct {
 	client     corev1client.CoreV1Interface
 	restconfig *restclient.Config
 }
 
-func NewClient(config *restclient.Config) (*Client, error) {
+type Client interface {
+	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+	REST() restclient.Interface
+}
+
+func NewClient(config *restclient.Config) (Client, error) {
 	// Create a Kubernetes core/v1 client.
 	cl, err := corev1client.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
+	return &client{
 		client:     cl,
 		restconfig: config,
 	}, nil
 }
 
-func (c *Client) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+func (c *client) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 	// Prepare the API URL used to execute another process within the Pod.
 	// In this case, we'll run a remote shell.
 	req := c.client.RESTClient().
@@ -61,6 +66,6 @@ func (c *Client) Exec(ctx context.Context, pod *corev1.Pod, containerName string
 	})
 }
 
-func (c *Client) REST() restclient.Interface {
+func (c *client) REST() restclient.Interface {
 	return c.client.RESTClient()
 }

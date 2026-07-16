@@ -450,7 +450,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "mongos-ip",
+			expected: "mongos-ip:27017",
 		},
 		{
 			name: "cluster ip expose for sharding",
@@ -489,7 +489,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
-			expected: "mongos-ip,mongos-ip,mongos-ip",
+			expected: "mongos-ip:27017,mongos-ip:27017,mongos-ip:27017",
 		},
 		{
 			name: "cluster ip expose for sharding with service per pod",

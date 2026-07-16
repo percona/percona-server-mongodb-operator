@@ -56,5 +56,6 @@ COPY build/ps-entry.sh /ps-entry.sh
 COPY build/physical-restore-ps-entry.sh /physical-restore-ps-entry.sh
 COPY build/pbm-entry.sh /pbm-entry.sh
 COPY build/logcollector /logcollector
+COPY build/mongot-entrypoint.sh /mongot-entrypoint.sh
 
 USER 2

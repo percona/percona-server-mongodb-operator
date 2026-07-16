@@ -44,6 +44,14 @@ spec:
           container: operator-testing
           prefix: psmdb-demand-backup-physical
           credentialsSecret: azure-secret
+      oss-native:
+        type: oss
+        oss:
+          credentialsSecret: alibaba-cloud-secret
+          region: eu-central-1
+          bucket: operator-testing
+          prefix: psmdb-demand-backup-physical-parallel-oss-native
+          endpointUrl: https://oss-eu-central-1.aliyuncs.com
 
     tasks:
     - name: weekly

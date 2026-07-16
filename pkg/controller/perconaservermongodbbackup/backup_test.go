@@ -9,7 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
@@ -20,6 +20,62 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
+
+func TestBackupStartOSSStorageDestination(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPBM := NewMockPBM(ctrl)
+	mockPBM.EXPECT().SendCmd(gomock.Any(), gomock.Any()).Return(nil)
+
+	cluster := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-cluster",
+			Namespace: "some-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: "1.20.0",
+			Backup: api.BackupSpec{
+				Storages: map[string]api.BackupStorageSpec{
+					"oss": {
+						Type: api.BackupStorageOSS,
+						Main: true,
+						OSS: api.BackupStorageOSSSpec{
+							Bucket:            "some-bucket",
+							Prefix:            "some-prefix",
+							CredentialsSecret: "some-secret",
+						},
+					},
+				},
+			},
+			Replsets: []*api.ReplsetSpec{
+				{Name: "rs0"},
+			},
+		},
+	}
+	backup := &managedBackups{
+		pbm:  mockPBM,
+		spec: cluster.Spec.Backup,
+	}
+
+	status, err := backup.Start(t.Context(), nil, cluster, &api.PerconaServerMongoDBBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-backup",
+			Namespace: "some-namespace",
+		},
+		Spec: api.PerconaServerMongoDBBackupSpec{
+			ClusterName: "some-cluster",
+			StorageName: "oss",
+			Type:        defs.LogicalBackup,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, api.BackupStateRequested, status.State)
+	assert.Equal(t, "oss", status.StorageName)
+	assert.NotNil(t, status.OSS)
+	assert.Equal(t, "oss://some-bucket/some-prefix/"+status.PBMname, status.Destination)
+}
 
 func TestBackup_Status(t *testing.T) {
 	ctx := context.Background()
@@ -93,7 +149,7 @@ func TestBackup_Status(t *testing.T) {
 						Status:           defs.StatusDone,
 						StartTS:          1234567890,
 						LastTransitionTS: 1234567900,
-						LastWriteTS:      primitive.Timestamp{T: 1234567950},
+						LastWriteTS:      bsonv2.Timestamp{T: 1234567950},
 						Size:             1073741824, // 1GB
 					}, nil)
 				mockPBM.EXPECT().

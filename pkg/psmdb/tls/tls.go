@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -42,17 +43,52 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 		return false, nil
 	}
 
+	certificateName := secret.Annotations[cm.CertificateNameKey]
+	certificateFound := false
+	if certificateName != "" {
+		certificate := new(cm.Certificate)
+		if err := c.Get(ctx, types.NamespacedName{
+			Name:      certificateName,
+			Namespace: secret.Namespace,
+		}, certificate); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return true, errors.Wrap(err, "failed to get certificate")
+			}
+		} else {
+			certificateFound = true
+			if metav1.IsControlledBy(certificate, cr) {
+				return false, nil
+			}
+		}
+	}
+
 	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
-	if secret.Annotations[cm.IssuerKindAnnotationKey] != cm.IssuerKind || issuerName == "" {
+	if issuerName == "" {
 		return true, nil
 	}
-	issuer := new(cm.Issuer)
+
+	var issuer client.Object
+	issuerNamespace := secret.Namespace
+	kind := secret.Annotations[cm.IssuerKindAnnotationKey]
+	switch kind {
+	case cm.IssuerKind:
+		issuer = new(cm.Issuer)
+	case cm.ClusterIssuerKind:
+		issuer = new(cm.ClusterIssuer)
+		issuerNamespace = ""
+	default:
+		return true, nil
+	}
 	if err := c.Get(ctx, types.NamespacedName{
 		Name:      issuerName,
-		Namespace: secret.Namespace,
+		Namespace: issuerNamespace,
 	}, issuer); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return true, nil
+		if k8serrors.IsNotFound(err) || (kind == cm.ClusterIssuerKind && k8serrors.IsForbidden(err)) {
+			// The issuer is gone or unreadable (Forbidden in namespaced installs).
+			// Only treat the secret as user-created if its Certificate CRD still exists
+			// and is not operator-owned. If the Certificate is gone, the secret is
+			// orphaned and the operator should recreate it.
+			return certificateFound, nil
 		}
 		return true, errors.Wrap(err, "failed to get issuer")
 	}
@@ -229,6 +265,21 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}, nil
 }
 
+// searchSans returns the SAN entries for the mongot Service of the given replset/shard.
+func searchSans(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) []string {
+	name := naming.SearchServiceName(cr, replset)
+	return []string{
+		name,
+		name + "." + cr.Namespace,
+		name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		"*." + name,
+		"*." + name + "." + cr.Namespace,
+		"*." + name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix,
+		name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+		"*." + name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
+	}
+}
+
 func getShardingSans(cr *api.PerconaServerMongoDB) []string {
 	sans := []string{
 		cr.Name + "-mongos",
@@ -278,6 +329,10 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			}
 			slices.Sort(uniqueHorizonSans)
 			sans = append(sans, uniqueHorizonSans...)
+		}
+
+		if cr.IsSearchEnabled() {
+			sans = append(sans, searchSans(cr, replset)...)
 		}
 	}
 	sans = append(sans, "*."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix)

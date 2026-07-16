@@ -12,6 +12,9 @@ rules:
   - perconaservermongodbbackups
   - perconaservermongodbbackups/status
   - perconaservermongodbbackups/finalizers
+  - perconaservermongodbclustersyncs
+  - perconaservermongodbclustersyncs/status
+  - perconaservermongodbclustersyncs/finalizers
   - perconaservermongodbrestores
   - perconaservermongodbrestores/status
   - perconaservermongodbrestores/finalizers

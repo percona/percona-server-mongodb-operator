@@ -10,6 +10,11 @@ spec:
     tls: true
   tls:
     mode: disabled
+  defaultRWConcern:
+    readConcern: majority
+    writeConcern:
+      w: majority
+      wtimeout: 5000
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
@@ -62,15 +67,15 @@ spec:
           requests:
             storage: 1Gi
     sidecars:
-    - image: busybox
+    - image: docker.io/busybox:latest
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: my-sidecar-1
-    - image: busybox
+    - image: docker.io/busybox:latest
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: my-sidecar-2
-    - image: busybox
+    - image: docker.io/busybox:latest
       name: mongod
     runtimeClassName: container-rc
     size: 3

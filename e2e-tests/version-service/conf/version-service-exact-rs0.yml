@@ -13,7 +13,7 @@ spec:
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: http://version-service:11000
-    apply: 6.0.3-2
+    apply: 6.0.27-21
     schedule: "0 2 * * *"
   replsets:
   - name: rs0

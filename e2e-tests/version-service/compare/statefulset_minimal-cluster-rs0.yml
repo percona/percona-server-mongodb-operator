@@ -127,9 +127,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: minimal-cluster-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -156,8 +153,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
@@ -168,11 +163,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: minimal-cluster-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: minimal-cluster-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}

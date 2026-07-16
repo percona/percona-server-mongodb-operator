@@ -177,11 +177,6 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	newSizeBytes := currentSize.Value() + config.GrowthStep.Value()
 	newSize := *resource.NewQuantity(newSizeBytes, resource.BinarySI)
 
-	gib, err := RoundUpGiB(newSize.Value())
-	if err == nil {
-		newSize = *resource.NewQuantity(gib*GiB, resource.BinarySI)
-	}
-
 	if !config.MaxSize.IsZero() && newSize.Cmp(config.MaxSize) > 0 {
 		newSize = config.MaxSize
 	}
