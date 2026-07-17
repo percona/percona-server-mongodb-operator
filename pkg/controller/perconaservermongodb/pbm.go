@@ -201,6 +201,7 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 	// storage.MaskedString masks credentials in JSON and YAML but not in BSON,
 	// so BSON is the only marshaller that lets credential rotation change the hash.
 	if cr.CompareVersion("1.23.0") >= 0 {
+		// bson.Marshal requires a top-level document since it can't marshal a bare slice, that's why configs was used.
 		v, err := bson.Marshal(struct {
 			Configs []config.Config `bson:"configs"`
 		}{Configs: c})
