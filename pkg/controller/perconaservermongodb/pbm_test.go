@@ -10,6 +10,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/stretchr/testify/require"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -437,7 +438,7 @@ func TestIsResyncNeeded(t *testing.T) {
 
 func TestHashPBMConfiguration(t *testing.T) {
 	t.Run("updating credentials changes hash", func(t *testing.T) {
-		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
 		cfg := []config.Config{
 			{
 				Name: "test",
@@ -458,6 +459,290 @@ func TestHashPBMConfiguration(t *testing.T) {
 			AccessKeyID:     "some-access-key",
 			SecretAccessKey: "some-secret-key",
 		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("rotating non-empty credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket:      "operator-testing",
+						Region:      "us-east-1",
+						EndpointURL: "https://s3.amazonaws.com",
+						Prefix:      "prefix",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_KEY",
+			SecretAccessKey: "NEW_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("rotating profile credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "main",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "main-bucket",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "MAIN_KEY",
+							SecretAccessKey: "MAIN_SECRET",
+						},
+					},
+				},
+			},
+			{
+				Name:      "profile-a",
+				IsProfile: true,
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "profile-bucket",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_PROFILE_KEY",
+							SecretAccessKey: "OLD_PROFILE_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[1].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_PROFILE_KEY",
+			SecretAccessKey: "NEW_PROFILE_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("identical config produces identical hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket:      "operator-testing",
+						Region:      "us-east-1",
+						EndpointURL: "https://s3.amazonaws.com",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "KEY",
+							SecretAccessKey: "SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.Equal(t, hash1, hash2)
+	})
+	t.Run("non-credential change changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Bucket = "operator-testing-2"
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("yaml path (1.22.0): credential rotation does not change hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_KEY",
+			SecretAccessKey: "NEW_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.Equal(t, hash1, hash2)
+	})
+	t.Run("yaml path (1.22.0): non-credential change changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Bucket = "operator-testing-2"
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("json path (1.21.0): credential rotation does not change hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.21.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_KEY",
+							SecretAccessKey: "OLD_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_KEY",
+			SecretAccessKey: "NEW_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.Equal(t, hash1, hash2)
+	})
+	t.Run("json path (1.21.0): non-credential change changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.21.0"}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Storage.S3.Bucket = "operator-testing-2"
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
+	t.Run("map fields produce a deterministic hash across repeated calls", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						EndpointURLMap: map[string]string{
+							"rs0-0": "https://endpoint-0.example.com",
+							"rs0-1": "https://endpoint-1.example.com",
+							"rs0-2": "https://endpoint-2.example.com",
+							"rs0-3": "https://endpoint-3.example.com",
+							"rs0-4": "https://endpoint-4.example.com",
+						},
+						Credentials: s3.Credentials{
+							AccessKeyID:     "KEY",
+							SecretAccessKey: "SECRET",
+						},
+					},
+				},
+				Backup: &config.BackupConf{
+					Priority: config.Priority{
+						"host-a": 1.0,
+						"host-b": 2.0,
+						"host-c": 3.0,
+						"host-d": 4.0,
+						"host-e": 5.0,
+					},
+				},
+				Restore: &config.RestoreConf{
+					MongodLocationMap: map[string]string{
+						"rs0-0": "/usr/bin/mongod-0",
+						"rs0-1": "/usr/bin/mongod-1",
+						"rs0-2": "/usr/bin/mongod-2",
+						"rs0-3": "/usr/bin/mongod-3",
+						"rs0-4": "/usr/bin/mongod-4",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		for i := 0; i < 200; i++ {
+			h, err := hashPBMConfiguration(cfg, cr)
+			require.NoError(t, err)
+			require.Equal(t, hash1, h, "hash flapped on iteration %d", i)
+		}
+	})
+	t.Run("changing map contents changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{Bucket: "operator-testing"},
+				},
+				Restore: &config.RestoreConf{
+					MongodLocationMap: map[string]string{"rs0-0": "/usr/bin/mongod"},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Restore.MongodLocationMap["rs0-1"] = "/usr/bin/mongod-alt"
 		hash2, err := hashPBMConfiguration(cfg, cr)
 		require.NoError(t, err)
 		require.NotEqual(t, hash1, hash2)
