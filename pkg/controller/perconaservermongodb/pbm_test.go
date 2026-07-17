@@ -9,9 +9,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
-	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/stretchr/testify/require"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -423,170 +422,6 @@ func TestIsResyncNeeded(t *testing.T) {
 			},
 			expected: false,
 		},
-		{
-			name: "s3: access key rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.S3,
-					S3: &s3.Config{
-						Bucket: "operator-testing",
-						Region: "us-east-1",
-						Credentials: s3.Credentials{
-							AccessKeyID:     "OLD_KEY",
-							SecretAccessKey: "OLD_SECRET",
-						},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.S3,
-					S3: &s3.Config{
-						Bucket: "operator-testing",
-						Region: "us-east-1",
-						Credentials: s3.Credentials{
-							AccessKeyID:     "NEW_KEY",
-							SecretAccessKey: "OLD_SECRET",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "minio: secret key rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Minio,
-					Minio: &mio.Config{
-						Bucket: "operator-testing",
-						Credentials: mio.Credentials{
-							AccessKeyID:     "KEY",
-							SecretAccessKey: "OLD_SECRET",
-						},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Minio,
-					Minio: &mio.Config{
-						Bucket: "operator-testing",
-						Credentials: mio.Credentials{
-							AccessKeyID:     "KEY",
-							SecretAccessKey: "NEW_SECRET",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "azure: key rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Azure,
-					Azure: &azure.Config{
-						Account:     "operator-account",
-						Container:   "operator-testing",
-						Credentials: azure.Credentials{Key: "OLD_KEY"},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.Azure,
-					Azure: &azure.Config{
-						Account:     "operator-account",
-						Container:   "operator-testing",
-						Credentials: azure.Credentials{Key: "NEW_KEY"},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "gcs: hmac secret rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.GCS,
-					GCS: &gcs.Config{
-						Bucket: "operator-testing",
-						Credentials: gcs.Credentials{
-							HMACAccessKey: "KEY",
-							HMACSecret:    "OLD_SECRET",
-						},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.GCS,
-					GCS: &gcs.Config{
-						Bucket: "operator-testing",
-						Credentials: gcs.Credentials{
-							HMACAccessKey: "KEY",
-							HMACSecret:    "NEW_SECRET",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "oss: access key rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.OSS,
-					OSS: &oss.Config{
-						Bucket:      "operator-testing",
-						Credentials: oss.Credentials{AccessKeyID: "OLD_KEY", AccessKeySecret: "S"},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.OSS,
-					OSS: &oss.Config{
-						Bucket:      "operator-testing",
-						Credentials: oss.Credentials{AccessKeyID: "NEW_KEY", AccessKeySecret: "S"},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "oci: user principal private key rotated",
-			currentCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.OCI,
-					OCI: &oci.Config{
-						Bucket: "operator-testing",
-						Credentials: oci.Credentials{
-							UserPrincipal: &oci.UserPrincipalCredentials{
-								Tenancy: "t", User: "u", Fingerprint: "f",
-								PrivateKey: "OLD_KEY",
-							},
-						},
-					},
-				},
-			},
-			newCfg: &config.Config{
-				Storage: config.StorageConf{
-					Type: storage.OCI,
-					OCI: &oci.Config{
-						Bucket: "operator-testing",
-						Credentials: oci.Credentials{
-							UserPrincipal: &oci.UserPrincipalCredentials{
-								Tenancy: "t", User: "u", Fingerprint: "f",
-								PrivateKey: "NEW_KEY",
-							},
-						},
-					},
-				},
-			},
-			expected: true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -603,7 +438,7 @@ func TestIsResyncNeeded(t *testing.T) {
 
 func TestHashPBMConfiguration(t *testing.T) {
 	t.Run("updating credentials changes hash", func(t *testing.T) {
-		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
 		cfg := []config.Config{
 			{
 				Name: "test",
@@ -628,12 +463,8 @@ func TestHashPBMConfiguration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, hash1, hash2)
 	})
-
-	// storage.MaskedString marshals any non-empty value to "***", so rotating
-	// credentials between two non-empty values produces an identical hash.
-	// This is why isResyncNeeded must compare credentials directly.
-	t.Run("rotating non-empty credentials does not change hash", func(t *testing.T) {
-		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: "1.22.0"}}
+	t.Run("rotating non-empty credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
 		cfg := []config.Config{
 			{
 				Name: "test",
@@ -660,6 +491,47 @@ func TestHashPBMConfiguration(t *testing.T) {
 		}
 		hash2, err := hashPBMConfiguration(cfg, cr)
 		require.NoError(t, err)
-		require.Equal(t, hash1, hash2)
+		require.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("rotating profile credentials changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "main",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "main-bucket",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "MAIN_KEY",
+							SecretAccessKey: "MAIN_SECRET",
+						},
+					},
+				},
+			},
+			{
+				Name:      "profile-a",
+				IsProfile: true,
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "profile-bucket",
+						Credentials: s3.Credentials{
+							AccessKeyID:     "OLD_PROFILE_KEY",
+							SecretAccessKey: "OLD_PROFILE_SECRET",
+						},
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[1].Storage.S3.Credentials = s3.Credentials{
+			AccessKeyID:     "NEW_PROFILE_KEY",
+			SecretAccessKey: "NEW_PROFILE_SECRET",
+		}
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
 	})
 }

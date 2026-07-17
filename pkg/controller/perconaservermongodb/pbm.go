@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 	"gopkg.in/yaml.v3"
@@ -21,7 +22,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
-	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -158,7 +158,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	// Hashes can be equal even if the actual PBM configuration differs from the one that was hashed
 	// For example, a restore can modify the PBM config
 	// We should use `isResyncNeeded` to compare the current configuration with the one we need
-	// Also, storage credentials are not hashed since they are excluded from JSON representation. `isResyncNeeded` will handle it.
 	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
 		return nil
 	}
@@ -199,7 +198,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 }
 
 func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (string, error) {
-	// Use YAML marshaller so that even credentials are included
+	// storage.MaskedString masks credentials in JSON and YAML but not in BSON,
+	// so BSON is the only marshaller that lets credential rotation change the hash.
+	if cr.CompareVersion("1.23.0") >= 0 {
+		v, err := bson.Marshal(struct {
+			Configs []config.Config `bson:"configs"`
+		}{Configs: c})
+		if err != nil {
+			return "", err
+		}
+		return sha256Hash(v), nil
+	}
+	// 1.22.0 used yaml, earlier versions used json. Both mask credentials in
+	// storage.MaskedString fields, so credential rotation is not detected
+	// through the hash on those versions.
 	if cr.CompareVersion("1.22.0") >= 0 {
 		v, err := yaml.Marshal(c)
 		if err != nil {
@@ -207,7 +219,6 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 		}
 		return sha256Hash(v), nil
 	}
-	// Use JSON for versions prior to 1.22.0
 	v, err := json.Marshal(c)
 	if err != nil {
 		return "", err
@@ -216,50 +227,7 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
-	if !currentCfg.Storage.IsSameStorage(&newCfg.Storage) {
-		return true
-	}
-	return !sameStorageCredentials(&currentCfg.Storage, &newCfg.Storage)
-}
-
-func sameStorageCredentials(a, b *config.StorageConf) bool {
-	if a.Type != b.Type {
-		return false
-	}
-	switch a.Type {
-	case storage.S3:
-		if a.S3 == nil || b.S3 == nil {
-			return a.S3 == b.S3
-		}
-		return reflect.DeepEqual(a.S3.Credentials, b.S3.Credentials)
-	case storage.Minio:
-		if a.Minio == nil || b.Minio == nil {
-			return a.Minio == b.Minio
-		}
-		return reflect.DeepEqual(a.Minio.Credentials, b.Minio.Credentials)
-	case storage.Azure:
-		if a.Azure == nil || b.Azure == nil {
-			return a.Azure == b.Azure
-		}
-		return reflect.DeepEqual(a.Azure.Credentials, b.Azure.Credentials)
-	case storage.GCS:
-		if a.GCS == nil || b.GCS == nil {
-			return a.GCS == b.GCS
-		}
-		return reflect.DeepEqual(a.GCS.Credentials, b.GCS.Credentials)
-	case storage.OSS:
-		if a.OSS == nil || b.OSS == nil {
-			return a.OSS == b.OSS
-		}
-		return reflect.DeepEqual(a.OSS.Credentials, b.OSS.Credentials)
-	case storage.OCI:
-		if a.OCI == nil || b.OCI == nil {
-			return a.OCI == b.OCI
-		}
-		return reflect.DeepEqual(a.OCI.Credentials, b.OCI.Credentials)
-	default:
-		return true
-	}
+	return !currentCfg.Storage.IsSameStorage(&newCfg.Storage)
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
