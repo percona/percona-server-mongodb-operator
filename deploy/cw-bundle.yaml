@@ -31460,7 +31460,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: percona/percona-server-mongodb-operator:1.23.0
+          image: perconalab/percona-server-mongodb-operator:1.23.0-custom
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
