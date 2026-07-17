@@ -1021,11 +1021,11 @@ type LivenessProbeExtended struct {
 }
 
 func (l LivenessProbeExtended) CommandHas(flag string) bool {
-	if l.ProbeHandler.Exec == nil {
+	if l.Exec == nil {
 		return false
 	}
 
-	return slices.Contains(l.ProbeHandler.Exec.Command, flag)
+	return slices.Contains(l.Exec.Command, flag)
 }
 
 type VolumeSpec struct {

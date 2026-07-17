@@ -221,6 +221,3 @@ func backupWithState(name, namespace, uid, clusterName string, state psmdbv1.Bac
 		Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: state},
 	}
 }
-
-//go:fix inline
-func stringPtr(s string) *string { return new(s) }
