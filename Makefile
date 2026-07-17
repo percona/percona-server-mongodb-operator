@@ -21,7 +21,7 @@ generate: controller-gen mockgen go-fix ## Generate CRDs and RBAC files
 
 .PHONY: go-fix
 go-fix: ## Run go fix on all packages
-	go fix ./...
+	go fix ./pkg/...
 
 $(DEPLOYDIR)/crd.yaml: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
