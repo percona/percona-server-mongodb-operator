@@ -676,4 +676,75 @@ func TestHashPBMConfiguration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, hash1, hash2)
 	})
+	t.Run("map fields produce a deterministic hash across repeated calls", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{
+						Bucket: "operator-testing",
+						Region: "us-east-1",
+						EndpointURLMap: map[string]string{
+							"rs0-0": "https://endpoint-0.example.com",
+							"rs0-1": "https://endpoint-1.example.com",
+							"rs0-2": "https://endpoint-2.example.com",
+							"rs0-3": "https://endpoint-3.example.com",
+							"rs0-4": "https://endpoint-4.example.com",
+						},
+						Credentials: s3.Credentials{
+							AccessKeyID:     "KEY",
+							SecretAccessKey: "SECRET",
+						},
+					},
+				},
+				Backup: &config.BackupConf{
+					Priority: config.Priority{
+						"host-a": 1.0,
+						"host-b": 2.0,
+						"host-c": 3.0,
+						"host-d": 4.0,
+						"host-e": 5.0,
+					},
+				},
+				Restore: &config.RestoreConf{
+					MongodLocationMap: map[string]string{
+						"rs0-0": "/usr/bin/mongod-0",
+						"rs0-1": "/usr/bin/mongod-1",
+						"rs0-2": "/usr/bin/mongod-2",
+						"rs0-3": "/usr/bin/mongod-3",
+						"rs0-4": "/usr/bin/mongod-4",
+					},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		for i := 0; i < 200; i++ {
+			h, err := hashPBMConfiguration(cfg, cr)
+			require.NoError(t, err)
+			require.Equal(t, hash1, h, "hash flapped on iteration %d", i)
+		}
+	})
+	t.Run("changing map contents changes hash", func(t *testing.T) {
+		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
+		cfg := []config.Config{
+			{
+				Name: "test",
+				Storage: config.StorageConf{
+					S3: &s3.Config{Bucket: "operator-testing"},
+				},
+				Restore: &config.RestoreConf{
+					MongodLocationMap: map[string]string{"rs0-0": "/usr/bin/mongod"},
+				},
+			},
+		}
+		hash1, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+
+		cfg[0].Restore.MongodLocationMap["rs0-1"] = "/usr/bin/mongod-alt"
+		hash2, err := hashPBMConfiguration(cfg, cr)
+		require.NoError(t, err)
+		require.NotEqual(t, hash1, hash2)
+	})
 }

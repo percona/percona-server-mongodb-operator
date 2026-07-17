@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -201,10 +202,7 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 	// storage.MaskedString masks credentials in JSON and YAML but not in BSON,
 	// so BSON is the only marshaller that lets credential rotation change the hash.
 	if cr.CompareVersion("1.23.0") >= 0 {
-		// bson.Marshal requires a top-level document since it can't marshal a bare slice, that's why configs was used.
-		v, err := bson.Marshal(struct {
-			Configs []config.Config `bson:"configs"`
-		}{Configs: c})
+		v, err := canonicalConfigBSON(c)
 		if err != nil {
 			return "", err
 		}
@@ -225,6 +223,37 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 		return "", err
 	}
 	return sha256Hash(v), nil
+}
+
+func canonicalConfigBSON(c []config.Config) ([]byte, error) {
+	// bson.Marshal requires a top-level document since it can't marshal a bare slice, that's why configs was used.
+	raw, err := bson.Marshal(struct {
+		Configs []config.Config `bson:"configs"`
+	}{Configs: c})
+	if err != nil {
+		return nil, err
+	}
+	var d bson.D
+	if err := bson.Unmarshal(raw, &d); err != nil {
+		return nil, err
+	}
+	sortBSONKeys(d)
+	return bson.Marshal(d)
+}
+
+// sortBSONKeys recursively sorts keys in every bson.D reachable from v.
+func sortBSONKeys(v any) {
+	switch x := v.(type) {
+	case bson.D:
+		sort.Slice(x, func(i, j int) bool { return x[i].Key < x[j].Key })
+		for i := range x {
+			sortBSONKeys(x[i].Value)
+		}
+	case bson.A:
+		for i := range x {
+			sortBSONKeys(x[i])
+		}
+	}
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
