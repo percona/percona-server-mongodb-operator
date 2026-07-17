@@ -1407,9 +1407,10 @@ const (
 	AuthTypeOkeWorkloadIdentity OCIAuthType = "okeWorkloadIdentity"
 )
 
-// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'userPrincipal' || (has(self.secretName) && size(self.secretName) > 0)",message="secretName must be set when credentials type is userPrincipal"
+// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'userPrincipal' || has(self.secretName)",message="secretName must be set when credentials type is userPrincipal"
 type OCICredentialsSpec struct {
 	Type OCIAuthType `json:"type,omitempty"`
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	SecretName string `json:"secretName,omitempty"`
 }
