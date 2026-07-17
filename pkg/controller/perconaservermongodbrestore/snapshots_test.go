@@ -15,7 +15,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -41,7 +40,7 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 	require.NotNil(t, pvc.Spec.DataSource)
 	assert.Equal(t, "my-snapshot", pvc.Spec.DataSource.Name)
 	assert.Equal(t, "VolumeSnapshot", pvc.Spec.DataSource.Kind)
-	assert.Equal(t, ptr.To(volumesnapshotv1.SchemeGroupVersion.Group), pvc.Spec.DataSource.APIGroup)
+	assert.Equal(t, new(volumesnapshotv1.SchemeGroupVersion.Group), pvc.Spec.DataSource.APIGroup)
 	assert.Equal(t, "my-restore", pvc.Annotations[naming.AnnotationRestoreName])
 	assert.Equal(t, labels, pvc.Labels)
 }
@@ -172,7 +171,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(3)),
+				Replicas: new(int32(3)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
@@ -217,7 +216,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(0)),
+				Replicas: new(int32(0)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
@@ -270,7 +269,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 					Namespace: ns,
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr.To(int32(0)),
+					Replicas: new(int32(0)),
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: "mongod"}},
@@ -320,7 +319,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(1)),
+				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
@@ -396,7 +395,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(1)),
+				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
@@ -461,7 +460,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(1)),
+				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
@@ -536,7 +535,7 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(0)),
+				Replicas: new(int32(0)),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 0,
@@ -564,7 +563,7 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(rs.Size),
+				Replicas: new(rs.Size),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: rs.Size,
@@ -1009,7 +1008,7 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 			Namespace: ns,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: ptr.To(int32(1)),
+			Replicas: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "mongod"}},

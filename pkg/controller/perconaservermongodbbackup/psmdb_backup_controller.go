@@ -5,6 +5,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -394,10 +395,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
-	for _, f := range cr.GetFinalizers() {
-		if f == naming.FinalizerReleaseLock {
-			return nil
-		}
+	if slices.Contains(cr.GetFinalizers(), naming.FinalizerReleaseLock) {
+		return nil
 	}
 
 	orig := cr.DeepCopy()

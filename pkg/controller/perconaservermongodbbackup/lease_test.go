@@ -222,4 +222,5 @@ func backupWithState(name, namespace, uid, clusterName string, state psmdbv1.Bac
 	}
 }
 
-func stringPtr(s string) *string { return &s }
+//go:fix inline
+func stringPtr(s string) *string { return new(s) }

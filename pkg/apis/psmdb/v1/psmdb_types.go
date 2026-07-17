@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -694,8 +695,8 @@ func (h *HiddenSpec) GetSize() int32 {
 
 type MongoConfiguration string
 
-func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interface{}, error) {
-	m := make(map[string]interface{})
+func (conf MongoConfiguration) GetOptions(name string) (map[any]any, error) {
+	m := make(map[string]any)
 	err := yaml.Unmarshal([]byte(conf), m)
 	if err != nil {
 		return nil, err
@@ -704,7 +705,7 @@ func (conf MongoConfiguration) GetOptions(name string) (map[interface{}]interfac
 	if !ok {
 		return nil, nil
 	}
-	options, _ := val.(map[interface{}]interface{})
+	options, _ := val.(map[any]any)
 	return options, nil
 }
 
@@ -849,7 +850,7 @@ func (conf *MongoConfiguration) SetPort(port int32) error {
 
 // setEncryptionDefaults sets encryptionKeyFile to a default value if enableEncryption is specified.
 func (conf *MongoConfiguration) setEncryptionDefaults() error {
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 
 	err := yaml.Unmarshal([]byte(*conf), m)
 	if err != nil {
@@ -861,7 +862,7 @@ func (conf *MongoConfiguration) setEncryptionDefaults() error {
 		return nil
 	}
 
-	security, ok := val.(map[interface{}]interface{})
+	security, ok := val.(map[any]any)
 	if !ok {
 		return errors.New("security configuration section is invalid")
 	}
@@ -1024,13 +1025,7 @@ func (l LivenessProbeExtended) CommandHas(flag string) bool {
 		return false
 	}
 
-	for _, v := range l.ProbeHandler.Exec.Command {
-		if v == flag {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(l.ProbeHandler.Exec.Command, flag)
 }
 
 type VolumeSpec struct {
@@ -1412,7 +1407,7 @@ const (
 	AuthTypeOkeWorkloadIdentity OCIAuthType = "okeWorkloadIdentity"
 )
 
-// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'userPrincipal' || (has(self.secretName) && self.secretName != '')",message="secretName must be set when credentials type is userPrincipal"
+// +kubebuilder:validation:XValidation:rule="!has(self.type) || self.type != 'userPrincipal' || (has(self.secretName) && self.secretName != ”)",message="secretName must be set when credentials type is userPrincipal"
 type OCICredentialsSpec struct {
 	Type       OCIAuthType `json:"type,omitempty"`
 	SecretName string      `json:"secretName,omitempty"`
