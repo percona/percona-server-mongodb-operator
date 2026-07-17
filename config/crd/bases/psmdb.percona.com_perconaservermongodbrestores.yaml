@@ -168,7 +168,7 @@ spec:
                         - message: secretName must be set when credentials type is
                             userPrincipal
                           rule: '!has(self.type) || self.type != ''userPrincipal''
-                            || (has(self.secretName) && self.secretName != '''')'
+                            || (has(self.secretName) && self.secretName != ”)'
                       maxObjSizeGB:
                         type: number
                       namespace:
