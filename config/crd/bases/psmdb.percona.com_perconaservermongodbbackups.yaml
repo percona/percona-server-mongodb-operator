@@ -202,6 +202,7 @@ spec:
                   credentials:
                     properties:
                       secretName:
+                        maxLength: 253
                         type: string
                       type:
                         type: string
