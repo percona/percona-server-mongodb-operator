@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 	"gopkg.in/yaml.v3"
@@ -157,7 +159,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	// Hashes can be equal even if the actual PBM configuration differs from the one that was hashed
 	// For example, a restore can modify the PBM config
 	// We should use `isResyncNeeded` to compare the current configuration with the one we need
-	// Also, storage credentials are not hashed since they are excluded from JSON representation. `isResyncNeeded` will handle it.
 	if cr.Status.BackupConfigHash == hash && !isResyncNeeded(currentCfg, &main) {
 		return nil
 	}
@@ -198,7 +199,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 }
 
 func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (string, error) {
-	// Use YAML marshaller so that even credentials are included
+	// storage.MaskedString masks credentials in JSON and YAML but not in BSON,
+	// so BSON is the only marshaller that lets credential rotation change the hash.
+	if cr.CompareVersion("1.23.0") >= 0 {
+		v, err := canonicalConfigBSON(c)
+		if err != nil {
+			return "", err
+		}
+		return sha256Hash(v), nil
+	}
+	// 1.22.0 used yaml, earlier versions used json. Both mask credentials in
+	// storage.MaskedString fields, so credential rotation is not detected
+	// through the hash on those versions.
 	if cr.CompareVersion("1.22.0") >= 0 {
 		v, err := yaml.Marshal(c)
 		if err != nil {
@@ -206,12 +218,42 @@ func hashPBMConfiguration(c []config.Config, cr *psmdbv1.PerconaServerMongoDB) (
 		}
 		return sha256Hash(v), nil
 	}
-	// Use JSON for versions prior to 1.22.0
 	v, err := json.Marshal(c)
 	if err != nil {
 		return "", err
 	}
 	return sha256Hash(v), nil
+}
+
+func canonicalConfigBSON(c []config.Config) ([]byte, error) {
+	// bson.Marshal requires a top-level document since it can't marshal a bare slice, that's why configs was used.
+	raw, err := bson.Marshal(struct {
+		Configs []config.Config `bson:"configs"`
+	}{Configs: c})
+	if err != nil {
+		return nil, err
+	}
+	var d bson.D
+	if err := bson.Unmarshal(raw, &d); err != nil {
+		return nil, err
+	}
+	sortBSONKeys(d)
+	return bson.Marshal(d)
+}
+
+// sortBSONKeys recursively sorts keys in every bson.D reachable from v.
+func sortBSONKeys(v any) {
+	switch x := v.(type) {
+	case bson.D:
+		sort.Slice(x, func(i, j int) bool { return x[i].Key < x[j].Key })
+		for i := range x {
+			sortBSONKeys(x[i].Value)
+		}
+	case bson.A:
+		for i := range x {
+			sortBSONKeys(x[i])
+		}
+	}
 }
 
 func isResyncNeeded(currentCfg *config.Config, newCfg *config.Config) bool {
@@ -231,21 +273,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
 	}
 
 	// if PiTR is enabled user can configure only one storage
-	var storage psmdbv1.BackupStorageSpec
-	for name, stg := range cr.Spec.Backup.Storages {
-		storage = stg
+	var stg psmdbv1.BackupStorageSpec
+	for name, s := range cr.Spec.Backup.Storages {
+		stg = s
 		log.Info("Configuring PBM with storage", "storage", name)
 		break
 	}
 
 	var secretName string
-	switch storage.Type {
+	switch stg.Type {
 	case psmdbv1.BackupStorageS3:
-		secretName = storage.S3.CredentialsSecret
+		secretName = stg.S3.CredentialsSecret
 	case psmdbv1.BackupStorageAzure:
-		secretName = storage.Azure.CredentialsSecret
+		secretName = stg.Azure.CredentialsSecret
 	case psmdbv1.BackupStorageOSS:
-		secretName = storage.OSS.CredentialsSecret
+		secretName = stg.OSS.CredentialsSecret
 	}
 
 	if secretName != "" {
@@ -260,7 +302,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePiTRStorageLegacy(
 		}
 	}
 
-	err := pbm.GetNSetConfigLegacy(ctx, r.client, cr, storage)
+	err := pbm.GetNSetConfigLegacy(ctx, r.client, cr, stg)
 	if err != nil {
 		return errors.Wrap(err, "set PBM config")
 	}
