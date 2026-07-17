@@ -1089,7 +1089,7 @@ spec:
 #        periodSeconds: 10
 #  search:
 #    enabled: true
-#    image: perconalab/percona-server-mongodb-mongot:0.70.1
+#    image: perconalab/percona-server-mongodb-operator:main-mongot
 #    size: 1
 #    storage:
 #      persistentVolumeClaim:
