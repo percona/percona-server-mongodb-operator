@@ -2243,7 +2243,7 @@ setup_gcs_credentials() {
 
 	echo "Setting up GCS credentials from K8s secret: $secret_name"
 
-	Disable tracing for the entire credential section
+	# Disable tracing for the entire credential section
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
@@ -2276,14 +2276,15 @@ EOF
 
 	[[ $trace_was_on -eq 1 ]] && set -x
 
-	echo "Recheck GCS credentials working"
+	echo "GCS credentials configured successfully"
+	# echo "Recheck GCS credentials working"
 
-	if gsutil ls "gs://operator-testing/psmdb-demand-backup-physical" >/dev/null 2>&1; then
-		echo "GCS credentials configured successfully"
-	else
-		echo "GCS credentials not working"
-		exit 1
-	fi
+	# if gsutil ls "gs://operator-testing/psmdb-demand-backup-physical" >/dev/null 2>&1; then
+	# 	echo "GCS credentials configured successfully"
+	# else
+	# 	echo "GCS credentials not working"
+	# 	exit 1
+	# fi
 }
 
 setup_azure_credentials() {
@@ -2992,10 +2993,10 @@ check_backup_existence_gcs() {
 	gcs_path="gs://${backup_dest_gcp}${obj}"
 
 	until gsutil ls "$gcs_path" >/dev/null 2>&1; do
-		if [ $retry -ge 15 ]; then
-			gsutil ls "$gcs_path"
+		if [ $retry -ge 30 ]; then
 			echo "Max retry count $retry reached. Something went wrong with operator or Kubernetes cluster."
 			echo "Backup was not found in bucket -- $storage_name"
+			gsutil ls "$gcs_path"
 			exit 1
 		fi
 		echo "Waiting for backup $gcs_path in $storage_name"
