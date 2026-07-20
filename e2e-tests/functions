@@ -2988,7 +2988,8 @@ check_backup_existence_gcs() {
 	gcs_path="gs://${backup_dest_gcp}${obj}"
 
 	until gsutil ls "$gcs_path" >/dev/null 2>&1; do
-		if [ $retry -ge 30 ]; then
+		if [ $retry -ge 15 ]; then
+			gsutil ls "$gcs_path"
 			echo "Max retry count $retry reached. Something went wrong with operator or Kubernetes cluster."
 			echo "Backup was not found in bucket -- $storage_name"
 			exit 1
