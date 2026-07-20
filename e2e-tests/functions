@@ -2272,7 +2272,14 @@ EOF
 
 	[[ $trace_was_on -eq 1 ]] && set -x
 
-	echo "GCS credentials configured successfully"
+	echo "Recheck GCS credentials working"
+
+	if gsutil ls >/dev/null 2>&1; then
+		echo "GCS credentials configured successfully"
+	else
+		echo "GCS credentials not working"
+		exit 1
+	fi
 }
 
 setup_azure_credentials() {
