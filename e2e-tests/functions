@@ -2232,6 +2232,10 @@ setup_oci_s3_credentials() {
 setup_gcs_credentials() {
 	local secret_name="gcp-cs-secret"
 
+	#  unset GOOGLE_APPLICATION_CREDENTIALS
+	#  export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+	#  export CLOUDSDK_CONFIG=$(mktemp -d)
+
 	if gsutil ls >/dev/null 2>&1; then
 		echo "GCS credentials already set in environment"
 		return 0
@@ -2239,7 +2243,7 @@ setup_gcs_credentials() {
 
 	echo "Setting up GCS credentials from K8s secret: $secret_name"
 
-	# Disable tracing for the entire credential section
+	Disable tracing for the entire credential section
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
@@ -2274,7 +2278,7 @@ EOF
 
 	echo "Recheck GCS credentials working"
 
-	if gsutil ls >/dev/null 2>&1; then
+	if gsutil ls "gs://operator-testing/psmdb-demand-backup-physical" >/dev/null 2>&1; then
 		echo "GCS credentials configured successfully"
 	else
 		echo "GCS credentials not working"
