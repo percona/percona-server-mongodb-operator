@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -68,9 +68,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
-		for k, v := range cr.Spec.Sharding.Mongos.Labels {
-			ls[k] = v
-		}
+		maps.Copy(ls, cr.Spec.Sharding.Mongos.Labels)
 	}
 
 	mountKeyFile := cr.KeyFileAuthEnabled() || keyfileExists
@@ -427,7 +425,7 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: name,
 					},
-					Optional: ptr.To(true),
+					Optional: new(true),
 				},
 			},
 		})
@@ -453,9 +451,7 @@ func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 
 	if cr.Spec.Sharding.Mongos != nil {
 		annotations := make(map[string]string)
-		for k, v := range cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations {
-			annotations[k] = v
-		}
+		maps.Copy(annotations, cr.Spec.Sharding.Mongos.Expose.ServiceAnnotations)
 
 		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
 			var hostname string

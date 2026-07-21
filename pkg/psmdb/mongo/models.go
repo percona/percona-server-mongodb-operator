@@ -44,7 +44,7 @@ type RSConfig struct {
 	Members                            ConfigMembers `bson:"members" json:"members"`
 	Configsvr                          bool          `bson:"configsvr,omitempty" json:"configsvr,omitempty"`
 	ProtocolVersion                    int           `bson:"protocolVersion,omitempty" json:"protocolVersion,omitempty"`
-	Settings                           Settings      `bson:"settings,omitempty" json:"settings,omitempty"`
+	Settings                           Settings      `bson:"settings,omitempty" json:"settings"`
 	WriteConcernMajorityJournalDefault bool          `bson:"writeConcernMajorityJournalDefault" json:"writeConcernMajorityJournalDefault"`
 }
 
@@ -56,7 +56,7 @@ type Settings struct {
 	ElectionTimeoutMillis   int64                              `bson:"electionTimeoutMillis,omitempty" json:"electionTimeoutMillis,omitempty"`
 	CatchUpTimeoutMillis    int64                              `bson:"catchUpTimeoutMillis,omitempty" json:"catchUpTimeoutMillis,omitempty"`
 	GetLastErrorModes       map[string]WriteConcernReplsetTags `bson:"getLastErrorModes,omitempty" json:"getLastErrorModes,omitempty"`
-	GetLastErrorDefaults    WriteConcern                       `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults,omitempty"`
+	GetLastErrorDefaults    WriteConcern                       `bson:"getLastErrorDefaults,omitempty" json:"getLastErrorDefaults"`
 	ReplicaSetID            bson.ObjectID                      `bson:"replicaSetId,omitempty" json:"replicaSetId,omitempty"`
 }
 
@@ -80,9 +80,9 @@ type OKResponse struct {
 
 // WriteConcern document: https://docs.mongodb.com/manual/reference/write-concern/
 type WriteConcern struct {
-	WriteConcern interface{} `bson:"w" json:"w"`
-	WriteTimeout int         `bson:"wtimeout" json:"wtimeout"`
-	Journal      bool        `bson:"j,omitempty" json:"j,omitempty"`
+	WriteConcern any  `bson:"w" json:"w"`
+	WriteTimeout int  `bson:"wtimeout" json:"wtimeout"`
+	Journal      bool `bson:"j,omitempty" json:"j,omitempty"`
 }
 
 type BalancerStatus struct {
@@ -157,13 +157,13 @@ type Member struct {
 	Optime            *Optime        `bson:"optime" json:"optime"`
 	OptimeDate        time.Time      `bson:"optimeDate" json:"optimeDate"`
 	ConfigVersion     int            `bson:"configVersion" json:"configVersion"`
-	ElectionTime      bson.Timestamp `bson:"electionTime,omitempty" json:"electionTime,omitempty"`
-	ElectionDate      time.Time      `bson:"electionDate,omitempty" json:"electionDate,omitempty"`
+	ElectionTime      bson.Timestamp `bson:"electionTime,omitempty" json:"electionTime"`
+	ElectionDate      time.Time      `bson:"electionDate,omitempty" json:"electionDate"`
 	InfoMessage       string         `bson:"infoMessage,omitempty" json:"infoMessage,omitempty"`
 	OptimeDurable     *Optime        `bson:"optimeDurable,omitempty" json:"optimeDurable,omitempty"`
-	OptimeDurableDate time.Time      `bson:"optimeDurableDate,omitempty" json:"optimeDurableDate,omitempty"`
-	LastHeartbeat     time.Time      `bson:"lastHeartbeat,omitempty" json:"lastHeartbeat,omitempty"`
-	LastHeartbeatRecv time.Time      `bson:"lastHeartbeatRecv,omitempty" json:"lastHeartbeatRecv,omitempty"`
+	OptimeDurableDate time.Time      `bson:"optimeDurableDate,omitempty" json:"optimeDurableDate"`
+	LastHeartbeat     time.Time      `bson:"lastHeartbeat,omitempty" json:"lastHeartbeat"`
+	LastHeartbeatRecv time.Time      `bson:"lastHeartbeatRecv,omitempty" json:"lastHeartbeatRecv"`
 	PingMs            int64          `bson:"pingMs,omitempty" json:"pingMs,omitempty"`
 	Self              bool           `bson:"self,omitempty" json:"self,omitempty"`
 	SyncingTo         string         `bson:"syncingTo,omitempty" json:"syncingTo,omitempty"`
@@ -249,8 +249,8 @@ type RoleAuthenticationRestriction struct {
 }
 
 type RolePrivilege struct {
-	Resource map[string]interface{} `bson:"resource" json:"resource"`
-	Actions  []string               `bson:"actions" json:"actions"`
+	Resource map[string]any `bson:"resource" json:"resource"`
+	Actions  []string       `bson:"actions" json:"actions"`
 }
 
 type InheritenceRole struct {

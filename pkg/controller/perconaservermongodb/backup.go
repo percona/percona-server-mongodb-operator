@@ -135,7 +135,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB, ctasks map[string]api.BackupTaskSpec) error {
 	log := logf.FromContext(ctx)
 
-	r.crons.backupJobs.Range(func(k, v interface{}) bool {
+	r.crons.backupJobs.Range(func(k, v any) bool {
 		item := v.(BackupScheduleJob)
 
 		if item.ClusterName != "" && item.ClusterName != cr.NamespacedName().String() {
@@ -269,11 +269,11 @@ func (h minHeap) Less(i, j int) bool {
 
 func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h *minHeap) Push(x interface{}) {
+func (h *minHeap) Push(x any) {
 	*h = append(*h, x.(api.PerconaServerMongoDBBackup))
 }
 
-func (h *minHeap) Pop() interface{} {
+func (h *minHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -355,7 +355,6 @@ func getLatestBackup(ctx context.Context, cl client.Client, cr *api.PerconaServe
 
 	var latest *api.PerconaServerMongoDBBackup
 	for _, b := range backups.Items {
-		b := b
 
 		if b.Status.State != api.BackupStateReady || b.Spec.GetClusterName() != cr.Name {
 			continue

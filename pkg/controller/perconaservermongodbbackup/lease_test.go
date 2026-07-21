@@ -221,5 +221,3 @@ func backupWithState(name, namespace, uid, clusterName string, state psmdbv1.Bac
 		Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: state},
 	}
 }
-
-func stringPtr(s string) *string { return &s }

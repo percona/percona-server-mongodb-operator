@@ -18,7 +18,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -139,7 +138,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			Namespace: namespace,
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
-			VolumeSnapshotClass: ptr.To("csi-snapclass"),
+			VolumeSnapshotClass: new("csi-snapclass"),
 		},
 	}
 
@@ -149,7 +148,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			Namespace: namespace,
 		},
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
-			ReadyToUse: ptr.To(true),
+			ReadyToUse: new(true),
 		},
 	}
 
@@ -166,7 +165,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			check: func(t *testing.T, snapshot *volumesnapshotv1.VolumeSnapshot) {
 				assert.Equal(t, naming.VolumeSnapshotName(bcp, "rs0"), snapshot.GetName())
 				assert.Equal(t, namespace, snapshot.GetNamespace())
-				assert.Equal(t, ptr.To("csi-snapclass"), snapshot.Spec.VolumeSnapshotClassName)
+				assert.Equal(t, new("csi-snapclass"), snapshot.Spec.VolumeSnapshotClassName)
 				require.NotNil(t, snapshot.Spec.Source.PersistentVolumeClaimName)
 				assert.Equal(t, "mongod-data-pod-0", *snapshot.Spec.Source.PersistentVolumeClaimName)
 			},
@@ -178,7 +177,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			check: func(t *testing.T, snapshot *volumesnapshotv1.VolumeSnapshot) {
 				assert.Equal(t, naming.VolumeSnapshotName(bcp, "rs0"), snapshot.GetName())
 				require.NotNil(t, snapshot.Status)
-				assert.Equal(t, ptr.To(true), snapshot.Status.ReadyToUse)
+				assert.Equal(t, new(true), snapshot.Status.ReadyToUse)
 			},
 		},
 	}
@@ -219,7 +218,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 			Namespace: namespace,
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
-			VolumeSnapshotClass: ptr.To("csi-snapclass"),
+			VolumeSnapshotClass: new("csi-snapclass"),
 		},
 	}
 
@@ -234,7 +233,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 				Namespace: namespace,
 			},
 			Status: &volumesnapshotv1.VolumeSnapshotStatus{
-				ReadyToUse: ptr.To(true),
+				ReadyToUse: new(true),
 			},
 		}
 	}
@@ -282,7 +281,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 						Namespace: namespace,
 					},
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
-						ReadyToUse: ptr.To(false),
+						ReadyToUse: new(false),
 					},
 				},
 			},
@@ -305,7 +304,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 					},
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
-							Message: ptr.To("snapshot creation failed: insufficient storage"),
+							Message: new("snapshot creation failed: insufficient storage"),
 						},
 					},
 				},
@@ -379,7 +378,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			},
 			Spec: api.PerconaServerMongoDBBackupSpec{
 				Type:                defs.ExternalBackup,
-				VolumeSnapshotClass: ptr.To("csi-snapclass"),
+				VolumeSnapshotClass: new("csi-snapclass"),
 			},
 			Status: api.PerconaServerMongoDBBackupStatus{
 				PBMname: pbmName,
@@ -396,7 +395,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			Namespace: namespace,
 		},
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
-			ReadyToUse: ptr.To(true),
+			ReadyToUse: new(true),
 		},
 	}
 
@@ -406,7 +405,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			Namespace: namespace,
 		},
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
-			ReadyToUse: ptr.To(false),
+			ReadyToUse: new(false),
 		},
 	}
 
@@ -508,7 +507,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			cluster: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					Backup: api.BackupSpec{
-						StartingDeadlineSeconds: ptr.To(int64(10)),
+						StartingDeadlineSeconds: new(int64(10)),
 					},
 				},
 			},
@@ -618,7 +617,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 					},
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
-							Message: ptr.To("csi driver error: disk unavailable"),
+							Message: new("csi driver error: disk unavailable"),
 						},
 					},
 				},
