@@ -42,6 +42,7 @@ spec:
       labels:
         app.kubernetes.io/name: openldap
     spec:
+      serviceAccountName: openldap
       containers:
         - name: ldap-setup
           image: docker.io/osixia/openldap:latest
