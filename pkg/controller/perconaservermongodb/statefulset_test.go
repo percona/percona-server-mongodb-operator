@@ -12,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
@@ -54,7 +53,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "test-configmap",
 				},
-				Optional: ptr.To(true),
+				Optional: new(true),
 			},
 		},
 	}
@@ -68,7 +67,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "test-configmap-cfg",
 				},
-				Optional: ptr.To(true),
+				Optional: new(true),
 			},
 		},
 	}

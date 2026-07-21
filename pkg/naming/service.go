@@ -3,8 +3,6 @@ package naming
 import (
 	"strconv"
 
-	"k8s.io/utils/ptr"
-
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -16,7 +14,7 @@ func AppProtocol(cr *api.PerconaServerMongoDB) *string {
 		//
 		// However, Istio expects `appProtocol: mongo`, so we use that instead.
 		// https://istio.io/latest/docs/ops/configuration/traffic-management/protocol-selection/#explicit-protocol-selection
-		return ptr.To("mongo")
+		return new("mongo")
 	}
 	return nil
 }

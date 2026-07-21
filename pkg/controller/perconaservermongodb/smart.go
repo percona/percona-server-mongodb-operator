@@ -520,7 +520,7 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.
 }
 
 func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
-	for i := 0; i < waitLimit; i++ {
+	for range waitLimit {
 		time.Sleep(time.Second * 1)
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)

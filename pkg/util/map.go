@@ -1,5 +1,7 @@
 package util
 
+import "maps"
+
 // MapEqual compares maps for equality
 func MapEqual(a, b map[string]string) bool {
 	if len(a) != len(b) {
@@ -18,9 +20,7 @@ func MapEqual(a, b map[string]string) bool {
 // MapCopy makes (shallow) copy of src map
 func MapCopy(src map[string]string) map[string]string {
 	dst := make(map[string]string)
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dst, src)
 
 	return dst
 }
@@ -33,9 +33,7 @@ func MapMerge(ms ...map[string]string) map[string]string {
 
 	rv := MapCopy(ms[0])
 	for _, m := range ms[1:] {
-		for k, v := range m {
-			rv[k] = v
-		}
+		maps.Copy(rv, m)
 	}
 
 	return rv
