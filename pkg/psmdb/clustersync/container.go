@@ -76,10 +76,7 @@ func loopbackStatusProbe(timeoutSeconds int32) corev1.ProbeHandler {
 	if maxTime > 1 {
 		maxTime--
 	}
-	connectTimeout := int32(1)
-	if connectTimeout > maxTime {
-		connectTimeout = maxTime
-	}
+	connectTimeout := min(int32(1), maxTime)
 	return corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
