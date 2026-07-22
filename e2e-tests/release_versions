@@ -9,6 +9,7 @@ IMAGE_PMM3_CLIENT=percona/pmm-client:3.8.1
 IMAGE_PMM3_SERVER=percona/pmm-server:3.8.1
 IMAGE_LOGCOLLECTOR=percona/fluentbit:5.0.9-1
 IMAGE_SEARCH=perconalab/percona-search-mongodb:1.70.1-1
+IMAGE_CLUSTERSYNC=percona/percona-clustersync-mongodb:0.9.0
 GKE_MIN=1.33
 GKE_MAX=1.35
 EKS_MIN=1.33
