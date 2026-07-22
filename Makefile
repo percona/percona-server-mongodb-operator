@@ -133,6 +133,7 @@ release: manifests
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" pkg/psmdb/mongos_test.go
+	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: $(IMAGE_CLUSTERSYNC)|g" deploy/clustersync.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
@@ -158,6 +159,7 @@ after-release: update-version manifests
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
+	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
 
 version-service-client: swagger
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
