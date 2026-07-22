@@ -18,6 +18,8 @@ metadata:
     support: percona/percona.com
     categories: Database
     capabilities: Deep Insights
+    operatorframework.io/supported.archs: amd64,arm64
+    operatorframework.io/supported.os: linux
     description: >-
       Percona Distribution for MongoDB Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment
     createdAt: ""
@@ -39,8 +41,6 @@ spec:
       ## Percona is Cloud Native
   
       The Percona Distribution for MongoDB Kubernetes Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment.
-      The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB
-      instance modification, or deletion of items in your Percona Server for MongoDB environment.
       The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
   
   
@@ -108,7 +108,6 @@ spec:
   
       Add the PSMDB user `Secret` to Kubernetes. User information must be placed
       in the data section of the `secrets.yaml`
-  
       file with Base64-encoded logins and passwords for the user accounts.
   
   
@@ -139,11 +138,11 @@ spec:
   links:
   - name: Percona
     url: 'https://www.percona.com/'
-  - name: Percona Kubernetes Operators Landing Page
-    url: 'https://www.percona.com/software/percona-kubernetes-operators'
   - name: Documentation
-    url: 'https://docs.percona.com/percona-operator-for-mongodb/'
-  - name: Github
+    url: 'https://docs.percona.com/percona-operator-for-mongodb/index.html'
+  - name: Cloud Native Landing Page
+    url: 'https://www.percona.com/cloud-native/'
+  - name: GitHub
     url: 'https://github.com/percona/percona-server-mongodb-operator'
   maintainers:
     - name: Percona
@@ -154,85 +153,7 @@ spec:
       mediatype: image/svg+xml
 
   customresourcedefinitions:
-    owned:
-      - description: Instance of a Percona Server for MongoDB replica set
-        displayName: PerconaServerMongoDB
-        kind: PerconaServerMongoDB
-        name: perconaservermongodbs.psmdb.percona.com
-        version: v1
-        specDescriptors: [ ]
-        statusDescriptors: [ ]
-        resources:
-          - version: v1
-            kind: Deployment
-            name: ''
-          - version: v1
-            kind: Service
-            name: ''
-          - version: v1
-            kind: ReplicaSet
-            name: ''
-          - version: v1
-            kind: Pod
-            name: ''
-          - version: v1
-            kind: Secret
-            name: ''
-          - version: v1
-            kind: ConfigMap
-            name: ''
-      - description: Instance of a Percona Server for MongoDB Backup
-        displayName: PerconaServerMongoDBBackup
-        kind: PerconaServerMongoDBBackup
-        name: perconaservermongodbbackups.psmdb.percona.com
-        version: v1
-        specDescriptors: [ ]
-        statusDescriptors: [ ]
-        resources:
-          - version: v1
-            kind: Deployment
-            name: ''
-          - version: v1
-            kind: Service
-            name: ''
-          - version: v1
-            kind: ReplicaSet
-            name: ''
-          - version: v1
-            kind: Pod
-            name: ''
-          - version: v1
-            kind: Secret
-            name: ''
-          - version: v1
-            kind: ConfigMap
-            name: ''
-      - description: Instance of a Percona Server for MongoDB Restore
-        displayName: PerconaServerMongoDBRestore
-        kind: PerconaServerMongoDBRestore
-        name: perconaservermongodbrestores.psmdb.percona.com
-        version: v1
-        specDescriptors: [ ]
-        statusDescriptors: [ ]
-        resources:
-          - version: v1
-            kind: Deployment
-            name: ''
-          - version: v1
-            kind: Service
-            name: ''
-          - version: v1
-            kind: ReplicaSet
-            name: ''
-          - version: v1
-            kind: Pod
-            name: ''
-          - version: v1
-            kind: Secret
-            name: ''
-          - version: v1
-            kind: ConfigMap
-            name: ''
+    owned: [ ]
     required: [ ]
     install:
       strategy: deployment

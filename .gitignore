@@ -189,3 +189,11 @@ bin/
 projects/
 installers/olm/operator_*.yaml
 installers/olm/bundles
+installers/olm/tools
+installers/olm/catalogs
+
+# Generated namespace-scoped manifests
+config/manager/namespace/operator.yaml
+config/rbac/namespace/role.yaml
+config/rbac/namespace/role_binding.yaml
+config/rbac/namespace/service_account.yaml

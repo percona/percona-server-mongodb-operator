@@ -75,6 +75,14 @@ undeploy: ## Undeploy operator
 test: envtest generate ## Run tests.
 	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+.PHONY: validate
+validate: ## Validate OLM bundles
+	$(MAKE) -C installers/olm validate VERSION=$(VERSION)
+
+.PHONY: validate/community validate/certified
+validate/community validate/certified: validate/%: ## Validate one OLM bundle
+	$(MAKE) -C installers/olm validate/$* VERSION=$(VERSION)
+
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-get-tool
