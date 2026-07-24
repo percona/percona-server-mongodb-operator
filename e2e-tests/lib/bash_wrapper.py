@@ -21,7 +21,7 @@ def run_bash_test(test_name: str) -> None:
 
     try:
         os.chdir(script_dir)
-        result = subprocess.run(["bash", "run"])
+        result = subprocess.run(["bash", "run"], check=False)
 
         if result.returncode != 0:
             pytest.fail(f"Test {test_name} failed with exit code {result.returncode}")

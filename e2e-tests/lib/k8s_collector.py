@@ -4,8 +4,7 @@ import logging
 import os
 import tarfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 
 from lib.kubectl import kubectl_bin
 
@@ -15,10 +14,10 @@ REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
 
 
 class K8sCollector:
-    def __init__(self, namespace: str, custom_resources: Optional[List[str]] = None):
+    def __init__(self, namespace: str, custom_resources: list[str] | None = None):
         self.namespace = namespace
         self.custom_resources = custom_resources or []
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         self.output_dir = os.path.join(REPORTS_DIR, f"{namespace}_{self.timestamp}")
 
     def kubectl(self, *args: str) -> str:
@@ -29,7 +28,7 @@ class K8sCollector:
         """Run kubectl command with namespace flag"""
         return kubectl_bin(*args, "-n", self.namespace, check=False, return_stderr=True)
 
-    def get_names(self, resource_type: str) -> List[str]:
+    def get_names(self, resource_type: str) -> list[str]:
         """Get list of resource names"""
         output = self.kubectl_ns("get", resource_type, "-o", "name")
         return [line.split("/")[-1] for line in output.strip().split("\n") if line]
@@ -122,7 +121,7 @@ class K8sCollector:
                 + "\n\n".join(errors),
             )
 
-    def capture_summary(self) -> Dict[str, str]:
+    def capture_summary(self) -> dict[str, str]:
         """Capture simplified resources for HTML report. Returns dict with resources, logs, events."""
         sections = []
 
@@ -189,7 +188,7 @@ class K8sCollector:
 
 
 def collect_resources(
-    namespace: str, custom_resources: Optional[List[str]] = None, output_dir: Optional[str] = None
+    namespace: str, custom_resources: list[str] | None = None, output_dir: str | None = None
 ) -> None:
     """Collect Kubernetes resources for a given namespace."""
     collector = K8sCollector(namespace, custom_resources)

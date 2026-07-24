@@ -1,8 +1,9 @@
 import groovy.transform.Field
 
-@Field def region = 'us-central1'
+@Field def zone = 'us-central1-c'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
+@Field int clusterCount = 15
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -10,7 +11,7 @@ void createCluster(String CLUSTER_SUFFIX) {
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
-            GKE_VERSION=\$(gcloud container get-server-config --zone ${region} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
+            GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
             if [ -z "\${GKE_VERSION}" ]; then
                 echo "Failed to detect the minimum Kubernetes version from the GKE stable release channel"
                 exit 1
@@ -18,11 +19,11 @@ void createCluster(String CLUSTER_SUFFIX) {
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
                 gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
                     --spot \
-                    --region=${region} \
+                    --zone=${zone} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
                     --num-nodes=3 \
@@ -43,7 +44,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --region ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --region ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 exit 1
             fi
         """
@@ -65,7 +66,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --region ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${zone} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         """
    }
 }
@@ -89,7 +90,7 @@ void deleteOldClusters(String FILTER) {
                             break
                         fi
                     done
-                    gcloud container clusters delete --async --region ${region} --quiet \$GKE_CLUSTER || true
+                    gcloud container clusters delete --async --zone ${zone} --quiet \$GKE_CLUSTER || true
                 done
             fi
         """
@@ -191,9 +192,20 @@ String formatTime(def time) {
 
 @Field def TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
 
+String resultIcon(def result) {
+    switch (result) {
+        case "passed":  return "✅"
+        case "failure": return "❌"
+        case "error":   return "⚠️"
+        default:        return "⏭️"
+    }
+}
+
 void makeReport() {
     def wholeTestAmount = tests.size()
     def startedTestAmount = 0
+    def failedTestAmount = 0
+    def erroredTestAmount = 0
     def totalTestTime = 0
 
     for (int i=0; i<tests.size(); i++) {
@@ -206,13 +218,21 @@ void makeReport() {
             totalTestTime += testTime
         }
 
-        if (tests[i]["result"] != "skipped") {
+        if (testResult != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
+        if (testResult == "failure") {
+            failedTestAmount++
+        }
+        if (testResult == "error") {
+            erroredTestAmount++
+        }
+        TestsReport = TestsReport + "\r\n| [" + testName + "](" + testUrl + ") | " + resultIcon(testResult) + " | " + formatTime(testTime) + " |"
     }
     TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
     TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
+    TestsReport = TestsReport + "\r\n| Tests Failed | $failedTestAmount |"
+    TestsReport = TestsReport + "\r\n| Tests Errored | $erroredTestAmount |"
     TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
     TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
 }
@@ -235,24 +255,37 @@ void normalizeReports() {
         // Always collapse to a single testcase per test so python (multi-method) and
         // bash-wrapper tests are counted identically in JUnit. Detail stays in the HTML.
         def failures = testResult == "failure" ? 1 : 0
-        def failureElement = testResult == "failure" ?
-            '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. See the HTML report for details.</failure>' : ''
+        def errors = testResult == "error" ? 1 : 0
+        def resultElement = ""
+        if (testResult == "failure") {
+            resultElement = '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. See the HTML report for details.</failure>'
+        } else if (testResult == "error") {
+            resultElement = '<error message="Jenkins reported test error">Jenkins reported this test as errored (infrastructure/timeout). See the HTML report for details.</error>'
+        }
 
         writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
 <testsuites name="pytest tests">
-<testsuite name="psmdb-e2e" errors="0" failures="${failures}" skipped="0" tests="1" time="${testTime}">
+<testsuite name="psmdb-e2e" errors="${errors}" failures="${failures}" skipped="0" tests="1" time="${testTime}">
 <testcase classname="e2e-tests.${testName}" name="${testName}" time="${testTime}">
-${failureElement}
+${resultElement}
 </testcase>
 </testsuite>
 </testsuites>"""
 
         if (!fileExists(htmlFile)) {
-            def resultCapitalized = testResult == "failure" ? "Failed" : "Passed"
             def formattedTime = formatTime(testTime)
-            def logMessage = testResult == "failure" ?
-                "Test did not produce a report" :
-                "Test marked as passed (from previous run)"
+            def resultCapitalized
+            def logMessage
+            if (testResult == "failure") {
+                resultCapitalized = "Failed"
+                logMessage = "Test did not produce a report"
+            } else if (testResult == "error") {
+                resultCapitalized = "Error"
+                logMessage = "Test errored (infrastructure/timeout) and did not produce a report"
+            } else {
+                resultCapitalized = "Passed"
+                logMessage = "Test marked as passed (from previous run)"
+            }
 
             writeFile file: htmlFile, text: """<!DOCTYPE html>
 <html>
@@ -261,7 +294,7 @@ ${failureElement}
 <title id="head-title">${testName}.html</title>
 </head>
 <body>
-<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report generated because the test report was missing"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td class=\\"col-links\\"></td>"], "log": "${logMessage}"}]}}'></div>
+<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report generated because the test report was missing"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td>-</td>"], "log": "${logMessage}"}]}}'></div>
 </body>
 </html>"""
         }
@@ -269,7 +302,7 @@ ${failureElement}
 }
 
 void clusterRunner(String cluster) {
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]){
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         def clusterCreated=0
 
         for (int i=0; i<tests.size(); i++) {
@@ -307,18 +340,9 @@ void runTest(Integer TEST_ID) {
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
                 export PATH="\$HOME/.local/bin:\$PATH"
-                mkdir -p e2e-tests/reports e2e-tests/logs
-
-                REPORT_OPTS="--html=e2e-tests/reports/${testName}.html --junitxml=e2e-tests/reports/${testName}.xml"
-
-                # Run native pytest if test_*.py exists, otherwise run bash via wrapper
                 bash -o pipefail <<BASH
                 {
-                    if ls e2e-tests/${testName}/test_*.py 1>/dev/null 2>&1; then
-                        uv run pytest e2e-tests/${testName}/ \$REPORT_OPTS
-                    else
-                        uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=${testName} \$REPORT_OPTS
-                    fi
+                    make e2e-test TEST=${testName}
                 } 2>&1 | tee e2e-tests/logs/${testName}.log
 BASH
             """
@@ -327,11 +351,22 @@ BASH
         tests[TEST_ID]["result"] = "passed"
     }
     catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
-        echo "Test $testName was interrupted!"
-        throw exc
+        // A per-test timeout is an environment/hang problem, not a test assertion
+        // failure: record it as an error and keep the rest of the suite running.
+        // Any other interruption (user abort, newer build) is propagated.
+        def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
+        if (timedOut) {
+            echo "Test $testName timed out!"
+            tests[TEST_ID]["result"] = "error"
+            currentBuild.result = 'FAILURE'
+        } else {
+            echo "Test $testName was interrupted!"
+            throw exc
+        }
     }
     catch (exc) {
         echo "Test $testName has failed!"
+        tests[TEST_ID]["result"] = "failure"
         currentBuild.result = 'FAILURE'
     }
     finally {
@@ -637,80 +672,10 @@ pipeline {
             options {
                 timeout(time: 5, unit: 'HOURS')
             }
-            parallel {
-                stage('cluster1') {
-                    steps {
-                        clusterRunner('cluster1')
-                    }
-                }
-                stage('cluster2') {
-                    steps {
-                        clusterRunner('cluster2')
-                    }
-                }
-                stage('cluster3') {
-                    steps {
-                        clusterRunner('cluster3')
-                    }
-                }
-                stage('cluster4') {
-                    steps {
-                        clusterRunner('cluster4')
-                    }
-                }
-                stage('cluster5') {
-                    steps {
-                        clusterRunner('cluster5')
-                    }
-                }
-                stage('cluster6') {
-                    steps {
-                        clusterRunner('cluster6')
-                    }
-                }
-                stage('cluster7') {
-                    steps {
-                        clusterRunner('cluster7')
-                    }
-                }
-                stage('cluster8') {
-                    steps {
-                        clusterRunner('cluster8')
-                    }
-                }
-                stage('cluster9') {
-                    steps {
-                        clusterRunner('cluster9')
-                    }
-                }
-                stage('cluster10') {
-                    steps {
-                        clusterRunner('cluster10')
-                    }
-                }
-                stage('cluster11') {
-                    steps {
-                        clusterRunner('cluster11')
-                    }
-                }
-                stage('cluster12') {
-                    steps {
-                        clusterRunner('cluster12')
-                    }
-                }
-                stage('cluster13') {
-                    steps {
-                        clusterRunner('cluster13')
-                    }
-                }
-                stage('cluster14') {
-                    steps {
-                        clusterRunner('cluster14')
-                    }
-                }
-                stage('cluster15') {
-                    steps {
-                        clusterRunner('cluster15')
+            steps {
+                script {
+                    parallel (1..clusterCount).collectEntries { n ->
+                        ["cluster$n": { clusterRunner("cluster$n") }]
                     }
                 }
             }

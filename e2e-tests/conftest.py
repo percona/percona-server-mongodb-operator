@@ -1,14 +1,15 @@
 import logging
 import os
-import random
 import subprocess
-import time
+import uuid
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator
+from typing import Any
 
 import pytest
 import yaml
+from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
     clean_all_namespaces,
     get_k8s_versions,
@@ -22,6 +23,8 @@ from lib.operator import check_crd_for_deletion, delete_crd_rbac, deploy_operato
 from lib.secrets import get_cloud_secret_default
 from lib.utils import (
     K8sHighlighter,
+    Paths,
+    env_bool,
     get_cr_version,
     get_git_branch,
     get_git_commit,
@@ -41,6 +44,7 @@ logging.basicConfig(
         RichHandler(
             console=Console(theme=k8s_theme),
             highlighter=K8sHighlighter(),
+            keywords=[],
             show_time=True,
             show_path=False,
             markup=False,
@@ -53,6 +57,10 @@ logging.getLogger("pytest_dependency").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 _current_namespace: str | None = None
+
+# Path shared with the bash harness (see e2e-tests/functions), which writes the
+# active namespace here so failure reports can be generated for bash-wrapped tests.
+_NAMESPACE_FILE = "/tmp/pytest_current_namespace"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -69,6 +77,8 @@ def pytest_collection_modifyitems(
 
     for item in items:
         if item.name == "test_bash_wrapper":
+            # Relies on the private _nodeid attribute; may need revisiting on
+            # pytest upgrades (no public API for renaming a collected item).
             item._nodeid = item._nodeid.replace(
                 "test_bash_wrapper", f"test_bash_wrapper[{test_name}]"
             )
@@ -81,32 +91,40 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 
 
 def _get_current_namespace() -> str | None:
-    """Get namespace from global or temp file (for bash wrapper tests)."""
+    """Get namespace from global or temp file."""
     if _current_namespace:
         return _current_namespace
     try:
-        with open("/tmp/pytest_current_namespace") as f:
+        with open(_NAMESPACE_FILE) as f:
             return f.read().strip() or None
     except Exception:
         return None
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(
-    item: pytest.Item, call: pytest.CallInfo[None]
-) -> Generator[None, None, None]:
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None]:
     """Collect K8s resources when a test fails and add to HTML report."""
     outcome: Any = yield
     report = outcome.get_result()
 
-    if report.when == "call" and report.failed:
+    # Handle the call phase, and setup failures (where infra fixtures break and
+    # there is no call phase). Skip passing setup/teardown to avoid duplicate work.
+    if not (report.when == "call" or (report.when == "setup" and report.failed)):
+        return
+
+    from lib import report_generator
+
+    try:
+        report.nodes_status = report_generator.check_nodes_ready()
+    except Exception as e:
+        logger.debug(f"Failed to check node readiness: {e}")
+
+    if report.failed:
         namespace = _get_current_namespace()
         if not namespace:
             return
 
         try:
-            from lib import report_generator
-
             report.extras = report_generator.generate_report(namespace)
         except Exception as e:
             logger.warning(f"Failed to generate HTML report extras: {e}")
@@ -144,7 +162,8 @@ def setup_env_vars() -> None:
         "IMAGE_PMM3_SERVER": "perconalab/pmm-server:3-dev-latest",
         "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
         "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
-        "CERT_MANAGER_VER": "1.19.3",
+        "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
+        "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",
         "MINIO_VER": "5.4.0",
         "PMM_SERVER_VER": "9.9.9",
@@ -163,6 +182,7 @@ def setup_env_vars() -> None:
         "IMAGE",
         "IMAGE_MONGOD",
         "IMAGE_MONGOD_CHAIN",
+        "IMAGE_SEARCH",
         "IMAGE_BACKUP",
         "IMAGE_PMM_CLIENT",
         "IMAGE_PMM_SERVER",
@@ -183,7 +203,7 @@ def setup_env_vars() -> None:
 
 
 @pytest.fixture(scope="class")
-def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
+def test_paths(request: pytest.FixtureRequest) -> Paths:
     """Fixture to provide paths relative to the test file."""
     test_file = request.path
     test_dir = test_file.parent
@@ -200,16 +220,16 @@ def test_paths(request: pytest.FixtureRequest) -> Dict[str, str]:
 
 def _wait_for_project_delete(project: str, timeout: int = 180) -> None:
     """Wait for OpenShift project to be fully deleted."""
-    start = time.time()
-    while time.time() - start < timeout:
-        result = subprocess.run(
-            ["oc", "get", "project", project],
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            return
-        time.sleep(5)
+    result = oc_bin(
+        "wait",
+        "--for=delete",
+        f"project/{project}",
+        f"--timeout={timeout}s",
+        check=False,
+        capture=True,
+    )
+    if result.returncode == 0 or "NotFound" in result.stderr:
+        return
     logger.warning(f"Project {project} not deleted within {timeout}s, continuing anyway")
 
 
@@ -218,24 +238,18 @@ def create_namespace() -> Callable[[str], str]:
     def _create_namespace(namespace: str) -> str:
         """Create kubernetes namespace and clean up if exists."""
 
-        if int(os.environ.get("CLEAN_NAMESPACE") or "0"):
+        if env_bool("CLEAN_NAMESPACE"):
             clean_all_namespaces()
 
-        if int(os.environ.get("OPENSHIFT") or "0"):
+        if env_bool("OPENSHIFT"):
             logger.info("Cleaning up existing OpenShift project if exists")
-            subprocess.run(
-                ["oc", "delete", "project", namespace, "--ignore-not-found"],
-                check=False,
-            )
+            oc_bin("delete", "project", namespace, "--ignore-not-found", check=False)
             _wait_for_project_delete(namespace)
 
             logger.info(f"Create namespace {namespace}")
-            subprocess.run(["oc", "new-project", namespace], check=True)
-            subprocess.run(["oc", "project", namespace], check=True)
-            subprocess.run(
-                ["oc", "adm", "policy", "add-scc-to-user", "hostaccess", "-z", "default"],
-                check=False,
-            )
+            oc_bin("new-project", namespace)
+            oc_bin("project", namespace)
+            oc_bin("adm", "policy", "add-scc-to-user", "hostaccess", "-z", "default", check=False)
         else:
             logger.info("Cleaning up existing namespace")
 
@@ -256,8 +270,8 @@ def create_namespace() -> Callable[[str], str]:
 
 @pytest.fixture(scope="class")
 def create_infra(
-    test_paths: Dict[str, str], create_namespace: Callable[[str], str]
-) -> Generator[Callable[[str], str], None, None]:
+    test_paths: Paths, create_namespace: Callable[[str], str]
+) -> Generator[Callable[[str], str]]:
     global _current_namespace
     created_namespaces: list[str] = []
 
@@ -265,17 +279,20 @@ def create_infra(
         """Create the necessary infrastructure for the tests."""
         global _current_namespace
         logger.info("Creating test environment")
-        if os.environ.get("DELETE_CRD_ON_START") == "1":
+        if env_bool("DELETE_CRD_ON_START"):
             delete_crd_rbac(Path(test_paths["src_dir"]))
             check_crd_for_deletion(f"{test_paths['src_dir']}/deploy/crd.yaml")
 
+        namespace = f"{test_name}-{uuid.uuid4().hex[:8]}"
         operator_ns = os.environ.get("OPERATOR_NS")
+        # Cluster-wide: operator lives in its own namespace, deployed first.
+        # Namespaced: operator lives in the test namespace, which must exist first.
         if operator_ns:
             create_namespace(operator_ns)
             deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
-            namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
+            create_namespace(namespace)
         else:
-            namespace = create_namespace(f"{test_name}-{random.randint(0, 32767)}")
+            create_namespace(namespace)
             deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
 
         # Track created namespace for cleanup and failure collection
@@ -288,8 +305,8 @@ def create_infra(
     # Teardown code
     _current_namespace = None
 
-    if os.environ.get("SKIP_DELETE") == "1":
-        logger.info("SKIP_DELETE=1. Skipping test environment cleanup")
+    if env_bool("SKIP_DELETE"):
+        logger.info("SKIP_DELETE is set. Skipping test environment cleanup")
         return
 
     def run_cmd(cmd: list[str]) -> None:
@@ -340,49 +357,56 @@ def create_infra(
         ],
     ]
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=len(commands) + 1) as executor:
         futures = [executor.submit(run_cmd, cmd) for cmd in commands]
         futures.append(executor.submit(cleanup_crd))
 
-    # Clean up all created namespaces
+    # Clean up all created namespaces (in parallel) after resource cleanup so
+    # finalizer-bearing resources (e.g. psmdb-backup) are removed first.
     namespaces_to_delete = created_namespaces.copy()
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
         namespaces_to_delete.append(operator_ns)
 
-    for ns in namespaces_to_delete:
-        run_cmd(["delete", "--grace-period=0", "--force", "namespace", ns, "--ignore-not-found"])
+    if namespaces_to_delete:
+        with ThreadPoolExecutor(max_workers=len(namespaces_to_delete)) as executor:
+            for ns in namespaces_to_delete:
+                executor.submit(
+                    run_cmd,
+                    [
+                        "delete",
+                        "--grace-period=0",
+                        "--force",
+                        "namespace",
+                        ns,
+                        "--ignore-not-found",
+                    ],
+                )
 
 
 @pytest.fixture(scope="class")
-def deploy_chaos_mesh() -> Generator[Callable[[str], None], None, None]:
+def deploy_chaos_mesh() -> Generator[Callable[[str], None]]:
     """Deploy Chaos Mesh and clean up after tests."""
     deployed_namespaces = []
 
     def _deploy(namespace: str) -> None:
-        subprocess.run(
-            ["helm", "repo", "add", "chaos-mesh", "https://charts.chaos-mesh.org"], check=True
-        )
-        subprocess.run(["helm", "repo", "update"], check=True)
-        subprocess.run(
-            [
-                "helm",
-                "install",
-                "chaos-mesh",
-                "chaos-mesh/chaos-mesh",
-                "--namespace",
-                namespace,
-                "--version",
-                os.environ["CHAOS_MESH_VER"],
-                "--set",
-                "dashboard.create=false",
-                "--set",
-                "chaosDaemon.runtime=containerd",
-                "--set",
-                "chaosDaemon.socketPath=/run/containerd/containerd.sock",
-                "--wait",
-            ],
-            check=True,
+        helm_bin("repo", "add", "chaos-mesh", "https://charts.chaos-mesh.org")
+        helm_bin("repo", "update")
+        helm_bin(
+            "install",
+            "chaos-mesh",
+            "chaos-mesh/chaos-mesh",
+            "--namespace",
+            namespace,
+            "--version",
+            os.environ["CHAOS_MESH_VER"],
+            "--set",
+            "dashboard.create=false",
+            "--set",
+            "chaosDaemon.runtime=containerd",
+            "--set",
+            "chaosDaemon.socketPath=/run/containerd/containerd.sock",
+            "--wait",
         )
         deployed_namespaces.append(namespace)
 
@@ -390,53 +414,54 @@ def deploy_chaos_mesh() -> Generator[Callable[[str], None], None, None]:
 
     for ns in deployed_namespaces:
         try:
-            subprocess.run(
-                [
-                    "helm",
-                    "uninstall",
-                    "chaos-mesh",
-                    "--namespace",
-                    ns,
-                    "--wait",
-                    "--timeout",
-                    "60s",
-                ],
-                check=True,
-            )
+            helm_bin("uninstall", "chaos-mesh", "--namespace", ns, "--wait", "--timeout", "60s")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to cleanup chaos-mesh in {ns}: {e}")
 
 
 @pytest.fixture(scope="class")
-def deploy_cert_manager() -> Generator[None, None, None]:
+def deploy_cert_manager() -> Generator[Callable[..., None]]:
     """Deploy Cert Manager and clean up after tests."""
-    logger.info("Deploying cert-manager")
     cert_manager_url = f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
-    try:
-        kubectl_bin("create", "namespace", "cert-manager")
-        kubectl_bin(
-            "label", "namespace", "cert-manager", "certmanager.k8s.io/disable-validation=true"
-        )
-        kubectl_bin("apply", "-f", cert_manager_url, "--validate=false")
-        kubectl_bin(
-            "wait",
-            "pod",
-            "-l",
-            "app.kubernetes.io/instance=cert-manager",
-            "--for=condition=ready",
-            "-n",
-            "cert-manager",
-        )
-    except Exception as e:
-        try:
-            kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as cleanup_error:
-            logger.warning(
-                f"Failed to cleanup cert-manager during error handling: {cleanup_error}"
-            )
-        raise e
 
-    yield
+    def _deploy(*extra_args: str) -> None:
+        logger.info("Deploying cert-manager")
+        try:
+            kubectl_bin("create", "namespace", "cert-manager")
+            kubectl_bin(
+                "label", "namespace", "cert-manager", "certmanager.k8s.io/disable-validation=true"
+            )
+            kubectl_bin("apply", "-f", cert_manager_url, "--validate=false")
+            for arg in extra_args:
+                kubectl_bin(
+                    "patch",
+                    "deployment",
+                    "cert-manager",
+                    "-n",
+                    "cert-manager",
+                    "--type=json",
+                    "-p",
+                    f'[{{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"{arg}"}}]',
+                )
+            kubectl_bin(
+                "wait",
+                "pod",
+                "-l",
+                "app.kubernetes.io/instance=cert-manager",
+                "--for=condition=ready",
+                "-n",
+                "cert-manager",
+            )
+        except Exception:
+            try:
+                kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as cleanup_error:
+                logger.warning(
+                    f"Failed to cleanup cert-manager during error handling: {cleanup_error}"
+                )
+            raise
+
+    yield _deploy
 
     try:
         kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")
@@ -444,60 +469,61 @@ def deploy_cert_manager() -> Generator[None, None, None]:
         logger.error(f"Failed to cleanup cert-manager: {e}")
 
 
+def aws_cli_minio(command: str, endpoint: str) -> str:
+    """Run an aws-cli command against MinIO from a throwaway pod."""
+    return kubectl_bin(
+        "run",
+        "-i",
+        "--rm",
+        "aws-cli",
+        f"--image={os.environ.get('IMAGE_AWS_CLI')}",
+        "--restart=Never",
+        "--env=AWS_ACCESS_KEY_ID=some-access-key",
+        "--env=AWS_SECRET_ACCESS_KEY=some-secret-key",
+        "--env=AWS_DEFAULT_REGION=us-east-1",
+        "--",
+        "--no-verify-ssl",
+        "--endpoint-url",
+        endpoint,
+        *command.split(),
+    )
+
+
 @pytest.fixture(scope="class")
-def deploy_minio() -> Generator[None, None, None]:
+def deploy_minio() -> Generator[None]:
     """Deploy MinIO and clean up after tests."""
     service_name = "minio-service"
     bucket = "operator-testing"
 
     logger.info(f"Installing MinIO: {service_name}")
 
-    subprocess.run(["helm", "uninstall", service_name], capture_output=True, check=False)
-    subprocess.run(["helm", "repo", "remove", "minio"], capture_output=True, check=False)
-    subprocess.run(["helm", "repo", "add", "minio", "https://charts.min.io/"], check=True)
+    helm_bin("uninstall", service_name, check=False, capture=True)
+    helm_bin("repo", "remove", "minio", check=False, capture=True)
+    helm_bin("repo", "add", "minio", "https://charts.min.io/")
 
     endpoint = f"http://{service_name}:9000"
     minio_ver = os.environ.get("MINIO_VER") or ""
-    minio_args = [
-        "helm",
-        "install",
-        service_name,
-        "minio/minio",
-        "--version",
-        minio_ver,
-        "--set",
-        "replicas=1",
-        "--set",
-        "mode=standalone",
-        "--set",
-        "resources.requests.memory=256Mi",
-        "--set",
-        "rootUser=rootuser",
-        "--set",
-        "rootPassword=rootpass123",
-        "--set",
-        "users[0].accessKey=some-access-key",
-        "--set",
-        "users[0].secretKey=some-secret-key",
-        "--set",
-        "users[0].policy=consoleAdmin",
-        "--set",
-        "service.type=ClusterIP",
-        "--set",
-        "configPathmc=/tmp/",
-        "--set",
-        "securityContext.enabled=false",
-        "--set",
-        "persistence.size=2G",
-        "--set",
-        f"fullnameOverride={service_name}",
-        "--set",
-        "serviceAccount.create=true",
-        "--set",
-        f"serviceAccount.name={service_name}-sa",
-    ]
+    settings = {
+        "replicas": "1",
+        "mode": "standalone",
+        "resources.requests.memory": "256Mi",
+        "rootUser": "rootuser",
+        "rootPassword": "rootpass123",
+        "users[0].accessKey": "some-access-key",
+        "users[0].secretKey": "some-secret-key",
+        "users[0].policy": "consoleAdmin",
+        "service.type": "ClusterIP",
+        "configPathmc": "/tmp/",
+        "securityContext.enabled": "false",
+        "persistence.size": "2G",
+        "fullnameOverride": service_name,
+        "serviceAccount.create": "true",
+        "serviceAccount.name": f"{service_name}-sa",
+    }
+    set_args = [arg for k, v in settings.items() for arg in ("--set", f"{k}={v}")]
+    install_args = ["install", service_name, "minio/minio", "--version", minio_ver, *set_args]
 
-    retry(lambda: subprocess.run(minio_args, check=True), max_attempts=10, delay=60)
+    retry(lambda: helm_bin(*install_args), max_attempts=6, delay=5, backoff=2)
 
     minio_pod = kubectl_bin(
         "get",
@@ -525,35 +551,18 @@ def deploy_minio() -> Generator[None, None, None]:
         )
 
     logger.info(f"Creating MinIO bucket: {bucket}")
-    kubectl_bin(
-        "run",
-        "-i",
-        "--rm",
-        "aws-cli",
-        "--image=perconalab/awscli",
-        "--restart=Never",
-        "--",
-        "bash",
-        "-c",
-        "AWS_ACCESS_KEY_ID=some-access-key "
-        "AWS_SECRET_ACCESS_KEY=some-secret-key "
-        "AWS_DEFAULT_REGION=us-east-1 "
-        f"/usr/bin/aws --no-verify-ssl --endpoint-url {endpoint} s3 mb s3://{bucket}",
-    )
+    aws_cli_minio(f"s3 mb s3://{bucket}", endpoint)
 
     yield
 
     try:
-        subprocess.run(
-            ["helm", "uninstall", service_name, "--wait", "--timeout", "60s"],
-            check=True,
-        )
+        helm_bin("uninstall", service_name, "--wait", "--timeout", "60s")
     except subprocess.CalledProcessError as e:
         logger.warning(f"Failed to cleanup minio: {e}")
 
 
 @pytest.fixture(scope="class")
-def psmdb_client(test_paths: Dict[str, str]) -> MongoManager:
+def psmdb_client(test_paths: Paths) -> MongoManager:
     """Deploy and get the client pod name."""
     kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70.yml")
 

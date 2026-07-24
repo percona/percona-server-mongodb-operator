@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from deepdiff import DeepDiff
 
@@ -76,7 +76,7 @@ class MongoManager:
             else:
                 raise FileNotFoundError(f"Expected file not found: {base_file}")
 
-        def clean_mongo_json(data: Dict[str, Any]) -> Dict[str, Any]:
+        def clean_mongo_json(data: dict[str, Any]) -> dict[str, Any]:
             """Remove timestamps and metadata from MongoDB response"""
 
             def remove_timestamps(obj: Any) -> Any:

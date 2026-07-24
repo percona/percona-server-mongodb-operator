@@ -3,6 +3,8 @@ import logging
 import subprocess
 import time
 
+from .cli import oc_bin
+
 logger = logging.getLogger(__name__)
 
 
@@ -12,7 +14,7 @@ def kubectl_bin(
     """Execute kubectl command"""
     cmd = ["kubectl"] + list(args)
     logger.debug(" ".join(map(str, cmd)))
-    result = subprocess.run(cmd, capture_output=True, text=True, input=input_data)
+    result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
 
     if result.stderr:
         logger.warning(f"kubectl error: {result.stderr}")
@@ -125,9 +127,9 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
-def wait_cluster_consistency(cluster_name: str, wait_time: int = 32) -> None:
+def wait_cluster_consistency(cluster_name: str, wait_time: int = 35) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
-    time.sleep(7)
+    time.sleep(5)
     logger.info(f"Waiting for cluster {cluster_name} consistency")
     for _ in range(wait_time):
         state = kubectl_bin("get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}").strip(
@@ -204,7 +206,7 @@ def get_k8s_versions() -> tuple[str, str]:
 def is_openshift() -> str:
     """Detect if running on OpenShift. Returns '1' or ''."""
     try:
-        result = subprocess.run(["oc", "get", "projects"], capture_output=True)
+        result = oc_bin("get", "projects", check=False, capture=True)
         return "1" if result.returncode == 0 else ""
     except FileNotFoundError:
         return ""

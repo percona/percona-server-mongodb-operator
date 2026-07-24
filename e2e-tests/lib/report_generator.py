@@ -1,11 +1,15 @@
 import html
 import os
 import re
-from typing import Any, List, MutableSequence
+from collections.abc import MutableSequence
+from typing import Any
 
 from pytest_html import extras
 
 from lib.k8s_collector import K8sCollector
+from lib.kubectl import kubectl_bin
+
+MIN_READY_NODES = 3
 
 ENV_VARS_TO_REPORT = [
     "KUBE_VERSION",
@@ -44,7 +48,7 @@ def pytest_html_results_summary(
     rows = ""
     for i, var in enumerate(ENV_VARS_TO_REPORT):
         value = os.environ.get(var, "")
-        escaped_value = value.replace("<", "&lt;").replace(">", "&gt;")
+        escaped_value = html.escape(value)
         bg = "#f9f9f9" if i % 2 == 0 else "#ffffff"
         rows += f'<tr style="background-color: {bg};"><td style="border: 1px solid #ddd; padding: 6px;"><code>{var}</code></td><td style="border: 1px solid #ddd; padding: 6px;"><code>{escaped_value}</code></td></tr>\n'
 
@@ -66,13 +70,41 @@ def pytest_html_results_summary(
         prefix.append(table)
 
 
+def check_nodes_ready(min_ready: int = MIN_READY_NODES) -> dict[str, Any]:
+    """Return node readiness counts at the current moment."""
+    output = kubectl_bin(
+        "get",
+        "nodes",
+        "-o",
+        "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}",
+        check=False,
+        return_stderr=True,
+    )
+    # Only count valid Ready condition values; anything else (e.g. an error
+    # message on command failure) is ignored so it can't inflate the totals.
+    statuses = [s for s in output.split() if s in ("True", "False")]
+    ready = sum(1 for s in statuses if s == "True")
+    total = len(statuses)
+    return {"ready": ready, "total": total, "ok": total > 0 and ready >= min_ready}
+
+
+def _nodes_cell(nodes: dict[str, Any] | None) -> str:
+    """Render the Nodes column cell for a test row."""
+    if not nodes or nodes["total"] == 0:
+        return "<td>-</td>"
+    if nodes["ok"]:
+        return f'<td style="color: #00CC66; font-weight: bold;">{nodes["ready"]}/{nodes["total"]} ready</td>'
+    return f'<td style="color: #ff6b6b; font-weight: bold;">{nodes["ready"]}/{nodes["total"]} NOT READY</td>'
+
+
 def pytest_html_results_table_header(cells: MutableSequence[str]) -> None:
-    """Add Class column to HTML report."""
+    """Add Class column and replace the Links column with a Nodes readiness column."""
     cells.insert(1, '<th class="sortable alpha" data-column-type="alpha">Class</th>')
+    cells[-1] = '<th class="sortable alpha" data-column-type="alpha">K8s Nodes</th>'
 
 
 def pytest_html_results_table_row(report: Any, cells: MutableSequence[str]) -> None:
-    """Populate Class column with the e2e-tests subdir (test name) for both python and bash."""
+    """Populate Class column and replace Links cell with node readiness status."""
     nodeid = report.nodeid
     if "test_bash_wrapper[" in nodeid:
         # test_pytest_wrapper.py::test_bash_wrapper[test-name]
@@ -82,6 +114,7 @@ def pytest_html_results_table_row(report: Any, cells: MutableSequence[str]) -> N
         path_parts = nodeid.split("::")[0].split("/")
         class_name = path_parts[-2] if len(path_parts) >= 2 else "-"
     cells.insert(1, f"<td>{class_name}</td>")
+    cells[-1] = _nodes_cell(getattr(report, "nodes_status", None))
 
 
 LOG_LEVEL_COLORS = {
@@ -92,7 +125,9 @@ LOG_LEVEL_COLORS = {
     "Normal": "#00CC66",
     "Warning": "#ffa500",
 }
-LOG_LEVEL_PATTERN = re.compile(r"\b(" + "|".join(LOG_LEVEL_COLORS.keys()) + r")\b")
+LOG_LEVEL_PATTERN = re.compile(
+    r"\b(" + "|".join(sorted(LOG_LEVEL_COLORS.keys(), key=len, reverse=True)) + r")\b"
+)
 
 
 def highlight_log_levels(logs: str) -> str:
@@ -103,7 +138,7 @@ def highlight_log_levels(logs: str) -> str:
     )
 
 
-def generate_report(namespace: str) -> List[Any]:
+def generate_report(namespace: str) -> list[Any]:
     def create_collapsible_section(title: str, content: str) -> str:
         return f"""
         <div style="margin: 10px 0;">

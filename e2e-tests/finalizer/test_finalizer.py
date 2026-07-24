@@ -1,10 +1,12 @@
 import logging
-from typing import Callable, Dict, TypedDict
+from collections.abc import Callable
+from typing import TypedDict
 
 import pytest
 from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_cluster_consistency, wait_for_delete, wait_for_running
 from lib.mongo import MongoManager
+from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ def config(create_infra: Callable[[str], str]) -> FinalizerConfig:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Dict[str, str]) -> None:
+def setup_tests(test_paths: Paths) -> None:
     """Setup test environment"""
     kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets_with_tls.yml")
 
@@ -33,7 +35,7 @@ class TestFinalizer:
     """Test MongoDB cluster finalizers"""
 
     @pytest.mark.dependency()
-    def test_create_cluster(self, config: FinalizerConfig, test_paths: Dict[str, str]) -> None:
+    def test_create_cluster(self, config: FinalizerConfig, test_paths: Paths) -> None:
         apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}.yml")
         wait_for_running(f"{config['cluster']}-rs0", 3, False)
         wait_for_running(f"{config['cluster']}-cfg", 3)

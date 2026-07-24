@@ -819,7 +819,7 @@ aws_cli_minio() {
 	local endpoint=$1
 	shift
 
-	kubectl_bin run -i --rm aws-cli --image=docker.io/amazon/aws-cli:2.34.60 \
+	kubectl_bin run -i --rm aws-cli --image=$IMAGE_AWS_CLI \
 		--restart=Never \
 		--env=AWS_ACCESS_KEY_ID=some-access-key \
 		--env=AWS_SECRET_ACCESS_KEY=some-secret-key \

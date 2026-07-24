@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import time
-from typing import Callable, Dict, TypedDict
+from collections.abc import Callable
+from typing import TypedDict
 
 import pytest
 from lib.config import apply_cluster, apply_runtime_class, compare_kubectl
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
 from lib.secrets import apply_s3_storage_secrets, get_user_data
-from lib.utils import retry
+from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ def config(create_infra: Callable[[str], str]) -> InitDeployConfig:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Dict[str, str]) -> None:
+def setup_tests(test_paths: Paths) -> None:
     """Setup test environment"""
     kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets_with_tls.yml")
     apply_runtime_class(test_paths["test_dir"])
@@ -43,9 +45,7 @@ class TestInitDeploy:
     """Test MongoDB cluster deployment and operations"""
 
     @pytest.mark.dependency()
-    def test_create_first_cluster(
-        self, config: InitDeployConfig, test_paths: Dict[str, str]
-    ) -> None:
+    def test_create_first_cluster(self, config: InitDeployConfig, test_paths: Paths) -> None:
         """Create first PSMDB cluster"""
         apply_cluster(f"{test_paths['test_dir']}/../conf/{config['cluster']}.yml")
         wait_for_running(config["cluster"], 3)
@@ -61,7 +61,7 @@ class TestInitDeploy:
     def test_verify_users_created(
         self,
         config: InitDeployConfig,
-        test_paths: Dict[str, str],
+        test_paths: Paths,
         psmdb_client: MongoManager,
     ) -> None:
         """Check if users created with correct permissions"""
@@ -115,7 +115,7 @@ class TestInitDeploy:
     def test_write_and_read_data(
         self,
         config: InitDeployConfig,
-        test_paths: Dict[str, str],
+        test_paths: Paths,
         psmdb_client: MongoManager,
     ) -> None:
         """Write data and read from all nodes"""
@@ -157,7 +157,7 @@ class TestInitDeploy:
     def test_primary_failover(
         self,
         config: InitDeployConfig,
-        test_paths: Dict[str, str],
+        test_paths: Paths,
         psmdb_client: MongoManager,
     ) -> None:
         """Kill Primary Pod, check reelection, check data"""
@@ -197,9 +197,7 @@ class TestInitDeploy:
             )
 
     @pytest.mark.dependency(depends=["TestInitDeploy::test_primary_failover"])
-    def test_create_second_cluster(
-        self, config: InitDeployConfig, test_paths: Dict[str, str]
-    ) -> None:
+    def test_create_second_cluster(self, config: InitDeployConfig, test_paths: Paths) -> None:
         """Check if possible to create second cluster"""
         apply_s3_storage_secrets(test_paths["conf_dir"])
         apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster2']}.yml")
@@ -213,10 +211,31 @@ class TestInitDeploy:
         )
 
     @pytest.mark.dependency(depends=["TestInitDeploy::test_create_second_cluster"])
+    def test_default_rw_concern(
+        self, config: InitDeployConfig, psmdb_client: MongoManager
+    ) -> None:
+        """Check defaultRWConcern is applied on the cluster"""
+        rwc = json.loads(
+            psmdb_client.run_mongosh(
+                "JSON.stringify(db.adminCommand({getDefaultRWConcern:1}))",
+                f"clusterAdmin:clusterAdmin123456@{config['cluster2']}.{config['namespace']}",
+            )
+        )
+        assert rwc["defaultReadConcern"]["level"] == "majority", (
+            f"expected defaultReadConcern.level 'majority', got {rwc.get('defaultReadConcern')}"
+        )
+        assert rwc["defaultWriteConcern"]["w"] == "majority", (
+            f"expected defaultWriteConcern.w 'majority', got {rwc.get('defaultWriteConcern')}"
+        )
+        assert rwc["defaultWriteConcern"]["wtimeout"] == 5000, (
+            f"expected defaultWriteConcern.wtimeout 5000, got {rwc.get('defaultWriteConcern')}"
+        )
+
+    @pytest.mark.dependency(depends=["TestInitDeploy::test_default_rw_concern"])
     def test_second_cluster_data_operations(
         self,
         config: InitDeployConfig,
-        test_paths: Dict[str, str],
+        test_paths: Paths,
         psmdb_client: MongoManager,
     ) -> None:
         """Write data and read from all nodes in second cluster"""

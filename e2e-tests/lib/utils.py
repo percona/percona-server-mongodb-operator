@@ -1,21 +1,41 @@
 import logging
 import os
 import re
-import subprocess
 import time
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from subprocess import CalledProcessError
+from typing import Any, ClassVar, TypedDict
 
 from rich.highlighter import RegexHighlighter
 from rich.theme import Theme
 
+from .cli import git_bin
+
 logger = logging.getLogger(__name__)
+
+
+class Paths(TypedDict):
+    """Filesystem paths relative to a test file (values are strings)."""
+
+    test_file: str
+    test_dir: str
+    conf_dir: str
+    src_dir: str
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    """Parse a boolean-ish environment variable (1/true/yes/on)."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 class K8sHighlighter(RegexHighlighter):
     """Highlight Kubernetes resources in logs."""
 
     base_style = "k8s."
-    highlights = [
+    highlights: ClassVar[list[str]] = [
         r"(?P<tool>kubectl)\s+(?P<action>exec)\s+(?P<pod>[\w-]+)\s+--\s+(?P<timeout>timeout\s+\d+)\s+(?P<client>mongosh)\s+(?P<uri>mongodb(?:\+srv)?://[^ ]+)\s+--eval\s+(?P<eval>\S.+?)\s+--quiet",
         r"(?P<pod>(?<!\S)pod\s+[\w-]+)",
         r"(?P<resource>(?<!\S)(pod|psmdb|namespace|cluster|secret|configmap|pvc|service)/[\w-]+)",
@@ -43,9 +63,13 @@ def retry(
     func: Callable[[], Any],
     max_attempts: int = 5,
     delay: int = 1,
-    condition: Optional[Callable[[Any], bool]] = None,
+    condition: Callable[[Any], bool] | None = None,
+    backoff: float = 1.0,
 ) -> Any:
-    """Retry a function until it succeeds or max attempts reached."""
+    """Retry a function until it succeeds or max attempts reached.
+
+    With backoff > 1.0 the delay grows exponentially per attempt.
+    """
     for attempt in range(max_attempts):
         try:
             result = func()
@@ -55,9 +79,9 @@ def retry(
             if attempt == max_attempts - 1:
                 raise
 
-        time.sleep(delay)
+        time.sleep(delay * backoff**attempt)
 
-    raise Exception(f"Max attempts ({max_attempts}) reached")
+    raise RuntimeError(f"Max attempts ({max_attempts}) reached")
 
 
 def qualify_image(ref: str, registry_full: str) -> str:
@@ -73,7 +97,7 @@ def qualify_image(ref: str, registry_full: str) -> str:
 
 
 def get_git_commit() -> str:
-    result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    result = git_bin("rev-parse", "HEAD", check=False)
     return result.stdout.strip()
 
 
@@ -97,14 +121,9 @@ def get_git_branch() -> str:
         return version
 
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        result = git_bin("rev-parse", "--abbrev-ref", "HEAD")
         branch = result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (CalledProcessError, FileNotFoundError):
         return "unknown"
 
     return re.sub(r"[^a-zA-Z0-9-]", "-", branch.lower())

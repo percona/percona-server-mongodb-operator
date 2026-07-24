@@ -2,17 +2,19 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 from lib.config import apply_cluster, compare_kubectl
 from lib.kubectl import kubectl_bin, wait_for_running
+from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class", autouse=True)
-def config(create_infra: Callable[[str], str]) -> Dict[str, str]:
+def config(create_infra: Callable[[str], str]) -> dict[str, str]:
     """Configuration for tests"""
     return {
         "namespace": create_infra("liveness"),
@@ -21,7 +23,7 @@ def config(create_infra: Callable[[str], str]) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Dict[str, str], deploy_minio: Any) -> None:
+def setup_tests(test_paths: Paths, deploy_minio: Any) -> None:
     """Setup test environment"""
     kubectl_bin(
         "apply",
@@ -34,9 +36,7 @@ def setup_tests(test_paths: Dict[str, str], deploy_minio: Any) -> None:
 
 class TestLiveness:
     @pytest.mark.dependency()
-    def test_create_first_cluster(
-        self, config: Dict[str, str], test_paths: Dict[str, str]
-    ) -> None:
+    def test_create_first_cluster(self, config: dict[str, str], test_paths: Paths) -> None:
         """Create first PSMDB cluster"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0.yml")
         wait_for_running(f"{config['cluster']}-rs0", 3)
@@ -46,7 +46,7 @@ class TestLiveness:
         )
 
     @pytest.mark.dependency(depends=["TestLiveness::test_create_first_cluster"])
-    def test_liveness_check_fails_with_invalid_ssl_option(self, config: Dict[str, str]) -> None:
+    def test_liveness_check_fails_with_invalid_ssl_option(self, config: dict[str, str]) -> None:
         kubectl_bin(
             "exec",
             f"{config['cluster']}-rs0-0",
@@ -58,6 +58,8 @@ class TestLiveness:
             "/opt/percona/mongodb-healthcheck k8s liveness --ssl",
             check=False,
         )
+
+        wait_for_running(f"{config['cluster']}-rs0", 3)
 
         logs_output = kubectl_bin(
             "exec",
@@ -78,9 +80,7 @@ class TestLiveness:
     @pytest.mark.dependency(
         depends=["TestLiveness::test_liveness_check_fails_with_invalid_ssl_option"]
     )
-    def test_change_liveness_config(
-        self, config: Dict[str, str], test_paths: Dict[str, str]
-    ) -> None:
+    def test_change_liveness_config(self, config: dict[str, str], test_paths: Paths) -> None:
         apply_cluster(f"{test_paths['test_dir']}/conf/{config['cluster']}-rs0-changed.yml")
 
         wait_for_running(f"{config['cluster']}-rs0", 3)

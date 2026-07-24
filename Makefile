@@ -39,8 +39,24 @@ $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(D
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
-e2e-test:
-	IMAGE=$(IMAGE) ./e2e-tests/$(TEST)/run
+##@ E2E Tests
+
+# Run a single e2e test via pytest (native Python or bash wrapper).
+# Usage: make e2e-test TEST=init-deploy
+# Optional: REPORT_OPTS=... to override HTML/JUnit report flags
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
+
+.PHONY: e2e-test
+e2e-test: ## Run a single e2e test via pytest (TEST=<name>)
+ifndef TEST
+	$(error TEST is required. Usage: make e2e-test TEST=init-deploy)
+endif
+	mkdir -p e2e-tests/reports e2e-tests/logs
+	@if ls e2e-tests/$(TEST)/test_*.py 1>/dev/null 2>&1; then \
+		uv run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
+	else \
+		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
+	fi
 
 ##@ Build
 

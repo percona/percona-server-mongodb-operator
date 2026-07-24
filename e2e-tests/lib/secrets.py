@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 import urllib.parse
 from pathlib import Path
-from typing import Optional
 
 from .kubectl import kubectl_bin
 
@@ -46,7 +45,7 @@ def get_user_data(secret_name: str, data_key: str) -> str:
     return urllib.parse.quote(secret_data, safe="")
 
 
-def get_cloud_secret_default(conf_dir: Optional[Path] = None) -> str:
+def get_cloud_secret_default(conf_dir: Path | None = None) -> str:
     """Return default for SKIP_BACKUPS_TO_AWS_GCP_AZURE based on cloud-secret.yml existence."""
     if conf_dir is None:
         conf_dir = Path(__file__).parent.parent / "conf"
@@ -105,6 +104,5 @@ def setup_gcs_credentials(secret_name: str = "gcp-cs-secret") -> bool:
 
 
 # TODO: implement this function
-def check_passwords_leak(namespace: Optional[str] = None) -> None:
+def check_passwords_leak(namespace: str | None = None) -> None:
     """Check for password leaks in Kubernetes pod logs."""
-    pass
