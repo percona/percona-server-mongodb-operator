@@ -26,8 +26,11 @@ kubectl
 docker
 ```
 
-The Makefile downloads the OLM helper tools into
-`installers/olm/tools/<os>-<arch>`:
+The Makefile downloads the OLM helper tools into:
+
+```text
+installers/olm/tools/<os>-<arch>
+```
 
 ```bash
 make tools
@@ -41,7 +44,7 @@ Downloaded tools:
 
 ## Variables
 
-Most workflows only need `VERSION`.
+Most workflows only require `VERSION`.
 
 ```bash
 export VERSION=1.23.0
@@ -54,61 +57,38 @@ Useful optional variables:
 | `CSV_VERSION` | CSV version. Defaults to the first `x.y.z` parsed from `VERSION`. | `1.23.0` |
 | `IMAGE` | Community operator image used in generated manifests. | `docker.io/percona/percona-server-mongodb-operator:1.23.0` |
 | `REDHAT_OPERATOR_IMAGE` | Certified operator image used in generated manifests. | `registry.connect.redhat.com/percona/percona-server-mongodb-operator:1.23.0` |
-| `DEV_BUNDLE_REPO` | Development bundle and catalog image repository. | `docker.io/perconalab/percona-server-mongodb-operator` |
-| `CONFIRM_PUSH` | Ask before pushing images. Set to `0` in CI. | `0` |
+| `DEV_BUNDLE_REPO` | Repository used by development bundle and catalog images. | `docker.io/perconalab/percona-server-mongodb-operator` |
+| `DEPLOY_BUNDLE_REPO` | Repository used by release bundle and catalog images. | `docker.io/percona/percona-server-mongodb-operator` |
+| `CONFIRM_PUSH` | Ask before pushing images. Development targets default to local builds; deploy targets enable push automatically. Set to `0` in CI. | `0` |
 | `SKIP_DIGEST_FAILURE` | Continue certified generation when a digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
 
 OpenShift versions are resolved from `../../e2e-tests/release_versions` and used
-to render `com.redhat.openshift.versions`. Override only when needed:
+to render `com.redhat.openshift.versions`.
+
+Override only when necessary:
 
 ```bash
 export OPENSHIFT_VERSIONS="v4.18-v4.22"
 ```
 
-## Development
+---
 
-Development targets publish bundle and catalog images to `perconalab`.
+# Development
 
-The development package names are suffixed with `-dev` to avoid colliding with
-public OperatorHub packages already present in OpenShift default catalogs:
+Development targets build local bundles and catalogs by default. Images are only
+pushed when running a deploy target (or when explicitly enabling push).
+
+Development package names are suffixed with `-dev` to avoid colliding with the
+public OperatorHub packages shipped with OpenShift.
+
+Packages:
 
 - `percona-server-mongodb-operator-dev`
 - `percona-server-mongodb-operator-certified-dev`
 
-The display name is suffixed with `(Dev)` in the OpenShift console.
+Display names are suffixed with **(Dev)**.
 
-Build and push development bundle images:
-
-```bash
-make bundle-dev VERSION=1.23.0
-make bundle-dev/community VERSION=1.23.0
-make bundle-dev/certified VERSION=1.23.0
-```
-
-Deploy development catalogs to OpenShift:
-
-```bash
-make deploy-dev VERSION=1.23.0
-make deploy-dev/community VERSION=1.23.0
-make deploy-dev/certified VERSION=1.23.0
-```
-
-After deploying, search the OpenShift console for:
-
-```bash
-Percona Distribution for MongoDB Operator (Dev)
-```
-
-Or check with:
-
-```bash
-kubectl get packagemanifest percona-server-mongodb-operator-dev -n openshift-marketplace
-kubectl get packagemanifest percona-server-mongodb-operator-certified-dev -n openshift-marketplace
-```
-
-## Release Example
-
-Generate release bundles locally:
+## Generate bundles
 
 ```bash
 make bundles VERSION=1.23.0
@@ -116,32 +96,93 @@ make bundle/community VERSION=1.23.0
 make bundle/certified VERSION=1.23.0
 ```
 
-Build, push, and deploy release catalogs:
+## Build catalogs
 
 ```bash
-make deploy VERSION=1.23.0
+make catalog/community VERSION=1.23.0
+make catalog/certified VERSION=1.23.0
+```
+
+## Deploy catalogs
+
+Deploy automatically enables image push (with confirmation when enabled).
+
+```bash
 make deploy/community VERSION=1.23.0
 make deploy/certified VERSION=1.23.0
+make deploy VERSION=1.23.0
 ```
 
-Release deploy runs the full flow for each bundle type:
+After deployment, verify the packages:
 
 ```bash
-make bundle/<bundle-type>
-./build-image.sh ${CONTAINER} bundles/<bundle-type> <bundle-type> ${BUNDLE_IMAGE_VERSION}
-make catalog/<bundle-type> BUNDLE_REPO=${DEPLOY_BUNDLE_REPO}
-make apply-catalog/<bundle-type>
+kubectl get packagemanifest percona-server-mongodb-operator-dev -n openshift-marketplace
+kubectl get packagemanifest percona-server-mongodb-operator-certified-dev -n openshift-marketplace
 ```
 
-## Validation
+or search in the OpenShift console for:
 
-Validate all generated bundles:
+```text
+Percona Distribution for MongoDB Operator (Dev)
+```
+
+---
+
+# Release (`*-prod`)
+
+Release targets use the `-prod` suffix.
+
+## Generate release bundles
+
+```bash
+make bundles-prod VERSION=1.23.0
+make bundle-prod/community VERSION=1.23.0
+make bundle-prod/certified VERSION=1.23.0
+```
+
+## Build release catalogs
+
+```bash
+make catalog-prod/community VERSION=1.23.0
+make catalog-prod/certified VERSION=1.23.0
+```
+
+## Deploy release catalogs
+
+```bash
+make deploy-prod/community VERSION=1.23.0
+make deploy-prod/certified VERSION=1.23.0
+make deploy-prod VERSION=1.23.0
+```
+
+Each deploy performs the complete release workflow:
+
+```text
+bundle-prod/*
+    ↓
+build-image.sh
+    ↓
+catalog-prod/*
+    ↓
+apply-catalog/*
+```
+
+Unlike the development targets, release bundles use the production package names:
+
+- `percona-server-mongodb-operator`
+- `percona-server-mongodb-operator-certified`
+
+---
+
+# Validation
+
+Validate every generated bundle:
 
 ```bash
 make validate VERSION=1.23.0
 ```
 
-Validate one bundle:
+Or validate a single bundle:
 
 ```bash
 make validate/community VERSION=1.23.0
@@ -153,29 +194,34 @@ Validation uses:
 - `validate-image.sh`
 - `validate-directory.sh`
 
-## Certified Metadata
+---
+
+# Certified Metadata
 
 Certified bundles resolve image metadata and related image digests through
 `distributions/redhat.sh`.
 
 Bundle generation fails when:
 
-- a required image is missing
-- a certified image tag does not match the expected pattern
-- a required digest cannot be resolved and `SKIP_DIGEST_FAILURE` is not enabled
+- a required image is missing;
+- a certified image tag does not match the expected pattern;
+- a required digest cannot be resolved and `SKIP_DIGEST_FAILURE` is disabled.
 
-With `SKIP_DIGEST_FAILURE=1`, missing digests are rendered as `<DIGEST>` and
+When `SKIP_DIGEST_FAILURE=1`, missing digests are rendered as `<DIGEST>` and
 reported in the build output.
 
-## Cleanup
+---
 
-Remove generated bundles, catalogs, temporary SDK projects, and downloaded tools:
+# Cleanup
+
+Remove generated bundles, catalogs, temporary SDK projects, and downloaded
+tools:
 
 ```bash
 make clean
 ```
 
-Show available targets:
+Display all available targets:
 
 ```bash
 make help

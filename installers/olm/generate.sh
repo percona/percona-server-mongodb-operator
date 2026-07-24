@@ -337,11 +337,13 @@ validate_manifest_inputs() {
 build_examples() {
 	local cr_example
 	local backup_example
+	local clustersync_example
 	local image_backup
 	local image_logcollector
 	local image_mongod
 	local image_operator
 	local image_pmm
+	local image_clustersync
 	local restore_example
 
 	image_backup="$(release_image_ref "IMAGE_BACKUP")"
@@ -349,6 +351,7 @@ build_examples() {
 	image_mongod="$(release_image_ref "IMAGE_MONGOD80")"
 	image_operator="$(release_image_ref "IMAGE_OPERATOR")"
 	image_pmm="$(release_image_ref "IMAGE_PMM3_CLIENT")"
+	image_clustersync="$(release_image_ref "IMAGE_CLUSTERSYNC")"
 
 	if [[ "${DISTRIBUTION}" == "redhat" ]]; then
 		image_backup="$(jq -r '.relatedImages[] | select(.name == "backup").image' <<<"${redhat_distribution_images}")"
@@ -356,6 +359,7 @@ build_examples() {
 		image_mongod="$(jq -r '.relatedImages[] | select(.name == "mongod8.0").image' <<<"${redhat_distribution_images}")"
 		image_operator="$(jq -r '.operatorImage' <<<"${redhat_distribution_images}")"
 		image_pmm="$(jq -r '.relatedImages[] | select(.name == "pmm3").image' <<<"${redhat_distribution_images}")"
+		image_clustersync="$(jq -r '.relatedImages[] | select(.name == "clustersync").image' <<<"${redhat_distribution_images}")"
 	fi
 
 	cr_example="$(
@@ -385,10 +389,24 @@ build_examples() {
 				)
 			'
 	)"
+
+	clustersync_example="$(
+		yq eval -o=json ../../deploy/clustersync.yaml |
+			jq -s \
+				--arg imageClustersync "${image_clustersync}" \
+				'
+				map(
+					select(.kind == "PerconaServerMongoDBClusterSync")
+					| .spec.image = $imageClustersync
+				)
+				| first
+				'
+	)"
+
 	backup_example="$(yq eval -o=json ../../deploy/backup/backup.yaml)"
 	restore_example="$(yq eval -o=json ../../deploy/backup/restore.yaml)"
 
-	jq -n "[${cr_example}, ${backup_example}, ${restore_example}]"
+	jq -n "[${cr_example}, ${backup_example}, ${restore_example}, ${clustersync_example}]"
 }
 
 build_managed_resources() {

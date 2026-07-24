@@ -111,6 +111,9 @@ validate_certified_tag() {
 		IMAGE_LOGCOLLECTOR)
 			expected="${redhat_release}-logcollector-${source_tag}"
 			;;
+		IMAGE_CLUSTERSYNC)
+			expected="${redhat_release}-clustersync"
+			;;
 		*)
 			abort "unsupported certified image key: ${key}"
 			;;
@@ -193,7 +196,8 @@ build_redhat_related_images() {
 		IMAGE_BACKUP \
 		IMAGE_PMM_CLIENT \
 		IMAGE_PMM3_CLIENT \
-		IMAGE_LOGCOLLECTOR; do
+		IMAGE_LOGCOLLECTOR \
+		IMAGE_CLUSTERSYNC; do
 		require_release_image "${key}"
 	done
 
@@ -208,6 +212,7 @@ build_redhat_related_images() {
 	add_related_image "IMAGE_BACKUP" "backup" "${redhat_containers_repository}" "${redhat_release}-backup"
 	add_related_image "IMAGE_PMM_CLIENT" "pmm" "${redhat_containers_repository}" "${redhat_release}-pmm"
 	add_related_image "IMAGE_PMM3_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
+	add_related_image "IMAGE_CLUSTERSYNC" "clustersync" "${redhat_containers_repository}" "${redhat_release}-clustersync"
 	add_related_image "IMAGE_LOGCOLLECTOR" "logcollector" "${redhat_containers_repository}" "${redhat_release}-logcollector-${logcollector_tag}" "${logcollector_tag}"
 	add_related_image "IMAGE_OPERATOR" "operator" "${redhat_operator_repository}" "${redhat_operator_tag}"
 

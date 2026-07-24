@@ -6,10 +6,6 @@
 .SUFFIXES:
 SHELL := /bin/bash
 
-# ==============================================================================
-# Project Configuration
-# ==============================================================================
-
 NAME ?= percona-server-mongodb-operator
 BUNDLE_TYPES := community certified
 
@@ -21,10 +17,6 @@ RELEASE_VERSIONS ?= ../../e2e-tests/release_versions
 PACKAGE_CHANNEL ?= stable
 MIN_KUBE_VERSION ?= ""
 OPENSHIFT_VERSIONS ?= $(shell awk -F= '$$1 == "OPENSHIFT_MIN" { split($$2, v, "."); min = "v" v[1] "." v[2] } $$1 == "OPENSHIFT_MAX" { split($$2, v, "."); max = "v" v[1] "." v[2] } END { if (min && max) print min "-" max }' '$(RELEASE_VERSIONS)')
-
-# ==============================================================================
-# Image Configuration
-# ==============================================================================
 
 COMMUNITY_REGISTRY ?= docker.io
 IMAGE_TAG_OWNER ?= percona
@@ -39,7 +31,6 @@ DOCKER_DEFAULT_PLATFORM ?= linux/amd64
 BUNDLE_TYPE ?= community
 BUNDLE_REPO ?= $(IMAGE_TAG_BASE)
 DEV_BUNDLE_REPO ?= docker.io/perconalab/$(NAME)
-DEV_PACKAGE_SUFFIX ?= -dev
 DEV_DISPLAY_NAME_SUFFIX ?= (Dev)
 DEPLOY_BUNDLE_REPO ?= $(DEV_BUNDLE_REPO)
 BUNDLE_IMAGE_VERSION ?= $(CSV_VERSION)
@@ -55,28 +46,24 @@ CONFIRM_PUSH ?= 1
 SKIP_DIGEST_FAILURE ?= 0
 RUN_BUNDLE_TIMEOUT ?= 10m
 
-# ==============================================================================
-# Tool Configuration
-# ==============================================================================
-
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
 KUSTOMIZE := $(REPO_ROOT)/bin/kustomize
 
-JQ_VERSION := 1.7.1
-OPERATOR_SDK_VERSION := v1.41.1
-OPM_VERSION := v1.66.0
-
 OS_KERNEL ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
-OS_MACHINE ?= $(shell uname -m | sed 's/^x86_/amd/')
+OS_MACHINE ?= $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^x86_/amd/' -e 's/^aarch64$$/arm64/')
 SYSTEM := $(OS_KERNEL)-$(OS_MACHINE)
 TOOLS_DIR := tools/$(SYSTEM)
+
+JQ_VERSION := 1.7.1
+JQ_PLATFORM := $(if $(filter darwin,$(OS_KERNEL)),macos,$(OS_KERNEL))
+OPERATOR_SDK_VERSION := v1.41.1
+OPM_VERSION := v1.66.0
 
 export PATH := $(CURDIR)/$(TOOLS_DIR):$(PATH)
 
 # ==============================================================================
-# Display
+# Helpers
 # ==============================================================================
-
 GREEN := $(shell tput setaf 2)
 RESET := $(shell tput sgr0)
 
@@ -101,21 +88,123 @@ export PACKAGE_NAME_OVERRIDE CSV_NAME_OVERRIDE DISPLAY_NAME_OVERRIDE
 export DOCKER_DEFAULT_PLATFORM BUNDLE_REPO BUNDLE_PLATFORMS SKIP_DIGEST_FAILURE
 
 # ==============================================================================
-# Bundle Targets
+# Validation and Tool Helpers
 # ==============================================================================
+.PHONY: check-prereqs
+check-prereqs: check-version check-csv-version check-tools tools $(KUSTOMIZE)
 
-.PHONY: bundles
-bundles: ## Build all OLM bundles (community, certified)
-bundles: check-prereqs $(BUNDLE_TYPES:%=bundle/%)
+.PHONY: check-version
+check-version:
+ifndef VERSION
+	$(error VERSION is not set)
+endif
+
+.PHONY: check-csv-version
+check-csv-version:
+ifndef CSV_VERSION
+	$(error CSV_VERSION is not set and could not be parsed from VERSION=$(VERSION))
+endif
+	@if ! [[ "$(CSV_VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]]; then \
+		echo "CSV_VERSION must be a semver without prerelease/build metadata, got: $(CSV_VERSION)"; \
+		exit 1; \
+	fi
+
+.PHONY: check-tools
+check-tools:
+	@for cmd in gawk gcsplit yq yamllint envsubst; do \
+		if ! command -v $$cmd >/dev/null 2>&1; then \
+			echo "Error: $$cmd is required but not installed"; \
+			exit 1; \
+		fi; \
+	done
+
+$(KUSTOMIZE):
+	$(MAKE) -C ../.. bin/kustomize
+
+.PHONY: tools
+tools: $(TOOLS_DIR) $(TOOLS_DIR)/jq $(TOOLS_DIR)/operator-sdk $(TOOLS_DIR)/opm
+
+$(TOOLS_DIR):
+	mkdir -p $(TOOLS_DIR)
+
+$(TOOLS_DIR)/jq:
+	curl -fL "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-$(JQ_PLATFORM)-$(OS_MACHINE)" -o $@
+	chmod +x $@
+
+$(TOOLS_DIR)/operator-sdk: | $(TOOLS_DIR)
+	curl -sL "https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS_KERNEL)_$(OS_MACHINE)" -o $@
+	chmod +x $@
+
+$(TOOLS_DIR)/opm: | $(TOOLS_DIR)
+	curl -sL "https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS_KERNEL)-$(OS_MACHINE)-opm" -o $@
+	chmod +x $@
+
+# ==============================================================================
+# Development Rules
+# ==============================================================================
+.PHONY: bundle
+bundle: ## Build all development OLM bundles and push bundle images to perconalab
+bundle: $(BUNDLE_TYPES:%=bundle/%)
 
 .PHONY: bundle/community
-bundle/community: ## Build community OLM bundle
+bundle/community: ## Build and push community bundle image to perconalab
 
 .PHONY: bundle/certified
-bundle/certified: ## Build certified OLM bundle
+bundle/certified: ## Build and push certified bundle image to perconalab
 
 .PHONY: $(BUNDLE_TYPES:%=bundle/%)
-$(BUNDLE_TYPES:%=bundle/%): bundle/%: tools $(KUSTOMIZE) check-version check-csv-version check-tools
+$(BUNDLE_TYPES:%=bundle/%): bundle/%: check-version check-csv-version
+	@package='$(NAME)'; \
+	if [[ "$*" == "certified" ]]; then \
+		package='$(NAME)-certified'; \
+	fi; \
+	csv_name="$${package}.v$(CSV_VERSION)"; \
+	$(MAKE) bundle-prod/$* PACKAGE_NAME_OVERRIDE="$${package}" CSV_NAME_OVERRIDE="$${csv_name}" DISPLAY_NAME_OVERRIDE="Percona Distribution for MongoDB Operator $(DEV_DISPLAY_NAME_SUFFIX)"
+	BUNDLE_REPO='$(DEV_BUNDLE_REPO)' ./build-image.sh '$(CONTAINER)' 'bundles/$*' '$*' '$(BUNDLE_IMAGE_VERSION)'
+
+.PHONY: catalog
+catalog: ## Build and push all development catalog images
+catalog: $(BUNDLE_TYPES:%=catalog/%)
+
+.PHONY: catalog/community
+catalog/community: ## Build and push community development catalog image
+
+.PHONY: catalog/certified
+catalog/certified: ## Build and push certified development catalog image
+
+.PHONY: $(BUNDLE_TYPES:%=catalog/%)
+$(BUNDLE_TYPES:%=catalog/%): catalog/%: bundle/%
+	$(MAKE) catalog-prod/$* BUNDLE_REPO='$(DEV_BUNDLE_REPO)'
+
+.PHONY: deploy
+deploy: ## Build, push, and deploy all development catalog sources
+deploy: $(BUNDLE_TYPES:%=deploy/%)
+
+.PHONY: deploy/community
+deploy/community: ## Build, push, and deploy community development catalog source
+
+.PHONY: deploy/certified
+deploy/certified: ## Build, push, and deploy certified development catalog source
+
+.PHONY: $(BUNDLE_TYPES:%=deploy/%)
+$(BUNDLE_TYPES:%=deploy/%): deploy/%: catalog/%
+	$(MAKE) apply-catalog/$* CATALOG_SOURCE_NAME='$*-dev'
+
+# ==============================================================================
+# Production Rules
+# ==============================================================================
+.PHONY: bundles-prod
+bundles-prod: ## Build all production OLM bundles (community, certified)
+bundles-prod: check-prereqs $(BUNDLE_TYPES:%=bundle-prod/%)
+
+.PHONY: bundle-prod/community
+bundle-prod/community: ## Build community OLM bundle
+
+.PHONY: bundle-prod/certified
+bundle-prod/certified: ## Build certified OLM bundle
+
+.PHONY: $(BUNDLE_TYPES:%=bundle-prod/%)
+$(BUNDLE_TYPES:%=bundle-prod/%): bundle-prod/%: tools $(KUSTOMIZE) check-version check-csv-version check-tools
 	@echo "$(GREEN)Building $* bundle...$(RESET)"
 	@distribution="$*"; \
 	operator_image="$(IMAGE)"; \
@@ -135,42 +224,18 @@ $(BUNDLE_TYPES:%=bundle/%): bundle/%: tools $(KUSTOMIZE) check-version check-csv
 	fi
 	@echo "$(GREEN)Bundle stored in installers/olm/bundles/$*$(RESET)"
 
-.PHONY: bundle-dev
-bundle-dev: ## Build all OLM bundles and push bundle images to perconalab
-bundle-dev: $(BUNDLE_TYPES:%=bundle-dev/%)
+.PHONY: catalog-prod
+catalog-prod: ## Build and push all production catalog images
+catalog-prod: $(BUNDLE_TYPES:%=catalog-prod/%)
 
-.PHONY: bundle-dev/community
-bundle-dev/community: ## Build and push community bundle image to perconalab
+.PHONY: catalog-prod/community
+catalog-prod/community: ## Build and push community catalog image to perconalab
 
-.PHONY: bundle-dev/certified
-bundle-dev/certified: ## Build and push certified bundle image to perconalab
+.PHONY: catalog-prod/certified
+catalog-prod/certified: ## Build and push certified catalog image to perconalab
 
-.PHONY: $(BUNDLE_TYPES:%=bundle-dev/%)
-$(BUNDLE_TYPES:%=bundle-dev/%): bundle-dev/%: check-version check-csv-version
-	@package='$(NAME)$(DEV_PACKAGE_SUFFIX)'; \
-	if [[ "$*" == "certified" ]]; then \
-		package='$(NAME)-certified$(DEV_PACKAGE_SUFFIX)'; \
-	fi; \
-	csv_name="$${package}.v$(CSV_VERSION)"; \
-	$(MAKE) bundle/$* PACKAGE_NAME_OVERRIDE="$${package}" CSV_NAME_OVERRIDE="$${csv_name}" DISPLAY_NAME_OVERRIDE="Percona Distribution for MongoDB Operator $(DEV_DISPLAY_NAME_SUFFIX)"
-	BUNDLE_REPO='$(DEV_BUNDLE_REPO)' ./build-image.sh '$(CONTAINER)' 'bundles/$*' '$*' '$(BUNDLE_IMAGE_VERSION)'
-
-# ==============================================================================
-# Deploy Targets
-# ==============================================================================
-
-.PHONY: catalog
-catalog: ## Build and push all catalog images to perconalab
-catalog: $(BUNDLE_TYPES:%=catalog/%)
-
-.PHONY: catalog/community
-catalog/community: ## Build and push community catalog image to perconalab
-
-.PHONY: catalog/certified
-catalog/certified: ## Build and push certified catalog image to perconalab
-
-.PHONY: $(BUNDLE_TYPES:%=catalog/%)
-$(BUNDLE_TYPES:%=catalog/%): catalog/%: tools check-version check-csv-version
+.PHONY: $(BUNDLE_TYPES:%=catalog-prod/%)
+$(BUNDLE_TYPES:%=catalog-prod/%): catalog-prod/%: tools check-version check-csv-version
 	@catalog_root='catalogs'; \
 	catalog_dir="$${catalog_root}/$*"; \
 	catalog_image='$(CATALOG_REPO):$*-catalog'; \
@@ -200,50 +265,22 @@ $(BUNDLE_TYPES:%=catalog/%): catalog/%: tools check-version check-csv-version
 		"$${catalog_root}"; \
 	echo "$(GREEN)Catalog image pushed: $${catalog_image}$(RESET)"
 
-.PHONY: deploy
-deploy: ## Build, push, and deploy all catalog sources
-deploy: $(BUNDLE_TYPES:%=deploy/%)
+.PHONY: deploy-prod
+deploy-prod: ## Build, push, and deploy all production catalog sources
+deploy-prod: $(BUNDLE_TYPES:%=deploy-prod/%)
 
-.PHONY: deploy/community
-deploy/community: ## Build, push, and deploy community bundle
+.PHONY: deploy-prod/community
+deploy-prod/community: ## Build, push, and deploy community bundle
 
-.PHONY: deploy/certified
-deploy/certified: ## Build, push, and deploy certified bundle
+.PHONY: deploy-prod/certified
+deploy-prod/certified: ## Build, push, and deploy certified bundle
 
-.PHONY: $(BUNDLE_TYPES:%=deploy/%)
-$(BUNDLE_TYPES:%=deploy/%): deploy/%: tools check-version check-csv-version
-	$(MAKE) bundle/$*
+.PHONY: $(BUNDLE_TYPES:%=deploy-prod/%)
+$(BUNDLE_TYPES:%=deploy-prod/%): deploy-prod/%: tools check-version check-csv-version
+	$(MAKE) bundle-prod/$*
 	BUNDLE_REPO='$(DEPLOY_BUNDLE_REPO)' ./build-image.sh '$(CONTAINER)' 'bundles/$*' '$*' '$(BUNDLE_IMAGE_VERSION)'
-	$(MAKE) catalog/$* BUNDLE_REPO='$(DEPLOY_BUNDLE_REPO)'
+	$(MAKE) catalog-prod/$* BUNDLE_REPO='$(DEPLOY_BUNDLE_REPO)'
 	$(MAKE) apply-catalog/$*
-
-.PHONY: catalog-dev
-catalog-dev: ## Build and push all development catalog images
-catalog-dev: $(BUNDLE_TYPES:%=catalog-dev/%)
-
-.PHONY: catalog-dev/community
-catalog-dev/community: ## Build and push community development catalog image
-
-.PHONY: catalog-dev/certified
-catalog-dev/certified: ## Build and push certified development catalog image
-
-.PHONY: $(BUNDLE_TYPES:%=catalog-dev/%)
-$(BUNDLE_TYPES:%=catalog-dev/%): catalog-dev/%: bundle-dev/%
-	$(MAKE) catalog/$* BUNDLE_REPO='$(DEV_BUNDLE_REPO)'
-
-.PHONY: deploy-dev
-deploy-dev: ## Build, push, and deploy all development catalog sources
-deploy-dev: $(BUNDLE_TYPES:%=deploy-dev/%)
-
-.PHONY: deploy-dev/community
-deploy-dev/community: ## Build, push, and deploy community development catalog source
-
-.PHONY: deploy-dev/certified
-deploy-dev/certified: ## Build, push, and deploy certified development catalog source
-
-.PHONY: $(BUNDLE_TYPES:%=deploy-dev/%)
-$(BUNDLE_TYPES:%=deploy-dev/%): deploy-dev/%: catalog-dev/%
-	$(MAKE) apply-catalog/$* CATALOG_SOURCE_NAME='$*-dev'
 
 .PHONY: $(BUNDLE_TYPES:%=apply-catalog/%)
 $(BUNDLE_TYPES:%=apply-catalog/%): apply-catalog/%:
@@ -284,9 +321,8 @@ $(BUNDLE_TYPES:%=apply-catalog/%): apply-catalog/%:
 	echo "$(GREEN)CatalogSource deployed: $${catalog_source} in $${catalog_namespace} -> $${catalog_image}$(RESET)"
 
 # ==============================================================================
-# Image Targets
+# Image Rules
 # ==============================================================================
-
 .PHONY: build
 build: ## Build bundle image (set BUNDLE_TYPE=community|certified)
 build: check-version check-csv-version
@@ -312,9 +348,8 @@ build-%-image:
 	./build-image.sh '$(CONTAINER)' 'bundles/$*' '$*' '$(BUNDLE_IMAGE_VERSION)'
 
 # ==============================================================================
-# Validation Targets
+# Validation Rules
 # ==============================================================================
-
 .PHONY: validate
 validate: ## Run bundle image and directory validation
 validate: tools
@@ -333,9 +368,8 @@ validate-%-image:
 	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
 
 # ==============================================================================
-# Utility Targets
+# Utility Rules
 # ==============================================================================
-
 .PHONY: install-olm
 install-olm: ## Install OLM in Kubernetes cluster
 install-olm: tools
@@ -348,56 +382,3 @@ clean: ## Remove generated files and downloaded tools
 .PHONY: help
 help: ## Show this help message
 	@awk 'BEGIN {FS = ": ## "; printf "\n$(GREEN)Usage:$(RESET)\n  make [target]\n\n$(GREEN)Targets:$(RESET)\n"} /^[a-zA-Z0-9_\/%-]+: ## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-
-# ==============================================================================
-# Validation Helpers
-# ==============================================================================
-
-.PHONY: check-prereqs
-check-prereqs: check-version check-csv-version check-tools tools $(KUSTOMIZE)
-
-.PHONY: check-version
-check-version:
-ifndef VERSION
-	$(error VERSION is not set)
-endif
-
-.PHONY: check-csv-version
-check-csv-version:
-ifndef CSV_VERSION
-	$(error CSV_VERSION is not set and could not be parsed from VERSION=$(VERSION))
-endif
-	@if ! [[ "$(CSV_VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]]; then \
-		echo "CSV_VERSION must be a semver without prerelease/build metadata, got: $(CSV_VERSION)"; \
-		exit 1; \
-	fi
-
-.PHONY: check-tools
-check-tools:
-	@for cmd in gawk gcsplit yq yamllint envsubst; do \
-		if ! command -v $$cmd >/dev/null 2>&1; then \
-			echo "Error: $$cmd is required but not installed"; \
-			exit 1; \
-		fi; \
-	done
-
-$(KUSTOMIZE):
-	$(MAKE) -C ../.. bin/kustomize
-
-.PHONY: tools
-tools: $(TOOLS_DIR)/jq $(TOOLS_DIR)/operator-sdk $(TOOLS_DIR)/opm
-
-$(TOOLS_DIR):
-	mkdir -p $(TOOLS_DIR)
-
-$(TOOLS_DIR)/jq: | $(TOOLS_DIR)
-	curl -sL "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-$(OS_KERNEL)-$(OS_MACHINE)" -o $@
-	chmod +x $@
-
-$(TOOLS_DIR)/operator-sdk: | $(TOOLS_DIR)
-	curl -sL "https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS_KERNEL)_$(OS_MACHINE)" -o $@
-	chmod +x $@
-
-$(TOOLS_DIR)/opm: | $(TOOLS_DIR)
-	curl -sL "https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS_KERNEL)-$(OS_MACHINE)-opm" -o $@
-	chmod +x $@
