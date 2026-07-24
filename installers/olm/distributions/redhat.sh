@@ -3,6 +3,7 @@
 # shellcheck disable=SC2016
 
 redhat_release="${VERSION}"
+redhat_skips_min_version="${REDHAT_SKIPS_MIN_VERSION:-1.17.0}"
 redhat_registry="${REDHAT_REGISTRY:-registry.connect.redhat.com}"
 redhat_catalog_api="${REDHAT_CATALOG_API:-https://catalog.redhat.com/api/containers/v1}"
 redhat_catalog_curl_timeout="${REDHAT_CATALOG_CURL_TIMEOUT:-20}"
@@ -225,4 +226,43 @@ build_redhat_related_images() {
 			operatorImage: $operator_image,
 			relatedImages: $related_images
 		}'
+}
+
+build_redhat_skips() {
+	local min_version="${redhat_skips_min_version}"
+	local current_version="v${redhat_release#v}"
+
+	min_version="v${min_version#v}"
+
+	log "Building Red Hat skips from ${min_version} up to ${current_version}"
+
+	git -C "${repo_root}" tag --list 'v*' \
+		| jq -Rsc \
+			--arg min_version "${min_version}" \
+			--arg current_version "${current_version}" \
+			--arg package_name "percona-server-mongodb-operator-certified" \
+			'
+			def version_parts:
+				ltrimstr("v")
+				| split(".")
+				| map(tonumber);
+
+			($min_version | version_parts) as $min
+			| ($current_version | version_parts) as $current
+			| split("\n")
+			| map(select(length > 0))
+			| map(select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")))
+			| map({
+				tag: .,
+				version: version_parts
+			})
+			| map(
+				select(
+					.version >= $min
+					and .version < $current
+				)
+			)
+			| sort_by(.version)
+			| map($package_name + "." + .tag)
+			'
 }

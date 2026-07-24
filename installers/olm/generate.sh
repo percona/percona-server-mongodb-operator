@@ -23,6 +23,7 @@ KUSTOMIZATION_FILE="../../config/bundle/kustomization.yaml"
 
 rulesLevel="permissions"
 relatedImages="[]"
+skips="[]"
 containerImage=""
 csv_stem=""
 redhat_distribution_images="{}"
@@ -499,7 +500,6 @@ update_yaml_images() {
 
 prepare_distribution_images() {
 	if [[ "${DISTRIBUTION}" != "redhat" ]]; then
-		relatedImages="[]"
 		containerImage="${IMAGE}"
 		return
 	fi
@@ -507,6 +507,7 @@ prepare_distribution_images() {
 	redhat_distribution_images="$(build_redhat_related_images)"
 	containerImage="$(jq -r '.operatorImage' <<<"${redhat_distribution_images}")"
 	relatedImages="$(jq -r '.relatedImages' <<<"${redhat_distribution_images}")"
+	skips="$(build_redhat_skips)"
 }
 
 render_csv() {
@@ -557,13 +558,13 @@ render_csv() {
 	export skip_range="<${version}"
 	export containerImage
 	export relatedImages
+	export skips
 	export rulesLevel
 	export icon_base64
 
 	yq -P eval '
 	  .metadata.annotations["alm-examples"] = strenv(examples) |
 	  .metadata.annotations["containerImage"] = env(containerImage) |
-	  .metadata.annotations["olm.skipRange"] = env(skip_range) |
 	  .metadata.annotations["createdAt"] = strenv(timestamp) |
 	  .metadata.name = env(name) |
 	  .spec.version = env(version) |
@@ -579,17 +580,21 @@ render_csv() {
 
 	case "${DISTRIBUTION}" in
 		community)
+			yq -P eval --inplace '
+		        .metadata.annotations["olm.skipRange"] = env(skip_range)' \
+				"${csv_file}"
 			;;
 		redhat)
 			yq -P eval --inplace '
 		        .spec.relatedImages = (strenv(relatedImages) | from_json) |
+						.spec.skips = (strenv(skips) | from_json) |
 		        .metadata.annotations.certified = "true" |
 		        .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
 		        .metadata.name = strenv(name_certified)' \
+						\
 				"${csv_file}"
 			;;
 	esac
-
 }
 
 validate_bundle() {
