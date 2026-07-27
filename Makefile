@@ -139,7 +139,7 @@ release: manifests
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
 MINOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
-after-release: update-version manifests
+after-release: update-version after-release-versions manifests update-upgrade-consistency-test
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod8.0#}" deploy/cr-minimal.yaml
@@ -160,6 +160,59 @@ after-release: update-version manifests
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
+
+.PHONY: after-release-versions
+after-release-versions:
+	$(SED) -i \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
+		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
+		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
+		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0#" \
+		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:dev-latest#" \
+		-e "s#^IMAGE_PMM3_CLIENT=.*#IMAGE_PMM3_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM3_SERVER=.*#IMAGE_PMM3_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_LOGCOLLECTOR=.*#IMAGE_LOGCOLLECTOR=perconalab/fluentbit:main-logcollector#" \
+		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \
+		e2e-tests/release_versions
+
+.PHONY: update-upgrade-consistency-test
+update-upgrade-consistency-test:
+ifndef NEXT_VER
+	$(error NEXT_VER is required. Usage: make update-upgrade-consistency-test NEXT_VER=1.24.0)
+endif
+	@file="e2e-tests/upgrade-consistency/run"; \
+	next="$(NEXT_VER)"; \
+	versions=$$(grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' "$$file" | awk '!seen[$$0]++' | head -3); \
+	old1=$$(echo "$$versions" | sed -n '1p'); \
+	old2=$$(echo "$$versions" | sed -n '2p'); \
+	old3=$$(echo "$$versions" | sed -n '3p'); \
+	if [ "$${old3%.*}" = "$${next%.*}" ]; then \
+		new1="$$old1"; new2="$$old2"; new3="$$next"; \
+	else \
+		new1="$$old2"; new2="$$old3"; new3="$$next"; \
+	fi; \
+	echo "$$old1 -> $$new1"; \
+	echo "$$old2 -> $$new2"; \
+	echo "$$old3 -> $$new3"; \
+	sed -i.bak \
+		-e "s/$$old1/__VERSION_1__/g" \
+		-e "s/$$old2/__VERSION_2__/g" \
+		-e "s/$$old3/__VERSION_3__/g" \
+		-e "s/-$${old1//./}/-__SUFFIX_1__/g" \
+		-e "s/-$${old2//./}/-__SUFFIX_2__/g" \
+		-e "s/-$${old3//./}/-__SUFFIX_3__/g" \
+		"$$file"; \
+	sed -i.bak \
+		-e "s/__VERSION_1__/$$new1/g" \
+		-e "s/__VERSION_2__/$$new2/g" \
+		-e "s/__VERSION_3__/$$new3/g" \
+		-e "s/__SUFFIX_1__/$${new1//./}/g" \
+		-e "s/__SUFFIX_2__/$${new2//./}/g" \
+		-e "s/__SUFFIX_3__/$${new3//./}/g" \
+		"$$file"; \
+	rm -f "$$file.bak"
 
 version-service-client: swagger
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
