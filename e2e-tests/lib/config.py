@@ -7,17 +7,11 @@ from typing import Any
 
 import yaml
 
+from .arch import arch, clean_arch
 from .kubectl import kubectl_bin
 from .utils import env_bool, render_yaml_diff
 
 logger = logging.getLogger(__name__)
-
-ARCH_NODE_SELECTOR_KEY = "kubernetes.io/arch"
-
-
-def _arch() -> str:
-    """Target architecture for scheduling, or '' when disabled."""
-    return os.environ.get("ARCH", "")
 
 
 # Keys removed wherever they appear in the tree.
@@ -73,39 +67,6 @@ _DELETE_PATHS = [
 ]
 
 
-def _add_arch_scheduling(target: dict[str, Any]) -> None:
-    """Add the arch nodeSelector and toleration to a pod-owning spec."""
-    arch = _arch()
-    target.setdefault("nodeSelector", {})[ARCH_NODE_SELECTOR_KEY] = arch
-
-    toleration = {
-        "key": ARCH_NODE_SELECTOR_KEY,
-        "operator": "Equal",
-        "value": arch,
-        "effect": "NoSchedule",
-    }
-    tolerations = target.setdefault("tolerations", [])
-    if toleration not in tolerations:
-        tolerations.append(toleration)
-
-
-def _add_arch_to_psmdb(spec: dict[str, Any]) -> None:
-    """Pin every PSMDB component to the target architecture."""
-    if not _arch():
-        return
-
-    for replset in spec.get("replsets") or []:
-        _add_arch_scheduling(replset)
-        for component in ("arbiter", "nonvoting", "hidden"):
-            if replset.get(component) is not None:
-                _add_arch_scheduling(replset[component])
-
-    sharding = spec.get("sharding") or {}
-    for component in ("configsvrReplSet", "mongos"):
-        if sharding.get(component) is not None:
-            _add_arch_scheduling(sharding[component])
-
-
 def render_cluster_config(config_file: str) -> str:
     """Render a cluster manifest with test image and scheduling overrides."""
     with open(config_file, "r") as f:
@@ -135,8 +96,6 @@ def render_cluster_config(config_file: str) -> str:
         if "upgradeOptions" not in spec:
             spec["upgradeOptions"] = {}
         spec["upgradeOptions"]["apply"] = "Never"
-
-        _add_arch_to_psmdb(spec)
 
     return yaml.dump(config)
 
@@ -219,37 +178,6 @@ def _filter_scalar(value: str, namespace: str) -> str:
     return value.replace(namespace, "NAME_SPACE")
 
 
-def _clean_arch(node: object) -> None:
-    """Remove the arch nodeSelector/toleration so compare files stay arch-agnostic."""
-    arch = _arch()
-    if isinstance(node, dict):
-        selector = node.get("nodeSelector")
-        if isinstance(selector, dict):
-            selector.pop(ARCH_NODE_SELECTOR_KEY, None)
-            if not selector:
-                node.pop("nodeSelector", None)
-
-        tolerations = node.get("tolerations")
-        if isinstance(tolerations, list):
-            node["tolerations"] = [
-                t
-                for t in tolerations
-                if not (
-                    isinstance(t, dict)
-                    and t.get("key") == ARCH_NODE_SELECTOR_KEY
-                    and t.get("value") == arch
-                )
-            ]
-            if not node["tolerations"]:
-                node.pop("tolerations", None)
-
-        for value in node.values():
-            _clean_arch(value)
-    elif isinstance(node, list):
-        for item in node:
-            _clean_arch(item)
-
-
 def filter_yaml(
     yaml_content: str, namespace: str, resource: str = "", skip_generation_check: bool = False
 ) -> str:
@@ -276,8 +204,8 @@ def filter_yaml(
 
     _walk(data, namespace)
 
-    if _arch():
-        _clean_arch(data)
+    if arch():
+        clean_arch(data)
 
     return yaml.dump(data, sort_keys=False)
 

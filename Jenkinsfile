@@ -3,14 +3,16 @@ import groovy.transform.Field
 @Field def zone = 'us-central1-c'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
+@Field def reportHtml = 'e2e-test-report.html'
+@Field def reportXml = 'e2e-test-report.xml'
 @Field int clusterCount = 15
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-            gcloud config set project $GCP_PROJECT
+            gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+            gcloud config set project "\$GCP_PROJECT"
             GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
             if [ -z "\${GKE_VERSION}" ]; then
                 echo "Failed to detect the minimum Kubernetes version from the GKE stable release channel"
@@ -39,7 +41,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --no-enable-managed-prometheus \
                     --workload-pool=cloud-dev-112233.svc.id.goog \
                     --quiet && \
-                kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
+                kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"\$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
             done
@@ -55,8 +57,8 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-            gcloud config set project $GCP_PROJECT
+            gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+            gcloud config set project "\$GCP_PROJECT"
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
                 kubectl delete deployments --all -n \$namespace --force --grace-period=0 || true
                 kubectl delete sts --all -n \$namespace --force --grace-period=0 || true
@@ -75,8 +77,8 @@ void deleteOldClusters(String FILTER) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             if gcloud --version > /dev/null 2>&1; then
-                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-                gcloud config set project $GCP_PROJECT
+                gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+                gcloud config set project "\$GCP_PROJECT"
                 for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
                     GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
                     retry=0
@@ -119,11 +121,11 @@ EOF
 }
 
 void pushReportFile() {
-    echo "Push final_report.html to S3!"
+    echo "Push ${reportHtml} to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
-            aws s3 cp --content-type text/html --quiet final_report.html \$S3_PATH/final_report.html || :
+            aws s3 cp --content-type text/html --quiet ${reportHtml} \$S3_PATH/${reportHtml} || :
         """
     }
 }
@@ -157,18 +159,25 @@ void markPassedTests() {
     echo "Marking passed tests in the tests map!"
 
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-        def listing = sh(
-            script: "aws s3 ls s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/ || :",
-            returnStdout: true
-        )
-        def existingFiles = listing.split('\n').collect { it.trim().split(/\s+/).last() } as Set
+        sh """
+            aws s3 ls "s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/" || :
+        """
 
+        def marked = 0
         for (int i=0; i<tests.size(); i++) {
-            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-${tests[i]['name']}"
-            if (existingFiles.contains(file)) {
+            def testName = tests[i]["name"]
+            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
+            def retFileExists = sh(
+                script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1",
+                returnStatus: true
+            )
+
+            if (retFileExists == 0) {
                 tests[i]["result"] = "passed"
+                marked++
             }
         }
+        echo "Marked ${marked}/${tests.size()} test(s) as already passed (will skip on this run)"
     }
 }
 
@@ -231,8 +240,8 @@ void makeReport() {
     }
     TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
     TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
-    TestsReport = TestsReport + "\r\n| Tests Failed | $failedTestAmount |"
-    TestsReport = TestsReport + "\r\n| Tests Errored | $erroredTestAmount |"
+    TestsReport = TestsReport + "\r\n| Tests Failed | $failedTestAmount/$wholeTestAmount  |"
+    TestsReport = TestsReport + "\r\n| Tests Errored | $erroredTestAmount/$wholeTestAmount  |"
     TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
     TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
 }
@@ -266,7 +275,7 @@ void normalizeReports() {
         writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
 <testsuites name="pytest tests">
 <testsuite name="psmdb-e2e" errors="${errors}" failures="${failures}" skipped="0" tests="1" time="${testTime}">
-<testcase classname="e2e-tests.${testName}" name="${testName}" time="${testTime}">
+<testcase classname="" name="${testName}" time="${testTime}">
 ${resultElement}
 </testcase>
 </testsuite>
@@ -299,6 +308,26 @@ ${resultElement}
 </html>"""
         }
     }
+}
+
+void formatReportDuration(String htmlFile) {
+    def marker = ' tests ran in '
+    def suffix = ' seconds'
+    def html = readFile(htmlFile)
+
+    def valueStart = html.indexOf(marker)
+    if (valueStart < 0) {
+        return
+    }
+    valueStart += marker.length()
+
+    def valueEnd = html.indexOf(suffix, valueStart)
+    if (valueEnd < 0) {
+        return
+    }
+
+    def formatted = formatTime(html.substring(valueStart, valueEnd))
+    writeFile file: htmlFile, text: html.substring(0, valueStart) + formatted + html.substring(valueEnd + suffix.length())
 }
 
 void clusterRunner(String cluster) {
@@ -677,7 +706,11 @@ pipeline {
                     def branches = [:]
                     for (int i = 1; i <= clusterCount; i++) {
                         def cluster = "cluster${i}".toString()
-                        branches[cluster] = { clusterRunner(cluster) }
+                        branches[cluster] = {
+                            stage(cluster) {
+                                clusterRunner(cluster)
+                            }
+                        }
                     }
                     parallel branches
                 }
@@ -711,16 +744,17 @@ pipeline {
                         
                         sh """
                             export PATH="\$HOME/.local/bin:\$PATH"
-                            uv run pytest_html_merger -i e2e-tests/reports -o final_report.html
-                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' final_report.xml
+                            uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
+                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
                         """
-                        junit testResults: 'final_report.xml', healthScaleFactor: 1.0
-                        archiveArtifacts 'final_report.xml, final_report.html'
+                        formatReportDuration(reportHtml)
+                        junit testResults: reportXml, healthScaleFactor: 1.0
+                        archiveArtifacts "${reportXml}, ${reportHtml}"
                         pushReportFile()
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/final_report.html)\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml})\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")

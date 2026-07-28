@@ -35,6 +35,22 @@ def config(create_infra: Callable[[str], str]) -> InitDeployConfig:
     )
 
 
+def settled_conn_count(psmdb_client: MongoManager, uri: str, max_conn: int) -> int:
+    """Sample connection count until it settles under max_conn.
+
+    Connections from previous steps and health probes are reaped asynchronously,
+    so a single sample can catch a transient spike.
+    """
+
+    def sample() -> int:
+        return int(psmdb_client.run_mongosh("db.serverStatus().connections.current", uri).strip())
+
+    try:
+        return int(retry(sample, max_attempts=3, delay=3, condition=lambda c: c <= max_conn))
+    except RuntimeError:
+        return sample()
+
+
 @pytest.fixture(scope="class", autouse=True)
 def setup_tests(test_paths: Paths) -> None:
     """Setup test environment"""
@@ -140,11 +156,10 @@ class TestInitDeploy:
     @pytest.mark.dependency(depends=["TestInitDeploy::test_write_and_read_data"])
     def test_connection_count(self, config: InitDeployConfig, psmdb_client: MongoManager) -> None:
         """Check number of connections doesn't exceed maximum"""
-        conn_count = int(
-            psmdb_client.run_mongosh(
-                "db.serverStatus().connections.current",
-                f"clusterAdmin:clusterAdmin123456@{config.cluster}.{config.namespace}",
-            ).strip()
+        conn_count = settled_conn_count(
+            psmdb_client,
+            f"clusterAdmin:clusterAdmin123456@{config.cluster}.{config.namespace}",
+            config.max_conn,
         )
         assert conn_count <= config.max_conn, (
             f"Connection count {conn_count} exceeds maximum {config.max_conn}"
@@ -260,11 +275,10 @@ class TestInitDeploy:
         max_conn = 50
         time.sleep(300)  # Wait for backup agent connections
 
-        conn_count = int(
-            psmdb_client.run_mongosh(
-                "db.serverStatus().connections.current",
-                f"clusterAdmin:clusterAdmin123456@{config.cluster2}.{config.namespace}",
-            ).strip()
+        conn_count = settled_conn_count(
+            psmdb_client,
+            f"clusterAdmin:clusterAdmin123456@{config.cluster2}.{config.namespace}",
+            max_conn,
         )
         assert conn_count <= max_conn, (
             f"Connection count {conn_count} exceeds maximum {max_conn} with backup enabled"

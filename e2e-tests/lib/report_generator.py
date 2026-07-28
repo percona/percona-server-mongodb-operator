@@ -94,7 +94,7 @@ def _nodes_cell(nodes: dict[str, Any] | None) -> str:
         return "<td>-</td>"
     if nodes["ok"]:
         return f'<td style="color: #00CC66; font-weight: bold;">{nodes["ready"]}/{nodes["total"]} ready</td>'
-    return f'<td style="color: #ff6b6b; font-weight: bold;">{nodes["ready"]}/{nodes["total"]} NOT READY</td>'
+    return f'<td style="color: #ff6b6b; font-weight: bold;">{nodes["ready"]}/{nodes["total"]} not ready</td>'
 
 
 def pytest_html_results_table_header(cells: MutableSequence[str]) -> None:

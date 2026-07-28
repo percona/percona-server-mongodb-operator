@@ -1,18 +1,82 @@
 import json
 import logging
+import os
 import subprocess
 import time
+import urllib.request
+from pathlib import Path
 
+from .arch import add_arch_to_manifest, arch, arch_run_overrides
 from .cli import oc_bin
 
 logger = logging.getLogger(__name__)
+
+
+def _read_manifest(source: str) -> str | None:
+    """Return manifest text for a local file or http(s) URL, else None."""
+    if os.path.isfile(source):
+        return Path(source).read_text()
+    if source.startswith(("http://", "https://")):
+        with urllib.request.urlopen(source) as response:
+            return str(response.read().decode())
+    return None
+
+
+def _inline_apply_files(args: list[str]) -> tuple[list[str], str]:
+    """Read local/remote `-f` manifests, patch with arch scheduling, feed via stdin."""
+    new_args: list[str] = []
+    manifests: list[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("-f", "--filename") and i + 1 < len(args):
+            filename, step = args[i + 1], 2
+        elif arg.startswith(("-f=", "--filename=")):
+            filename, step = arg.split("=", 1)[1], 1
+        else:
+            new_args.append(arg)
+            i += 1
+            continue
+
+        manifest = None if filename == "-" else _read_manifest(filename)
+        if manifest is not None:
+            manifests.append(manifest)
+        else:
+            new_args.extend(args[i : i + step])
+        i += step
+
+    if not manifests:
+        return args, ""
+    new_args.extend(["-f", "-"])
+    return new_args, add_arch_to_manifest("\n---\n".join(manifests))
+
+
+def _apply_arch_scheduling(args: list[str], input_data: str) -> tuple[list[str], str]:
+    """Inject arch nodeSelector/tolerations into `apply` and `run` commands."""
+    if not args or not arch():
+        return args, input_data
+
+    if args[0] == "apply":
+        if input_data:
+            return args, add_arch_to_manifest(input_data)
+        return _inline_apply_files(args)
+
+    if args[0] == "run" and not any(a.split("=", 1)[0] == "--overrides" for a in args):
+        override = f"--overrides={arch_run_overrides()}"
+        if "--" in args:
+            idx = args.index("--")
+            return args[:idx] + [override] + args[idx:], input_data
+        return args + [override], input_data
+
+    return args, input_data
 
 
 def kubectl_bin(
     *args: str, check: bool = True, input_data: str = "", return_stderr: bool = False
 ) -> str:
     """Execute kubectl command"""
-    cmd = ["kubectl"] + list(args)
+    arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
+    cmd = ["kubectl"] + arg_list
     logger.debug(" ".join(map(str, cmd)))
     result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
 
@@ -30,90 +94,71 @@ def kubectl_bin(
     return result.stdout
 
 
-def wait_pod(pod_name: str, timeout: int = 360) -> None:
-    """Wait for pod to be ready."""
-    start_time = time.time()
-    logger.info(f"Waiting for pod/{pod_name} to be ready...")
-    while time.time() - start_time < timeout:
-        try:
-            result = kubectl_bin(
-                "get",
-                "pod",
-                pod_name,
-                "-o",
-                "jsonpath={.status.conditions[?(@.type=='Ready')].status}",
-            ).strip("'")
-            if result == "True":
-                logger.info(f"Pod {pod_name} is ready")
-                return
-        except subprocess.CalledProcessError:
-            pass
+def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, timeout: int) -> None:
+    """Poll `kubectl get` until the jsonpath value equals `expected`, else raise TimeoutError."""
+    logger.info(f"Waiting for {what} to be ready...")
+    deadline = time.time() + timeout
+    status = ""
+    while time.time() < deadline:
+        status = kubectl_bin(
+            "get", *resource, "-o", f"jsonpath={jsonpath}", check=False, return_stderr=True
+        ).strip("'\n ")
+        if status == expected:
+            logger.info(f"{what} is ready")
+            return
         time.sleep(1)
 
-    status = (
-        kubectl_bin(
-            "get",
-            "pod",
-            pod_name,
-            "-o",
-            "jsonpath={.status.phase} (Ready={.status.conditions[?(@.type=='Ready')].status})",
-            check=False,
-            return_stderr=True,
-        ).strip()
-        or "not found"
+    raise TimeoutError(
+        f"Timeout waiting for {what} to be ready. Last status: {status or 'unknown'}"
     )
-    raise TimeoutError(f"Timeout waiting for {pod_name} to be ready. Last status: {status}")
+
+
+def wait_pod(pod_name: str, timeout: int = 360) -> None:
+    """Wait for pod to be ready."""
+    _wait_for(
+        f"pod/{pod_name}",
+        ["pod", pod_name],
+        "{.status.phase} {.status.conditions[?(@.type=='Ready')].status}",
+        "Running True",
+        timeout,
+    )
+
+
+def _wait_cluster_ready(cluster_name: str, timeout: int) -> None:
+    _wait_for(
+        f"cluster {cluster_name}", ["psmdb", cluster_name], "{.status.state}", "ready", timeout
+    )
+
+
+def _replset_field(cluster_name: str, rs_name: str, path: str) -> str:
+    """Read a field of a replset from the PSMDB spec, '' when unavailable."""
+    jsonpath = f'{{.spec.replsets[?(@.name=="{rs_name}")].{path}}}'
+    return kubectl_bin(
+        "get", "psmdb", cluster_name, "-o", f"jsonpath={jsonpath}", check=False
+    ).strip()
 
 
 def wait_for_running(
     cluster_name: str, expected_pods: int, check_cluster_readyness: bool = True, timeout: int = 600
 ) -> None:
-    """Wait for pods to be in running state using custom label selector"""
+    """Wait for all pods of a replset (incl. arbiter/nonvoting/hidden) to be ready."""
     last_pod = expected_pods - 1
     rs_name = cluster_name.split("-")[-1]
 
-    for i in range(last_pod + 1):
-        if i == last_pod and get_jsonpath(cluster_name, rs_name, "arbiter.enabled") == "true":
+    for i in range(expected_pods):
+        if i == last_pod and _replset_field(cluster_name, rs_name, "arbiter.enabled") == "true":
             wait_pod(f"{cluster_name}-arbiter-0")
         else:
             wait_pod(f"{cluster_name}-{i}")
 
-    for pod_type, path_prefix in [("nv", "nonvoting"), ("hidden", "hidden")]:
-        if get_jsonpath(cluster_name, rs_name, f"{path_prefix}.enabled") == "true":
-            size = get_jsonpath(cluster_name, rs_name, f"{path_prefix}.size")
-            if size:
-                for i in range(int(size)):
-                    wait_pod(f"{cluster_name}-{pod_type}-{i}")
+    for pod_type, component in (("nv", "nonvoting"), ("hidden", "hidden")):
+        if _replset_field(cluster_name, rs_name, f"{component}.enabled") == "true":
+            size = _replset_field(cluster_name, rs_name, f"{component}.size")
+            for i in range(int(size or 0)):
+                wait_pod(f"{cluster_name}-{pod_type}-{i}")
 
-    cluster_name = cluster_name.replace(f"-{rs_name}", "")
     if check_cluster_readyness:
-        start_time = time.time()
-        logger.info(f"Waiting for cluster {cluster_name} readiness")
-        while time.time() - start_time < timeout:
-            try:
-                state = kubectl_bin(
-                    "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}"
-                ).strip("'")
-                if state == "ready":
-                    logger.info(f"Cluster {cluster_name} is ready")
-                    return
-            except subprocess.CalledProcessError:
-                pass
-            time.sleep(1)
-
-        state = (
-            kubectl_bin(
-                "get",
-                "psmdb",
-                cluster_name,
-                "-o",
-                "jsonpath={.status.state}",
-                check=False,
-                return_stderr=True,
-            ).strip("'")
-            or "unknown"
-        )
-        raise TimeoutError(f"Timeout waiting for {cluster_name} to be ready. Last state: {state}")
+        _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 
 
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
@@ -127,29 +172,10 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
-def wait_cluster_consistency(cluster_name: str, wait_time: int = 35) -> None:
+def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
-    time.sleep(5)
-    logger.info(f"Waiting for cluster {cluster_name} consistency")
-    for _ in range(wait_time):
-        state = kubectl_bin("get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}").strip(
-            "'"
-        )
-        if state == "ready":
-            logger.info(f"Cluster {cluster_name} is consistent")
-            return
-        time.sleep(5)
-
-    raise TimeoutError(f"Cluster {cluster_name} did not become ready within {wait_time} retries")
-
-
-def get_jsonpath(cluster_name: str, rs_name: str, path: str) -> str:
-    """Get value from PSMDB resource using JSONPath"""
-    jsonpath = f'{{.spec.replsets[?(@.name=="{rs_name}")].{path}}}'
-    try:
-        return kubectl_bin("get", "psmdb", cluster_name, "-o", f"jsonpath={jsonpath}")
-    except subprocess.CalledProcessError:
-        return ""
+    time.sleep(5)  # give the operator time to leave the "ready" state first
+    _wait_cluster_ready(cluster_name, timeout)
 
 
 def clean_all_namespaces() -> None:
@@ -179,28 +205,10 @@ def clean_all_namespaces() -> None:
         logger.error("Failed to clean namespaces")
 
 
-def detect_k8s_provider(provider: str) -> str:
-    """Detect if the Kubernetes provider matches the given string"""
-    try:
-        output = kubectl_bin("version", "-o", "json")
-        git_version = json.loads(output)["serverVersion"]["gitVersion"]
-        return "1" if provider in git_version else "0"
-    except Exception as e:
-        logger.error(f"Failed to detect Kubernetes provider: {e}")
-        return "0"
-
-
 def get_k8s_versions() -> tuple[str, str]:
     """Get Kubernetes git version and semantic version."""
-    output = kubectl_bin("version", "-o", "json")
-    version_info = json.loads(output)["serverVersion"]
-
-    git_version = version_info["gitVersion"]
-    major = version_info["major"]
-    minor = version_info["minor"].rstrip("+")
-    kube_version = f"{major}.{minor}"
-
-    return git_version, kube_version
+    info = json.loads(kubectl_bin("version", "-o", "json"))["serverVersion"]
+    return info["gitVersion"], f"{info['major']}.{info['minor'].rstrip('+')}"
 
 
 def is_openshift() -> str:

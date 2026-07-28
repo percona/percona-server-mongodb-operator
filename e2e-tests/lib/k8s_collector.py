@@ -153,15 +153,22 @@ class K8sCollector:
         sections.append("=== PSMDB Restore ===")
         sections.append(self.kubectl_ns("get", "psmdb-restore") or "(no output)")
 
-        logs = self.kubectl_ns(
-            "logs", "-l", "app.kubernetes.io/name=percona-server-mongodb-operator", "--tail=50"
+        # In cluster-wide mode the operator runs in OPERATOR_NS, not the test namespace.
+        operator_ns = os.environ.get("OPERATOR_NS") or self.namespace
+        logs = self.kubectl(
+            "logs",
+            "-n",
+            operator_ns,
+            "-l",
+            "app.kubernetes.io/name=percona-server-mongodb-operator",
+            "--tail=50",
         )
 
         events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
 
         return {
             "resources": "\n".join(sections),
-            "logs": f"=== PSMDB Operator Logs ===\n{logs or '(no output)'}",
+            "logs": f"=== PSMDB Operator Logs (namespace {operator_ns}) ===\n{logs or '(no output)'}",
             "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
         }
 

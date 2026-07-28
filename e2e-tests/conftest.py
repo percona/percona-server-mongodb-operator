@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 import yaml
+from lib.arch import helm_arch_set_args
 from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
     clean_all_namespaces,
@@ -112,6 +113,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     if not (report.when == "call" or (report.when == "setup" and report.failed)):
         return
 
+    # Imported here so pytest can assert-rewrite it when loading it as a plugin.
     from lib import report_generator
 
     try:
@@ -130,11 +132,30 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
             logger.warning(f"Failed to generate HTML report extras: {e}")
 
 
+def _detect_arch() -> None:
+    """Enable arch scheduling automatically on arm64-only clusters (mirrors vars)."""
+    if os.environ.get("ARCH"):
+        return
+    arches = kubectl_bin(
+        "get",
+        "nodes",
+        "-o",
+        r'jsonpath={range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}',
+        check=False,
+    )
+    unique = {a for a in arches.split() if a}
+    if unique == {"arm64"}:
+        os.environ["ARCH"] = "arm64"
+        logger.info("Detected arm64-only cluster: enabling ARCH=arm64 scheduling")
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
     git_branch = get_git_branch()
     git_version, kube_version = get_k8s_versions()
+
+    _detect_arch()
 
     defaults = {
         "KUBE_VERSION": kube_version,
@@ -177,29 +198,15 @@ def setup_env_vars() -> None:
     for key, value in defaults.items():
         os.environ.setdefault(key, value)
 
-    registry_full = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
-    image_vars = [
-        "IMAGE",
-        "IMAGE_MONGOD",
-        "IMAGE_MONGOD_CHAIN",
-        "IMAGE_SEARCH",
-        "IMAGE_BACKUP",
-        "IMAGE_PMM_CLIENT",
-        "IMAGE_PMM_SERVER",
-        "IMAGE_PMM3_CLIENT",
-        "IMAGE_PMM3_SERVER",
-        "IMAGE_LOGCOLLECTOR",
-        "IMAGE_CLUSTERSYNC",
-    ]
-    for var in image_vars:
-        raw_value = os.environ.get(var)
-        if raw_value:
-            os.environ[var] = "\n".join(
-                qualify_image(line, registry_full) for line in raw_value.splitlines() if line
-            )
+    registry = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
+    for var in (key for key in defaults if key.startswith("IMAGE")):
+        images = os.environ.get(var, "").splitlines()
+        if images:
+            os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)
 
-    env_lines = [f"{key}={os.environ.get(key)}" for key in defaults]
-    logger.info("Environment variables:\n" + "\n".join(env_lines))
+    logger.info(
+        "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
+    )
 
 
 @pytest.fixture(scope="class")
@@ -252,13 +259,8 @@ def create_namespace() -> Callable[[str], str]:
             oc_bin("adm", "policy", "add-scc-to-user", "hostaccess", "-z", "default", check=False)
         else:
             logger.info("Cleaning up existing namespace")
-
-            # Delete namespace if exists
-            try:
-                kubectl_bin("delete", "namespace", namespace, "--ignore-not-found")
-                kubectl_bin("wait", "--for=delete", f"namespace/{namespace}")
-            except subprocess.CalledProcessError:
-                pass
+            kubectl_bin("delete", "namespace", namespace, "--ignore-not-found", check=False)
+            kubectl_bin("wait", "--for=delete", f"namespace/{namespace}", check=False)
 
             logger.info(f"Create namespace {namespace}")
             kubectl_bin("create", "namespace", namespace)
@@ -266,6 +268,71 @@ def create_namespace() -> Callable[[str], str]:
         return namespace
 
     return _create_namespace
+
+
+def _kubectl_quietly(*args: str) -> None:
+    """Run kubectl, logging instead of raising: cleanup must never fail a test."""
+    try:
+        kubectl_bin(*args)
+    except (subprocess.CalledProcessError, OSError) as e:
+        logger.debug(f"Command failed (continuing cleanup): {' '.join(args)}, error: {e}")
+
+
+def _cleanup_crd(src_dir: str) -> None:
+    """Delete the operator CRDs, clearing finalizers so the deletion can finish."""
+    crd_file = Path(src_dir) / "deploy" / "crd.yaml"
+    _kubectl_quietly("delete", "-f", str(crd_file), "--ignore-not-found", "--wait=false")
+
+    try:
+        docs = list(yaml.safe_load_all(crd_file.read_text()))
+    except (OSError, yaml.YAMLError) as e:
+        logger.debug(f"CRD cleanup failed (continuing): {e}")
+        return
+
+    for doc in docs:
+        name = doc.get("metadata", {}).get("name") if isinstance(doc, dict) else None
+        if not name:
+            continue
+        _kubectl_quietly(
+            "patch", "crd", name, "--type=merge", "-p", '{"metadata":{"finalizers":[]}}'
+        )
+        _kubectl_quietly("wait", "--for=delete", "crd", name, "--timeout=60s")
+
+
+def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
+    """Best-effort teardown of everything created by the create_infra fixture."""
+    logger.info("Cleaning up test environment")
+    src_dir = test_paths["src_dir"]
+    rbac = f"{src_dir}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml"
+    deletes = [
+        ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
+        [
+            "delete",
+            "-f",
+            f"{test_paths['test_dir']}/../conf/container-rc.yaml",
+            "--ignore-not-found",
+        ],
+        ["delete", "-f", rbac, "--ignore-not-found"],
+    ]
+
+    with ThreadPoolExecutor(max_workers=len(deletes) + 1) as pool:
+        for args in deletes:
+            pool.submit(_kubectl_quietly, *args)
+        pool.submit(_cleanup_crd, src_dir)
+
+    # Namespaces go last so finalizer-bearing resources (e.g. psmdb-backup) are removed first.
+    if namespaces:
+        with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
+            for ns in namespaces:
+                pool.submit(
+                    _kubectl_quietly,
+                    "delete",
+                    "--grace-period=0",
+                    "--force",
+                    "namespace",
+                    ns,
+                    "--ignore-not-found",
+                )
 
 
 @pytest.fixture(scope="class")
@@ -302,86 +369,14 @@ def create_infra(
 
     yield _create_infra
 
-    # Teardown code
     _current_namespace = None
 
     if env_bool("SKIP_DELETE"):
         logger.info("SKIP_DELETE is set. Skipping test environment cleanup")
         return
 
-    def run_cmd(cmd: list[str]) -> None:
-        try:
-            kubectl_bin(*cmd)
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
-            logger.debug(f"Command failed (continuing cleanup): {' '.join(cmd)}, error: {e}")
-
-    def cleanup_crd() -> None:
-        crd_file = f"{test_paths['src_dir']}/deploy/crd.yaml"
-        run_cmd(["delete", "-f", crd_file, "--ignore-not-found", "--wait=false"])
-
-        try:
-            with open(crd_file, "r") as f:
-                for doc in f.read().split("---"):
-                    if not doc.strip():
-                        continue
-                    crd_name = yaml.safe_load(doc)["metadata"]["name"]
-                    run_cmd(
-                        [
-                            "patch",
-                            "crd",
-                            crd_name,
-                            "--type=merge",
-                            "-p",
-                            '{"metadata":{"finalizers":[]}}',
-                        ]
-                    )
-                    run_cmd(["wait", "--for=delete", "crd", crd_name, "--timeout=60s"])
-        except (FileNotFoundError, yaml.YAMLError, KeyError, TypeError) as e:
-            logger.debug(f"CRD cleanup failed (continuing): {e}")
-
-    logger.info("Cleaning up test environment")
-
-    commands = [
-        ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
-        [
-            "delete",
-            "-f",
-            f"{test_paths['test_dir']}/../conf/container-rc.yaml",
-            "--ignore-not-found",
-        ],
-        [
-            "delete",
-            "-f",
-            f"{test_paths['src_dir']}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml",
-            "--ignore-not-found",
-        ],
-    ]
-
-    with ThreadPoolExecutor(max_workers=len(commands) + 1) as executor:
-        futures = [executor.submit(run_cmd, cmd) for cmd in commands]
-        futures.append(executor.submit(cleanup_crd))
-
-    # Clean up all created namespaces (in parallel) after resource cleanup so
-    # finalizer-bearing resources (e.g. psmdb-backup) are removed first.
-    namespaces_to_delete = created_namespaces.copy()
     operator_ns = os.environ.get("OPERATOR_NS")
-    if operator_ns:
-        namespaces_to_delete.append(operator_ns)
-
-    if namespaces_to_delete:
-        with ThreadPoolExecutor(max_workers=len(namespaces_to_delete)) as executor:
-            for ns in namespaces_to_delete:
-                executor.submit(
-                    run_cmd,
-                    [
-                        "delete",
-                        "--grace-period=0",
-                        "--force",
-                        "namespace",
-                        ns,
-                        "--ignore-not-found",
-                    ],
-                )
+    _cleanup_infra(test_paths, created_namespaces + ([operator_ns] if operator_ns else []))
 
 
 @pytest.fixture(scope="class")
@@ -406,6 +401,7 @@ def deploy_chaos_mesh() -> Generator[Callable[[str], None]]:
             "chaosDaemon.runtime=containerd",
             "--set",
             "chaosDaemon.socketPath=/run/containerd/containerd.sock",
+            *helm_arch_set_args(("controllerManager.", "chaosDaemon.")),
             "--wait",
         )
         deployed_namespaces.append(namespace)
@@ -528,6 +524,7 @@ def deploy_minio() -> Generator[None]:
         "serviceAccount.name": f"{service_name}-sa",
     }
     set_args = [arg for k, v in settings.items() for arg in ("--set", f"{k}={v}")]
+    set_args += helm_arch_set_args(("", "postJob."))
     install_args = ["install", service_name, "minio/minio", "--version", minio_ver, *set_args]
 
     retry(lambda: helm_bin(*install_args), max_attempts=6, delay=5, backoff=2)
