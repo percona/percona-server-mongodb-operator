@@ -23390,6 +23390,8 @@ spec:
                             - type: string
                             x-kubernetes-int-or-string: true
                         type: object
+                      podManagementPolicy:
+                        type: string
                       podSecurityContext:
                         properties:
                           appArmorProfile:

@@ -46,7 +46,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 			},
 		}
 	}
-	return appsv1.StatefulSetSpec{
+	spec := appsv1.StatefulSetSpec{
 		Replicas: &cr.Spec.Sharding.Mongos.Size,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: naming.MongosLabels(cr),
@@ -54,6 +54,10 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		Template:       template,
 		UpdateStrategy: updateStrategy,
 	}
+	if cr.Spec.Sharding.Mongos.PodManagementPolicy != nil {
+		spec.PodManagementPolicy = *cr.Spec.Sharding.Mongos.PodManagementPolicy
+	}
+	return spec
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string) (corev1.PodTemplateSpec, error) {

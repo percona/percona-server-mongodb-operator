@@ -1512,7 +1512,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "ensure pvc")
 	}
 
+	existingPMP := sts.Spec.PodManagementPolicy
 	sts.Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+	if existingPMP != "" {
+		sts.Spec.PodManagementPolicy = existingPMP
+	}
 
 	err = r.createOrUpdate(ctx, sts)
 	if err != nil {
