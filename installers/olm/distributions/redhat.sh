@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # shellcheck disable=SC2016
-
 redhat_release="${VERSION}"
 redhat_skips_min_version="${REDHAT_SKIPS_MIN_VERSION:-1.17.0}"
 redhat_registry="${REDHAT_REGISTRY:-registry.connect.redhat.com}"
@@ -12,16 +12,17 @@ redhat_containers_repository="${REDHAT_CONTAINERS_REPOSITORY:-percona/percona-se
 redhat_operator_tag="${REDHAT_OPERATOR_TAG:-${redhat_release}}"
 redhat_related_images="[]"
 redhat_missing_digests=()
+release_versions_file="${repo_root}/e2e-tests/release_versions"
 
 image_tag() {
 	local image="$1"
 
-	printf '%s\n' "${image##*:}"
+	echo -n "${image##*:}"
 }
 
 digest_key() {
-	printf '%s' "$1" \
-		| sed -E 's/[^[:alnum:]]+/_/g' \
+	echo -n "$1" \
+		| "$sed" -E 's/[^[:alnum:]]+/_/g' \
 		| tr '[:lower:]' '[:upper:]'
 }
 
@@ -52,39 +53,42 @@ catalog_digest() {
 	)" || digest=""
 
 	if [[ -n "${digest}" && "${digest}" != "null" ]]; then
-		printf 'sha256:%s\n' "${digest#sha256:}"
+		echo -n "sha256:${digest#sha256:}"
 		return
 	fi
 
 	return 1
 }
 
-image_ref() {
+set_image_ref() {
 	local key="$1"
 	local name="$2"
 	local repository="$3"
 	local tag="$4"
-	local digest_var="REDHAT_IMAGE_DIGEST_$(digest_key "${key}")"
-	local digest="${!digest_var:-}"
+	local digest_var
+	local digest
+
+	digest_var="REDHAT_IMAGE_DIGEST_$(digest_key "${key}")"
+	digest="${!digest_var:-}"
 
 	if [[ -z "${digest}" ]]; then
 		digest="$(catalog_digest "${repository}" "${tag}")" || digest=""
 	fi
 
 	if [[ -z "${digest}" ]]; then
-		if [[ "${SKIP_DIGEST_FAILURE:-0}" == "1" || "${SKIP_DIGEST_FAILURE:-false}" == "true" ]]; then
-			digest="<DIGEST>"
-			redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
-		else
-			abort "unable to resolve digest for ${redhat_registry}/${repository}:${tag}; set SKIP_DIGEST_FAILURE=1 to continue with <DIGEST>"
+		if [[ "${key}" == "IMAGE_CLUSTERSYNC" ]]; then
+			abort "unable to resolve digest for required clustersync tag ${redhat_registry}/${repository}:${tag}"
 		fi
+
+		digest="<DIGEST>"
+		redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
 	fi
 
 	if [[ "${digest}" != "<DIGEST>" ]]; then
 		digest="sha256:${digest#sha256:}"
 	fi
 
-	printf '%s/%s@%s\n' "${redhat_registry}" "${repository}" "${digest}"
+	echo -n "${redhat_registry}/${repository}@${digest}"
 }
 
 validate_certified_tag() {
@@ -134,7 +138,7 @@ add_related_image() {
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	image="$(image_ref "${key}" "${name}" "${repository}" "${tag}")"
+	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")"
 
 	log "Related image ${name}: ${image}"
 
@@ -160,7 +164,7 @@ require_release_image() {
 	local key="$1"
 
 	if [[ -z "${!key:-}" ]]; then
-		abort "${key} is required in e2e-tests/release_versions"
+		abort "${key} is required in ${release_versions_file}"
 	fi
 }
 
@@ -176,19 +180,18 @@ report_missing_digests() {
 }
 
 build_redhat_related_images() {
-	local release_versions="${repo_root}/e2e-tests/release_versions"
 	local mongod60_tag
 	local mongod70_tag
 	local mongod80_tag
 	local logcollector_tag
 
-	log "Building Red Hat related images from ${release_versions}"
+	log "Building Red Hat related images from ${release_versions_file}"
 
-	[[ -f "${release_versions}" ]] \
-		|| abort "release versions file not found: ${release_versions}"
+	[[ -f "${release_versions_file}" ]] \
+		|| abort "release versions file not found: ${release_versions_file}"
 
 	# shellcheck source=/dev/null
-	source "${release_versions}"
+	source "${release_versions_file}"
 
 	for key in \
 		IMAGE_MONGOD60 \
@@ -197,8 +200,7 @@ build_redhat_related_images() {
 		IMAGE_BACKUP \
 		IMAGE_PMM_CLIENT \
 		IMAGE_PMM3_CLIENT \
-		IMAGE_LOGCOLLECTOR \
-		IMAGE_CLUSTERSYNC; do
+		IMAGE_LOGCOLLECTOR; do
 		require_release_image "${key}"
 	done
 
@@ -240,7 +242,7 @@ build_redhat_skips() {
 		| jq -Rsc \
 			--arg min_version "${min_version}" \
 			--arg current_version "${current_version}" \
-			--arg package_name "percona-server-mongodb-operator-certified" \
+			--arg package_name "${component_name}-certified" \
 			'
 			def version_parts:
 				ltrimstr("v")
@@ -265,4 +267,55 @@ build_redhat_skips() {
 			| sort_by(.version)
 			| map($package_name + "." + .tag)
 			'
+}
+
+distribution_package_name() {
+	echo -n "${component_name}-certified"
+}
+
+customize_csv() {
+	yq -P eval --inplace '
+		.spec.relatedImages = (strenv(relatedImages) | from_json) |
+		.spec.skips = (strenv(skips) | from_json) |
+		.metadata.annotations.certified = "true" |
+		.metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
+		.metadata.name = strenv(name_certified)
+	' "$1"
+}
+
+build_distribution_data() {
+	local redhat_data
+	local images
+	local related_images
+	local skips
+
+	redhat_data="$(build_redhat_related_images)" || return
+
+	jq -e \
+		'.operatorImage and (.relatedImages | type == "array")' \
+		>/dev/null \
+		<<<"${redhat_data}" \
+		|| abort "Invalid Red Hat image data"
+
+	images="$(
+		jq -c '
+			.operatorImage as $operator
+			| reduce .relatedImages[] as $item
+				({}; .[$item.name] = $item.image)
+			| .operator = $operator
+		' <<<"${redhat_data}"
+	)"
+
+	related_images="$(jq -c '.relatedImages' <<<"${redhat_data}")"
+	skips="$(build_redhat_skips)"
+
+	jq -nc \
+		--argjson images "${images}" \
+		--argjson related_images "${related_images}" \
+		--argjson skips "${skips}" \
+		'{
+			images: $images,
+			relatedImages: $related_images,
+			skips: $skips
+		}'
 }

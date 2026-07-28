@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
 
 DISTRIBUTION="${1:?Distribution argument required (community|redhat)}"
 
 cd "${BASH_SOURCE[0]%/*}"
 
+sed=$(command -v gsed || command -v sed)
+date=$(command -v gdate || command -v date)
 repo_root="$(cd ../.. && pwd)"
 release_versions_file="${repo_root}/e2e-tests/release_versions"
 bundle_name="${BUNDLE_NAME:-${DISTRIBUTION}}"
@@ -13,23 +15,26 @@ bundle_directory="bundles/${bundle_name}"
 project_directory="projects/${bundle_name}"
 go_api_directory="$(cd ../../pkg/apis && pwd)"
 
-package_name="percona-server-mongodb-operator"
-project_name="percona-server-mongodb-operator"
-file_name="percona-server-mongodb-operator"
+# Used both as the operator-sdk project name and as the CSV file stem.
+component_name="percona-server-mongodb-operator"
 
 NS_RESOURCE_RBAC="../rbac/namespace"
 NS_RESOURCE_OPERATOR="../manager/namespace"
 KUSTOMIZATION_FILE="../../config/bundle/kustomization.yaml"
 
-rulesLevel="permissions"
 relatedImages="[]"
 skips="[]"
 containerImage=""
 csv_stem=""
-redhat_distribution_images="{}"
+distribution_data="{}"
 
 log() {
 	echo >&2 "[olm] $*"
+}
+
+abort() {
+	echo >&2 "[olm] ERROR: $*"
+	exit 1
 }
 
 debug() {
@@ -38,53 +43,36 @@ debug() {
 	fi
 }
 
-abort() {
-	echo >&2 "[olm] ERROR: $*"
-	exit 1
-}
-
 run_quiet() {
 	local description="$1"
 	shift
 
-	if [[ "${OLM_VERBOSE:-0}" == "1" || "${OLM_VERBOSE:-false}" == "true" ]]; then
-		"$@"
-		return
+	local output_path=""
+	if [[ "$1" == "-o" ]]; then
+		output_path="$2"
+		shift 2
 	fi
-
-	local output_file
-	output_file="$(mktemp)"
-
-	if "$@" >"${output_file}" 2>&1; then
-		rm -f "${output_file}"
-		return
-	fi
-
-	cat "${output_file}" >&2
-	rm -f "${output_file}"
-	abort "${description} failed"
-}
-
-run_quiet_output() {
-	local output_path="$1"
-	local description="$2"
-	shift 2
 
 	if [[ "${OLM_VERBOSE:-0}" == "1" || "${OLM_VERBOSE:-false}" == "true" ]]; then
-		"$@" >"${output_path}"
+		if [[ -n "${output_path}" ]]; then
+			"$@" >"${output_path}"
+		else
+			"$@"
+		fi
 		return
 	fi
 
-	local error_file
-	error_file="$(mktemp)"
+	local capture_file
+	capture_file="$(mktemp)"
 
-	if "$@" >"${output_path}" 2>"${error_file}"; then
-		rm -f "${error_file}"
-		return
+	if [[ -n "${output_path}" ]]; then
+		"$@" >"${output_path}" 2>"${capture_file}" && { rm -f "${capture_file}"; return; }
+	else
+		"$@" >"${capture_file}" 2>&1 && { rm -f "${capture_file}"; return; }
 	fi
 
-	cat "${error_file}" >&2
-	rm -f "${error_file}"
+	cat "${capture_file}" >&2
+	rm -f "${capture_file}"
 	abort "${description} failed"
 }
 
@@ -104,7 +92,7 @@ sed_in_place() {
 	local tmp_file
 
 	tmp_file="$(mktemp)"
-	sed "$expression" "$file" >"$tmp_file"
+	"$sed" "$expression" "$file" >"$tmp_file"
 	mv "$tmp_file" "$file"
 }
 
@@ -119,26 +107,16 @@ check_tools() {
 release_version_value() {
 	local key="$1"
 
-	awk -F= -v key="${key}" '$1 == key { print $2 }' "${release_versions_file}" \
+	local version
+	version="$(awk -F= -v key="${key}" '$1 == key { print $2 }' "${release_versions_file}" \
 		| tr -d '"' \
-		| tail -1
-}
+		| tail -1)"
 
-release_image_ref() {
-	local key="$1"
-	local image
+	if [[ -z "${version}" ]]; then
+		abort "Missing ${key} in ${release_versions_file}"
+	fi
 
-	image="$(release_version_value "${key}")"
-	[[ -n "${image}" ]] || abort "${key} is required in ${release_versions_file}"
-
-	case "${image}" in
-		*.*/*|*:*/*|localhost/*)
-			printf '%s' "${image}"
-			;;
-		*)
-			printf 'docker.io/%s' "${image}"
-			;;
-	esac
+	echo -n "${version}"
 }
 
 resolve_openshift_versions() {
@@ -146,7 +124,7 @@ resolve_openshift_versions() {
 	local openshift_max
 
 	if [[ -n "${OPENSHIFT_VERSIONS:-}" ]]; then
-		printf '%s' "${OPENSHIFT_VERSIONS}"
+		echo -n "${OPENSHIFT_VERSIONS}"
 		return
 	fi
 
@@ -159,26 +137,23 @@ resolve_openshift_versions() {
 	[[ -n "${openshift_min}" && -n "${openshift_max}" ]] \
 		|| abort "OPENSHIFT_MIN and OPENSHIFT_MAX must be set in ${release_versions_file}"
 
-	printf '%s-%s' "${openshift_min}" "${openshift_max}"
+	echo -n "${openshift_min}-${openshift_max}"
 }
 
 load_distribution_hooks() {
-	local hook_file=""
+	local hook_file="distributions/${DISTRIBUTION}.sh"
 
-	case "${DISTRIBUTION}" in
-		redhat)
-			hook_file="distributions/redhat.sh"
-			;;
-		community)
-			hook_file="distributions/community.sh"
-			;;
-	esac
+	[[ "${DISTRIBUTION}" == "community" || "${DISTRIBUTION}" == "redhat" ]] \
+		|| abort "Unknown distribution: ${DISTRIBUTION}"
+	[[ -f "${hook_file}" ]] || abort "Distribution hooks not found: ${hook_file}"
 
-	if [[ -n "${hook_file}" && -f "${hook_file}" ]]; then
-		log "Loading distribution hooks from ${hook_file}"
-		# shellcheck source=/dev/null
-		source "${hook_file}"
-	fi
+	log "Loading distribution hooks from ${hook_file}"
+	# shellcheck source=/dev/null
+	source "${hook_file}"
+
+	for hook in build_distribution_data distribution_package_name customize_csv; do
+		declare -F "${hook}" >/dev/null || abort "Missing distribution hook: ${hook}"
+	done
 }
 
 configure_namespace_manifests() {
@@ -200,7 +175,7 @@ prepare_operator_sources() {
 render_operator_manifests() {
 	log "Rendering operator manifests for ${DISTRIBUTION}"
 
-	run_quiet_output operator_yamls.yaml "Rendering operator manifests" \
+	run_quiet "Rendering operator manifests" -o operator_yamls.yaml \
 		kubectl kustomize "../../config/${DISTRIBUTION}"
 
 	yq eval '. | select(.kind == "CustomResourceDefinition")' operator_yamls.yaml >operator_crds.yaml
@@ -218,7 +193,7 @@ create_sdk_workspace() {
 	(
 		cd "${project_directory}"
 		run_quiet "Creating Operator SDK workspace" \
-			operator-sdk init --fetch-deps="false" --project-name="${project_name}"
+			operator-sdk init --fetch-deps="false" --project-name="${component_name}"
 
 		yq eval '[. | {"group": .spec.group, "kind": .spec.names.kind, "version": .spec.versions[].name}]' \
 			../../../../deploy/crd.yaml >crd_gvks.yaml
@@ -243,33 +218,20 @@ create_bundle_directory() {
 render_bundle_metadata() {
 	log "Rendering bundle metadata"
 
-	export package="${PACKAGE_NAME_OVERRIDE:-${package_name}}"
+	export package="${PACKAGE_NAME_OVERRIDE:-$(distribution_package_name)}"
 	export package_channel="${PACKAGE_CHANNEL:-stable}"
 	export openshift_supported_versions
 	openshift_supported_versions="$(resolve_openshift_versions)"
 
-	if [[ "${DISTRIBUTION}" == "redhat" ]]; then
-		export package="${PACKAGE_NAME_OVERRIDE:-${package_name}-certified}"
-	fi
-
-	yq eval '.annotations["operators.operatorframework.io.bundle.channels.v1"] = env(package_channel) |
-	         .annotations["operators.operatorframework.io.bundle.channel.default.v1"] = env(package_channel) |
-	         .annotations["operators.operatorframework.io.bundle.package.v1"] = env(package) |
-	         .annotations["com.redhat.openshift.versions"] = env(openshift_supported_versions)' \
-		bundle.annotations.yaml >"${bundle_directory}/metadata/annotations.yaml"
-
-	case "${DISTRIBUTION}" in
-		community)
-			yq eval --inplace '
-			     .annotations["operators.operatorframework.io.bundle.package.v1"] = env(package) |
-		         .annotations["org.opencontainers.image.authors"] = "info@percona.com" |
-		         .annotations["org.opencontainers.image.url"] = "https://percona.com" |
-		         .annotations["org.opencontainers.image.vendor"] = "Percona"' \
-				"${bundle_directory}/metadata/annotations.yaml"
-			;;
-		redhat)
-			;;
-	esac
+	yq eval '
+		.annotations["operators.operatorframework.io.bundle.channels.v1"] = env(package_channel) |
+		.annotations["operators.operatorframework.io.bundle.channel.default.v1"] = env(package_channel) |
+		.annotations["operators.operatorframework.io.bundle.package.v1"] = env(package) |
+		.annotations["com.redhat.openshift.versions"] = env(openshift_supported_versions) |
+		.annotations["org.opencontainers.image.authors"] = "info@percona.com" |
+		.annotations["org.opencontainers.image.url"] = "https://percona.com" |
+		.annotations["org.opencontainers.image.vendor"] = "Percona"
+	' bundle.annotations.yaml >"${bundle_directory}/metadata/annotations.yaml"
 }
 
 render_bundle_dockerfile() {
@@ -316,6 +278,7 @@ BEGIN {
 ' ../../deploy/crd.yaml
 
 	find "${bundle_directory}/manifests" -type f -name "*.crd.yaml" -print0 | while IFS= read -r -d '' file; do
+		# shellcheck disable=SC2016
 		sed_in_place '1s/^/---\
 /; ${/^---$/d;}' "$file"
 	done
@@ -339,38 +302,15 @@ build_examples() {
 	local cr_example
 	local backup_example
 	local clustersync_example
-	local image_backup
-	local image_logcollector
-	local image_mongod
-	local image_operator
-	local image_pmm
-	local image_clustersync
+	local images
 	local restore_example
 
-	image_backup="$(release_image_ref "IMAGE_BACKUP")"
-	image_logcollector="$(release_image_ref "IMAGE_LOGCOLLECTOR")"
-	image_mongod="$(release_image_ref "IMAGE_MONGOD80")"
-	image_operator="$(release_image_ref "IMAGE_OPERATOR")"
-	image_pmm="$(release_image_ref "IMAGE_PMM3_CLIENT")"
-	image_clustersync="$(release_image_ref "IMAGE_CLUSTERSYNC")"
-
-	if [[ "${DISTRIBUTION}" == "redhat" ]]; then
-		image_backup="$(jq -r '.relatedImages[] | select(.name == "backup").image' <<<"${redhat_distribution_images}")"
-		image_logcollector="$(jq -r '.relatedImages[] | select(.name == "logcollector").image' <<<"${redhat_distribution_images}")"
-		image_mongod="$(jq -r '.relatedImages[] | select(.name == "mongod8.0").image' <<<"${redhat_distribution_images}")"
-		image_operator="$(jq -r '.operatorImage' <<<"${redhat_distribution_images}")"
-		image_pmm="$(jq -r '.relatedImages[] | select(.name == "pmm3").image' <<<"${redhat_distribution_images}")"
-		image_clustersync="$(jq -r '.relatedImages[] | select(.name == "clustersync").image' <<<"${redhat_distribution_images}")"
-	fi
+	images="$(jq -c '.images' <<<"${distribution_data}")"
 
 	cr_example="$(
 		yq eval -o=json ../../deploy/cr.yaml |
 			jq \
-				--arg imageBackup "${image_backup}" \
-				--arg imageLogcollector "${image_logcollector}" \
-				--arg imageMongod "${image_mongod}" \
-				--arg imageOperator "${image_operator}" \
-				--arg imagePmm "${image_pmm}" \
+				--argjson images "${images}" \
 				'
 				def insert_after($k; $new):
 					to_entries as $e
@@ -381,33 +321,36 @@ build_examples() {
 
 				.spec |= (
 					if has("initImage") then del(.initImage) else . end
-					| .image = $imageMongod
-					| insert_after("image"; {"initImage": $imageOperator})
-					| if has("initImage") then . else . + {"initImage": $imageOperator} end
-					| .pmm.image = $imagePmm
-					| .backup.image = $imageBackup
-					| .logcollector.image = $imageLogcollector
+					| .image = $images["mongod8.0"]
+					| insert_after("image"; {"initImage": $images.operator})
+					| if has("initImage") then . else . + {"initImage": $images.operator} end
+					| .pmm.image = $images.pmm3
+					| .backup.image = $images.backup
+					| .logcollector.image = $images.logcollector
 				)
 			'
 	)"
 
-	clustersync_example="$(
-		yq eval -o=json ../../deploy/clustersync.yaml |
-			jq -s \
-				--arg imageClustersync "${image_clustersync}" \
-				'
-				map(
-					select(.kind == "PerconaServerMongoDBClusterSync")
-					| .spec.image = $imageClustersync
-				)
-				| first
-				'
-	)"
+	clustersync_example="null"
+	if jq -e '.clustersync? | strings | length > 0' >/dev/null <<<"${images}"; then
+		clustersync_example="$(
+			yq eval -o=json ../../deploy/clustersync.yaml |
+				jq -s \
+					--argjson images "${images}" \
+					'
+					map(
+						select(.kind == "PerconaServerMongoDBClusterSync")
+						| .spec.image = $images.clustersync
+					)
+					| first
+					'
+		)"
+	fi
 
 	backup_example="$(yq eval -o=json ../../deploy/backup/backup.yaml)"
 	restore_example="$(yq eval -o=json ../../deploy/backup/restore.yaml)"
 
-	jq -n "[${cr_example}, ${backup_example}, ${restore_example}, ${clustersync_example}]"
+	jq -n "[${cr_example}, ${backup_example}, ${restore_example}, ${clustersync_example}] | map(select(. != null))"
 }
 
 build_managed_resources() {
@@ -486,28 +429,18 @@ build_owned_crds() {
 	'
 }
 
-update_yaml_images() {
-	local yaml_file="$1"
-	local temp_file
+prepare_distribution() {
+	distribution_data="$(build_distribution_data)" || exit $?
 
-	[[ -f "$yaml_file" ]] \
-		|| abort "file '$yaml_file' does not exist"
+	jq -e '
+		(.images | type == "object") and
+		((["operator", "backup", "logcollector", "mongod8.0", "pmm3"] - (.images | keys)) | length == 0)
+	' >/dev/null <<<"${distribution_data}" \
+		|| abort "Distribution data is missing required images"
 
-	temp_file="$(mktemp)"
-	sed -E 's/(("image":|"initImage":|containerImage:|image:|initImage:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
-	mv "$temp_file" "$yaml_file"
-}
-
-prepare_distribution_images() {
-	if [[ "${DISTRIBUTION}" != "redhat" ]]; then
-		containerImage="${IMAGE}"
-		return
-	fi
-
-	redhat_distribution_images="$(build_redhat_related_images)"
-	containerImage="$(jq -r '.operatorImage' <<<"${redhat_distribution_images}")"
-	relatedImages="$(jq -r '.relatedImages' <<<"${redhat_distribution_images}")"
-	skips="$(build_redhat_skips)"
+	containerImage="$(jq -er '.images.operator' <<<"${distribution_data}")"
+	relatedImages="$(jq -c '.relatedImages // []' <<<"${distribution_data}")"
+	skips="$(jq -c '.skips // []' <<<"${distribution_data}")"
 }
 
 render_csv() {
@@ -540,8 +473,8 @@ render_csv() {
 	account="$(yq eval '.[] | .metadata.name' operator_accounts.yaml)"
 	rules="$(yq eval '.[] | .rules' operator_roles.yaml)"
 	version="${CSV_VERSION:-${VERSION}}"
-	timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-	csv_file="${bundle_directory}/manifests/${file_name}.clusterserviceversion.yaml"
+	timestamp="$("$date" -u +"%Y-%m-%dT%H:%M:%SZ")"
+	csv_file="${bundle_directory}/manifests/${component_name}.clusterserviceversion.yaml"
 	icon_base64="$(base64 <"${repo_root}/kubernetes.svg" | tr -d '\n')"
 
 	export examples
@@ -554,12 +487,10 @@ render_csv() {
 	export timestamp
 	export name="${CSV_NAME_OVERRIDE:-${csv_stem}.v${version}}"
 	export name_certified="${CSV_NAME_OVERRIDE:-${csv_stem}-certified.v${version}}"
-	export display_name_override="${DISPLAY_NAME_OVERRIDE:-}"
 	export skip_range="<${version}"
 	export containerImage
 	export relatedImages
 	export skips
-	export rulesLevel
 	export icon_base64
 
 	yq -P eval '
@@ -570,31 +501,11 @@ render_csv() {
 	  .spec.version = env(version) |
 	  .spec.icon = [{ "base64data": strenv(icon_base64), "mediatype": "image/svg+xml" }] |
 	  .spec.customresourcedefinitions.owned = (strenv(owned_crds) | from_json) |
-	  .spec.install.spec[strenv(rulesLevel)] = [{ "serviceAccountName": env(account), "rules": env(rules) }] |
+	  .spec.install.spec.permissions = [{ "serviceAccountName": env(account), "rules": env(rules) }] |
 	  .spec.install.spec.deployments = (env(deployment) | [.[] | { "name": .metadata.name, "spec": .spec }])' \
 		bundle.csv.yaml >"${csv_file}"
 
-	if [[ -n "${display_name_override}" ]]; then
-		yq eval --inplace '.spec.displayName = strenv(display_name_override)' "${csv_file}"
-	fi
-
-	case "${DISTRIBUTION}" in
-		community)
-			yq -P eval --inplace '
-		        .metadata.annotations["olm.skipRange"] = env(skip_range)' \
-				"${csv_file}"
-			;;
-		redhat)
-			yq -P eval --inplace '
-		        .spec.relatedImages = (strenv(relatedImages) | from_json) |
-						.spec.skips = (strenv(skips) | from_json) |
-		        .metadata.annotations.certified = "true" |
-		        .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
-		        .metadata.name = strenv(name_certified)' \
-						\
-				"${csv_file}"
-			;;
-	esac
+	customize_csv "${csv_file}"
 }
 
 validate_bundle() {
@@ -622,7 +533,7 @@ main() {
 	render_bundle_dockerfile
 	write_crd_manifests
 	validate_manifest_inputs
-	prepare_distribution_images
+	prepare_distribution
 	render_csv
 	normalize_bundle_permissions
 	validate_bundle

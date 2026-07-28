@@ -40,50 +40,60 @@ spec:
   description: |-
       ## Percona is Cloud Native
   
-      The Percona Distribution for MongoDB Kubernetes Operator automates the creation, modification, or deletion of items in your Percona Server for MongoDB environment.
-      The Operator contains the necessary Kubernetes settings to maintain a consistent Percona Server for MongoDB instance.
+      The Percona Distribution for MongoDB Kubernetes Operator automates the
+      creation, modification, or deletion of items in your Percona Server for
+      MongoDB environment.
+      The Operator contains the necessary Kubernetes settings to maintain a
+      consistent Percona Server for MongoDB instance.
   
   
       Consult the
-      [documentation](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/index.html/)
+      [documentation](https://docs.percona.com/percona-operator-for-mongodb/index.html)
       on the Percona Kubernetes Operator for Percona Server for MongoDB for
       complete details on capabilities and options.
   
   
       ### Supported Features
   
-  
+
       * **Scale Your Cluster** - change the `size` parameter to [add or remove
       members](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/scaling.html)
       of the replica set. Three is the minimum recommended size for a functioning
       replica set.
-  
-  
+
       * **Add Monitoring** - [Percona Monitoring and Management (PMM) can be
       easily
       deployed](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/monitoring.html)
       to monitor your Percona Server for MongoDB replica set(s). The recommended
       installation process uses Helm, the package manager for Kubernetes.
   
-  
-      * **Automate Your Backups** - [configure automatic
-      backups](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/backups.html)
-      to run on a scheduled basis or run an on-demand backup at any time. Backups
-      are performed using Percona Backup for MongoDB (PBM) and can be stored on
-      local PVs or in any S3-compatible cloud storage provider.
-  
-      * **Physical Backups** - [configure physical backups](https://docs.percona.com/percona-operator-for-mongodb/backups.html#physical)
-  
-      * **Automated volume expansion**
-      Kubernetes supports the Persistent Volume expansion as a stable feature since v1.24. Using it with the Operator
-      previously involved manual operations. Now this is automated, and users can resize their PVCs by just changing
-      the value of the resources.requests.storage option in the PerconaServerMongoDB custom resource.
-      This feature is in a technical preview stage and is not recommended for production environments.
-  
-  
+      * **Configure Backups** - [configure scheduled and on-demand
+      backups](https://docs.percona.com/percona-operator-for-mongodb/backups.html)
+      in the Custom Resource. Backups are performed using Percona Backup for
+      MongoDB (PBM), with support for logical, physical, and external PVC
+      snapshot backup types. Store backups in S3-compatible storage, Google
+      Cloud Storage with Workload Identity, Oracle Cloud Infrastructure Object
+      Storage, Alibaba Cloud OSS, Azure Blob Storage, or a remote file server.
+
+      * **Automated Storage Scaling** - configure the Operator to monitor
+      Persistent Volume Claim usage and automatically expand storage when usage
+      reaches configured thresholds. Manual volume expansion is also supported
+      by changing resources.requests.storage in the PerconaServerMongoDB custom
+      resource.
+
+      * **Real-time replication and migration** - use
+      [Percona ClusterSync for MongoDB](https://docs.percona.com/percona-operator-for-mongodb/clustersync.html)
+      for near-zero downtime migrations and live replication between MongoDB
+      deployments.
+
+      * **TLS Certificate Management** - [integrate with
+      cert-manager](https://docs.percona.com/percona-operator-for-mongodb/tls-cert-manager.html)
+      and tune TLS certificate management behavior.
+
+
       ### Common Configurations
-  
-  
+
+
       * **Set Member as Arbiter** - [Set up a replica set which contains an
       arbiter](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/arbiter.html),
       which participates in elections but does not store any data. This reduces
@@ -94,26 +104,25 @@ spec:
       ServiceType](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/expose.html)
       you can expose replica set members outside of Kubernetes or provide
       statically assigned IP addresses.
-  
-  
+
+
       * **Utilize Local Storage Options** - [with support for Local Storage you
       can mount existing data
       directories](https://www.percona.com/doc/kubernetes-operator-for-psmongodb/storage.html)
       into your replica set managed by Kubernetes or utilize high performance
       hardware for local storage rather than network storage for your database.
-  
-  
+
+
       ### Before You Start
-  
-  
+
+
       Add the PSMDB user `Secret` to Kubernetes. User information must be placed
       in the data section of the `secrets.yaml`
       file with Base64-encoded logins and passwords for the user accounts.
-  
-  
+
+
       Below is a sample `secrets.yaml` file for the correct formatting.
-  
-  
+
       ```
       apiVersion: v1
       kind: Secret
