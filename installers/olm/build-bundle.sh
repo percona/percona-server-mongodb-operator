@@ -13,31 +13,26 @@ is_true() {
 	esac
 }
 
-confirm_build_push() {
+confirm_push() {
 	local image="$1"
 	local answer
 
-	if ! is_true "${CONFIRM_BUILD_PUSH:-1}"; then
+	if ! is_true "${CONFIRM_PUSH:-1}"; then
 		return 0
 	fi
 
 	if [[ -r /dev/tty ]]; then
-		read -r -p "Build and push bundle image ${image}? [y/N] " answer </dev/tty
+		read -r -p "Push bundle image ${image}? [y/N] " answer </dev/tty
 	else
-		read -r -p "Build and push bundle image ${image}? [y/N] " answer
+		read -r -p "Push bundle image ${image}? [y/N] " answer
 	fi
 	[[ "$answer" =~ ^(y|Y|yes|YES)$ ]]
 }
 
-build_image() {
-	local container="$1"
-	local directory="$2"
-	local distro="$3"
-	local version="$4"
-	local bundle_repo="$5"
-	local bundle_tag_suffix="${6:-}"
-
-	directory=$(cd "${directory}" && pwd)
+bundle_image() {
+	local distro="$1"
+	local version="$2"
+	local bundle_repo="$3"
 
 	local bundle_name="${distro}"
 	if [[ "${distro}" == "redhat" ]]; then
@@ -45,32 +40,73 @@ build_image() {
 	fi
 
 	local tag="${version}-${bundle_name}-bundle"
-	if [[ -n "${bundle_tag_suffix}" ]]; then
-		tag="${tag}-${bundle_tag_suffix}"
-	fi
-	local image="${bundle_repo}:${tag}"
-	local platforms="${BUNDLE_PLATFORMS:-linux/amd64,linux/arm64}"
-	local build_action="--load"
 
-	if is_true "${BUNDLE_BUILD_PUSH:-1}"; then
-		confirm_build_push "${image}" || {
-			echo "Bundle image push skipped: ${image}"
-			exit 1
-		}
-		build_action="--push"
-	else
-		echo "Push skipped. Building image locally."
-	fi
+	printf "%s:%s" "${bundle_repo}" "${tag}"
+}
 
+build_image() {
+	local container="$1"
+	local directory="$2"
+	local image="$3"
+	local platforms
+
+	platforms="${BUNDLE_PLATFORM:-linux/amd64}"
+	echo "Building bundle image locally: ${image}"
+
+	directory=$(cd "${directory}" && pwd)
 	pushd "${directory}" >/dev/null
 
 	"${container}" buildx build \
 		--platform "${platforms}" \
 		-t "${image}" \
-		"${build_action}" \
+		--load \
 		.
 
 	popd >/dev/null
 }
 
-build_image "$@"
+push_image() {
+	local container="$1"
+	local image="$2"
+
+	confirm_push "${image}" || {
+		echo "Bundle image push skipped: ${image}"
+		exit 1
+	}
+	"${container}" push "${image}"
+}
+
+main() {
+	local action="${1:-}"
+
+	if [[ "${action}" != "build" && "${action}" != "push" ]]; then
+		echo "Usage: $0 build|push CONTAINER BUNDLE_DIR DISTRO VERSION BUNDLE_REPO" >&2
+		exit 1
+	fi
+
+	shift
+	if [[ "$#" -ne 5 ]]; then
+		echo "Usage: $0 build|push CONTAINER BUNDLE_DIR DISTRO VERSION BUNDLE_REPO" >&2
+		exit 1
+	fi
+
+	local container="$1"
+	local directory="$2"
+	local distro="$3"
+	local version="$4"
+	local bundle_repo="$5"
+	local image
+
+	image=$(bundle_image "${distro}" "${version}" "${bundle_repo}")
+
+	case "${action}" in
+		build)
+			build_image "${container}" "${directory}" "${image}"
+			;;
+		push)
+			push_image "${container}" "${image}"
+			;;
+	esac
+}
+
+main "$@"

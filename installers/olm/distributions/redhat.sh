@@ -76,8 +76,8 @@ set_image_ref() {
 	fi
 
 	if [[ -z "${digest}" ]]; then
-		if [[ "${key}" == "IMAGE_CLUSTERSYNC" ]]; then
-			abort "unable to resolve digest for required clustersync tag ${redhat_registry}/${repository}:${tag}"
+		if [[ "${BUNDLE_SKIP_DIGEST_FAILURE:-0}" != "1" ]]; then
+			abort "unable to resolve digest for ${redhat_registry}/${repository}:${tag}; set BUNDLE_SKIP_DIGEST_FAILURE=1 to continue with <DIGEST>"
 		fi
 
 		digest="<DIGEST>"
@@ -173,7 +173,7 @@ report_missing_digests() {
 
 	[[ "${#redhat_missing_digests[@]}" -eq 0 ]] && return
 
-	log "Digest resolution failed for the following image(s); <DIGEST> was used because SKIP_DIGEST_FAILURE is enabled:"
+	log "Digest resolution failed for the following image(s); <DIGEST> was used because BUNDLE_SKIP_DIGEST_FAILURE is enabled:"
 	for item in "${redhat_missing_digests[@]}"; do
 		log "  - ${item}"
 	done
@@ -194,13 +194,15 @@ build_redhat_related_images() {
 	source "${release_versions_file}"
 
 	for key in \
+		IMAGE_OPERATOR \
 		IMAGE_MONGOD60 \
 		IMAGE_MONGOD70 \
 		IMAGE_MONGOD80 \
 		IMAGE_BACKUP \
 		IMAGE_PMM_CLIENT \
 		IMAGE_PMM3_CLIENT \
-		IMAGE_LOGCOLLECTOR; do
+		IMAGE_LOGCOLLECTOR \
+		IMAGE_CLUSTERSYNC; do
 		require_release_image "${key}"
 	done
 

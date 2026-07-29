@@ -219,7 +219,7 @@ render_bundle_metadata() {
 	log "Rendering bundle metadata"
 
 	export package="${PACKAGE_NAME_OVERRIDE:-$(distribution_package_name)}"
-	export package_channel="${PACKAGE_CHANNEL:-stable}"
+	export package_channel="${BUNDLE_PACKAGE_CHANNEL:-stable}"
 	export openshift_supported_versions
 	openshift_supported_versions="$(resolve_openshift_versions)"
 
@@ -287,7 +287,7 @@ BEGIN {
 validate_manifest_inputs() {
 	yq eval -i '[.]' operator_deployments.yaml
 	yq eval 'length == 1' operator_deployments.yaml --exit-status >/dev/null \
-		|| abort "too many deployments accounts: $(yq eval . operator_deployments.yaml)"
+		|| abort "expected exactly one deployment: $(yq eval . operator_deployments.yaml)"
 
 	yq eval -i '[.]' operator_accounts.yaml
 	yq eval 'length == 1' operator_accounts.yaml --exit-status >/dev/null \

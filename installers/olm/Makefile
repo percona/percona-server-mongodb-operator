@@ -17,25 +17,19 @@ VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-
 CSV_VERSION ?= $(shell printf '%s\n' '$(VERSION)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
 RELEASE_VERSIONS ?= ../../e2e-tests/release_versions
 
-PACKAGE_CHANNEL ?= stable
-OPENSHIFT_MIN_VERSION := $(shell awk -F= '$$1 == "OPENSHIFT_MIN" { print $$2 }' '$(RELEASE_VERSIONS)' | cut -d. -f1,2)
-OPENSHIFT_MAX_VERSION := $(shell awk -F= '$$1 == "OPENSHIFT_MAX" { print $$2 }' '$(RELEASE_VERSIONS)' | cut -d. -f1,2)
-OPENSHIFT_VERSIONS ?= v$(OPENSHIFT_MIN_VERSION)-v$(OPENSHIFT_MAX_VERSION)
-
-DEV_REPOSITORY_BASE ?= $(REGISTRY)/$(DEV_REPOSITORY)
-PROD_REPOSITORY_BASE ?= $(REGISTRY)/$(PROD_REPOSITORY)
+CONFIRM_PUSH ?= 1
 
 BUNDLE_TYPE ?= community
 BUNDLE_IMAGE_VERSION ?= $(CSV_VERSION)
-BUNDLE_PLATFORMS ?= linux/amd64,linux/arm64
-BUNDLE_BUILD_PUSH ?= 1
-SKIP_DIGEST_FAILURE ?= 0
-DEV_BUNDLE_REPO ?= $(DEV_REPOSITORY_BASE)/$(NAME)
-PROD_BUNDLE_REPO ?= $(PROD_REPOSITORY_BASE)/$(NAME)
+BUNDLE_PLATFORM ?= linux/amd64
+BUNDLE_PACKAGE_CHANNEL ?= stable
+BUNDLE_SKIP_DIGEST_FAILURE ?= 0
+BUNDLE_DEV_REPO ?= $(REGISTRY)/$(DEV_REPOSITORY)/$(NAME)
+BUNDLE_PROD_REPO ?= $(REGISTRY)/$(PROD_REPOSITORY)/$(NAME)
 
 CATALOG_BUNDLE_LIMIT ?= 2
+CATALOG_PLATFORM ?= linux/amd64
 CATALOG_NAMESPACE ?= openshift-marketplace
-CATALOG_PLATFORMS ?= linux/amd64,linux/arm64
 CATALOG_BUILD_PUSH ?= 1
 
 REPO_ROOT := $(shell git rev-parse --show-toplevel)
@@ -62,18 +56,9 @@ RESET := $(shell tput sgr0)
 
 bundle_distribution = $(if $(filter certified,$(1)),redhat,$(1))
 
-define catalog_build_env
-BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
-BUNDLE_PLATFORMS='$(BUNDLE_PLATFORMS)' \
-CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
-CATALOG_PLATFORMS='$(CATALOG_PLATFORMS)' \
-CONTAINER='$(CONTAINER)' \
-CONFIRM_BUILD_PUSH='$(CONFIRM_BUILD_PUSH)'
-endef
-
-export VERSION CSV_VERSION BUNDLE_IMAGE_VERSION OPENSHIFT_VERSIONS PACKAGE_CHANNEL
+export VERSION CSV_VERSION BUNDLE_IMAGE_VERSION BUNDLE_PACKAGE_CHANNEL
 export PACKAGE_NAME_OVERRIDE CSV_NAME_OVERRIDE
-export BUNDLE_PLATFORMS BUNDLE_BUILD_PUSH CONFIRM_BUILD_PUSH SKIP_DIGEST_FAILURE
+export BUNDLE_PLATFORM CONFIRM_PUSH BUNDLE_SKIP_DIGEST_FAILURE
 
 # ==============================================================================
 # Validation and Tool Helpers
@@ -99,7 +84,7 @@ endif
 
 .PHONY: check-tools
 check-tools:
-	@for cmd in gawk gcsplit yq yamllint envsubst; do \
+	@for cmd in curl gawk gcsplit yq yamllint envsubst '$(CONTAINER)'; do \
 		if ! command -v $$cmd >/dev/null 2>&1; then \
 			echo "Error: $$cmd is required but not installed"; \
 			exit 1; \
@@ -116,15 +101,18 @@ $(TOOLS_DIR):
 	mkdir -p $(TOOLS_DIR)
 
 $(TOOLS_DIR)/jq:
-	curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-$(JQ_PLATFORM)-$(OS_MACHINE)" -o $@
+	curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-$(JQ_PLATFORM)-$(OS_MACHINE)" -o $@.tmp
+	mv $@.tmp $@
 	chmod +x $@
 
 $(TOOLS_DIR)/operator-sdk: | $(TOOLS_DIR)
-	curl -fsSL "https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS_KERNEL)_$(OS_MACHINE)" -o $@
+	curl -fsSL "https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS_KERNEL)_$(OS_MACHINE)" -o $@.tmp
+	mv $@.tmp $@
 	chmod +x $@
 
 $(TOOLS_DIR)/opm: | $(TOOLS_DIR)
-	curl -fsSL "https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS_KERNEL)-$(OS_MACHINE)-opm" -o $@
+	curl -fsSL "https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$(OS_KERNEL)-$(OS_MACHINE)-opm" -o $@.tmp
+	mv $@.tmp $@
 	chmod +x $@
 
 # ==============================================================================
@@ -155,9 +143,9 @@ generate-bundle: check-bundle-type tools $(KUSTOMIZE) check-version check-csv-ve
 # Development Rules
 # ==============================================================================
 
-## Build all development OLM bundles and push bundle images to DEV_REPOSITORY
+## Generate all development OLM bundles
 .PHONY: bundles bundle $(BUNDLE_TYPES:%=bundle/%)
-bundles: ## Build all development OLM bundles and push bundle images
+bundles: ## Generate all development OLM bundles
 bundles: bundle
 bundle: $(BUNDLE_TYPES:%=bundle/%)
 
@@ -174,8 +162,6 @@ $(BUNDLE_TYPES:%=bundle/%): bundle/%: check-version check-csv-version
 		BUNDLE_TYPE='$*' \
 		PACKAGE_NAME_OVERRIDE="$${package}" \
 		CSV_NAME_OVERRIDE="$${csv_name}"
-	$(MAKE) build \
-		BUNDLE_TYPE='$*'
 
 ## Build and push all development catalog images to DEV_REPOSITORY
 .PHONY: catalog-build-push $(BUNDLE_TYPES:%=catalog-build-push/%)
@@ -186,13 +172,16 @@ catalog-build-push/community:
 catalog-build-push/certified:
 
 $(BUNDLE_TYPES:%=catalog-build-push/%): catalog-build-push/%: tools check-version check-csv-version
-	$(MAKE) bundle/$* BUNDLE_BUILD_PUSH=1
 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
-		$(catalog_build_env) \
+		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
+		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
+		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
+		CONTAINER='$(CONTAINER)' \
+		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
 		./build-catalog.sh build \
 			'$*' \
-			'$(DEV_BUNDLE_REPO)' \
-			'$(DEV_BUNDLE_REPO)'; \
+			'$(BUNDLE_DEV_REPO)' \
+			'$(BUNDLE_DEV_REPO)'; \
 	else \
 		echo "[olm] Skipping catalog build and push"; \
 	fi
@@ -205,10 +194,14 @@ deploy: $(BUNDLE_TYPES:%=deploy/%)
 deploy/community:
 deploy/certified:
 
-$(BUNDLE_TYPES:%=deploy/%): deploy/%: catalog-build-push/%
+$(BUNDLE_TYPES:%=deploy/%): deploy/%: tools check-version check-csv-version
+	$(MAKE) bundle/$*
+	$(MAKE) build/$*
+	$(MAKE) push/$*
+	$(MAKE) catalog-build-push/$*
 	CATALOG_NAMESPACE='$(CATALOG_NAMESPACE)' \
 	NAME='$(NAME)' \
-	bash ./build-catalog.sh apply '$*' '$(DEV_BUNDLE_REPO)'
+	bash ./build-catalog.sh apply '$*' '$(BUNDLE_DEV_REPO)'
 
 # ==============================================================================
 # Production Rules
@@ -235,40 +228,72 @@ deploy-prod/certified:
 
 $(BUNDLE_TYPES:%=deploy-prod/%): deploy-prod/%: tools check-version check-csv-version
 	$(MAKE) bundle-prod/$*
-	$(MAKE) build-prod BUNDLE_TYPE='$*' BUNDLE_BUILD_PUSH=1
+	$(MAKE) build-prod BUNDLE_TYPE='$*'
+	$(MAKE) push-prod BUNDLE_TYPE='$*'
 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
-		$(catalog_build_env) \
+		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
+		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
+		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
+		CONTAINER='$(CONTAINER)' \
+		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
 		bash ./build-catalog.sh build \
 			'$*' \
-			'$(DEV_BUNDLE_REPO)' \
-			'$(PROD_BUNDLE_REPO)'; \
+			'$(BUNDLE_DEV_REPO)' \
+			'$(BUNDLE_PROD_REPO)'; \
 	else \
 		echo "[olm] Skipping catalog build and push"; \
 	fi
 	CATALOG_NAMESPACE='$(CATALOG_NAMESPACE)' \
 	NAME='$(NAME)' \
-	bash ./build-catalog.sh apply '$*' '$(DEV_BUNDLE_REPO)'
+	bash ./build-catalog.sh apply '$*' '$(BUNDLE_DEV_REPO)'
 
 # ==============================================================================
 # Image Rules
 # ==============================================================================
 
-.PHONY: build
-build: ## Build and optionally push bundle image (set BUNDLE_TYPE=community|certified)
-build: build-dev
+.PHONY: build build-prod $(BUNDLE_TYPES:%=build/%) $(BUNDLE_TYPES:%=build-prod/%)
+build: ## Build bundle image locally (set BUNDLE_TYPE=community|certified)
+build-prod: ## Build production bundle image locally (set BUNDLE_TYPE=community|certified)
 
-.PHONY: build-dev build-prod
-build-dev: BUNDLE_REPO = $(DEV_BUNDLE_REPO)
-build-prod: BUNDLE_REPO = $(PROD_BUNDLE_REPO)
-build-dev build-prod: check-bundle-type check-version check-csv-version
-	BUNDLE_BUILD_PUSH='$(BUNDLE_BUILD_PUSH)' \
+$(BUNDLE_TYPES:%=build/%): build/%:
+	$(MAKE) build BUNDLE_TYPE='$*'
+
+$(BUNDLE_TYPES:%=build-prod/%): build-prod/%:
+	$(MAKE) build-prod BUNDLE_TYPE='$*'
+
+build: BUNDLE_REPO = $(BUNDLE_DEV_REPO)
+build-prod: BUNDLE_REPO = $(BUNDLE_PROD_REPO)
+build build-prod: check-bundle-type check-version check-csv-version
+	BUNDLE_PLATFORM='$(BUNDLE_PLATFORM)' \
 	./build-bundle.sh \
+		build \
 		'$(CONTAINER)' \
 		'bundles/$(call bundle_distribution,$(BUNDLE_TYPE))' \
 		'$(call bundle_distribution,$(BUNDLE_TYPE))' \
 		'$(BUNDLE_IMAGE_VERSION)' \
-		'$(BUNDLE_REPO)' \
-		'$(BUNDLE_TAG_SUFFIX)'
+		'$(BUNDLE_REPO)'
+
+
+.PHONY: push push-prod $(BUNDLE_TYPES:%=push/%) $(BUNDLE_TYPES:%=push-prod/%)
+push: ## Push existing bundle image (set BUNDLE_TYPE=community|certified)
+push-prod: ## Push existing production bundle image (set BUNDLE_TYPE=community|certified)
+
+$(BUNDLE_TYPES:%=push/%): push/%:
+	$(MAKE) push BUNDLE_TYPE='$*'
+
+$(BUNDLE_TYPES:%=push-prod/%): push-prod/%:
+	$(MAKE) push-prod BUNDLE_TYPE='$*'
+
+push: BUNDLE_REPO = $(BUNDLE_DEV_REPO)
+push-prod: BUNDLE_REPO = $(BUNDLE_PROD_REPO)
+push push-prod: check-bundle-type check-version check-csv-version
+	./build-bundle.sh \
+		push \
+		'$(CONTAINER)' \
+		'bundles/$(call bundle_distribution,$(BUNDLE_TYPE))' \
+		'$(call bundle_distribution,$(BUNDLE_TYPE))' \
+		'$(BUNDLE_IMAGE_VERSION)' \
+		'$(BUNDLE_REPO)'
 
 .PHONY: build-bundle-images
 build-bundle-images: check-version check-csv-version
@@ -287,14 +312,14 @@ validate: $(BUNDLE_TYPES:%=validate-%-directory)
 
 .PHONY: validate/community validate/certified
 validate/community validate/certified: validate/%: tools
-	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
-	./validate-directory.sh 'bundles/$*'
+	./validate-image.sh '$(CONTAINER)' 'bundles/$(call bundle_distribution,$*)'
+	./validate-directory.sh 'bundles/$(call bundle_distribution,$*)'
 
 validate-%-directory:
-	./validate-directory.sh 'bundles/$*'
+	./validate-directory.sh 'bundles/$(call bundle_distribution,$*)'
 
 validate-%-image:
-	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
+	./validate-image.sh '$(CONTAINER)' 'bundles/$(call bundle_distribution,$*)'
 
 # ==============================================================================
 # Utility Rules

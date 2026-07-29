@@ -8,13 +8,12 @@ CATALOG_REPO="${3:-}"
 BUNDLE_REPO="${4:-}"
 
 CONTAINER="${CONTAINER:-docker}"
-BUNDLE_PLATFORMS="${BUNDLE_PLATFORMS:-linux/amd64,linux/arm64}"
-CATALOG_PLATFORMS="${CATALOG_PLATFORMS:-linux/amd64,linux/arm64}"
+CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
 CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
-CONFIRM_PUSH="${CONFIRM_PUSH:-${CONFIRM_BUILD_PUSH:-1}}"
+CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
 NAME="${NAME:-percona-server-mongodb-operator}"
-CATALOG_ENV="${CATALOG_ENV:-dev-catalog}"
+CATALOG_ENV="${CATALOG_ENV:-dev}"
 
 usage() {
 	cat <<EOF
@@ -76,7 +75,11 @@ configure_bundle_type() {
 }
 
 catalog_image() {
-	echo -n "${CATALOG_REPO}:${BUNDLE_TYPE}-${CATALOG_ENV}"
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${CATALOG_REPO}:${BUNDLE_TYPE}-${CATALOG_ENV}-catalog"
+		return
+	fi
+	echo -n "${CATALOG_REPO}:${BUNDLE_TYPE}-catalog"
 }
 
 current_bundle_image() {
@@ -84,12 +87,19 @@ current_bundle_image() {
 }
 
 previous_bundle_image() {
-	echo -n "${CATALOG_REPO}:$1-${BUNDLE_TYPE}-bundle-${CATALOG_ENV}"
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${CATALOG_REPO}:$1-${BUNDLE_TYPE}-bundle-${CATALOG_ENV}-catalog"
+		return
+	fi
+	echo -n "${CATALOG_REPO}:$1-${BUNDLE_TYPE}-bundle-catalog"
 }
 
-# CatalogSource name, e.g. certified-dev, certified-prod, community-dev.
 catalog_source_name() {
-	echo -n "${BUNDLE_TYPE}-${CATALOG_ENV}"
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${BUNDLE_TYPE}-${CATALOG_ENV}"
+		return
+	fi
+	echo -n "${BUNDLE_TYPE}"
 }
 
 list_bundle_images() {
@@ -199,7 +209,7 @@ build_previous_bundle() {
 	write_bundle_dockerfile "$bundle_dir"
 
 	"$CONTAINER" buildx build \
-		--platform "$BUNDLE_PLATFORMS" \
+		--platform "$CATALOG_PLATFORM" \
 		--tag "$image" \
 		--push \
 		"$bundle_dir"
@@ -242,7 +252,7 @@ build_catalog() {
 	echo "[olm] Building and pushing catalog ${image}"
 
 	"$CONTAINER" buildx build \
-		--platform "$CATALOG_PLATFORMS" \
+		--platform "$CATALOG_PLATFORM" \
 		--file "${CATALOG_DIR}.Dockerfile" \
 		--tag "$image" \
 		--push \
