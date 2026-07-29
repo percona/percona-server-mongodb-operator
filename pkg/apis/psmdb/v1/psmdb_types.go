@@ -1075,19 +1075,20 @@ func SSLInternalSecretName(cr *PerconaServerMongoDB) string {
 type MongosSpec struct {
 	MultiAZ `json:",inline"`
 
-	Port                     int32                      `json:"port,omitempty"`
-	HostPort                 int32                      `json:"hostPort,omitempty"`
-	SetParameter             *MongosSpecSetParameter    `json:"setParameter,omitempty"`
-	Expose                   MongosExpose               `json:"expose,omitempty"`
-	Size                     int32                      `json:"size,omitempty"`
-	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
-	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
-	Env                      []corev1.EnvVar            `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
-	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	Port                     int32                           `json:"port,omitempty"`
+	HostPort                 int32                           `json:"hostPort,omitempty"`
+	SetParameter             *MongosSpecSetParameter         `json:"setParameter,omitempty"`
+	Expose                   MongosExpose                    `json:"expose,omitempty"`
+	Size                     int32                           `json:"size,omitempty"`
+	ReadinessProbe           *corev1.Probe                   `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended          `json:"livenessProbe,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext      `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext         `json:"containerSecurityContext,omitempty"`
+	Configuration            MongoConfiguration              `json:"configuration,omitempty"`
+	PodManagementPolicy      *appsv1.PodManagementPolicyType `json:"podManagementPolicy,omitempty"`
+	Env                      []corev1.EnvVar                 `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource          `json:"envFrom,omitempty"`
+	HostAliases              []corev1.HostAlias              `json:"hostAliases,omitempty"`
 }
 
 func (ms MongosSpec) GetPort() int32 {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -267,4 +268,38 @@ func readDefaultCR(name, namespace string) (*api.PerconaServerMongoDB, error) {
 	cr.Namespace = namespace
 	cr.Spec.InitImage = "perconalab/percona-server-mongodb-operator:main"
 	return cr, nil
+}
+
+func TestMongosStatefulsetSpec_PodManagementPolicy(t *testing.T) {
+	cr, err := readDefaultCR("test-cr", "test-ns")
+	assert.NoError(t, err)
+
+	err = cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes)
+	assert.NoError(t, err)
+
+	template := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"app": "test"},
+		},
+	}
+
+	t.Run("nil PodManagementPolicy leaves field empty", func(t *testing.T) {
+		cr.Spec.Sharding.Mongos.PodManagementPolicy = nil
+		spec := MongosStatefulsetSpec(cr, template)
+		assert.Equal(t, appsv1.PodManagementPolicyType(""), spec.PodManagementPolicy)
+	})
+
+	t.Run("Parallel PodManagementPolicy is propagated", func(t *testing.T) {
+		parallel := appsv1.ParallelPodManagement
+		cr.Spec.Sharding.Mongos.PodManagementPolicy = &parallel
+		spec := MongosStatefulsetSpec(cr, template)
+		assert.Equal(t, appsv1.ParallelPodManagement, spec.PodManagementPolicy)
+	})
+
+	t.Run("OrderedReady PodManagementPolicy is propagated", func(t *testing.T) {
+		ordered := appsv1.OrderedReadyPodManagement
+		cr.Spec.Sharding.Mongos.PodManagementPolicy = &ordered
+		spec := MongosStatefulsetSpec(cr, template)
+		assert.Equal(t, appsv1.OrderedReadyPodManagement, spec.PodManagementPolicy)
+	})
 }

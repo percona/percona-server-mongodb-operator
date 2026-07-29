@@ -7,6 +7,7 @@ package v1
 import (
 	metav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -914,6 +915,11 @@ func (in *MongosSpec) DeepCopyInto(out *MongosSpec) {
 		in, out := &in.ContainerSecurityContext, &out.ContainerSecurityContext
 		*out = new(corev1.SecurityContext)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.PodManagementPolicy != nil {
+		in, out := &in.PodManagementPolicy, &out.PodManagementPolicy
+		*out = new(appsv1.PodManagementPolicyType)
+		**out = **in
 	}
 	if in.Env != nil {
 		in, out := &in.Env, &out.Env
