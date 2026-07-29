@@ -3,7 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -51,7 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 	handleRoles(ctx, cr, mongoCli)
 
-	err = handleUsers(ctx, cr, mongoCli, r.client)
+	err = handleUsers(ctx, cr, mongoCli, r.client, "")
 	if err != nil {
 		return errors.Wrap(err, "handle users")
 	}
@@ -69,13 +68,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 
 			for i := range cr.Spec.Replsets {
 				rs := cr.Spec.Replsets[i]
+
+				// Guard: check if all shard users already have matching password
+				// hashes for this replset's annotation key. If so, skip connecting
+				// entirely — this is the steady-state fast path that avoids opening
+				// a TLS+SCRAM connection to every shard on every 5-second reconcile.
+				if shardUsersUpToDate(ctx, r.client, cr, shardUsers, rs.Name) {
+					continue
+				}
+
 				shardCli, err := r.mongoClientWithRole(ctx, cr, rs, api.RoleUserAdmin)
 				if err != nil {
 					log.Error(err, "failed to get mongo client for shard", "replset", rs.Name)
 					continue
 				}
 
-				if err := handleUsers(ctx, shardCR, shardCli, r.client); err != nil {
+				if err := handleUsers(ctx, shardCR, shardCli, r.client, rs.Name); err != nil {
 					log.Error(err, "failed to handle users on shard", "replset", rs.Name)
 				}
 
@@ -102,7 +110,53 @@ func filterShardUsers(users []api.User) []api.User {
 	return filtered
 }
 
-func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mongo.Client, client client.Client) error {
+// shardUsersUpToDate returns true if all shard users already have password hashes
+// committed for the given replset. This is the steady-state check that avoids
+// opening a mongo connection to the shard when nothing has changed.
+//
+// External-DB users have no password and are excluded from this check (they are
+// currently not included in filterShardUsers, but this is defensive).
+//
+// Returns false (triggering a connection) if:
+//   - Any user's secret cannot be read
+//   - Any user's per-replset annotation is missing or doesn't match the current hash
+func shardUsersUpToDate(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, users []api.User, rsName string) bool {
+	log := logf.FromContext(ctx)
+
+	for i := range users {
+		user := &users[i]
+
+		// External-DB users have no password — skip them in the hash check.
+		if user.IsExternalDB() {
+			continue
+		}
+
+		passKey := user.Name
+		if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key != "" {
+			passKey = user.PasswordSecretRef.Key
+		}
+
+		sec, err := getCustomUserSecret(ctx, cl, cr, user, passKey)
+		if err != nil {
+			log.V(1).Info("Cannot read secret for shard guard, will connect", "user", user.Name, "replset", rsName)
+			return false
+		}
+
+		annotationKey := fmt.Sprintf("percona.com/%s-%s-%s-hash", cr.Name, user.Name, rsName)
+		currentHash, ok := sec.Annotations[annotationKey]
+		if !ok {
+			return false
+		}
+
+		if currentHash != sha256Hash(sec.Data[passKey]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mongo.Client, client client.Client, annotationKeySuffix string) error {
 	log := logf.FromContext(ctx)
 
 	if len(cr.Spec.Users) == 0 {
@@ -148,7 +202,12 @@ func handleUsers(ctx context.Context, cr *api.PerconaServerMongoDB, mongoCli mon
 			continue
 		}
 
-		annotationKey := fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
+		var annotationKey string
+		if annotationKeySuffix == "" {
+			annotationKey = fmt.Sprintf("percona.com/%s-%s-hash", cr.Name, user.Name)
+		} else {
+			annotationKey = fmt.Sprintf("percona.com/%s-%s-%s-hash", cr.Name, user.Name, annotationKeySuffix)
+		}
 
 		if userInfo == nil && !user.IsExternalDB() {
 			err = createUser(ctx, client, mongoCli, &user, sec, annotationKey, userSecretPassKey)
@@ -388,6 +447,17 @@ func updatePass(
 	return nil
 }
 
+// roleKey is a comparable projection of a mongo.Role containing only the fields
+// that matter for user-role assignment comparison (DB and Role name). MongoDB
+// does not guarantee ordering of roles in usersInfo output, and the returned
+// Role structs may have extra fields (Roles, Privileges, AuthenticationRestrictions)
+// populated that the desired state never sets. Comparing only {DB, Role} avoids
+// false positives from both ordering differences and extra-field presence.
+type roleKey struct {
+	DB   string
+	Role string
+}
+
 func updateRoles(ctx context.Context, mongoCli mongo.Client, user *api.User, userInfo *mongo.User) error {
 	log := logf.FromContext(ctx)
 
@@ -395,17 +465,34 @@ func updateRoles(ctx context.Context, mongoCli mongo.Client, user *api.User, use
 		return nil
 	}
 
-	roles := make([]mongo.Role, 0)
+	desiredRoles := make([]mongo.Role, 0, len(user.Roles))
+	desiredKeys := make([]roleKey, 0, len(user.Roles))
 	for _, role := range user.Roles {
-		roles = append(roles, mongo.Role{DB: role.DB, Role: role.Name})
+		desiredRoles = append(desiredRoles, mongo.Role{DB: role.DB, Role: role.Name})
+		desiredKeys = append(desiredKeys, roleKey{DB: role.DB, Role: role.Name})
 	}
 
-	if reflect.DeepEqual(userInfo.Roles, roles) {
+	currentKeys := make([]roleKey, 0, len(userInfo.Roles))
+	for _, role := range userInfo.Roles {
+		currentKeys = append(currentKeys, roleKey{DB: role.DB, Role: role.Role})
+	}
+
+	opts := cmp.Options{
+		cmpopts.SortSlices(func(a, b roleKey) bool {
+			if a.DB != b.DB {
+				return a.DB < b.DB
+			}
+			return a.Role < b.Role
+		}),
+		cmpopts.EquateEmpty(),
+	}
+
+	if cmp.Equal(currentKeys, desiredKeys, opts...) {
 		return nil
 	}
 
 	log.Info("User roles changed, updating them.", "user", user.UserID())
-	err := mongoCli.UpdateUserRoles(ctx, user.DB, user.Name, roles)
+	err := mongoCli.UpdateUserRoles(ctx, user.DB, user.Name, desiredRoles)
 	if err != nil {
 		return err
 	}

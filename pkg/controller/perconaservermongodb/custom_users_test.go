@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -598,4 +599,379 @@ func TestReconcileCustomUsers_ShardedPropagation(t *testing.T) {
 	// Must have connected to each shard replset directly
 	assert.ElementsMatch(t, []string{"rs0", "rs1"}, tracker.shardCalls,
 		"expected direct connections to each shard replset")
+}
+
+// TestUpdateRoles_OrderInsensitive verifies that updateRoles does not issue an
+// UpdateUserRoles call when the same roles are returned in a different order by
+// MongoDB, and does issue one when the set genuinely differs.
+func TestUpdateRoles_OrderInsensitive(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name         string
+		userRoles    []api.UserRole
+		mongoRoles   []mongo.Role
+		expectUpdate bool
+	}{
+		{
+			name: "same roles different order - no update",
+			userRoles: []api.UserRole{
+				{Name: "readWrite", DB: "mydb"},
+				{Name: "clusterAdmin", DB: "admin"},
+			},
+			mongoRoles: []mongo.Role{
+				{Role: "clusterAdmin", DB: "admin"},
+				{Role: "readWrite", DB: "mydb"},
+			},
+			expectUpdate: false,
+		},
+		{
+			name: "genuinely different roles - update",
+			userRoles: []api.UserRole{
+				{Name: "readWrite", DB: "mydb"},
+				{Name: "clusterAdmin", DB: "admin"},
+			},
+			mongoRoles: []mongo.Role{
+				{Role: "read", DB: "mydb"},
+				{Role: "clusterAdmin", DB: "admin"},
+			},
+			expectUpdate: true,
+		},
+		{
+			name: "extra role in mongo - update",
+			userRoles: []api.UserRole{
+				{Name: "readWrite", DB: "mydb"},
+			},
+			mongoRoles: []mongo.Role{
+				{Role: "readWrite", DB: "mydb"},
+				{Role: "clusterAdmin", DB: "admin"},
+			},
+			expectUpdate: true,
+		},
+		{
+			name: "roles with extra fields populated by mongo - no update",
+			userRoles: []api.UserRole{
+				{Name: "readWrite", DB: "mydb"},
+			},
+			mongoRoles: []mongo.Role{
+				{
+					Role:       "readWrite",
+					DB:         "mydb",
+					Roles:      []mongo.InheritenceRole{{Role: "read", DB: "mydb"}},
+					Privileges: []mongo.RolePrivilege{{Actions: []string{"find"}}},
+				},
+			},
+			expectUpdate: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updated := false
+			cli := &trackingUpdateRolesClient{
+				noopMongoClient: noopMongoClient{},
+				onUpdateRoles: func() {
+					updated = true
+				},
+			}
+
+			user := &api.User{
+				Name:  "testuser",
+				DB:    "admin",
+				Roles: tt.userRoles,
+			}
+			userInfo := &mongo.User{
+				DB:    "admin",
+				Roles: tt.mongoRoles,
+			}
+
+			err := updateRoles(ctx, cli, user, userInfo)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectUpdate, updated, "unexpected UpdateUserRoles call status")
+		})
+	}
+}
+
+// trackingUpdateRolesClient extends noopMongoClient to track UpdateUserRoles calls.
+type trackingUpdateRolesClient struct {
+	noopMongoClient
+	onUpdateRoles func()
+}
+
+func (c *trackingUpdateRolesClient) UpdateUserRoles(ctx context.Context, db, username string, roles []mongo.Role) error {
+	if c.onUpdateRoles != nil {
+		c.onUpdateRoles()
+	}
+	return nil
+}
+
+// TestReconcileCustomUsers_SteadyStateNoShardConnections verifies that after an
+// initial reconcile (which creates users on shards), a second reconcile with
+// unchanged state opens zero shard connections.
+func TestReconcileCustomUsers_SteadyStateNoShardConnections(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	assert.NoError(t, corev1.AddToScheme(scheme))
+	assert.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
+
+	ns := "test-ns"
+	clusterName := "steady-state-cluster"
+
+	passSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName + "-custom-user-secret",
+			Namespace: ns,
+		},
+		Data: map[string][]byte{
+			"MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD": []byte("supersecret"),
+		},
+	}
+
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "internal-" + clusterName + "-users",
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(passSecret, internalSecret).Build()
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ns,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Sharding: api.Sharding{Enabled: true},
+			Replsets: []*api.ReplsetSpec{
+				{Name: "rs0"},
+				{Name: "rs1"},
+			},
+			Users: []api.User{
+				{
+					Name: "clusterSuperAdmin",
+					DB:   "admin",
+					PasswordSecretRef: &api.SecretKeySelector{
+						Name: clusterName + "-custom-user-secret",
+						Key:  "MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD",
+					},
+					Roles: []api.UserRole{
+						{Name: "clusterAdmin", DB: "admin"},
+					},
+				},
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			State: api.AppStateReady,
+		},
+	}
+
+	// First reconcile: should connect to shards (annotations not yet present)
+	tracker1 := &trackingMongoClientProvider{client: fakeClient}
+	r := &ReconcilePerconaServerMongoDB{
+		client:              fakeClient,
+		mongoClientProvider: tracker1,
+	}
+
+	err := r.reconcileCustomUsers(ctx, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, tracker1.mongosCount, "first reconcile: expected 1 mongos connection")
+	assert.ElementsMatch(t, []string{"rs0", "rs1"}, tracker1.shardCalls,
+		"first reconcile: expected connections to both shards")
+
+	// After first reconcile, the secret should have per-replset annotations.
+	// Verify they exist.
+	updatedSecret := &corev1.Secret{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: clusterName + "-custom-user-secret", Namespace: ns}, updatedSecret)
+	assert.NoError(t, err)
+	assert.Contains(t, updatedSecret.Annotations, "percona.com/"+clusterName+"-clusterSuperAdmin-rs0-hash")
+	assert.Contains(t, updatedSecret.Annotations, "percona.com/"+clusterName+"-clusterSuperAdmin-rs1-hash")
+
+	// Second reconcile: should NOT connect to shards (guard short-circuits)
+	tracker2 := &trackingMongoClientProvider{client: fakeClient}
+	r.mongoClientProvider = tracker2
+
+	err = r.reconcileCustomUsers(ctx, cr)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, tracker2.mongosCount, "second reconcile: expected 1 mongos connection")
+	assert.Empty(t, tracker2.shardCalls, "second reconcile: expected zero shard connections")
+}
+
+// TestReconcileCustomUsers_PasswordRotationPropagates verifies that when a
+// password changes, it propagates to every shard and updates per-replset annotations.
+func TestReconcileCustomUsers_PasswordRotationPropagates(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	assert.NoError(t, corev1.AddToScheme(scheme))
+	assert.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
+
+	ns := "test-ns"
+	clusterName := "rotation-cluster"
+
+	// Start with password "oldpassword" and pre-set annotations as if prior reconcile ran
+	oldPass := "oldpassword"
+	oldHash := sha256Hash([]byte(oldPass))
+
+	passSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName + "-custom-user-secret",
+			Namespace: ns,
+			Annotations: map[string]string{
+				"percona.com/" + clusterName + "-clusterSuperAdmin-hash":     oldHash,
+				"percona.com/" + clusterName + "-clusterSuperAdmin-rs0-hash": oldHash,
+				"percona.com/" + clusterName + "-clusterSuperAdmin-rs1-hash": oldHash,
+			},
+		},
+		Data: map[string][]byte{
+			"MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD": []byte("newpassword"),
+		},
+	}
+
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "internal-" + clusterName + "-users",
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(passSecret, internalSecret).Build()
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ns,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Sharding: api.Sharding{Enabled: true},
+			Replsets: []*api.ReplsetSpec{
+				{Name: "rs0"},
+				{Name: "rs1"},
+			},
+			Users: []api.User{
+				{
+					Name: "clusterSuperAdmin",
+					DB:   "admin",
+					PasswordSecretRef: &api.SecretKeySelector{
+						Name: clusterName + "-custom-user-secret",
+						Key:  "MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD",
+					},
+					Roles: []api.UserRole{
+						{Name: "clusterAdmin", DB: "admin"},
+					},
+				},
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			State: api.AppStateReady,
+		},
+	}
+
+	tracker := &trackingMongoClientProvider{client: fakeClient}
+	r := &ReconcilePerconaServerMongoDB{
+		client:              fakeClient,
+		mongoClientProvider: tracker,
+	}
+
+	err := r.reconcileCustomUsers(ctx, cr)
+	assert.NoError(t, err)
+
+	// Should have connected to both shards because password hash doesn't match
+	assert.Equal(t, 1, tracker.mongosCount)
+	assert.ElementsMatch(t, []string{"rs0", "rs1"}, tracker.shardCalls,
+		"password rotation should trigger connections to all shards")
+
+	// Verify annotations are updated to the new hash
+	newHash := sha256Hash([]byte("newpassword"))
+	updatedSecret := &corev1.Secret{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: clusterName + "-custom-user-secret", Namespace: ns}, updatedSecret)
+	assert.NoError(t, err)
+	assert.Equal(t, newHash, updatedSecret.Annotations["percona.com/"+clusterName+"-clusterSuperAdmin-rs0-hash"])
+	assert.Equal(t, newHash, updatedSecret.Annotations["percona.com/"+clusterName+"-clusterSuperAdmin-rs1-hash"])
+	assert.Equal(t, newHash, updatedSecret.Annotations["percona.com/"+clusterName+"-clusterSuperAdmin-hash"])
+}
+
+// TestReconcileCustomUsers_PerShardSkip verifies that a shard with no committed
+// annotation is processed while a sibling shard with a matching annotation is skipped.
+func TestReconcileCustomUsers_PerShardSkip(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	assert.NoError(t, corev1.AddToScheme(scheme))
+	assert.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
+
+	ns := "test-ns"
+	clusterName := "per-shard-skip-cluster"
+
+	passHash := sha256Hash([]byte("thepassword"))
+
+	// Pre-set annotation for rs0 but NOT for rs1 — simulates rs1 being new/rebuilt
+	passSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName + "-custom-user-secret",
+			Namespace: ns,
+			Annotations: map[string]string{
+				"percona.com/" + clusterName + "-clusterSuperAdmin-hash":     passHash,
+				"percona.com/" + clusterName + "-clusterSuperAdmin-rs0-hash": passHash,
+				// rs1 annotation intentionally absent
+			},
+		},
+		Data: map[string][]byte{
+			"MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD": []byte("thepassword"),
+		},
+	}
+
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "internal-" + clusterName + "-users",
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(passSecret, internalSecret).Build()
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: ns,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Sharding: api.Sharding{Enabled: true},
+			Replsets: []*api.ReplsetSpec{
+				{Name: "rs0"},
+				{Name: "rs1"},
+			},
+			Users: []api.User{
+				{
+					Name: "clusterSuperAdmin",
+					DB:   "admin",
+					PasswordSecretRef: &api.SecretKeySelector{
+						Name: clusterName + "-custom-user-secret",
+						Key:  "MONGODB_CLUSTER_SUPER_ADMIN_PASSWORD",
+					},
+					Roles: []api.UserRole{
+						{Name: "clusterAdmin", DB: "admin"},
+					},
+				},
+			},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			State: api.AppStateReady,
+		},
+	}
+
+	tracker := &trackingMongoClientProvider{client: fakeClient}
+	r := &ReconcilePerconaServerMongoDB{
+		client:              fakeClient,
+		mongoClientProvider: tracker,
+	}
+
+	err := r.reconcileCustomUsers(ctx, cr)
+	assert.NoError(t, err)
+
+	// rs0 should be skipped (matching annotation), only rs1 should be connected
+	assert.Equal(t, 1, tracker.mongosCount)
+	assert.Equal(t, []string{"rs1"}, tracker.shardCalls,
+		"only rs1 should be connected (rs0 has matching annotation)")
 }
