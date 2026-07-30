@@ -34,7 +34,7 @@ def setup_tests(test_paths: Paths, destroy_cert_manager: Callable[[], None]) -> 
     destroy_cert_manager()
 
     kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
-    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client_with_tls.yml")
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70-tls.yml")
 
 
 def _save_operator_secret(secret_name: str) -> str:

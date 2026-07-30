@@ -8,14 +8,34 @@ from pathlib import Path
 import yaml
 
 from .kubectl import kubectl_bin, wait_pod
+from .utils import retry
 
 logger = logging.getLogger(__name__)
+
+
+def _resource_kind(crd_doc: dict) -> str:
+    """Build the `plural.group` resource identifier from a CRD document."""
+    return f"{crd_doc['spec']['names']['plural']}.{crd_doc['spec']['group']}"
+
+
+def _remove_instance_finalizers(resource_kind: str) -> None:
+    """Clear finalizers on all instances of a CR type across namespaces."""
+    try:
+        items = json.loads(kubectl_bin("get", resource_kind, "--all-namespaces", "-o", "json"))
+        for item in items.get("items", []):
+            meta = item["metadata"]
+            kubectl_bin(
+                "patch", resource_kind, "-n", meta["namespace"], meta["name"],
+                "--type=merge", "-p", '{"metadata":{"finalizers":[]}}',
+            )
+    except subprocess.CalledProcessError:
+        pass
 
 
 def deploy_operator(test_dir: str, src_dir: str) -> None:
     """Deploy the operator"""
     logger.info("Start PSMDB operator")
-    operator_ns = os.environ.get("OPERATOR_NS")
+    prefix = "cw-" if os.environ.get("OPERATOR_NS") else ""
 
     crd_file = f"{test_dir}/conf/crd.yaml"
     if not os.path.isfile(crd_file):
@@ -23,10 +43,9 @@ def deploy_operator(test_dir: str, src_dir: str) -> None:
 
     kubectl_bin("apply", "--server-side", "--force-conflicts", "-f", crd_file)
 
-    rbac_type = "cw-rbac" if operator_ns else "rbac"
-    operator_file = f"{src_dir}/deploy/{'cw-' if operator_ns else ''}operator.yaml"
+    operator_file = f"{src_dir}/deploy/{prefix}operator.yaml"
 
-    apply_rbac(src_dir, rbac_type)
+    apply_rbac(src_dir, f"{prefix}rbac")
 
     with open(operator_file, "r") as f:
         data = yaml.safe_load(f)
@@ -60,23 +79,24 @@ def get_operator_pod() -> str:
         "pods",
         "--selector=name=percona-server-mongodb-operator",
         "-o",
-        "jsonpath={.items[].metadata.name}",
+        "jsonpath={.items[*].metadata.name}",
     ]
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
         args.extend(["-n", operator_ns])
-    try:
-        out = kubectl_bin(*args)
+
+    def _fetch() -> str:
+        out = kubectl_bin(*args, check=False)
         names = [n for n in out.strip().split() if n]
+
         if not names:
-            raise RuntimeError(
-                "No Running operator pod found. Ensure the operator deployment succeeded"
-            )
+            raise RuntimeError("Operator pod not created yet")
         if len(names) > 1:
             raise RuntimeError(f"Multiple operator pods found: {names}")
+
         return names[0]
-    except Exception as e:
-        raise RuntimeError(f"Failed to get operator pod: {e}") from e
+
+    return retry(_fetch, max_attempts=30, delay=2)
 
 
 def apply_rbac(src_dir: str, rbac: str = "rbac") -> None:
@@ -89,68 +109,37 @@ def apply_rbac(src_dir: str, rbac: str = "rbac") -> None:
         r"^(\s*)namespace:\s*.*$", rf"\1namespace: {operator_ns}", yaml_content, flags=re.MULTILINE
     )
 
-    args = ["apply", "-f", "-"]
-    if os.getenv("OPERATOR_NS"):
-        args = ["apply", "-n", operator_ns, "-f", "-"]
-
-    kubectl_bin(*args, input_data=modified_yaml)
+    ns_flag = ["-n", operator_ns] if os.getenv("OPERATOR_NS") else []
+    kubectl_bin("apply", *ns_flag, "-f", "-", input_data=modified_yaml)
 
 
 def delete_crd_rbac(src_dir: Path) -> None:
     logger.info("Deleting old CRDs and RBACs")
     crd_path = (src_dir / "deploy" / "crd.yaml").resolve()
 
-    docs = list(yaml.safe_load_all(crd_path.read_text()))
-    crd_names = []
-    resource_kinds = []
-    for doc in docs:
-        if doc and doc.get("kind") == "CustomResourceDefinition":
-            crd_names.append(doc["metadata"]["name"])
-            group = doc["spec"]["group"]
-            plural = doc["spec"]["names"]["plural"]
-            resource_kinds.append(f"{plural}.{group}")
+    crds = [
+        doc
+        for doc in yaml.safe_load_all(crd_path.read_text())
+        if doc and doc.get("kind") == "CustomResourceDefinition"
+    ]
 
     kubectl_bin("delete", "-f", str(crd_path), "--ignore-not-found", "--wait=false", check=False)
 
-    for kind in resource_kinds:
-        try:
-            items_json = kubectl_bin("get", kind, "--all-namespaces", "-o", "json")
-            data = json.loads(items_json)
-            for item in data.get("items", []):
-                ns = item["metadata"]["namespace"]
-                name = item["metadata"]["name"]
-                kubectl_bin(
-                    "patch",
-                    kind,
-                    "-n",
-                    ns,
-                    name,
-                    "--type=merge",
-                    "-p",
-                    '{"metadata":{"finalizers":[]}}',
-                )
-        except subprocess.CalledProcessError:
-            pass
+    for crd in crds:
+        _remove_instance_finalizers(_resource_kind(crd))
 
-    for name in crd_names:
-        kubectl_bin("wait", "--for=delete", "crd", name, check=False)
+    for crd in crds:
+        kubectl_bin("wait", "--for=delete", "crd", crd["metadata"]["name"], check=False)
 
 
-def check_crd_for_deletion(file_path: str) -> None:
+def check_crd_for_deletion(file_path: Path) -> None:
     """Check and remove finalizers from CRDs to allow deletion"""
-    with open(file_path, "r") as f:
-        yaml_content = f.read()
-
-    for doc in yaml_content.split("---"):
-        if not doc.strip():
+    for doc in yaml.safe_load_all(Path(file_path).read_text()):
+        if not doc or doc.get("kind") != "CustomResourceDefinition":
             continue
+
+        crd_name = doc["metadata"]["name"]
         try:
-            parsed_doc = yaml.safe_load(doc)
-            if not parsed_doc or "metadata" not in parsed_doc:
-                continue
-
-            crd_name = parsed_doc["metadata"]["name"]
-
             result = kubectl_bin(
                 "get",
                 f"crd/{crd_name}",
@@ -158,32 +147,17 @@ def check_crd_for_deletion(file_path: str) -> None:
                 "jsonpath={.status.conditions[-1].type}",
                 "--ignore-not-found",
             )
-            is_crd_terminating = result.strip() == "Terminating"
+            if result.strip() != "Terminating":
+                continue
 
-            if is_crd_terminating:
-                logger.info(f"Removing finalizers from CRD {crd_name} to allow deletion")
-                kubectl_bin(
-                    "patch",
-                    f"crd/{crd_name}",
-                    "--type=merge",
-                    "-p",
-                    '{"metadata":{"finalizers":[]}}',
-                )
-                try:
-                    kubectl_bin(
-                        "patch",
-                        crd_name,
-                        "--all-namespaces",
-                        "--type=merge",
-                        "-p",
-                        '{"metadata":{"finalizers":[]}}',
-                    )
-                except Exception as patch_error:
-                    logger.warning(
-                        f"Could not patch {crd_name} instances (may not exist): {patch_error}"
-                    )
-
-        except yaml.YAMLError as yaml_error:
-            logger.error(f"Error parsing YAML document: {yaml_error}")
+            logger.info(f"Removing finalizers from CRD {crd_name} to allow deletion")
+            kubectl_bin(
+                "patch",
+                f"crd/{crd_name}",
+                "--type=merge",
+                "-p",
+                '{"metadata":{"finalizers":[]}}',
+            )
+            _remove_instance_finalizers(_resource_kind(doc))
         except Exception as e:
-            logger.error(f"Error removing finalizers from CRD: {e}")
+            logger.error(f"Error removing finalizers from CRD {crd_name}: {e}")
