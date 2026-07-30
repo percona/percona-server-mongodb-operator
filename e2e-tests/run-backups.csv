@@ -1,5 +1,4 @@
 demand-backup
-demand-backup-eks-credentials
 demand-backup-eks-credentials-irsa
 demand-backup-fs
 demand-backup-if-unhealthy

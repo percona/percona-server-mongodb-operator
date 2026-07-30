@@ -301,8 +301,10 @@ sleep 5
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'check backup and restore -- aws-s3'
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
+	_aws_env_save
 	setup_aws_credentials
 	check_backup_existence_aws ${backup_dest_aws} '/rs0/myApp.test.gz'
+	_aws_env_restore
 	run_recovery_check "$backup_name_aws" "$cluster"
 
 	desc 'check backup and restore -- gcp-cs-s3'
