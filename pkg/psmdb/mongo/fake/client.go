@@ -23,7 +23,7 @@ func (c *fakeMongoClient) Disconnect(ctx context.Context) error {
 
 type fakeMongoClientDatabase struct{}
 
-func (c *fakeMongoClientDatabase) RunCommand(ctx context.Context, runCommand interface{}, opts ...options.Lister[options.RunCmdOptions]) *mgo.SingleResult {
+func (c *fakeMongoClientDatabase) RunCommand(ctx context.Context, runCommand any, opts ...options.Lister[options.RunCmdOptions]) *mgo.SingleResult {
 	return singleResult(mongo.OKResponse{
 		OK: 1,
 	})

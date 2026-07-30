@@ -255,8 +255,8 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 // Pod format: "<statefulset-name>-<index>"
 func extractPodNameFromPVC(pvcName string, stsName string) string {
 	prefix := config.MongodDataVolClaimName + "-"
-	if strings.HasPrefix(pvcName, prefix) {
-		return strings.TrimPrefix(pvcName, prefix)
+	if after, ok := strings.CutPrefix(pvcName, prefix); ok {
+		return after
 	}
 	return ""
 }
