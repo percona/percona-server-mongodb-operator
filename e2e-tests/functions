@@ -2050,6 +2050,71 @@ run_backup() {
 		| kubectl_bin apply -f -
 }
 
+# Nest-safe save/restore of AWS_* (stack of snapshots). Keeps secret values
+# off the xtrace command line by doing work under set +x.
+_AWS_ENV_STACK=()
+
+# Restore one var: non-empty → export; empty/unset original → unset.
+# Empty AWS_ACCESS_KEY_ID="" overrides AWS_PROFILE and breaks EKS auth.
+_aws_env_restore_var() {
+	local name=$1
+	local value=$2
+	if [[ -n $value ]]; then
+		export "$name=$value"
+	else
+		unset "$name"
+	fi
+}
+
+_aws_env_save() {
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+	_AWS_ENV_STACK+=("${AWS_ACCESS_KEY_ID:-}")
+	_AWS_ENV_STACK+=("${AWS_SECRET_ACCESS_KEY:-}")
+	_AWS_ENV_STACK+=("${AWS_DEFAULT_REGION:-}")
+	_AWS_ENV_STACK+=("${AWS_REGION:-}")
+	if [[ $trace_was_on -eq 1 ]]; then
+		set -x
+	fi
+	return 0
+}
+
+_aws_env_restore() {
+	local trace_was_on=0
+	if [[ $- == *x* ]]; then
+		trace_was_on=1
+		set +x
+	fi
+
+	local n=${#_AWS_ENV_STACK[@]}
+	if ((n < 4)); then
+		if [[ $trace_was_on -eq 1 ]]; then
+			set -x
+		fi
+		echo "error: _aws_env_restore called without matching _aws_env_save" >&2
+		return 1
+	fi
+
+	local key="${_AWS_ENV_STACK[n - 4]}"
+	local secret="${_AWS_ENV_STACK[n - 3]}"
+	local def_region="${_AWS_ENV_STACK[n - 2]}"
+	local region="${_AWS_ENV_STACK[n - 1]}"
+	_AWS_ENV_STACK=("${_AWS_ENV_STACK[@]:0:n-4}")
+
+	_aws_env_restore_var AWS_ACCESS_KEY_ID "$key"
+	_aws_env_restore_var AWS_SECRET_ACCESS_KEY "$secret"
+	_aws_env_restore_var AWS_DEFAULT_REGION "$def_region"
+	_aws_env_restore_var AWS_REGION "$region"
+
+	if [[ $trace_was_on -eq 1 ]]; then
+		set -x
+	fi
+	return 0
+}
+
 check_backup_deletion_aws() {
 	bucket=$(echo "$1" | cut -d'/' -f1)
 	key_prefix=$(echo "$1" | cut -d'/' -f2-)
@@ -2057,10 +2122,14 @@ check_backup_deletion_aws() {
 	storage_name="aws-s3"
 	retry=0
 
+	_aws_env_save
+	setup_aws_credentials
+
 	while aws s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
 		if [ $retry -ge 15 ]; then
 			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
 			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			_aws_env_restore
 			exit 1
 		fi
 		echo "waiting for backup to be deleted from $storage_name"
@@ -2069,6 +2138,7 @@ check_backup_deletion_aws() {
 	done
 
 	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+	_aws_env_restore
 }
 
 check_backup_deletion_oss() {
@@ -2080,12 +2150,14 @@ check_backup_deletion_oss() {
 	storage_name="oss-native"
 	retry=0
 
+	_aws_env_save
 	setup_alibaba_cloud_s3_credentials "$region"
 
 	while aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key "${key_prefix}${key}" &>/dev/null; do
 		if [ $retry -ge 15 ]; then
 			echo "max retry count $retry reached. something went wrong with operator or kubernetes cluster"
 			echo "Backup still exists in $storage_name (expected it to be deleted)"
+			_aws_env_restore
 			exit 1
 		fi
 		echo "waiting for backup to be deleted from $storage_name"
@@ -2094,6 +2166,7 @@ check_backup_deletion_oss() {
 	done
 
 	echo "Backup ${key_prefix}${key} in bucket $bucket not found in $storage_name"
+	_aws_env_restore
 }
 
 check_backup_deletion_gcs() {
@@ -2160,26 +2233,25 @@ check_backup_deletion() {
 
 setup_aws_credentials() {
 	local secret_name="aws-s3-secret"
-
-	if [[ -n $AWS_ACCESS_KEY_ID ]] && [[ -n $AWS_SECRET_ACCESS_KEY ]]; then
-		echo "AWS credentials already set in environment"
-		return 0
-	fi
-
-	echo "Setting up AWS credentials from secret: $secret_name"
-
-	# Disable tracing for the entire credential section
+	# Disable xtrace before any credential value is expanded (set -x would print secrets).
 	local trace_was_on=0
 	if [[ $- == *x* ]]; then
 		trace_was_on=1
 		set +x
 	fi
 
+	if [[ -n ${AWS_ACCESS_KEY_ID:-} ]] && [[ -n ${AWS_SECRET_ACCESS_KEY:-} ]]; then
+		[[ $trace_was_on -eq 1 ]] && set -x
+		echo "AWS credentials already set in environment"
+		return 0
+	fi
+
+	echo "Setting up AWS credentials from secret: $secret_name"
+
 	AWS_ACCESS_KEY_ID=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null)
 	AWS_SECRET_ACCESS_KEY=$(kubectl get secret "$secret_name" -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
 
 	if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]]; then
-		# Re-enable tracing before error message if it was on
 		[[ $trace_was_on -eq 1 ]] && set -x
 		echo "Failed to extract AWS credentials from secret"
 		return 1
@@ -3015,10 +3087,11 @@ check_backup_existence_gcs() {
 
 	gcs_path="gs://${backup_dest_gcp}${obj}"
 
-	until gsutil ls "$gcs_path" >/dev/null 2>&1; do
+	until gsutil_err=$(gsutil ls "$gcs_path" 2>&1); do
 		if [ $retry -ge 30 ]; then
 			echo "Max retry count $retry reached. Something went wrong with operator or Kubernetes cluster."
 			echo "Backup was not found in bucket -- $storage_name"
+			echo "gsutil ls error: $gsutil_err"
 			exit 1
 		fi
 		echo "Waiting for backup $gcs_path in $storage_name"
@@ -3065,38 +3138,37 @@ check_backup_in_storage() {
 	case ${storage_type} in
 		s3)
 			endpoint="s3.amazonaws.com"
+			_aws_env_save
 			setup_aws_credentials
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}"
+			_aws_env_restore
 			;;
 		alibaba-s3)
 			endpoint=$(get_backup_storage_s3_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_s3_field "$backup" "region")
-			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
+			_aws_env_save
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "alibaba-cloud-s3"
-			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
-			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
+			_aws_env_restore
 			;;
 		oss)
 			endpoint=$(get_backup_storage_oss_field "$backup" "endpointUrl")
 			region=$(get_backup_storage_oss_field "$backup" "region")
 			endpoint=$(echo "$endpoint" | $sed 's|://oss-|://s3.oss-|')
-			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
+			_aws_env_save
 			setup_alibaba_cloud_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oss-native"
-			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
-			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
+			_aws_env_restore
 			;;
 		oci)
 			local oci_namespace region
 			oci_namespace=$(get_backup_storage_oci_field "$backup" "namespace")
 			region=$(get_backup_storage_oci_field "$backup" "region")
 			endpoint="https://${oci_namespace}.compat.objectstorage.${region}.oraclecloud.com"
-			local _orig_key_id="${AWS_ACCESS_KEY_ID:-}" _orig_secret="${AWS_SECRET_ACCESS_KEY:-}" _orig_default_region="${AWS_DEFAULT_REGION:-}" _orig_aws_region="${AWS_REGION:-}"
+			_aws_env_save
 			setup_oci_s3_credentials "$region"
 			check_backup_existence_aws "$backup_dest" "/${replset}/${file}" "$endpoint" "oci"
-			AWS_ACCESS_KEY_ID="$_orig_key_id" AWS_SECRET_ACCESS_KEY="$_orig_secret" AWS_DEFAULT_REGION="$_orig_default_region" AWS_REGION="$_orig_aws_region"
-			export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
+			_aws_env_restore
 			;;
 		gcs)
 			endpoint="storage.googleapis.com"
