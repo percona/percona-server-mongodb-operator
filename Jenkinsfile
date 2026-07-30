@@ -39,7 +39,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --monitoring=NONE \
                     --logging=NONE \
                     --no-enable-managed-prometheus \
-                    --workload-pool=cloud-dev-112233.svc.id.goog \
+                    --workload-pool=\$GCP_PROJECT.svc.id.goog \
                     --quiet && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"\$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
@@ -365,6 +365,7 @@ void runTest(Integer TEST_ID) {
             sh """
                 export DEBUG_TESTS=1
                 export SKIP_DELETE=0
+                export COLUMNS=200
                 export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
@@ -383,20 +384,30 @@ BASH
     catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
         // A per-test timeout is an environment/hang problem, not a test assertion
         // failure: record it as an error and keep the rest of the suite running.
-        // Any other interruption (user abort, newer build) is propagated.
+        // Any other interruption (user abort, newer/superseded build) is propagated
+        // so the build aborts cleanly.
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
             echo "Test $testName timed out!"
             tests[TEST_ID]["result"] = "error"
             currentBuild.result = 'FAILURE'
         } else {
-            echo "Test $testName was interrupted!"
+            echo "Test $testName was interrupted (build aborted/superseded)!"
             throw exc
         }
     }
     catch (exc) {
-        echo "Test $testName has failed!"
-        tests[TEST_ID]["result"] = "failure"
+        // When a timeout aborts the sh step the shell is killed with SIGTERM and the
+        // step can surface as a plain "exit code 143" error before the timeout's
+        // FlowInterruptedException propagates. Treat 143 as a timeout/termination
+        // (error), not a test assertion failure, so the report shows the right icon.
+        if (exc.message?.contains('exit code 143')) {
+            echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            tests[TEST_ID]["result"] = "error"
+        } else {
+            echo "Test $testName has failed!"
+            tests[TEST_ID]["result"] = "failure"
+        }
         currentBuild.result = 'FAILURE'
     }
     finally {
