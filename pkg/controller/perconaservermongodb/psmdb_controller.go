@@ -81,25 +81,18 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "failed to get operator pod image")
 	}
 
-	client, err := client.New(mgr.GetConfig(), client.Options{
-		Scheme: mgr.GetScheme(),
-		Cache: &client.CacheOptions{
-			DisableFor: []client.Object{&corev1.Node{}},
-		},
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "create client")
-	}
-
 	secretProviders := []pkgSecret.Provider{
 		new(vault.Provider),
 	}
 
+	reconcileInterval := getReconcileInterval()
+	mgr.GetLogger().Info("reconcile interval configured", "interval", reconcileInterval.String())
+
 	return &ReconcilePerconaServerMongoDB{
-		client:                 client,
+		client:                 mgr.GetClient(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
-		reconcileIn:            time.Second * 5,
+		reconcileIn:            reconcileInterval,
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
@@ -111,6 +104,21 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 		clientcmd: cli,
 	}, nil
+}
+
+// getReconcileInterval returns the reconciliation interval, reading from the
+// RESYNC_PERIOD environment variable. Defaults to 30s if not set or invalid.
+func getReconcileInterval() time.Duration {
+	const defaultInterval = 30 * time.Second
+	s := os.Getenv("RESYNC_PERIOD")
+	if s == "" {
+		return defaultInterval
+	}
+	d, err := time.ParseDuration(s)
+	if err == nil && d > 0 {
+		return d
+	}
+	return defaultInterval
 }
 
 func getOperatorPodImage(ctx context.Context) (string, error) {
@@ -512,10 +520,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+		if exists, err := getObjectByName(ctx, r.client, types.NamespacedName{
+			Name:      naming.ArbiterStatefulSetName(cr, replset),
+			Namespace: cr.Namespace,
+		}, &appsv1.StatefulSet{}); err != nil {
 			return err
+		} else if exists {
+			err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace))
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete arbiter in replset %s: %v", replset.Name, err)
+				return err
+			}
 		}
 	}
 
@@ -527,10 +542,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
+		if exists, err := getObjectByName(ctx, r.client, types.NamespacedName{
+			Name:      naming.NonVotingStatefulSetName(cr, replset),
+			Namespace: cr.Namespace,
+		}, &appsv1.StatefulSet{}); err != nil {
 			return err
+		} else if exists {
+			err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace))
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete nonVoting statefulset %s: %v", replset.Name, err)
+				return err
+			}
 		}
 	}
 
@@ -542,10 +564,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 			return err
 		}
 	} else {
-		err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
-		if err != nil && !k8serrors.IsNotFound(err) {
-			err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
+		if exists, err := getObjectByName(ctx, r.client, types.NamespacedName{
+			Name:      naming.HiddenStatefulSetName(cr, replset),
+			Namespace: cr.Namespace,
+		}, &appsv1.StatefulSet{}); err != nil {
 			return err
+		} else if exists {
+			err := r.client.Delete(ctx, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace))
+			if err != nil && !k8serrors.IsNotFound(err) {
+				err = errors.Errorf("delete hidden statefulset %s: %v", replset.Name, err)
+				return err
+			}
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -313,6 +314,8 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, c
 }
 
 func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &api.PerconaServerMongoDB{}
 
@@ -321,6 +324,14 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 			return err
 		}
 
+		// Skip the status update if nothing has semantically changed.
+		// This avoids triggering watch events that would enqueue another
+		// no-op reconciliation.
+		if equality.Semantic.DeepEqual(c.Status, cr.Status) {
+			return nil
+		}
+
+		log.V(1).Info("status changed, writing update")
 		c.Status = cr.Status
 
 		return r.client.Status().Update(ctx, c)
