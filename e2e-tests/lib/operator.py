@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -13,7 +14,7 @@ from .utils import retry
 logger = logging.getLogger(__name__)
 
 
-def _resource_kind(crd_doc: dict) -> str:
+def _resource_kind(crd_doc: dict[str, Any]) -> str:
     """Build the `plural.group` resource identifier from a CRD document."""
     return f"{crd_doc['spec']['names']['plural']}.{crd_doc['spec']['group']}"
 
@@ -25,8 +26,14 @@ def _remove_instance_finalizers(resource_kind: str) -> None:
         for item in items.get("items", []):
             meta = item["metadata"]
             kubectl_bin(
-                "patch", resource_kind, "-n", meta["namespace"], meta["name"],
-                "--type=merge", "-p", '{"metadata":{"finalizers":[]}}',
+                "patch",
+                resource_kind,
+                "-n",
+                meta["namespace"],
+                meta["name"],
+                "--type=merge",
+                "-p",
+                '{"metadata":{"finalizers":[]}}',
             )
     except subprocess.CalledProcessError:
         pass
@@ -96,7 +103,7 @@ def get_operator_pod() -> str:
 
         return names[0]
 
-    return retry(_fetch, max_attempts=30, delay=2)
+    return str(retry(_fetch, max_attempts=30, delay=2))
 
 
 def apply_rbac(src_dir: str, rbac: str = "rbac") -> None:

@@ -348,7 +348,7 @@ def create_infra(
         logger.info("Creating test environment")
         if env_bool("DELETE_CRD_ON_START"):
             delete_crd_rbac(Path(test_paths["src_dir"]))
-            check_crd_for_deletion(f"{test_paths['src_dir']}/deploy/crd.yaml")
+            check_crd_for_deletion(Path(test_paths["src_dir"]) / "deploy" / "crd.yaml")
 
         namespace = f"{test_name}-{uuid.uuid4().hex[:8]}"
         operator_ns = os.environ.get("OPERATOR_NS")
