@@ -125,6 +125,8 @@ class MongoManager:
         collection: str = "test",
         sort: str = "",
         test_file: str = "",
+        retries: int = 3,
+        retry_delay: int = 10,
     ) -> None:
         """Compare MongoDB command output"""
         full_cmd = f"{collection}.{command}"
@@ -133,18 +135,20 @@ class MongoManager:
 
         logger.info(f"Running: {full_cmd} on db {database}")
 
-        mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
-        result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
-
-        logger.info(f"MongoDB output: {result}")
-
         with open(test_file) as file:
             expected = json.load(file)
 
-        diff = DeepDiff(expected, result)
-        assert not diff, (
-            render_yaml_diff(expected, result, test_file, "mongodb output") or diff.pretty()
-        )
+        mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
+
+        def _compare() -> None:
+            result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
+            logger.info(f"MongoDB output: {result}")
+            diff = DeepDiff(expected, result)
+            assert not diff, (
+                render_yaml_diff(expected, result, test_file, "mongodb output") or diff.pretty()
+            )
+
+        retry(_compare, max_attempts=retries, delay=retry_delay)
 
     def get_mongo_primary(self, uri: str, cluster_name: str) -> str:
         """Get current MongoDB primary node"""

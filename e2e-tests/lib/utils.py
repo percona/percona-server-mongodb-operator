@@ -44,6 +44,9 @@ class K8sHighlighter(RegexHighlighter):
         r"(?P<namespace>(?<!\S)(?:\w+\/[\w-]+-\w+|[\w-]+-\d+\b))",
         r"(?P<bad_state>pending|failed|error|deleted)",
         r"(?P<state>ready|running)",
+        r"(?P<passed>\bPASSED\b)",
+        r"(?P<failed>\bFAILED\b)",
+        r"(?P<skipped>\bSKIPPED\b)",
     ]
 
 
@@ -57,6 +60,9 @@ k8s_theme = Theme(
         "k8s.namespace": "green",
         "k8s.bad_state": "red",
         "k8s.state": "blue",
+        "k8s.passed": "green",
+        "k8s.failed": "red",
+        "k8s.skipped": "yellow",
     }
 )
 

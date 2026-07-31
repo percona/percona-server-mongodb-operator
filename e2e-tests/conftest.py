@@ -38,12 +38,14 @@ from rich.logging import RichHandler
 
 pytest_plugins = ["lib.report_generator"]
 
+_console = Console(theme=k8s_theme, highlighter=K8sHighlighter())
+
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     format="%(message)s",
     handlers=[
         RichHandler(
-            console=Console(theme=k8s_theme),
+            console=_console,
             highlighter=K8sHighlighter(),
             keywords=[],
             show_time=True,
@@ -89,6 +91,39 @@ def pytest_collection_modifyitems(
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Print newline after pytest's verbose test name output."""
     print()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_report_teststatus(
+    report: pytest.TestReport, config: pytest.Config
+) -> tuple[str, str, str] | None:
+    """Suppress pytest's default PASSED/FAILED/SKIPPED word; we print our own banner."""
+    if report.when != "call":
+        return None
+    if report.passed:
+        return "passed", ".", ""
+    if report.failed:
+        return "failed", "F", ""
+    if report.skipped:
+        return "skipped", "s", ""
+    return None
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """Print a clear separator around call-phase results so they aren't buried in logs."""
+    if report.when != "call":
+        return
+    if report.passed:
+        status = "PASSED"
+    elif report.failed:
+        status = "FAILED"
+    elif report.skipped:
+        status = "SKIPPED"
+    else:
+        return
+    sep = "=" * 100
+    _console.print(f"\n{sep}\n[{status}] {report.nodeid}\n{sep}\n")
 
 
 def _get_current_namespace() -> str | None:
@@ -273,8 +308,8 @@ def create_namespace() -> Callable[[str], str]:
 def _kubectl_quietly(*args: str) -> None:
     """Run kubectl, logging instead of raising: cleanup must never fail a test."""
     try:
-        kubectl_bin(*args)
-    except (subprocess.CalledProcessError, OSError) as e:
+        kubectl_bin(*args, check=False)
+    except OSError as e:
         logger.debug(f"Command failed (continuing cleanup): {' '.join(args)}, error: {e}")
 
 

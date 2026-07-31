@@ -81,7 +81,8 @@ def kubectl_bin(
     result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
 
     if result.stderr:
-        logger.warning(f"kubectl error: {result.stderr}")
+        log = logger.warning if check else logger.debug
+        log("kubectl error: %s", result.stderr.strip())
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -157,6 +158,7 @@ def wait_for_running(
             for i in range(int(size or 0)):
                 wait_pod(f"{cluster_name}-{pod_type}-{i}")
 
+    time.sleep(10)
     if check_cluster_readyness:
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 

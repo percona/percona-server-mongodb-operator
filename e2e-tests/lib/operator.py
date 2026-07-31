@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -21,22 +20,26 @@ def _resource_kind(crd_doc: dict[str, Any]) -> str:
 
 def _remove_instance_finalizers(resource_kind: str) -> None:
     """Clear finalizers on all instances of a CR type across namespaces."""
+    raw = kubectl_bin("get", resource_kind, "--all-namespaces", "-o", "json", check=False)
+    if not raw.strip():
+        return
     try:
-        items = json.loads(kubectl_bin("get", resource_kind, "--all-namespaces", "-o", "json"))
-        for item in items.get("items", []):
-            meta = item["metadata"]
-            kubectl_bin(
-                "patch",
-                resource_kind,
-                "-n",
-                meta["namespace"],
-                meta["name"],
-                "--type=merge",
-                "-p",
-                '{"metadata":{"finalizers":[]}}',
-            )
-    except subprocess.CalledProcessError:
-        pass
+        items = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+    for item in items.get("items", []):
+        meta = item["metadata"]
+        kubectl_bin(
+            "patch",
+            resource_kind,
+            "-n",
+            meta["namespace"],
+            meta["name"],
+            "--type=merge",
+            "-p",
+            '{"metadata":{"finalizers":[]}}',
+            check=False,
+        )
 
 
 def deploy_operator(test_dir: str, src_dir: str) -> None:
