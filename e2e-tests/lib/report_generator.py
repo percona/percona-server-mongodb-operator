@@ -13,10 +13,14 @@ MIN_READY_NODES = 3
 
 ENV_VARS_TO_REPORT = [
     "KUBE_VERSION",
+    "PLATFORM",
     "EKS",
     "GKE",
+    "AKS",
     "OPENSHIFT",
+    "KIND",
     "MINIKUBE",
+    "RANCHER",
     "GIT_COMMIT",
     "GIT_BRANCH",
     "OPERATOR_VERSION",

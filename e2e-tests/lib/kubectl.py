@@ -1,13 +1,13 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 import urllib.request
 from pathlib import Path
 
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
-from .cli import oc_bin
 
 logger = logging.getLogger(__name__)
 
@@ -209,20 +209,48 @@ def clean_all_namespaces() -> None:
 
 def get_k8s_versions() -> tuple[str, str]:
     """Get Kubernetes git version and semantic version."""
-    info = json.loads(kubectl_bin("version", "-o", "json"))["serverVersion"]
-    return info["gitVersion"], f"{info['major']}.{info['minor'].rstrip('+')}"
+    out = json.loads(kubectl_bin("version", "-o", "json"))["serverVersion"]
+    kube_version = re.sub(r"[^0-9.]+", "", f"{out['major']}.{out['minor']}")
+    return out["gitVersion"], kube_version
 
 
-def is_openshift() -> str:
-    """Detect if running on OpenShift. Returns '1' or ''."""
-    try:
-        result = oc_bin("get", "projects", check=False, capture=True)
-        return "1" if result.returncode == 0 else ""
-    except FileNotFoundError:
-        return ""
+def detect_platform() -> str:
+    """Detect the Kubernetes platform, mirroring bash detect_k8s_env().
+
+    Returns one of: openshift, eks, gke, aks, kind, minikube, rancher, unknown.
+    """
+    if kubectl_bin(
+        "api-resources", "--api-group=project.openshift.io", "-o", "name", check=False
+    ).strip():
+        return "openshift"
+
+    labels = kubectl_bin("get", "nodes", "-o", "jsonpath={.items[0].metadata.labels}", check=False)
+    for needle, name in (
+        ("eksctl.io", "eks"),
+        ("cloud.google.com/gke", "gke"),
+        ("kubernetes.azure.com", "aks"),
+    ):
+        if needle in labels:
+            return name
+
+    provider_id = kubectl_bin(
+        "get", "nodes", "-o", "jsonpath={.items[0].spec.providerID}", check=False
+    ).lower()
+    for needle, name in (("kind://", "kind"), ("minikube", "minikube"), ("rke2", "rancher")):
+        if needle in provider_id:
+            return name
+
+    return "unknown"
 
 
-def is_minikube() -> str:
-    """Detect if running on Minikube. Returns '1' or ''."""
-    result = kubectl_bin("get", "nodes", check=False)
-    return "1" if any(line.startswith("minikube") for line in result.splitlines()) else ""
+def detect_arch() -> str:
+    """Detect target arch for scheduling: 'arm64' on arm64-only clusters, else '' (mirrors vars)."""
+    arches = kubectl_bin(
+        "get",
+        "nodes",
+        "-o",
+        r'jsonpath={range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}',
+        check=False,
+    )
+    unique = {a for a in arches.split() if a}
+    return "arm64" if unique == {"arm64"} else ""

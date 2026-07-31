@@ -13,9 +13,9 @@ from lib.arch import helm_arch_set_args
 from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
     clean_all_namespaces,
+    detect_arch,
+    detect_platform,
     get_k8s_versions,
-    is_minikube,
-    is_openshift,
     kubectl_bin,
     wait_pod,
 )
@@ -167,37 +167,23 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
             logger.warning(f"Failed to generate HTML report extras: {e}")
 
 
-def _detect_arch() -> None:
-    """Enable arch scheduling automatically on arm64-only clusters (mirrors vars)."""
-    if os.environ.get("ARCH"):
-        return
-    arches = kubectl_bin(
-        "get",
-        "nodes",
-        "-o",
-        r'jsonpath={range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}',
-        check=False,
-    )
-    unique = {a for a in arches.split() if a}
-    if unique == {"arm64"}:
-        os.environ["ARCH"] = "arm64"
-        logger.info("Detected arm64-only cluster: enabling ARCH=arm64 scheduling")
-
-
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
     git_branch = get_git_branch()
-    git_version, kube_version = get_k8s_versions()
-
-    _detect_arch()
+    platform = detect_platform()
 
     defaults = {
-        "KUBE_VERSION": kube_version,
-        "EKS": "1" if "eks" in git_version else "0",
-        "GKE": "1" if "gke" in git_version else "0",
-        "OPENSHIFT": is_openshift(),
-        "MINIKUBE": is_minikube(),
+        "KUBE_VERSION": get_k8s_versions()[1],
+        "PLATFORM": platform,
+        "ARCH": detect_arch(),
+        "EKS": "1" if platform == "eks" else "",
+        "GKE": "1" if platform == "gke" else "",
+        "AKS": "1" if platform == "aks" else "",
+        "OPENSHIFT": "1" if platform == "openshift" else "",
+        "KIND": "1" if platform == "kind" else "",
+        "MINIKUBE": "1" if platform == "minikube" else "",
+        "RANCHER": "1" if platform == "rancher" else "",
         "API": "psmdb.percona.com/v1",
         "REGISTRY_NAME": "docker.io",
         "GIT_COMMIT": get_git_commit(),
@@ -234,7 +220,9 @@ def setup_env_vars() -> None:
         os.environ.setdefault(key, value)
 
     registry = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
-    for var in (key for key in defaults if key.startswith("IMAGE")):
+    image_vars = [key for key in defaults if key.startswith("IMAGE")]
+    image_vars.append("IMAGE_OPERATOR")
+    for var in image_vars:
         images = os.environ.get(var, "").splitlines()
         if images:
             os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)

@@ -764,9 +764,12 @@ pipeline {
                         archiveArtifacts "${reportXml}, ${reportHtml}"
                         pushReportFile()
 
+                        def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
+                        currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml})\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${reportUrl})\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")
