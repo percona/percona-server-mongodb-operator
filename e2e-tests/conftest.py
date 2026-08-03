@@ -217,7 +217,8 @@ def setup_env_vars() -> None:
     }
 
     for key, value in defaults.items():
-        os.environ.setdefault(key, value)
+        if not os.environ.get(key):
+            os.environ[key] = value
 
     registry = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
     image_vars = [key for key in defaults if key.startswith("IMAGE")]
@@ -444,6 +445,9 @@ def _cert_manager_url() -> str:
 
 def _delete_cert_manager() -> None:
     """Best-effort removal of cert-manager; safe to call when it isn't installed."""
+    if env_bool("RANCHER"):
+        logger.info("Rancher cluster detected, skipping cert-manager destroy")
+        return
     logger.info("Deleting cert-manager")
     kubectl_bin("delete", "-f", _cert_manager_url(), "--ignore-not-found", check=False)
 
@@ -459,6 +463,9 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
     """Deploy Cert Manager and clean up after tests."""
 
     def _deploy(*extra_args: str) -> None:
+        if env_bool("RANCHER"):
+            logger.info("Rancher cluster detected, skipping cert-manager deployment")
+            return
         logger.info("Deploying cert-manager")
         try:
             kubectl_bin("create", "namespace", "cert-manager")

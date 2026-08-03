@@ -1652,7 +1652,7 @@ run_pumba() {
 }
 
 deploy_cert_manager() {
-	if [[ $PLATFORM == "rancher" ]]; then
+	if [[ -n "$RANCHER" ]]; then
 		log "Rancher cluster detected, skipping cert manager deployment"
 		return
 	fi
@@ -1747,7 +1747,7 @@ destroy() {
 }
 
 destroy_cert_manager() {
-	if [[ $PLATFORM == "rancher" ]]; then
+	if [[ -n "$RANCHER" ]]; then
 		log "Rancher cluster detected, skipping cert manager destroy"
 		return
 	fi
