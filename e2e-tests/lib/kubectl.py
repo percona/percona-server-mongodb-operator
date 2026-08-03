@@ -190,7 +190,21 @@ def clean_all_namespaces() -> None:
             "-o",
             "jsonpath={range .items[*]}{.metadata.name} {.status.phase}{'\\n'}{end}",
         )
-        excluded = ("kube-", "default", "psmdb-operator", "openshift", "gke-", "gmp-")
+        excluded = [
+            "kube-",
+            "default",
+            "psmdb-operator",
+            "openshift",
+            "gke-",
+            "gmp-",
+            "cattle-",
+            "fleet-",
+            "cluster-fleet-",
+            "local",
+        ]
+        # cert-manager is not destroyed on Rancher, so keep it around there.
+        if os.environ.get("RANCHER") == "1":
+            excluded.append("cert-manager")
 
         namespaces = [
             parts[0]
@@ -202,7 +216,7 @@ def clean_all_namespaces() -> None:
         ]
 
         if namespaces:
-            kubectl_bin("delete", "ns", *namespaces)
+            kubectl_bin("delete", "ns", "--wait=false", *namespaces)
     except subprocess.CalledProcessError:
         logger.error("Failed to clean namespaces")
 
