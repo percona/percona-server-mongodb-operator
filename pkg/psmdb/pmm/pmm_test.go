@@ -148,6 +148,30 @@ func TestContainer(t *testing.T) {
 	}
 }
 
+func TestPMMConfigFile(t *testing.T) {
+	newCR := func(crVersion string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion},
+		}
+	}
+
+	t.Run("v1.24.0 PMM2", func(t *testing.T) {
+		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0"), false))
+	})
+	t.Run("v1.24.0 PMM3", func(t *testing.T) {
+		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0"), true))
+	})
+	t.Run("newer than 1.24.0", func(t *testing.T) {
+		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.25.0"), true))
+	})
+	t.Run("older than 1.24.0 PMM2", func(t *testing.T) {
+		assert.Equal(t, "/usr/local/percona/pmm2/config/pmm-agent.yaml", pmmConfigFile(newCR("1.23.0"), false))
+	})
+	t.Run("older than 1.24.0 PMM3", func(t *testing.T) {
+		assert.Equal(t, "/usr/local/percona/pmm/config/pmm-agent.yaml", pmmConfigFile(newCR("1.23.0"), true))
+	})
+}
+
 func defaultPMMCR() *api.PerconaServerMongoDB {
 	boolTrue := true
 	return &api.PerconaServerMongoDB{
@@ -333,7 +357,7 @@ func buildExpectedPMMContainer() *corev1.Container {
 		portStart    = 30100
 		portEnd      = 30105
 		listenPort   = 7777
-		configFile   = "/usr/local/percona/pmm/config/pmm-agent.yaml"
+		configFile   = "/tmp/pmm-agent.yaml"
 		tempDir      = "/tmp/pmm"
 		prerunScript = `cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
 pmm-admin status --wait=10s;

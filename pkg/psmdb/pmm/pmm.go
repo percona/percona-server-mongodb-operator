@@ -19,6 +19,20 @@ const (
 	scramSHA256AuthMechanism = "SCRAM-SHA-256"
 )
 
+// pmmConfigFile returns the path for the stateless pmm-agent.yaml. From v1.24.0
+// it is placed directly in the writable "/tmp" emptyDir (pmm-agent does not
+// create the config's parent dir, so a subdirectory cannot be used) so PMM
+// works with readOnlyRootFilesystem.
+func pmmConfigFile(cr *api.PerconaServerMongoDB, isPMM3 bool) string {
+	if cr.CompareVersion("1.24.0") >= 0 {
+		return "/tmp/pmm-agent.yaml"
+	}
+	if isPMM3 {
+		return "/usr/local/percona/pmm/config/pmm-agent.yaml"
+	}
+	return "/usr/local/percona/pmm2/config/pmm-agent.yaml"
+}
+
 // containerForPMM2 returns a pmm2 container from the given spec.
 func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) corev1.Container {
 	_, oka := secret.Data[api.PMMAPIKey]
@@ -150,7 +164,7 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				},
 			},
 		}
-		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
+		pmm.Env = append(pmm.Env, pmmAgentEnvs(cr, spec, secret, customLogin, customAdminParams)...)
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
@@ -164,7 +178,7 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 	return pmm
 }
 
-func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
+func pmmAgentEnvs(cr *api.PerconaServerMongoDB, spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
 	pmmAgentEnvs := []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -200,7 +214,7 @@ func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, cus
 		},
 		{
 			Name:  "PMM_AGENT_CONFIG_FILE",
-			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
+			Value: pmmConfigFile(cr, false),
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
@@ -443,7 +457,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			},
 			{
 				Name:  "PMM_AGENT_CONFIG_FILE",
-				Value: "/usr/local/percona/pmm/config/pmm-agent.yaml",
+				Value: pmmConfigFile(cr, true),
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
