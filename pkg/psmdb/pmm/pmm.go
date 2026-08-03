@@ -19,6 +19,17 @@ const (
 	scramSHA256AuthMechanism = "SCRAM-SHA-256"
 )
 
+// pmmConfigFile returns the path for the stateless pmm-agent.yaml. For PMM3,
+// from v1.24.0 it is placed directly in the writable "/tmp" emptyDir (pmm-agent
+// does not create the config's parent dir, so a subdirectory cannot be used) so
+// PMM works with readOnlyRootFilesystem.
+func pmmConfigFile(cr *api.PerconaServerMongoDB) string {
+	if cr.CompareVersion("1.24.0") >= 0 {
+		return "/tmp/pmm-agent.yaml"
+	}
+	return "/usr/local/percona/pmm/config/pmm-agent.yaml"
+}
+
 func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	// handle disabled TLS
 
@@ -181,7 +192,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			},
 			{
 				Name:  "PMM_AGENT_CONFIG_FILE",
-				Value: "/usr/local/percona/pmm/config/pmm-agent.yaml",
+				Value: pmmConfigFile(cr),
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
