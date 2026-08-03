@@ -39,8 +39,24 @@ $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(D
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
-e2e-test:
-	IMAGE=$(IMAGE) ./e2e-tests/$(TEST)/run
+##@ E2E Tests
+
+# Run a single e2e test via pytest (native Python or bash wrapper).
+# Usage: make e2e-test TEST=init-deploy
+# Optional: REPORT_OPTS=... to override HTML/JUnit report flags
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
+
+.PHONY: e2e-test
+e2e-test: ## Run a single e2e test via pytest (TEST=<name>)
+ifndef TEST
+	$(error TEST is required. Usage: make e2e-test TEST=init-deploy)
+endif
+	mkdir -p e2e-tests/reports e2e-tests/logs
+	@if ls e2e-tests/$(TEST)/test_*.py 1>/dev/null 2>&1; then \
+		uv run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
+	else \
+		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
+	fi
 
 ##@ Build
 
@@ -70,6 +86,20 @@ undeploy: ## Undeploy operator
 
 test: envtest generate ## Run tests.
 	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+py-deps: uv ## Install e2e-tests Python dependencies
+	$(UV) sync --locked
+
+py-update-deps: uv ## Update e2e-tests Python dependencies
+	$(UV) lock --upgrade
+
+py-fmt: uv ## Format and organize imports in e2e-tests
+	$(UV) run ruff check --select I --fix e2e-tests/
+	$(UV) run ruff format e2e-tests/
+
+py-check: uv ## Run ruff and mypy checks on e2e-tests
+	$(UV) run ruff check e2e-tests/
+	$(UV) run mypy e2e-tests/
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -105,6 +135,12 @@ MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
+UV = $(shell pwd)/bin/uv
+uv: ## Download uv locally if necessary.
+	@[ -f $(UV) ] || { \
+	set -e ;\
+	curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=$(PROJECT_DIR)/bin sh ;\
+	}
 update-version:
 	echo $(NEXT_VER) > pkg/version/version.txt
 

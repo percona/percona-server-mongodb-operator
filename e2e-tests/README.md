@@ -112,7 +112,19 @@ For GKE Arm nodes, this adds `kubernetes.io/arch: arm64` node selectors and the 
 
 (see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
 
-Tests can also be run one-by-one using the appropriate scripts (their names should be self-explanatory):
+Tests can also be run one-by-one. Prefer the make target (handles both Python and bash tests):
+
+```
+make e2e-test TEST=init-deploy
+```
+
+HTML and JUnit reports are written to `e2e-tests/reports/` by default. Override or disable with `REPORT_OPTS`:
+
+```
+make e2e-test TEST=init-deploy REPORT_OPTS=
+```
+
+You can still invoke bash scripts directly (their names should be self-explanatory):
 
 ```
 ./e2e-tests/init-deploy/run
@@ -120,10 +132,6 @@ Tests can also be run one-by-one using the appropriate scripts (their names shou
 ./e2e-tests/limits/run
 ./e2e-tests/scaling/run
 ./e2e-tests/demand-backup/run
-./e2e-tests/scheduled-backup/run
-./e2e-tests/storage/run
-./e2e-tests/self-healing/run
-./e2e-tests/operator-self-healing/run
 ....
 ```
 
@@ -132,18 +140,105 @@ Test execution produces excessive output. It is recommended to redirect the outp
 ./e2e-tests/run >> /tmp/tests-run.out 2>&1
 ```
 
+## Python development setup
+
+The e2e tests are being migrated to pytest. This section covers setting up the Python environment.
+
+### Installing uv
+
+[uv](https://github.com/astral-sh/uv) is used for Python dependency management. Install it via make:
+
+```
+make uv
+```
+
+Or manually:
+
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Python make targets
+
+```
+make py-deps          # Install Python dependencies (locked versions)
+make py-update-deps   # Update Python dependencies
+make py-fmt           # Format code and organize imports with ruff
+make py-check         # Run ruff linter and mypy type checks
+make e2e-test TEST=<name>  # Run a single e2e test (Python or bash via pytest)
+```
+
+### Running tests with pytest
+
+First, install dependencies:
+
+```
+make py-deps
+```
+
+Run a single test (recommended — same path Jenkins uses):
+
+```
+make e2e-test TEST=init-deploy
+```
+
+Run all pytest-based tests:
+
+```
+uv run pytest e2e-tests/
+```
+
+Run a specific test file:
+
+```
+uv run pytest e2e-tests/init-deploy/test_init_deploy.py
+```
+
+Run a specific test:
+
+```
+uv run pytest e2e-tests/init-deploy/test_init_deploy.py::TestInitDeploy::test_cluster_creation
+```
+
+Run tests matching a pattern:
+
+```
+uv run pytest e2e-tests/ -k "init"
+```
+
 ## Using environment variables to customize the testing process
 
 ### Re-declaring default image names
 
-You can use environment variables to re-declare all default images used for testing. The
-full list of variables is the following one:
+You can use environment variables to override the default images used for testing:
 
-* `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:main` by default,
-* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod8.0` by default,
-* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `percona/pmm-client:2.44.1-1` by default,
-* `IMAGE_PMM3_CLIENT` - Percona Monitoring and Management 3 (PMM3) client, `perconalab/pmm-client:3-dev-latest` by default,
-* `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default,
+* `IMAGE` - Percona Server for MongoDB Operator, `perconalab/percona-server-mongodb-operator:${GIT_BRANCH}` by default
+* `IMAGE_MONGOD` - mongod, `perconalab/percona-server-mongodb-operator:main-mongod8.0` by default
+* `IMAGE_MONGOD_CHAIN` - newline-separated mongod images used by upgrade tests; versions 6.0, 7.0, and 8.0 by default
+* `IMAGE_SEARCH` - Percona Search, `perconalab/percona-server-mongodb-operator:main-mongot` by default
+* `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default
+* `IMAGE_PMM_CLIENT` - PMM client, `percona/pmm-client:2.44.1-1` by default
+* `IMAGE_PMM_SERVER` - PMM server, `perconalab/pmm-server:dev-latest` by default
+* `IMAGE_PMM3_CLIENT` - PMM 3 client, `perconalab/pmm-client:3-dev-latest` by default
+* `IMAGE_PMM3_SERVER` - PMM 3 server, `perconalab/pmm-server:3-dev-latest` by default
+* `IMAGE_LOGCOLLECTOR` - log collector, `perconalab/fluentbit:main-logcollector` by default
+* `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:0.9.0` by default
+
+`REGISTRY_NAME` changes the registry prefix for `percona/*` and `perconalab/*`
+images. It defaults to `docker.io`.
+
+### Other test configuration
+
+* `ARCH` - schedules test workloads on the requested architecture; automatically set to `arm64` when all nodes are Arm
+* `LOG_LEVEL` - Python test log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`; `INFO` by default
+* `NO_COLOR` - disables colored terminal output when set
+* `CLEAN_NAMESPACE=1` - removes non-system namespaces before creating a test namespace
+* `DELETE_CRD_ON_START` - deletes existing CRDs before a test, `1` by default
+* `SKIP_DELETE` - keeps test resources after completion, `1` by default for pytest tests
+* `SKIP_BACKUPS_TO_AWS_GCP_AZURE` - skips cloud backup tests, `1` by default when cloud credentials are unavailable
+* `UPDATE_COMPARE_FILES=1` - replaces expected resource files with the current Kubernetes output
+* `OPERATOR_NS` - deploys the operator in a separate namespace
+* `CERT_MANAGER_VER`, `MINIO_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
 
 ### Using automatic clean-up after testing
 
