@@ -4,7 +4,7 @@ metadata:
   name: my-cluster-sync
 spec:
   clusterName: my-target-cluster-name
-  image: percona/percona-clustersync-mongodb:0.9.0
+  image: perconalab/percona-clustersync-mongodb:latest
   # mode controls the PCSM lifecycle intent. Allowed values:
   #   running   - start/resume replication (default)
   #   paused    - pause an active replication
