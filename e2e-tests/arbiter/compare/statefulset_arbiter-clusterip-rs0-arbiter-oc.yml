@@ -175,11 +175,11 @@ spec:
         name: bin
       - emptyDir: {}
         name: mongosh
-     - configMap:
+      - configMap:
          defaultMode: 420
          name: arbiter-clusterip-rs0-mongod
          optional: true
-       name: config
+        name: config
       - name: arbiter-clusterip-mongodb-encryption-key
         secret:
           defaultMode: 288

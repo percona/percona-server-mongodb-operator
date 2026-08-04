@@ -43,8 +43,24 @@ $(DEPLOYDIR)/cw-bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(D
 
 manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle.yaml ## Put generated manifests to deploy directory
 
-e2e-test:
-	IMAGE=$(IMAGE) ./e2e-tests/$(TEST)/run
+##@ E2E Tests
+
+# Run a single e2e test via pytest (native Python or bash wrapper).
+# Usage: make e2e-test TEST=init-deploy
+# Optional: REPORT_OPTS=... to override HTML/JUnit report flags
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
+
+.PHONY: e2e-test
+e2e-test: ## Run a single e2e test via pytest (TEST=<name>)
+ifndef TEST
+	$(error TEST is required. Usage: make e2e-test TEST=init-deploy)
+endif
+	mkdir -p e2e-tests/reports e2e-tests/logs
+	@if ls e2e-tests/$(TEST)/test_*.py 1>/dev/null 2>&1; then \
+		uv run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
+	else \
+		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
+	fi
 
 ##@ Build
 
@@ -74,6 +90,20 @@ undeploy: ## Undeploy operator
 
 test: envtest generate ## Run tests.
 	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+py-deps: uv ## Install e2e-tests Python dependencies
+	$(UV) sync --locked
+
+py-update-deps: uv ## Update e2e-tests Python dependencies
+	$(UV) lock --upgrade
+
+py-fmt: uv ## Format and organize imports in e2e-tests
+	$(UV) run ruff check --select I --fix e2e-tests/
+	$(UV) run ruff format e2e-tests/
+
+py-check: uv ## Run ruff and mypy checks on e2e-tests
+	$(UV) run ruff check e2e-tests/
+	$(UV) run mypy e2e-tests/
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -109,6 +139,12 @@ MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
+UV = $(shell pwd)/bin/uv
+uv: ## Download uv locally if necessary.
+	@[ -f $(UV) ] || { \
+	set -e ;\
+	curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=$(PROJECT_DIR)/bin sh ;\
+	}
 update-version:
 	echo $(NEXT_VER) > pkg/version/version.txt
 
@@ -137,12 +173,13 @@ release: manifests
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" pkg/psmdb/mongos_test.go
+	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: $(IMAGE_CLUSTERSYNC)|g" deploy/clustersync.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
 MINOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
-after-release: update-version manifests
+after-release: update-version after-release-versions manifests update-upgrade-consistency-test
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod8.0#}" deploy/cr-minimal.yaml
@@ -162,6 +199,93 @@ after-release: update-version manifests
 		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
 	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
+	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
+
+.PHONY: after-release-versions
+after-release-versions:
+	$(SED) -i \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
+		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
+		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
+		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0#" \
+		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:dev-latest#" \
+		-e "s#^IMAGE_PMM3_CLIENT=.*#IMAGE_PMM3_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM3_SERVER=.*#IMAGE_PMM3_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_LOGCOLLECTOR=.*#IMAGE_LOGCOLLECTOR=perconalab/fluentbit:main-logcollector#" \
+		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \
+		e2e-tests/release_versions
+
+# Automates file versions but generation/new fields still need to be updated manually in the compare files.
+.PHONY: update-upgrade-consistency-test
+update-upgrade-consistency-test: SHELL := /bin/bash
+update-upgrade-consistency-test:
+	@test -n "$(NEXT_VER)" || \
+		(echo "Usage: make $@ NEXT_VER=1.24.0"; exit 1)
+	@set -eu; \
+	for test in \
+		e2e-tests/upgrade-consistency \
+		e2e-tests/upgrade-consistency-sharded-tls; do \
+		echo "Updating $$test..."; \
+		cd "$$test"; \
+		versions=($$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' run | awk '!seen[$$0]++')); \
+		v1="$${versions[0]}"; \
+		v2="$${versions[1]}"; \
+		v3="$${versions[2]}"; \
+		next="$(NEXT_VER)"; \
+		s1="$${v1//./}"; \
+		s2="$${v2//./}"; \
+		s3="$${v3//./}"; \
+		next_suffix="$${next//./}"; \
+		copy_compare_files() { \
+			source_suffix="$$1"; \
+			target_suffix="$$2"; \
+			source_version="$$3"; \
+			target_version="$$4"; \
+			for file in compare/*-"$$source_suffix"*.yml; do \
+				[[ -e "$$file" ]] || continue; \
+				new_file="$${file/-$$source_suffix/-$$target_suffix}"; \
+				cp "$$file" "$$new_file"; \
+				sed -i.bak \
+					-e "s/$$source_version/$$target_version/g" \
+					-e "s/-$$source_suffix/-$$target_suffix/g" \
+					"$$new_file"; \
+			done; \
+		}; \
+		if [[ "$${v3%.*}" == "$${next%.*}" ]]; then \
+			echo "  Patch release: $$v3 -> $$next"; \
+			echo "  Removing compare files for $$v3"; \
+			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
+			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
+			rm -f compare/*-"$$s3"*.yml; \
+			find . -type f \( -name run -o -path './conf/*.yml' \) \
+				-exec sed -i.bak \
+					-e "s/$$v3/$$next/g" \
+					-e "s/-$$s3/-$$next_suffix/g" {} +; \
+		else \
+			echo "  Minor release:"; \
+			echo "    $$v1 -> $$v2"; \
+			echo "    $$v2 -> $$v3"; \
+			echo "    $$v3 -> $$next"; \
+			echo "  Removing compare files for $$v1"; \
+			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
+			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
+			rm -f compare/*-"$$s1"*.yml; \
+			find . -type f \( -name run -o -path './conf/*.yml' \) \
+				-exec sed -i.bak \
+					-e "s/$$v3/__UPGRADE_V3__/g" \
+					-e "s/$$v2/$$v3/g" \
+					-e "s/$$v1/$$v2/g" \
+					-e "s/__UPGRADE_V3__/$$next/g" \
+					-e "s/-$$s3/-__UPGRADE_S3__/g" \
+					-e "s/-$$s2/-$$s3/g" \
+					-e "s/-$$s1/-$$s2/g" \
+					-e "s/-__UPGRADE_S3__/-$$next_suffix/g" {} +; \
+		fi; \
+		find . -name '*.bak' -delete; \
+		cd - >/dev/null; \
+	done
 
 version-service-client: swagger
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
