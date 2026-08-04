@@ -299,8 +299,12 @@ create_namespace() {
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
 		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
+		local ns_filter="^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME"
+		if [[ -n "$RANCHER" ]]; then
+			ns_filter="${ns_filter}|^cattle-|^fleet-|^cluster-fleet-|^local|^longhorn-|^metallb-|^cert-manager|^p-"
+		fi
 		kubectl_bin get ns \
-			| grep -E -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
+			| grep -E -v "${ns_filter}" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
