@@ -22,11 +22,8 @@ const (
 // pmmConfigFile returns the path for the stateless pmm-agent.yaml. For PMM3,
 // from v1.24.0 it is placed directly in the writable "/tmp" emptyDir (pmm-agent
 // does not create the config's parent dir, so a subdirectory cannot be used) so
-// PMM works with readOnlyRootFilesystem. PMM2 always uses its default path.
-func pmmConfigFile(cr *api.PerconaServerMongoDB, isPMM3 bool) string {
-	if !isPMM3 {
-		return "/usr/local/percona/pmm2/config/pmm-agent.yaml"
-	}
+// PMM works with readOnlyRootFilesystem.
+func pmmConfigFile(cr *api.PerconaServerMongoDB) string {
 	if cr.CompareVersion("1.24.0") >= 0 {
 		return "/tmp/pmm-agent.yaml"
 	}
@@ -164,7 +161,7 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				},
 			},
 		}
-		pmm.Env = append(pmm.Env, pmmAgentEnvs(cr, spec, secret, customLogin, customAdminParams)...)
+		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
@@ -178,7 +175,7 @@ func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 	return pmm
 }
 
-func pmmAgentEnvs(cr *api.PerconaServerMongoDB, spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
+func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
 	pmmAgentEnvs := []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -214,7 +211,7 @@ func pmmAgentEnvs(cr *api.PerconaServerMongoDB, spec api.PMMSpec, secret *corev1
 		},
 		{
 			Name:  "PMM_AGENT_CONFIG_FILE",
-			Value: pmmConfigFile(cr, false),
+			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
@@ -457,7 +454,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			},
 			{
 				Name:  "PMM_AGENT_CONFIG_FILE",
-				Value: pmmConfigFile(cr, true),
+				Value: pmmConfigFile(cr),
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
