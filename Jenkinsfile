@@ -146,10 +146,14 @@ void pushArtifactFile(String FILE_NAME) {
 void initTests() {
     echo "Populating tests into the tests array!"
 
-    def records = readCSV file: 'e2e-tests/run-pr.csv'
+    def output = sh(
+        script: 'export PATH="$HOME/.local/bin:$PATH"; uv run e2e-tests/select_tests.py list --suite pr --platform gke --operator-mode cluster-wide --format lines',
+        returnStdout: true
+    ).trim()
+    def records = output.split('\n').findAll { it }
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
+        tests.add(["name": records[i], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
     markPassedTests()
@@ -594,8 +598,8 @@ pipeline {
                 }
             }
             steps {
-                initTests()
                 prepareNode()
+                initTests()
                 script {
                     if (AUTHOR_NAME == 'null') {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()
