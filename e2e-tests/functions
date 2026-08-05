@@ -1710,6 +1710,9 @@ destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
 
+	# NOTE: the pytest bash wrapper (lib/bash_wrapper.py) always forces SKIP_DELETE=1
+	# for bash-wrapped runs, so this early return is always taken there and the actual
+	# teardown is owned by the bash_test_cleanup fixture in conftest.py instead.
 	if [[ ${SKIP_DELETE} == 1 ]]; then
 		echo "SKIP_DELETE=1, not destroying ${namespace}"
 		return
