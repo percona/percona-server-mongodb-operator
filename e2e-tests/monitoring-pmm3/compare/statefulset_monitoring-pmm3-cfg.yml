@@ -202,7 +202,7 @@ spec:
             - name: PMM_AGENT_PORTS_MAX
               value: "30105"
             - name: PMM_AGENT_CONFIG_FILE
-              value: /usr/local/percona/pmm/config/pmm-agent.yaml
+              value: /tmp/pmm-agent.yaml
             - name: PMM_AGENT_SERVER_INSECURE_TLS
               value: "1"
             - name: PMM_AGENT_LISTEN_ADDRESS
@@ -266,6 +266,8 @@ spec:
             - containerPort: 30105
               protocol: TCP
           resources: {}
+          securityContext:
+            readOnlyRootFilesystem: true
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -275,6 +277,8 @@ spec:
             - mountPath: /data/db
               name: mongod-data
               readOnly: true
+            - mountPath: /tmp
+              name: tmp
         - args:
             - fluent-bit
           command:
@@ -381,6 +385,8 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-monitoring-pmm3-users
+        - emptyDir: {}
+          name: tmp
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

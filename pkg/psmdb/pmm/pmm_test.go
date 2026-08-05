@@ -156,7 +156,7 @@ func TestPMMConfigFile(t *testing.T) {
 	}
 
 	t.Run("v1.24.0 PMM2", func(t *testing.T) {
-		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0"), false))
+		assert.Equal(t, "/usr/local/percona/pmm2/config/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0"), false))
 	})
 	t.Run("v1.24.0 PMM3", func(t *testing.T) {
 		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0"), true))
