@@ -315,6 +315,18 @@ func applyCustomProbes(cr *api.PerconaServerMongoDB, container *corev1.Container
 	}
 }
 
+// TmpVolumeRequired reports whether the PMM3 sidecar needs a writable /tmp
+// emptyDir because it runs with a read-only root filesystem. From v1.24.0 PMM3
+// keeps its stateless config (pmmConfigFile), temp dir (PMM_AGENT_PATHS_TEMPDIR)
+// and TLS pem all under /tmp, so a read-only root filesystem is only supported
+// from that version onwards.
+func TmpVolumeRequired(cr *api.PerconaServerMongoDB) bool {
+	sc := cr.Spec.PMM.ContainerSecurityContext
+	return cr.Spec.PMM.Enabled &&
+		cr.CompareVersion("1.24.0") >= 0 &&
+		sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
+}
+
 // SecretHasToken checks if the PMM3 token is configured as part of the given secret.
 func SecretHasToken(secret *corev1.Secret) bool {
 	if len(secret.Data) == 0 {
