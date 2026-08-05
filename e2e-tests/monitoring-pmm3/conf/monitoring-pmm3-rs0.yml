@@ -75,5 +75,7 @@ spec:
     mongodParams: "--enable-all-collectors --environment=dev-mongod"
     customClusterName:
     authenticationMechanism: SCRAM-SHA-256
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
   secrets:
     users: some-users

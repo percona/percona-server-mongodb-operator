@@ -19,18 +19,18 @@ const (
 	scramSHA256AuthMechanism = "SCRAM-SHA-256"
 )
 
-// pmmConfigFile returns the path for the stateless pmm-agent.yaml. From v1.24.0
-// it is placed directly in the writable "/tmp" emptyDir (pmm-agent does not
-// create the config's parent dir, so a subdirectory cannot be used) so PMM
-// works with readOnlyRootFilesystem.
+// pmmConfigFile returns the path for the stateless pmm-agent.yaml. For PMM3,
+// from v1.24.0 it is placed directly in the writable "/tmp" emptyDir (pmm-agent
+// does not create the config's parent dir, so a subdirectory cannot be used) so
+// PMM works with readOnlyRootFilesystem. PMM2 always uses its default path.
 func pmmConfigFile(cr *api.PerconaServerMongoDB, isPMM3 bool) string {
+	if !isPMM3 {
+		return "/usr/local/percona/pmm2/config/pmm-agent.yaml"
+	}
 	if cr.CompareVersion("1.24.0") >= 0 {
 		return "/tmp/pmm-agent.yaml"
 	}
-	if isPMM3 {
-		return "/usr/local/percona/pmm/config/pmm-agent.yaml"
-	}
-	return "/usr/local/percona/pmm2/config/pmm-agent.yaml"
+	return "/usr/local/percona/pmm/config/pmm-agent.yaml"
 }
 
 // containerForPMM2 returns a pmm2 container from the given spec.
@@ -650,6 +650,18 @@ func applyCustomProbes(cr *api.PerconaServerMongoDB, container *corev1.Container
 	if cr.Spec.PMM.ReadinessProbe != nil {
 		container.ReadinessProbe = cr.Spec.PMM.ReadinessProbe
 	}
+}
+
+// TmpVolumeRequired reports whether the PMM3 sidecar needs a writable /tmp
+// emptyDir because it runs with a read-only root filesystem. From v1.24.0 PMM3
+// keeps its stateless config (pmmConfigFile), temp dir (PMM_AGENT_PATHS_TEMPDIR)
+// and TLS pem all under /tmp, so a read-only root filesystem is only supported
+// from that version onwards.
+func TmpVolumeRequired(cr *api.PerconaServerMongoDB) bool {
+	sc := cr.Spec.PMM.ContainerSecurityContext
+	return cr.Spec.PMM.Enabled &&
+		cr.CompareVersion("1.24.0") >= 0 &&
+		sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
 }
 
 // SecretHasToken checks if the PMM3 token is configured as part of the given secret.
