@@ -165,6 +165,29 @@ func TestPMMConfigFile(t *testing.T) {
 	})
 }
 
+func TestTmpVolumeRequired(t *testing.T) {
+	newCR := func(crVersion string, pmmEnabled, readOnlyRootFilesystem bool) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion, PMM: api.PMMSpec{Enabled: pmmEnabled, ContainerSecurityContext: &corev1.SecurityContext{ReadOnlyRootFilesystem: &readOnlyRootFilesystem}}},
+		}
+	}
+	t.Run("PMM enabled, v1.24.0, and readOnlyRootFilesystem is true", func(t *testing.T) {
+		assert.Equal(t, true, TmpVolumeRequired(newCR("1.24.0", true, true)))
+	})
+	t.Run("PMM enabled, v1.24.0, and readOnlyRootFilesystem is false", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.24.0", true, false)))
+	})
+	t.Run("PMM disabled", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.24.0", false, true)))
+	})
+	t.Run("PMM enabled, newer than 1.24.0 and readOnlyRootFilesystem is true", func(t *testing.T) {
+		assert.Equal(t, true, TmpVolumeRequired(newCR("1.25.0", true, true)))
+	})
+	t.Run("PMM enabled, older than 1.24.0", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.23.0", true, true)))
+	})
+}
+
 func defaultPMMCR() *api.PerconaServerMongoDB {
 	boolTrue := true
 	return &api.PerconaServerMongoDB{
