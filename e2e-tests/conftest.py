@@ -327,8 +327,10 @@ def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
     logger.info("Cleaning up test environment")
     src_dir = test_paths["src_dir"]
     rbac = f"{src_dir}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml"
+
+    _kubectl_quietly("delete", "psmdb-backup", "--all", "--ignore-not-found", "--timeout=120s")
+
     deletes = [
-        ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
         [
             "delete",
             "-f",
@@ -343,18 +345,16 @@ def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
             pool.submit(_kubectl_quietly, *args)
         pool.submit(_cleanup_crd, src_dir)
 
-    # Namespaces go last so finalizer-bearing resources (e.g. psmdb-backup) are removed first.
     if namespaces:
         with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
             for ns in namespaces:
                 pool.submit(
                     _kubectl_quietly,
                     "delete",
-                    "--grace-period=0",
-                    "--force",
                     "namespace",
                     ns,
                     "--ignore-not-found",
+                    "--wait=false",
                 )
 
 
