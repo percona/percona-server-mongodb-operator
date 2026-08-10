@@ -1687,7 +1687,7 @@ delete_crd() {
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin wait --for=delete crd ${crd_name} || :
+		kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' --ignore-not-found || :
 	done
 
 	local rbac_yaml='rbac.yaml'
@@ -1695,15 +1695,16 @@ delete_crd() {
 		rbac_yaml='cw-rbac.yaml'
 	fi
 
-	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found --wait=false || true
 }
 
 delete_backups() {
-	desc 'Delete psmdb-backup'
-	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
-		kubectl_bin get psmdb-backup
-		kubectl_bin delete psmdb-backup --all
-	fi
+	desc 'Delete psmdb-backup (non-blocking)'
+	local name
+	for name in $(kubectl_bin get psmdb-backup -o name --ignore-not-found 2>/dev/null); do
+		kubectl_bin patch "${name}" --type=merge -p '{"metadata":{"finalizers":[]}}' || :
+	done
+	kubectl_bin delete psmdb-backup --all --ignore-not-found --wait=false || :
 }
 
 destroy() {
@@ -2421,7 +2422,8 @@ setup_azure_credentials() {
 create_infra() {
 	local ns="$1"
 
-	echo "$ns" >/tmp/pytest_current_namespace
+	# PYTEST_NAMESPACE_FILE isolates parallel Jenkins/local jobs sharing /tmp.
+	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
 
 	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
 		delete_crd
