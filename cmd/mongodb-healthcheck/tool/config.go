@@ -27,10 +27,7 @@ import (
 var (
 	defaultMongoDBHost = "localhost"
 	defaultMongoDBPort = "27017"
-	// system users used by the healthcheck live in the admin database. Without
-	// an explicit auth source the driver negotiates SASL mechanisms against an
-	// empty database and mongod logs a ProtocolError on every probe.
-	defaultAuthSource = "admin"
+	defaultAuthSource  = "admin"
 )
 
 func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*db.Config, error) {
