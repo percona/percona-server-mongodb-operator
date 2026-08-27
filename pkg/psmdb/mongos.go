@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +18,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
@@ -61,10 +63,36 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
 	}
 
+	if cr.IsMongosLogCollectorEnabled() {
+		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{MongosLogPVC(cr)}
+	}
+
 	return spec
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
+// MongosLogPVC returns the volume claim template backing mongos log storage.
+func MongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
+	storage := cr.Spec.Sharding.Mongos.LogStorage()
+
+	pvc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        config.MongosLogVolClaimName,
+			Namespace:   cr.Namespace,
+			Labels:      naming.MongosLabels(cr),
+			Annotations: storage.Annotations,
+		},
+	}
+
+	maps.Copy(pvc.Labels, storage.Labels)
+
+	if storage.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *storage.PersistentVolumeClaimSpec
+	}
+
+	return pvc
+}
+
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, configs StatefulConfigParams, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -72,7 +100,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	mountKeyFile := cr.KeyFileAuthEnabled() || keyfileExists
-	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances, mountKeyFile)
+	c, err := mongosContainer(cr, configs.MongoDConf.Type.IsUsable(), cfgInstances, mountKeyFile)
 	if err != nil {
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -87,13 +115,24 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
+	if cr.IsMongosLogCollectorEnabled() {
+		logCollectorCs, err := logcollector.Containers(cr, cr.Spec.Sharding.Mongos.GetPort(), config.MongosLogVolume())
+		if err != nil {
+			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
+		}
+		containers = append(containers, logCollectorCs...)
+	}
+
 	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations[naming.AnnotationConfigHash] = customConf.HashHex
+	if configs.MongoDConf.Type.IsUsable() {
+		annotations[naming.AnnotationConfigHash] = configs.MongoDConf.HashHex
+	}
+	if hash := configs.HashHex(cr); hash != "" && cr.CompareVersion("1.24.0") >= 0 {
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	return corev1.PodTemplateSpec{
@@ -115,7 +154,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 			Containers:                    containers,
 			InitContainers:                initContainers,
-			Volumes:                       volumes(cr, customConf.Type, mountKeyFile),
+			Volumes:                       volumes(cr, configs, mountKeyFile),
 			SchedulerName:                 cr.Spec.SchedulerName,
 			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
@@ -190,6 +229,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		})
 	}
 
+	if cr.IsMongosLogCollectorEnabled() {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.MongosLogVolClaimName,
+			MountPath: config.MongodContainerDataLogsDir,
+		})
+	}
+
 	container := corev1.Container{
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
@@ -241,6 +287,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
 		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
+	}
+
+	if cr.IsMongosLogCollectorEnabled() {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "LOGCOLLECTOR_ENABLED",
+			Value: "true",
+		})
 	}
 
 	return container, nil
@@ -308,7 +361,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType, mountKeyFile bool) []corev1.Volume {
+func volumes(cr *api.PerconaServerMongoDB, configs StatefulConfigParams, mountKeyFile bool) []corev1.Volume {
 	fvar, tvar := false, true
 
 	sslVolumeOptional := &cr.Spec.Unsafe.TLS
@@ -378,10 +431,10 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 		}
 	}
 
-	if configSource.IsUsable() {
+	if configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
+			VolumeSource: configs.MongoDConf.Type.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 
@@ -429,6 +482,18 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 				},
 			},
 		})
+	}
+
+	if cr.IsMongosLogCollectorEnabled() {
+		if configs.LogCollectionConf.Type.IsUsable() {
+			volumes = append(volumes, corev1.Volume{
+				Name:         logcollector.VolumeName,
+				VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logcollector.ConfigMapName(cr.Name)),
+			})
+		}
+		if vol := logRotateConfigVolume(configs, cr); vol != nil {
+			volumes = append(volumes, *vol)
+		}
 	}
 
 	return volumes

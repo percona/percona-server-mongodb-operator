@@ -2119,15 +2119,11 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
 
-func (cr *PerconaServerMongoDB) MongosLogCollectorEnabled() bool {
-	return cr.CompareVersion("1.24.0") >= 0 &&
-		cr.IsLogCollectorEnabled() &&
+func (cr *PerconaServerMongoDB) IsMongosLogCollectorEnabled() bool {
+	return cr.IsLogCollectorEnabled() &&
 		cr.Spec.Sharding.Enabled &&
-		cr.Spec.Sharding.Mongos != nil
-}
-
-func (cr *PerconaServerMongoDB) MongosLogStorageEnabled() bool {
-	return cr.MongosLogCollectorEnabled() && cr.Spec.Sharding.Mongos.LogStorage() != nil
+		cr.Spec.Sharding.Mongos != nil &&
+		cr.Spec.Sharding.Mongos.LogStorage() != nil
 }
 
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {

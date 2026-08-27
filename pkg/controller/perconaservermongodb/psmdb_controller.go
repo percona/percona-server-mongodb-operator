@@ -1506,11 +1506,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
-	if err != nil {
-		return errors.Wrap(err, "check if mongos custom configuration exists")
-	}
-
 	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
 	if err != nil {
 		return errors.Wrap(err, "get configsvr pods")
@@ -1540,7 +1535,32 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(keyfileSecretErr, "check keyfile secret for mongos")
 	}
 
-	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, customConfig, cfgInstances, keyfileSecretErr == nil)
+	configs := psmdb.StatefulConfigParams{}
+	configs.MongoDConf, err = r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
+	if err != nil {
+		return errors.Wrap(err, "check if mongos custom configuration exists")
+	}
+
+	if cr.IsMongosLogCollectorEnabled() {
+		configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
+		if err != nil {
+			return errors.Wrap(err, "check if log collection custom configuration exists")
+		}
+
+		configs.LogRotateConf, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
+		if err != nil {
+			return errors.Wrap(err, "check if log rotate configuration exists")
+		}
+
+		if cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
+			configs.LogRotateExtraConf, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+			if err != nil {
+				return errors.Wrap(err, "check if log rotate extra configuration exists")
+			}
+		}
+	}
+
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, configs, cfgInstances, keyfileSecretErr == nil)
 	if err != nil {
 		return errors.Wrapf(err, "create template spec for mongos")
 	}

@@ -113,7 +113,7 @@ func TestContainers(t *testing.T) {
 				},
 			}
 
-			containers, err := Containers(cr, 27017)
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
 
 			if tt.expectedContainers != nil {
 				var gotNames []string
@@ -227,7 +227,7 @@ func TestContainersProbes(t *testing.T) {
 			cr := newCR()
 			tt.setup(cr)
 
-			containers, err := Containers(cr, 27017)
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
 			assert.NoError(t, err)
 
 			logs := getContainer(t, containers, "logs")
