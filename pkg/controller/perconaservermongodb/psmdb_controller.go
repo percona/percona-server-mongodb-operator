@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	v "github.com/hashicorp/go-version"
+	psmdbcfg "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1504,6 +1506,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	err = r.client.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, sts)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
+	}
+	if err == nil && cr.Spec.Sharding.Mongos.LogStorage() != nil {
+		logVctConfigured := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+			return vct.Name == psmdbcfg.MongosLogVolClaimName
+		})
+		if !logVctConfigured {
+			log.Info("Recreating mongos statefulset to change log storage")
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			}
+		}
 	}
 
 	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
