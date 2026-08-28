@@ -371,6 +371,7 @@ void runTest(Integer TEST_ID) {
                 export SKIP_DELETE=0
                 export COLUMNS=200
                 export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
                 export PATH="\$HOME/.local/bin:\$PATH"
