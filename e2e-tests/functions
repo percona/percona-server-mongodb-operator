@@ -299,8 +299,12 @@ create_namespace() {
 	if [[ ${CLEAN_NAMESPACE} == 1 ]] && [[ -z ${skip_clean_namespace} ]]; then
 		destroy_chaos_mesh
 		desc 'cleaned up all old namespaces'
+		local ns_filter="^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME"
+		if [[ -n "$RANCHER" ]]; then
+			ns_filter="${ns_filter}|^cattle-|^fleet-|^cluster-fleet-|^local|^longhorn-|^metallb-|^cert-manager|^p-"
+		fi
 		kubectl_bin get ns \
-			| grep -E -v "^kube-|^default|Terminating|psmdb-operator|openshift|^gke-|^gmp-|^NAME" \
+			| grep -E -v "${ns_filter}" \
 			| awk '{print$1}' \
 			| xargs kubectl delete ns &
 	fi
@@ -1652,7 +1656,7 @@ run_pumba() {
 }
 
 deploy_cert_manager() {
-	if [[ $PLATFORM == "rancher" ]]; then
+	if [[ -n "$RANCHER" ]]; then
 		log "Rancher cluster detected, skipping cert manager deployment"
 		return
 	fi
@@ -1683,7 +1687,7 @@ delete_crd() {
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin wait --for=delete crd ${crd_name} || :
+		kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' --ignore-not-found || :
 	done
 
 	local rbac_yaml='rbac.yaml'
@@ -1691,21 +1695,25 @@ delete_crd() {
 		rbac_yaml='cw-rbac.yaml'
 	fi
 
-	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found || true
+	kubectl_bin delete -f "${src_dir}/deploy/$rbac_yaml" --ignore-not-found --wait=false || true
 }
 
 delete_backups() {
-	desc 'Delete psmdb-backup'
-	if [ $(kubectl_bin get psmdb-backup --no-headers | wc -l) != 0 ]; then
-		kubectl_bin get psmdb-backup
-		kubectl_bin delete psmdb-backup --all
-	fi
+	desc 'Delete psmdb-backup (non-blocking)'
+	local name
+	for name in $(kubectl_bin get psmdb-backup -o name --ignore-not-found 2>/dev/null); do
+		kubectl_bin patch "${name}" --type=merge -p '{"metadata":{"finalizers":[]}}' || :
+	done
+	kubectl_bin delete psmdb-backup --all --ignore-not-found --wait=false || :
 }
 
 destroy() {
 	local namespace="$1"
 	local ignore_logs="${2:-true}"
 
+	# NOTE: the pytest bash wrapper (lib/bash_wrapper.py) always forces SKIP_DELETE=1
+	# for bash-wrapped runs, so this early return is always taken there and the actual
+	# teardown is owned by the bash_test_cleanup fixture in conftest.py instead.
 	if [[ ${SKIP_DELETE} == 1 ]]; then
 		echo "SKIP_DELETE=1, not destroying ${namespace}"
 		return
@@ -1747,7 +1755,7 @@ destroy() {
 }
 
 destroy_cert_manager() {
-	if [[ $PLATFORM == "rancher" ]]; then
+	if [[ -n "$RANCHER" ]]; then
 		log "Rancher cluster detected, skipping cert manager destroy"
 		return
 	fi
@@ -2414,7 +2422,8 @@ setup_azure_credentials() {
 create_infra() {
 	local ns="$1"
 
-	echo "$ns" >/tmp/pytest_current_namespace
+	# PYTEST_NAMESPACE_FILE isolates parallel Jenkins/local jobs sharing /tmp.
+	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
 
 	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
 		delete_crd

@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import time
 import uuid
 from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
@@ -61,9 +62,9 @@ logger = logging.getLogger(__name__)
 
 _current_namespace: str | None = None
 
-# Path shared with the bash harness (see e2e-tests/functions), which writes the
-# active namespace here so failure reports can be generated for bash-wrapped tests.
-_NAMESPACE_FILE = "/tmp/pytest_current_namespace"
+# Shared with the bash harness (e2e-tests/functions). Override via
+# PYTEST_NAMESPACE_FILE so parallel Jenkins clusters don't race on one path.
+_NAMESPACE_FILE = os.environ.get("PYTEST_NAMESPACE_FILE", "/tmp/pytest_current_namespace")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -87,10 +88,35 @@ def pytest_collection_modifyitems(
             )
 
 
+_NODES_READY_TIMEOUT = 300
+_NODES_READY_INTERVAL = 10
+
+
+def _wait_for_nodes_ready() -> None:
+    """Wait until K8s nodes are ready, failing the test if they aren't in time."""
+    from lib import report_generator
+
+    deadline = time.monotonic() + _NODES_READY_TIMEOUT
+    while True:
+        status = report_generator.check_nodes_ready()
+        if status["ok"]:
+            return
+        if time.monotonic() >= deadline:
+            pytest.fail(
+                f"K8s nodes not ready: {status['ready']}/{status['total']} "
+                f"(need >= {report_generator.MIN_READY_NODES}) "
+                f"after {_NODES_READY_TIMEOUT}s",
+                pytrace=False,
+            )
+        logger.warning(f"Waiting for nodes ready: {status['ready']}/{status['total']}")
+        time.sleep(_NODES_READY_INTERVAL)
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: pytest.Item) -> None:
-    """Print newline after pytest's verbose test name output."""
+    """Print newline after pytest's verbose test name output and gate on node readiness."""
     print()
+    _wait_for_nodes_ready()
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -217,9 +243,10 @@ def setup_env_vars() -> None:
     }
 
     for key, value in defaults.items():
-        os.environ.setdefault(key, value)
+        if not os.environ.get(key):
+            os.environ[key] = value
 
-    registry = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
+    registry = os.environ.get("REGISTRY_NAME", "").rstrip("/") + "/"
     image_vars = [key for key in defaults if key.startswith("IMAGE")]
     image_vars.append("IMAGE_OPERATOR")
     for var in image_vars:
@@ -302,7 +329,7 @@ def _kubectl_quietly(*args: str) -> None:
 
 
 def _cleanup_crd(src_dir: str) -> None:
-    """Delete the operator CRDs, clearing finalizers so the deletion can finish."""
+    """Best-effort CRD delete: never wait on controllers."""
     crd_file = Path(src_dir) / "deploy" / "crd.yaml"
     _kubectl_quietly("delete", "-f", str(crd_file), "--ignore-not-found", "--wait=false")
 
@@ -319,23 +346,55 @@ def _cleanup_crd(src_dir: str) -> None:
         _kubectl_quietly(
             "patch", "crd", name, "--type=merge", "-p", '{"metadata":{"finalizers":[]}}'
         )
-        _kubectl_quietly("wait", "--for=delete", "crd", name, "--timeout=60s")
+
+
+def _clear_namespace_finalizers(ns: str) -> None:
+    """Strip finalizers on operator resources so the namespace does not hang in
+    Terminating when the operator is already gone (or gke-mcs stops clearing them)."""
+    for kind in ("psmdb", "psmdb-backup", "psmdb-restore", "serviceexport", "serviceimport"):
+        names = kubectl_bin("get", kind, "-n", ns, "-o", "name", "--ignore-not-found", check=False)
+        for name in (names or "").split():
+            _kubectl_quietly(
+                "patch",
+                name,
+                "-n",
+                ns,
+                "--type=merge",
+                "-p",
+                '{"metadata":{"finalizers":[]}}',
+            )
+
+
+def _delete_namespace_crs(ns: str) -> None:
+    """Issue non-blocking deletes for operator CRs after finalizers are cleared."""
+    for kind in ("psmdb-backup", "psmdb-restore", "psmdb"):
+        _kubectl_quietly("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=false")
 
 
 def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
-    """Best-effort teardown of everything created by the create_infra fixture."""
+    """Best-effort teardown: strip finalizers, fire-and-forget deletes, never hang."""
     logger.info("Cleaning up test environment")
     src_dir = test_paths["src_dir"]
     rbac = f"{src_dir}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml"
+
+    # Finalizers first, while CRD APIs still exist. Do not wait on operator/storage.
+    if namespaces:
+        with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
+            for ns in namespaces:
+                pool.submit(_clear_namespace_finalizers, ns)
+        with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
+            for ns in namespaces:
+                pool.submit(_delete_namespace_crs, ns)
+
     deletes = [
-        ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
         [
             "delete",
             "-f",
             f"{test_paths['test_dir']}/../conf/container-rc.yaml",
             "--ignore-not-found",
+            "--wait=false",
         ],
-        ["delete", "-f", rbac, "--ignore-not-found"],
+        ["delete", "-f", rbac, "--ignore-not-found", "--wait=false"],
     ]
 
     with ThreadPoolExecutor(max_workers=len(deletes) + 1) as pool:
@@ -343,18 +402,16 @@ def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
             pool.submit(_kubectl_quietly, *args)
         pool.submit(_cleanup_crd, src_dir)
 
-    # Namespaces go last so finalizer-bearing resources (e.g. psmdb-backup) are removed first.
     if namespaces:
         with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
             for ns in namespaces:
                 pool.submit(
                     _kubectl_quietly,
                     "delete",
-                    "--grace-period=0",
-                    "--force",
                     "namespace",
                     ns,
                     "--ignore-not-found",
+                    "--wait=false",
                 )
 
 
@@ -388,11 +445,13 @@ def create_infra(
         # Track created namespace for cleanup and failure collection
         created_namespaces.append(namespace)
         _current_namespace = namespace
+        Path(_NAMESPACE_FILE).write_text(namespace)
         return namespace
 
     yield _create_infra
 
     _current_namespace = None
+    Path(_NAMESPACE_FILE).unlink(missing_ok=True)
 
     if env_bool("SKIP_DELETE"):
         logger.info("SKIP_DELETE is set. Skipping test environment cleanup")
@@ -417,7 +476,7 @@ def deploy_chaos_mesh() -> Generator[Callable[[str], None]]:
             "--namespace",
             namespace,
             "--version",
-            os.environ["CHAOS_MESH_VER"],
+            os.environ.get("CHAOS_MESH_VER", ""),
             "--set",
             "dashboard.create=false",
             "--set",
@@ -444,6 +503,9 @@ def _cert_manager_url() -> str:
 
 def _delete_cert_manager() -> None:
     """Best-effort removal of cert-manager; safe to call when it isn't installed."""
+    if env_bool("RANCHER"):
+        logger.info("Rancher cluster detected, skipping cert-manager destroy")
+        return
     logger.info("Deleting cert-manager")
     kubectl_bin("delete", "-f", _cert_manager_url(), "--ignore-not-found", check=False)
 
@@ -459,6 +521,9 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
     """Deploy Cert Manager and clean up after tests."""
 
     def _deploy(*extra_args: str) -> None:
+        if env_bool("RANCHER"):
+            logger.info("Rancher cluster detected, skipping cert-manager deployment")
+            return
         logger.info("Deploying cert-manager")
         try:
             kubectl_bin("create", "namespace", "cert-manager")
@@ -528,7 +593,7 @@ def deploy_minio() -> Generator[None]:
     helm_bin("repo", "add", "minio", "https://charts.min.io/")
 
     endpoint = f"http://{service_name}:9000"
-    minio_ver = os.environ.get("MINIO_VER") or ""
+    minio_ver = os.environ.get("MINIO_VER", "")
     settings = {
         "replicas": "1",
         "mode": "standalone",
@@ -609,3 +674,20 @@ def psmdb_client(test_paths: Paths) -> MongoManager:
     pod_name = result.strip()
     wait_pod(pod_name)
     return MongoManager(pod_name)
+
+
+@pytest.fixture
+def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
+    """Tear down a bash-wrapped test's namespace after diagnostics are collected."""
+    yield
+
+    if env_bool("SKIP_DELETE"):
+        logger.info("SKIP_DELETE is set. Skipping bash test cleanup")
+        return
+
+    ns = _get_current_namespace()
+    namespaces = [ns] if ns else []
+    operator_ns = os.environ.get("OPERATOR_NS")
+    if operator_ns:
+        namespaces.append(operator_ns)
+    _cleanup_infra(test_paths, namespaces)
