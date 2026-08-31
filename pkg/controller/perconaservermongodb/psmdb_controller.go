@@ -1507,15 +1507,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
-	if err == nil && cr.Spec.Sharding.Mongos.LogStorage() != nil {
-		logVctConfigured := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+	if err == nil {
+		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbcfg.MongosLogVolClaimName
 		})
-		if !logVctConfigured {
+		wantLogVCT := cr.IsMongosLogCollectorEnabled()
+		if hasLogVCT != wantLogVCT {
 			log.Info("Recreating mongos statefulset to change log storage")
 			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
 				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 			}
+			return nil
 		}
 	}
 

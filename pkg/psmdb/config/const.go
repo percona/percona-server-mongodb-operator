@@ -203,6 +203,6 @@ func MongodLogVolume() LogVolume {
 func MongosLogVolume() LogVolume {
 	return LogVolume{
 		Name:      MongosLogVolClaimName,
-		MountPath: MongodContainerDataDir,
+		MountPath: MongodContainerDataLogsDir,
 	}
 }
