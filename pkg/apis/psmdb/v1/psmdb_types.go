@@ -2119,13 +2119,6 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
 
-func (cr *PerconaServerMongoDB) IsMongosLogCollectorEnabled() bool {
-	return cr.IsLogCollectorEnabled() &&
-		cr.Spec.Sharding.Enabled &&
-		cr.Spec.Sharding.Mongos != nil &&
-		cr.Spec.Sharding.Mongos.LogStorage() != nil
-}
-
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
 	replsets := make([]*ReplsetSpec, len(cr.Spec.Replsets))
 	copy(replsets, cr.Spec.Replsets)

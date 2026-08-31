@@ -1510,7 +1510,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbconfig.MongosLogVolClaimName
 		})
-		wantLogVCT := cr.IsMongosLogCollectorEnabled()
+		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
 		if hasLogVCT != wantLogVCT {
 			log.Info("Recreating mongos statefulset to change log storage")
 			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
@@ -1555,21 +1555,23 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	if cr.IsMongosLogCollectorEnabled() {
-		configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
-		if err != nil {
-			return errors.Wrap(err, "check if log collection custom configuration exists")
-		}
-
-		configs.LogRotateConf, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
-		if err != nil {
-			return errors.Wrap(err, "check if log rotate configuration exists")
-		}
-
-		if cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
-			configs.LogRotateExtraConf, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+	if cr.CompareVersion("1.24.0") >= 0 {
+		if cr.IsLogCollectorEnabled() {
+			configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
 			if err != nil {
-				return errors.Wrap(err, "check if log rotate extra configuration exists")
+				return errors.Wrap(err, "check if log collection custom configuration exists")
+			}
+
+			configs.LogRotateConf, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
+			if err != nil {
+				return errors.Wrap(err, "check if log rotate configuration exists")
+			}
+
+			if cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
+				configs.LogRotateExtraConf, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+				if err != nil {
+					return errors.Wrap(err, "check if log rotate extra configuration exists")
+				}
 			}
 		}
 	}

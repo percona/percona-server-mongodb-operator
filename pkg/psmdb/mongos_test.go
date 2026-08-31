@@ -5,13 +5,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -344,4 +348,75 @@ func TestMongosServiceAnnotations(t *testing.T) {
 			assert.Equal(t, tt.expectedAnnotations, svc.Annotations)
 		})
 	}
+}
+
+func TestMongosLogCollector(t *testing.T) {
+	cr, err := readDefaultCR("test-cr", "test-ns")
+	require.NoError(t, err)
+
+	cr.Spec.LogCollector = &api.LogCollectorSpec{Enabled: true, Image: "log-test-image"}
+	cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{
+		PersistentVolumeClaim: &api.PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+	templateSpec, err := MongosTemplateSpec(cr, cr.Spec.InitImage, logr.Discard(),
+		StatefulConfigParams{}, []string{"cfg-0.test-cr-cfg.test-ns.svc.cluster.local:27017"}, true)
+	require.NoError(t, err)
+
+	spec := MongosStatefulsetSpec(cr, templateSpec)
+
+	container := func(name string) *corev1.Container {
+		for i, c := range spec.Template.Spec.Containers {
+			if c.Name == name {
+				return &spec.Template.Spec.Containers[i]
+			}
+		}
+		return nil
+	}
+
+	// the collector sidecars run next to mongos
+	for _, name := range []string{"logs", "logrotate"} {
+		assert.NotNil(t, container(name), "container %s must be present", name)
+	}
+
+	// logs live on one PVC per pod, so the volume comes from the claim template
+	// and must not be declared in the pod spec as well
+	require.Len(t, spec.VolumeClaimTemplates, 1)
+	assert.Equal(t, config.MongosLogVolClaimName, spec.VolumeClaimTemplates[0].Name)
+	assert.Equal(t, resource.MustParse("1Gi"),
+		spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage])
+	for _, v := range spec.Template.Spec.Volumes {
+		assert.NotEqual(t, config.MongosLogVolClaimName, v.Name,
+			"the log volume must come from the claim template, not the pod spec")
+	}
+
+	// mongos and both sidecars have to agree on where the logs are
+	for _, name := range []string{"mongos", "logs", "logrotate"} {
+		c := container(name)
+		require.NotNil(t, c)
+
+		var mountPath string
+		for _, m := range c.VolumeMounts {
+			if m.Name == config.MongosLogVolClaimName {
+				mountPath = m.MountPath
+			}
+		}
+		assert.Equal(t, config.MongodContainerDataLogsDir, mountPath,
+			"container %s must mount %s at the log dir", name, config.MongosLogVolClaimName)
+	}
+
+	// without this mongos logs to stdout only and there is nothing to collect
+	assert.Contains(t, container("mongos").Env, corev1.EnvVar{
+		Name:  "LOGCOLLECTOR_ENABLED",
+		Value: "true",
+	})
 }
