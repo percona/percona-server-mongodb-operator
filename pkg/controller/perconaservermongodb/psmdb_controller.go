@@ -17,7 +17,6 @@ import (
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	v "github.com/hashicorp/go-version"
-	psmdbcfg "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1509,7 +1508,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	if err == nil {
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == psmdbcfg.MongosLogVolClaimName
+			return vct.Name == psmdbconfig.MongosLogVolClaimName
 		})
 		wantLogVCT := cr.IsMongosLogCollectorEnabled()
 		if hasLogVCT != wantLogVCT {
