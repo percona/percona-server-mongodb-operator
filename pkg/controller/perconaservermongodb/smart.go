@@ -453,7 +453,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	waitLimit := int(cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds)
 
 	sort.Slice(list.Items, func(i, j int) bool {
-		return list.Items[i].Name > list.Items[j].Name
+		return list.Items[i].Name < list.Items[j].Name
 	})
 
 	for _, pod := range list.Items {
