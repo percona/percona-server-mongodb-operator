@@ -63,7 +63,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
 	}
 
-	if cr.Spec.Sharding.Mongos.LogStorage() != nil {
+	if cr.CompareVersion("1.24.0") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil {
 		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{MongosLogPVC(cr)}
 	}
 
@@ -229,7 +229,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		})
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 {
+	if cr.CompareVersion("1.24.0") >= 0 && (cr.IsLogCollectorEnabled() || cr.Spec.Sharding.Mongos.LogStorage() != nil) {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.MongosLogVolClaimName,
 			MountPath: config.MongodContainerDataLogsDir,
@@ -484,7 +484,8 @@ func volumes(cr *api.PerconaServerMongoDB, configs StatefulConfigParams, mountKe
 		})
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 {
+	if cr.CompareVersion("1.24.0") >= 0 && cr.IsLogCollectorEnabled() {
+		// Add an emptyDir for logs if no persistent storage is specified
 		if cr.Spec.Sharding.Mongos.LogStorage() == nil {
 			volumes = append(volumes, corev1.Volume{
 				Name: config.MongosLogVolClaimName,
@@ -494,16 +495,14 @@ func volumes(cr *api.PerconaServerMongoDB, configs StatefulConfigParams, mountKe
 			})
 		}
 
-		if cr.IsLogCollectorEnabled() {
-			if configs.LogCollectionConf.Type.IsUsable() {
-				volumes = append(volumes, corev1.Volume{
-					Name:         logcollector.VolumeName,
-					VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logcollector.ConfigMapName(cr.Name)),
-				})
-			}
-			if vol := logRotateConfigVolume(configs, cr); vol != nil {
-				volumes = append(volumes, *vol)
-			}
+		if configs.LogCollectionConf.Type.IsUsable() {
+			volumes = append(volumes, corev1.Volume{
+				Name:         logcollector.VolumeName,
+				VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logcollector.ConfigMapName(cr.Name)),
+			})
+		}
+		if vol := logRotateConfigVolume(configs, cr); vol != nil {
+			volumes = append(volumes, *vol)
 		}
 	}
 
