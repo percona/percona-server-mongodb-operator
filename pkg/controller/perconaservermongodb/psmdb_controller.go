@@ -1549,7 +1549,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
-	if err == nil {
+	if err == nil && cr.CompareVersion("1.24.0") >= 0 {
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbconfig.MongosLogVolClaimName
 		})
