@@ -309,6 +309,7 @@ wait_cluster_consistency "$cluster" 42
 echo
 
 wait_all_pvc_resize "2Gi" 120 5 "${mongos_pvc_selector}"
+kubectl_bin wait --for=create statefulset "${cluster}-mongos" --timeout=60s
 
 desc "test mongos log PVC downscale"
 
