@@ -53,6 +53,7 @@ platformSkips:
     - name: storage
       reason: requires hostPath, which is unsupported on OpenShift
 
+# suites: pr, release, minikube, distro, backups
 tests:
   arbiter:
     suites: [pr, release, minikube, distro]

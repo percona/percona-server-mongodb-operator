@@ -115,6 +115,7 @@ def add_filter_args(p: argparse.ArgumentParser, meta: dict[str, list[str]]) -> N
         "--suite",
         default="pr",
         metavar="SUITE",
+        choices=meta["suites"] or None,
         help=f"Suite from tests.yaml (default: pr). Known: {', '.join(meta['suites']) or '?'}",
     )
     p.add_argument(
@@ -198,7 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     try:
         manifest = load_yaml(TESTS_YAML)
         meta = collect_meta(manifest.get("tests", {}), manifest.get("platformSkips", {}))
-    except OSError:
+    except (OSError, yaml.YAMLError):
         meta = {"suites": [], "modes": [], "groups": [], "platforms": []}
 
     parser = argparse.ArgumentParser(
