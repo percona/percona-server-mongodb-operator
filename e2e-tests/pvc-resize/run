@@ -311,6 +311,8 @@ echo
 
 wait_all_pvc_resize "2Gi" 120 5 "${mongos_pvc_selector}"
 kubectl_bin wait --for=create statefulset "${cluster}-mongos" --timeout=60s
+kubectl_bin wait --for=jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}'=2Gi \
+	statefulset "${cluster}-mongos" --timeout=120s
 
 desc "test mongos log PVC downscale"
 
