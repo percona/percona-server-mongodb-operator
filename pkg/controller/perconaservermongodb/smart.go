@@ -452,6 +452,21 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 
 	waitLimit := int(cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds)
 
+	// Roll out pods in ascending ordinal order (pod-0 -> pod-N).
+	//
+	// The order doesn't matter for mongos itself, but it does matter right after the
+	// mongos StatefulSet is re-created with orphaned pods: reconcileMongosStatefulset
+	// deletes and re-creates it whenever the log volumeClaimTemplate is added or removed,
+	// because volumeClaimTemplates are immutable.
+	//
+	// The adopted pods still run the old spec, so on every sync the StatefulSet controller
+	// walks them in ascending order and tries to patch the first pod whose volumes don't
+	// match the new template. That patch is always rejected, since a running pod's volumes
+	// can't be changed, and the sync aborts there without touching any higher ordinal.
+	//
+	// Descending order would deadlock: pod-N is deleted, but the controller keeps failing
+	// on pod-0 and never re-creates pod-N. Ascending order keeps the pod we delete the same
+	// pod the controller is stuck on, so every deletion lets it advance one ordinal.
 	sort.Slice(list.Items, func(i, j int) bool {
 		return list.Items[i].Name < list.Items[j].Name
 	})
