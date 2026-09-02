@@ -211,16 +211,17 @@ fi
 desc 'create resourcequota'
 
 # rs0 holds 3x2Gi, cfg holds 3x1Gi and the mongos logs hold 2x1Gi, so 11Gi is in
-# use. We're setting the quota to 12Gi, so we can only resize the first rs0 PVC to
-# 3Gi. the others should fail to resize due to the exceeded quota but operator
-# should handle the error and keep the cluster ready
+# use. We're setting the quota to 12Gi, so only one rs0 PVC can grow to 3Gi. the
+# rest fail with an exceeded quota error, which the operator handles by reverting
+# the storage request in the spec back to the configured size and keeping the
+# cluster ready
 
 apply_resourcequota 12Gi
 patch_pvc_request "${cluster}" "3Gi"
-wait_cluster_consistency "$cluster"
-echo
 
-wait_pvc_resize "persistentvolumeclaim/mongod-data-some-name-rs0-0" "3Gi"
+wait_pvc_request_revert "${cluster}" "2Gi"
+wait_cluster_status ${cluster} "ready"
+echo
 
 # We're setting the quota to 14Gi (3x3Gi for rs0 + 3x1Gi for cfg + 2x1Gi for the
 # mongos logs), so we can resize all rs0 PVCs to 3Gi
