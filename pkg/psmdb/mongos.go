@@ -64,14 +64,14 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 	}
 
 	if cr.CompareVersion("1.24.0") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil {
-		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{MongosLogPVC(cr)}
+		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{mongosLogPVC(cr)}
 	}
 
 	return spec
 }
 
 // MongosLogPVC returns the volume claim template backing mongos log storage.
-func MongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
+func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
 	storage := cr.Spec.Sharding.Mongos.LogStorage()
 
 	pvc := corev1.PersistentVolumeClaim{
