@@ -87,8 +87,6 @@ func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
 		},
 	}
 
-	maps.Copy(pvc.Labels, storage.Labels)
-
 	if storage.PersistentVolumeClaimSpec != nil {
 		pvc.Spec = *storage.PersistentVolumeClaimSpec
 	}
