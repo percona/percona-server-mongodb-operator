@@ -53,8 +53,6 @@ spec:
         type: ClusterIP
       logs:
         persistentVolumeClaim:
-          # accessModes is explicit: the operator does not default it for
-          # sharding.mongos.logs and a PVC cannot be created without one
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

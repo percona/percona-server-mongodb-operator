@@ -74,11 +74,15 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
 	storage := cr.Spec.Sharding.Mongos.LogStorage()
 
+	labels := map[string]string{}
+	maps.Copy(labels, storage.Labels)
+	maps.Copy(labels, naming.MongosLabels(cr))
+
 	pvc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        config.MongosLogVolClaimName,
 			Namespace:   cr.Namespace,
-			Labels:      naming.MongosLabels(cr),
+			Labels:      labels,
 			Annotations: storage.Annotations,
 		},
 	}

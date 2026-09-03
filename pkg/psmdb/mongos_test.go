@@ -495,7 +495,7 @@ func TestMongosLogPVC(t *testing.T) {
 				},
 			},
 		},
-		"custom labels win over operator labels": {
+		"custom labels do no win over operator labels": {
 			storage: &api.PVCSpec{
 				Labels: map[string]string{
 					"app.kubernetes.io/part-of": "custom",
@@ -507,7 +507,7 @@ func TestMongosLogPVC(t *testing.T) {
 				"app.kubernetes.io/instance":   "test-cr",
 				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
 				"app.kubernetes.io/name":       "percona-server-mongodb",
-				"app.kubernetes.io/part-of":    "custom",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
 			},
 			expectedAnnotations: nil,
 			expectedSpec:        corev1.PersistentVolumeClaimSpec{},
