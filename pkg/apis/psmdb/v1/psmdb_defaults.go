@@ -373,7 +373,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
-		if cr.Spec.Sharding.Mongos.LogStorage() != nil {
+		if s := cr.Spec.Sharding.Mongos.LogStorage(); s != nil && s.PersistentVolumeClaimSpec != nil {
 			if len(cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes) == 0 {
 				cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 			}
