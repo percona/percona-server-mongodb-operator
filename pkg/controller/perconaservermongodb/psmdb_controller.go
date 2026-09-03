@@ -1540,6 +1540,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return nil
 	}
 
+	var currentVCT []corev1.PersistentVolumeClaim
+
 	sts := psmdb.MongosStatefulset(cr)
 	err = setControllerReference(cr, sts, r.scheme)
 	if err != nil {
@@ -1550,6 +1552,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
 	if err == nil && cr.CompareVersion("1.24.0") >= 0 {
+		currentVCT = sts.Spec.VolumeClaimTemplates
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbconfig.MongosLogVolClaimName
 		})
@@ -1661,6 +1664,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 
 	sts.Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+
+	if len(currentVCT) > 0 {
+		// Pin the volumeClaimTemplates, they should never change here.
+		sts.Spec.VolumeClaimTemplates = currentVCT
+	}
 
 	err = r.createOrUpdate(ctx, sts)
 	if err != nil {
