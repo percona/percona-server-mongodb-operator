@@ -420,3 +420,142 @@ func TestMongosLogCollector(t *testing.T) {
 		Value: "true",
 	})
 }
+
+func TestMongosLogPVC(t *testing.T) {
+	mongosLabels := map[string]string{
+		"app.kubernetes.io/component":  "mongos",
+		"app.kubernetes.io/instance":   "test-cr",
+		"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+		"app.kubernetes.io/name":       "percona-server-mongodb",
+		"app.kubernetes.io/part-of":    "percona-server-mongodb",
+	}
+
+	tests := map[string]struct {
+		storage             *api.PVCSpec
+		expectedLabels      map[string]string
+		expectedAnnotations map[string]string
+		expectedSpec        corev1.PersistentVolumeClaimSpec
+	}{
+		"spec only": {
+			storage: &api.PVCSpec{
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+					StorageClassName: new("standard"),
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("1Gi"),
+						},
+					},
+				},
+			},
+			expectedLabels:      mongosLabels,
+			expectedAnnotations: nil,
+			expectedSpec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: new("standard"),
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		},
+		"custom labels and annotations": {
+			storage: &api.PVCSpec{
+				Labels: map[string]string{
+					"percona.com/test": "label",
+				},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
+				},
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("1Gi"),
+						},
+					},
+				},
+			},
+			expectedLabels: map[string]string{
+				"app.kubernetes.io/component":  "mongos",
+				"app.kubernetes.io/instance":   "test-cr",
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				"percona.com/test":             "label",
+			},
+			expectedAnnotations: map[string]string{
+				"percona.com/test": "annotation",
+			},
+			expectedSpec: corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1Gi"),
+					},
+				},
+			},
+		},
+		"custom labels win over operator labels": {
+			storage: &api.PVCSpec{
+				Labels: map[string]string{
+					"app.kubernetes.io/part-of": "custom",
+				},
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{},
+			},
+			expectedLabels: map[string]string{
+				"app.kubernetes.io/component":  "mongos",
+				"app.kubernetes.io/instance":   "test-cr",
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/part-of":    "custom",
+			},
+			expectedAnnotations: nil,
+			expectedSpec:        corev1.PersistentVolumeClaimSpec{},
+		},
+		"no claim spec": {
+			storage: &api.PVCSpec{
+				Labels: map[string]string{
+					"percona.com/test": "label",
+				},
+			},
+			expectedLabels: map[string]string{
+				"app.kubernetes.io/component":  "mongos",
+				"app.kubernetes.io/instance":   "test-cr",
+				"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+				"app.kubernetes.io/name":       "percona-server-mongodb",
+				"app.kubernetes.io/part-of":    "percona-server-mongodb",
+				"percona.com/test":             "label",
+			},
+			expectedAnnotations: nil,
+			expectedSpec:        corev1.PersistentVolumeClaimSpec{},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "test-ns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Sharding: api.Sharding{
+						Mongos: &api.MongosSpec{
+							Logs: &api.MongosLogsSpec{
+								PersistentVolumeClaim: tt.storage,
+							},
+						},
+					},
+				},
+			}
+
+			pvc := mongosLogPVC(cr)
+
+			assert.Equal(t, config.MongosLogVolClaimName, pvc.Name)
+			assert.Equal(t, "test-ns", pvc.Namespace)
+			assert.Equal(t, tt.expectedLabels, pvc.Labels)
+			assert.Equal(t, tt.expectedAnnotations, pvc.Annotations)
+			assert.Equal(t, tt.expectedSpec, pvc.Spec)
+		})
+	}
+}
