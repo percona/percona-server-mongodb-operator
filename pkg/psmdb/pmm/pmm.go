@@ -19,6 +19,17 @@ const (
 	scramSHA256AuthMechanism = "SCRAM-SHA-256"
 )
 
+// pmmConfigFile returns the path for the stateless pmm-agent.yaml. For PMM3,
+// from v1.24.0 it is placed directly in the writable "/tmp" emptyDir (pmm-agent
+// does not create the config's parent dir, so a subdirectory cannot be used) so
+// PMM works with readOnlyRootFilesystem.
+func pmmConfigFile(cr *api.PerconaServerMongoDB) string {
+	if cr.CompareVersion("1.24.0") >= 0 {
+		return "/tmp/pmm-agent.yaml"
+	}
+	return "/usr/local/percona/pmm/config/pmm-agent.yaml"
+}
+
 // containerForPMM2 returns a pmm2 container from the given spec.
 func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) corev1.Container {
 	_, oka := secret.Data[api.PMMAPIKey]
@@ -443,7 +454,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			},
 			{
 				Name:  "PMM_AGENT_CONFIG_FILE",
-				Value: "/usr/local/percona/pmm/config/pmm-agent.yaml",
+				Value: pmmConfigFile(cr),
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
@@ -636,6 +647,18 @@ func applyCustomProbes(cr *api.PerconaServerMongoDB, container *corev1.Container
 	if cr.Spec.PMM.ReadinessProbe != nil {
 		container.ReadinessProbe = cr.Spec.PMM.ReadinessProbe
 	}
+}
+
+// TmpVolumeRequired reports whether the PMM3 sidecar needs a writable /tmp
+// emptyDir because it runs with a read-only root filesystem. From v1.24.0 PMM3
+// keeps its stateless config (pmmConfigFile), temp dir (PMM_AGENT_PATHS_TEMPDIR)
+// and TLS pem all under /tmp, so a read-only root filesystem is only supported
+// from that version onwards.
+func TmpVolumeRequired(cr *api.PerconaServerMongoDB) bool {
+	sc := cr.Spec.PMM.ContainerSecurityContext
+	return cr.Spec.PMM.Enabled &&
+		cr.CompareVersion("1.24.0") >= 0 &&
+		sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
 }
 
 // SecretHasToken checks if the PMM3 token is configured as part of the given secret.
