@@ -18,10 +18,6 @@ platformSkips:
   eks:
     - name: demand-backup-gcs-workload-identity
       reason: requires GKE Workload Identity
-    - name: demand-backup-snapshot
-      reason: volume snapshot setup currently supports only GKE
-    - name: demand-backup-snapshot-vault
-      reason: volume snapshot setup currently supports only GKE
     - name: multi-cluster-service
       reason: requires GKE Multi-Cluster Services
   aks:
@@ -31,10 +27,6 @@ platformSkips:
       reason: requires EKS IRSA
     - name: demand-backup-gcs-workload-identity
       reason: requires GKE Workload Identity
-    - name: demand-backup-snapshot
-      reason: volume snapshot setup currently supports only GKE
-    - name: demand-backup-snapshot-vault
-      reason: volume snapshot setup currently supports only GKE
     - name: multi-cluster-service
       reason: requires GKE Multi-Cluster Services
   openshift:
@@ -44,16 +36,20 @@ platformSkips:
       reason: requires EKS IRSA
     - name: demand-backup-gcs-workload-identity
       reason: requires GKE Workload Identity
-    - name: demand-backup-snapshot
-      reason: volume snapshot setup currently supports only GKE
-    - name: demand-backup-snapshot-vault
-      reason: volume snapshot setup currently supports only GKE
     - name: multi-cluster-service
       reason: requires GKE Multi-Cluster Services
     - name: storage
       reason: requires hostPath, which is unsupported on OpenShift
+  rancher:
+    - name: demand-backup-eks-credentials
+      reason: requires EKS credentials integration
+    - name: demand-backup-eks-credentials-irsa
+      reason: requires EKS IRSA
+    - name: multi-cluster-service
+      reason: requires GKE Multi-Cluster Services
 
 # suites: pr, release, minikube, distro, backups
+# groups: backup, chaos, core, monitoring, networking, pitr, security, sharding, storage, tls, upgrade, users
 tests:
   arbiter:
     suites: [pr, release, minikube, distro]
