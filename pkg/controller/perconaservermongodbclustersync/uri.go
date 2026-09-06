@@ -30,6 +30,9 @@ func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaSe
 		return "", errors.Wrapf(err, "parse source uri %q", cr.Spec.Source.URI)
 	}
 	u.User = url.UserPassword(username, password)
+	if u.Path == "" {
+		u.Path = "/"
+	}
 	return u.String(), nil
 }
 
@@ -60,6 +63,7 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 		Scheme: "mongodb",
 		User:   url.UserPassword(username, password),
 		Host:   host,
+		Path:   "/",
 	}
 	if rsName != "" {
 		q := u.Query()
