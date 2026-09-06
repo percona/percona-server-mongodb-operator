@@ -372,6 +372,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				dns.Prefix = cr.Name
 			}
 		}
+
+		if s := cr.Spec.Sharding.Mongos.LogStorage(); s != nil && s.PersistentVolumeClaimSpec != nil {
+			if len(cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes) == 0 {
+				cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+			}
+		}
 	}
 
 	if mongos := cr.Spec.Sharding.Mongos; mongos != nil && cr.CompareVersion("1.18.0") >= 0 && cr.Status.State == AppStateInit {

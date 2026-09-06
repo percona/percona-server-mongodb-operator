@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,9 +179,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	sort.Slice(list.Items, func(i, j int) bool {
-		return list.Items[i].Name > list.Items[j].Name
-	})
+	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
@@ -452,9 +451,22 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 
 	waitLimit := int(cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds)
 
-	sort.Slice(list.Items, func(i, j int) bool {
-		return list.Items[i].Name > list.Items[j].Name
-	})
+	// Roll out pods in ascending ordinal order (pod-0 -> pod-N).
+	//
+	// The order doesn't matter for mongos itself, but it does matter right after the
+	// mongos StatefulSet is re-created with orphaned pods: reconcileMongosStatefulset
+	// deletes and re-creates it whenever the log volumeClaimTemplate is added or removed,
+	// because volumeClaimTemplates are immutable.
+	//
+	// The adopted pods still run the old spec, so on every sync the StatefulSet controller
+	// walks them in ascending order and tries to patch the first pod whose volumes don't
+	// match the new template. That patch is always rejected, since a running pod's volumes
+	// can't be changed, and the sync aborts there without touching any higher ordinal.
+	//
+	// Descending order would deadlock: pod-N is deleted, but the controller keeps failing
+	// on pod-0 and never re-creates pod-N. Ascending order keeps the pod we delete the same
+	// pod the controller is stuck on, so every deletion lets it advance one ordinal.
+	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 
 	for _, pod := range list.Items {
 		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
@@ -467,6 +479,25 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	log.Info("smart update finished for mongos statefulset")
 
 	return nil
+}
+
+func sortPodsByOrdinal(pods []corev1.Pod, less func(i, j int) bool) {
+	sort.Slice(pods, func(i, j int) bool {
+		oi, oj := podOrdinal(&pods[i]), podOrdinal(&pods[j])
+		return less(oi, oj)
+	})
+}
+
+func podOrdinal(pod *corev1.Pod) int {
+	val, ok := pod.GetLabels()[appsv1.PodIndexLabel]
+	if !ok {
+		return -1
+	}
+	ordinal, err := strconv.Atoi(val)
+	if err != nil || ordinal < 0 {
+		return -1
+	}
+	return ordinal
 }
 
 func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, cr *api.PerconaServerMongoDB, stsList *appsv1.StatefulSetList) (bool, error) {
