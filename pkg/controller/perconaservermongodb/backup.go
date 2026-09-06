@@ -129,6 +129,10 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 		JobID:          jobID,
 		ClusterName:    cr.NamespacedName().String(),
 	})
+
+	if err := r.catchUpMissedScheduledBackup(ctx, cr, task); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -205,6 +209,94 @@ func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr
 			log.Error(err, "failed to create backup")
 		}
 	}
+}
+
+// missedCronTick reports whether schedule should have fired after last and
+// before now. A zero last time returns false so a cluster with no prior
+// backups does not immediately create one on operator start.
+func missedCronTick(schedule string, last, now time.Time) (bool, error) {
+	if last.IsZero() {
+		return false, nil
+	}
+	sched, err := cron.ParseStandard(schedule)
+	if err != nil {
+		return false, errors.Wrap(err, "parse cron schedule")
+	}
+	next := sched.Next(last)
+	return !next.IsZero() && next.Before(now), nil
+}
+
+func backupInProgress(state api.BackupState) bool {
+	switch state {
+	case api.BackupStateNew, api.BackupStateWaiting, api.BackupStateRequested, api.BackupStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) latestScheduledBackup(ctx context.Context, cr *api.PerconaServerMongoDB, ancestor string) (*api.PerconaServerMongoDBBackup, error) {
+	bcpList := api.PerconaServerMongoDBBackupList{}
+	err := r.client.List(ctx,
+		&bcpList,
+		&client.ListOptions{
+			Namespace: cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				naming.LabelCluster:        cr.Name,
+				naming.LabelBackupAncestor: ancestor,
+			}),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var latest *api.PerconaServerMongoDBBackup
+	for i := range bcpList.Items {
+		b := &bcpList.Items[i]
+		if latest == nil || latest.CreationTimestamp.Before(&b.CreationTimestamp) {
+			latest = b
+		}
+	}
+	return latest, nil
+}
+
+// catchUpMissedScheduledBackup creates one backup when the in-memory cron
+// missed a tick (operator restart or eviction). Schedules are not Kubernetes
+// CronJobs, so robfig/cron does not catch up on its own.
+func (r *ReconcilePerconaServerMongoDB) catchUpMissedScheduledBackup(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
+	log := logf.FromContext(ctx)
+
+	latest, err := r.latestScheduledBackup(ctx, cr, task.Name)
+	if err != nil {
+		return errors.Wrap(err, "list scheduled backups")
+	}
+	if latest == nil {
+		return nil
+	}
+	if backupInProgress(latest.Status.State) {
+		return nil
+	}
+
+	missed, err := missedCronTick(task.Schedule, latest.CreationTimestamp.Time, time.Now())
+	if err != nil {
+		return err
+	}
+	if !missed {
+		return nil
+	}
+
+	running, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "check if backup is running")
+	}
+	if running {
+		return nil
+	}
+
+	log.Info("catching up missed scheduled backup", "job", task.Name, "lastBackup", latest.Name, "schedule", task.Schedule)
+	r.createBackupTask(ctx, cr, task)()
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteBackupTask(cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) {
