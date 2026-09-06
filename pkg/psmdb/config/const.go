@@ -17,6 +17,7 @@ const (
 
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
+	MongosLogVolClaimName  = "mongos-logs"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir     = "/data/db"
 	MongodContainerDataLogsDir = "/data/db/logs"
@@ -186,4 +187,23 @@ func getCustomConfigHashHex(strData map[string]string, binData map[string][]byte
 	hashHex := fmt.Sprintf("%x", md5.Sum(allData))
 
 	return hashHex, nil
+}
+
+type LogVolume struct {
+	Name      string
+	MountPath string
+}
+
+func MongodLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongodDataVolClaimName,
+		MountPath: MongodContainerDataDir,
+	}
+}
+
+func MongosLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongosLogVolClaimName,
+		MountPath: MongodContainerDataLogsDir,
+	}
 }

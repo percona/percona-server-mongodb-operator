@@ -29,6 +29,7 @@ const (
 	ComponentHidden         = "hidden"
 	ComponentArbiter        = "arbiter"
 	ComponentSearch         = "search"
+	ComponentConfigSrv      = "cfg"
 )
 
 const (

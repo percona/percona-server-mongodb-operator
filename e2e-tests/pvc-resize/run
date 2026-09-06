@@ -90,6 +90,59 @@ function wait_pvc_request_revert() {
 	echo "psmdb/${cluster} storage request reverted to ${expected}"
 }
 
+function spinup_sharded_psmdb() {
+	local config=$1
+
+	desc 'create PSMDB cluster'
+	apply_cluster "${config}"
+
+	desc 'check if all Pods started'
+	wait_for_running "${cluster}-rs0" 3
+	wait_for_running "${cluster}-cfg" 3 "false"
+	wait_for_running "${cluster}-mongos" 2
+	sleep 20
+
+	compare_kubectl "statefulset/${cluster}-rs0"
+
+	desc 'write data'
+
+	run_mongos 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
+		"userAdmin:userAdmin123456@${cluster}-mongos.${namespace}"
+
+	run_mongos 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-mongos.${namespace}"
+}
+
+function patch_mongos_pvc_request() {
+	local cluster=$1
+	local size=$2
+
+	echo "Patching mongos log PVC request to ${size} in ${cluster}"
+
+	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "replace", "path": "/spec/sharding/mongos/logs/persistentVolumeClaim/resources/requests/storage", "value":"'"${size}"'"}]'
+}
+
+function wait_mongos_pvc_request_revert() {
+	local cluster=$1
+	local expected=$2
+	local retry=0
+
+	echo -n "Waiting for psmdb/${cluster} mongos log storage request to revert to ${expected}"
+	until [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.sharding.mongos.logs.persistentVolumeClaim.resources.requests.storage}') == "${expected}" ]]; do
+		if [[ $retry -ge 60 ]]; then
+			echo
+			echo "psmdb/${cluster} mongos log storage request did not revert to ${expected}, max retries exceeded"
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+
+		retry=$((retry + 1))
+	done
+
+	echo
+	echo "psmdb/${cluster} mongos log storage request reverted to ${expected}"
+}
+
 set_debug
 
 if [[ "$EKS" -eq 1 ]]; then
@@ -106,19 +159,24 @@ kubectl_bin apply \
 	-f "$conf_dir/secrets.yml" \
 	-f "$conf_dir/client.yml"
 
-desc 'create PSMDB cluster'
 cluster="some-name"
+
+# the cluster is sharded, so cfg PVCs carry the mongod component label as well.
+# every assertion on the replset PVCs below is scoped to rs0
+rs0_pvc_selector="app.kubernetes.io/component=mongod,app.kubernetes.io/replset=rs0"
+mongos_pvc_selector="app.kubernetes.io/component=mongos"
+
 if [[ "$EKS" -eq 1 ]]; then
-	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+	spinup_sharded_psmdb "$test_dir/conf/$cluster-eks.yml"
 else
-	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+	spinup_sharded_psmdb "$test_dir/conf/$cluster.yml"
 fi
 
 patch_pvc_request "${cluster}" "2Gi"
 wait_cluster_consistency "$cluster"
 echo
 
-if wait_all_pvc_resize "2Gi" 120 1; then
+if wait_all_pvc_resize "2Gi" 120 1 "${rs0_pvc_selector}"; then
 	echo "PVC was resized, but resize.expansion is disabled"
 	exit 1
 fi
@@ -128,7 +186,7 @@ kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/sp
 sleep 10
 
 wait_cluster_consistency "$cluster"
-wait_all_pvc_resize "2Gi"
+wait_all_pvc_resize "2Gi" 120 5 "${rs0_pvc_selector}"
 
 echo
 
@@ -138,10 +196,10 @@ if [[ "$EKS" -eq 1 || -n "$OPENSHIFT" ]]; then
 	echo "Deleting and recreating PSMDB cluster ${cluster}"
 	kubectl_bin delete psmdb ${cluster}
 	kubectl_bin apply -f "$conf_dir/secrets.yml"
-		if [[ "$EKS" -eq 1 ]]; then
-		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+	if [[ "$EKS" -eq 1 ]]; then
+		spinup_sharded_psmdb "$test_dir/conf/$cluster-eks.yml"
 	else
-		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+		spinup_sharded_psmdb "$test_dir/conf/$cluster.yml"
 	fi
 	echo "Enabling PVC resize after recreating PSMDB cluster ${cluster} "
 	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/storageScaling", "value":{"enableVolumeScaling":true} }]'
@@ -152,25 +210,28 @@ fi
 
 desc 'create resourcequota'
 
-# We're setting the quota to 7Gi, so we can only resize the first PVC to 3Gi
-# the others should fail to resize due to the exceeded quota but operator should
-# handle the error and keep the cluster ready
+# rs0 holds 3x2Gi, cfg holds 3x1Gi and the mongos logs hold 2x1Gi, so 11Gi is in
+# use. We're setting the quota to 12Gi, so only one rs0 PVC can grow to 3Gi. the
+# rest fail with an exceeded quota error, which the operator handles by reverting
+# the storage request in the spec back to the configured size and keeping the
+# cluster ready
 
-apply_resourcequota 7Gi
+apply_resourcequota 12Gi
 patch_pvc_request "${cluster}" "3Gi"
-wait_cluster_consistency "$cluster"
+
+wait_pvc_request_revert "${cluster}" "2Gi"
+wait_cluster_status ${cluster} "ready"
 echo
 
-wait_pvc_resize "persistentvolumeclaim/mongod-data-some-name-rs0-0" "3Gi"
+# We're setting the quota to 14Gi (3x3Gi for rs0 + 3x1Gi for cfg + 2x1Gi for the
+# mongos logs), so we can resize all rs0 PVCs to 3Gi
 
-# We're setting the quota to 9Gi, so we can resize all PVCs to 3Gi
-
-apply_resourcequota 9Gi
+apply_resourcequota 14Gi
 patch_pvc_request "${cluster}" "3Gi"
 wait_cluster_consistency "$cluster" 42
 echo
 
-wait_all_pvc_resize "3Gi"
+wait_all_pvc_resize "3Gi" 120 5 "${rs0_pvc_selector}"
 
 desc "test downscale"
 
@@ -185,9 +246,9 @@ if [[ "$EKS" -eq 1 || -n "$OPENSHIFT" ]]; then
 	kubectl_bin delete psmdb ${cluster}
 	kubectl_bin apply -f "$conf_dir/secrets.yml"
 	if [[ "$EKS" -eq 1 ]]; then
-		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster-eks.yml"
+		spinup_sharded_psmdb "$test_dir/conf/$cluster-eks.yml"
 	else
-		spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
+		spinup_sharded_psmdb "$test_dir/conf/$cluster.yml"
 	fi
 	kubectl_bin patch psmdb "${cluster}" --type=json -p='[{"op": "add", "path": "/spec/storageScaling", "value":{"enableVolumeScaling":true} }]'
 	sleep 10
@@ -207,7 +268,7 @@ restarted_at_before=$(kubectl_bin get statefulset ${sts_name} -o jsonpath='{.spe
 [ -z "$restarted_at_before" ] && { echo "ERROR: restartedAt not found"; exit 1; }
 
 patch_pvc_request "${cluster}" "4Gi"
-wait_all_pvc_resize "4Gi"
+wait_all_pvc_resize "4Gi" 120 5 "${rs0_pvc_selector}"
 
 sleep_with_log 30 "wait for StatefulSet recreation after orphan delete during PVC resize"
 
@@ -226,6 +287,40 @@ fi
 
 wait_cluster_status ${cluster} "ready"
 wait_for_running ${sts_name} 3
+
+desc "test mongos log PVC resize"
+
+# one log PVC per mongos pod comes with the cluster
+if [[ $(kubectl_bin get pvc -l "${mongos_pvc_selector}" -o name | wc -l | tr -d ' ') -ne 2 ]]; then
+	echo "expected one log PVC per mongos pod"
+	exit 1
+fi
+
+wait_all_pvc_resize "1Gi" 120 5 "${mongos_pvc_selector}"
+
+# the mongos log file has to land on the volume the sidecars read, otherwise
+# the PVC is just an empty disk
+if ! kubectl_bin exec "${cluster}-mongos-0" -c mongos -- test -s /data/db/logs/mongos.log; then
+	echo "mongos.log is missing or empty on the log volume"
+	exit 1
+fi
+
+patch_mongos_pvc_request "${cluster}" "2Gi"
+wait_cluster_consistency "$cluster" 42
+echo
+
+wait_all_pvc_resize "2Gi" 120 5 "${mongos_pvc_selector}"
+kubectl_bin wait --for=create statefulset "${cluster}-mongos" --timeout=60s
+kubectl_bin wait --for=jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}'=2Gi \
+	statefulset "${cluster}-mongos" --timeout=120s
+
+desc "test mongos log PVC downscale"
+
+# as for replsets, the operator shouldn't downscale the PVCs. instead it reverts
+# the storage request in the spec back to the configured size and keeps the cluster ready
+patch_mongos_pvc_request "${cluster}" "1Gi"
+wait_mongos_pvc_request_revert "${cluster}" "2Gi"
+wait_cluster_status ${cluster} "ready"
 
 destroy "${namespace}"
 desc "test passed"
