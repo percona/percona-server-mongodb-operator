@@ -2,10 +2,16 @@ package perconaservermongodb
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -111,4 +117,46 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeleteSecretsIgnoresNotFoundOnDelete(t *testing.T) {
+	newCR := func() *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.Secrets.Users = cr.Name + "-users"
+		return cr
+	}
+	objsFor := func(cr *api.PerconaServerMongoDB) []client.Object {
+		objs := []client.Object{cr}
+		for _, name := range []string{
+			cr.Spec.Secrets.Users,
+			"internal-" + cr.Name,
+			"internal-" + cr.Name + "-users",
+			cr.Name + "-mongodb-encryption-key",
+		} {
+			objs = append(objs, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
+			})
+		}
+		return objs
+	}
+
+	t.Run("delete returns NotFound", func(t *testing.T) {
+		cr := newCR()
+		r := buildFakeClient(objsFor(cr)...)
+		r.client = interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+			return k8serrors.NewNotFound(corev1.Resource("secrets"), obj.GetName())
+		})
+
+		require.NoError(t, r.deleteSecrets(t.Context(), cr))
+	})
+
+	t.Run("delete fails for another reason", func(t *testing.T) {
+		cr := newCR()
+		r := buildFakeClient(objsFor(cr)...)
+		r.client = interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+			return errors.New("boom")
+		})
+
+		require.Error(t, r.deleteSecrets(t.Context(), cr))
+	})
 }
