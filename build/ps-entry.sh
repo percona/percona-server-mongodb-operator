@@ -496,9 +496,9 @@ if [[ $originalArgOne == mongo* ]]; then
 		_mongod_hack_rename_arg_save_val --sslDisabledProtocols --tlsDisabledProtocols "${mongodHackedArgs[@]}"
 	fi
 
-	if [[ $originalArgOne == "mongod" && ${LOGCOLLECTOR_ENABLED:-} == "true" ]]; then
+	if [[ ${LOGCOLLECTOR_ENABLED:-} == "true" ]] && [[ $originalArgOne == "mongod" || $originalArgOne == "mongos" ]]; then
 		mkdir -p /data/db/logs/
-		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/${originalArgOne}.log" "${mongodHackedArgs[@]}"
 		# https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
 		# the operator is using logrotate as part of the logcollector feature.
 		# using the rename option because logrotate performs db.adminCommand({ logRotate: 1 })
