@@ -931,6 +931,14 @@ type ReplsetSpec struct {
 	Env                      []corev1.EnvVar              `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+
+	// Instances declares the replia set's topology as named member groups.
+	// Requires crVersion > 1.24.0.
+	// Mutually exclusive with size, arbiter, nonvoting and hidden.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MinItems=1
+	Instances []InstanceSpec `json:"instances,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1011,6 +1019,13 @@ func (ms ReplsetSpec) GetPort() int32 {
 }
 
 func (r ReplsetSpec) GetSize() int32 {
+	if r.InstanceMode() {
+		var size int32 = 0
+		for _, ins := range r.Instances {
+			size += ins.Replicas
+		}
+		return size
+	}
 	return r.Size + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
 }
 
