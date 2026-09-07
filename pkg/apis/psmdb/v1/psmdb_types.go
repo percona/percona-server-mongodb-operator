@@ -283,10 +283,12 @@ const (
 )
 
 type Sharding struct {
-	Enabled          bool         `json:"enabled"`
+	Enabled  bool         `json:"enabled"`
+	Mongos   *MongosSpec  `json:"mongos,omitempty"`
+	Balancer BalancerSpec `json:"balancer,omitempty"`
+
+	// +kubebuilder:validation:XValidation:rule="!has(self.instances)",message="cannot declare configsvrReplSet using instances[]"
 	ConfigsvrReplSet *ReplsetSpec `json:"configsvrReplSet,omitempty"`
-	Mongos           *MongosSpec  `json:"mongos,omitempty"`
-	Balancer         BalancerSpec `json:"balancer,omitempty"`
 }
 
 type BalancerSpec struct {
@@ -905,6 +907,7 @@ type HorizonsSpec map[string]map[string]string
 
 type PrimaryPreferTagSelectorSpec map[string]string
 
+// +kubebuilder:validation:XValidation:rule="self.clusterRole != 'configsvr' || !has(self.instances)",message="instances[] cannot be specified for configServer"
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 

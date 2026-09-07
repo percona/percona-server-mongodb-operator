@@ -1,8 +1,41 @@
 package v1
 
 import (
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 )
+
+// These instance names are reserved for producing the equivalent legacy Kubernetes objects (i.e, without the use of instances[]).
+const (
+	ReservedGroupMongod    = "mongod"
+	ReservedGroupNonVoting = "nonVoting"
+	ReservedGroupArbiter   = "arbiter"
+	ReservedGroupHidden    = "hidden"
+)
+
+const maxPodNameLen = 63
+
+// InstancesMinCRVersion is the minimum CR version that supports the use of instances[].
+const InstancesMinCRVersion = "1.24.0"
+
+// blockedGroupNames are names that are neither reserved identities nor legal
+// custom names, because the object names or component labels they produce
+// collide with something the operator already owns.
+var blockedGroupNames = map[string]string{
+	"nv":        "it is the StatefulSet suffix of the reserved nonVoting group",
+	"nonvoting": `use "nonVoting"`,
+	"cfg":       "it is the config server component label",
+	"mongos":    "it is the mongos component label",
+	"search":    "it is the search component label",
+}
+
+func IsReservedGroupName(name string) bool {
+	switch name {
+	case ReservedGroupMongod, ReservedGroupNonVoting, ReservedGroupArbiter, ReservedGroupHidden:
+		return true
+	}
+	return false
+}
 
 // InstanceSpec describes one named group of members inside a replica set.
 type InstanceSpec struct {
@@ -141,4 +174,27 @@ func (i InstanceSpec) GetTags() map[string]string {
 		return nil
 	}
 	return i.RSConfig.Tags
+}
+
+func (rs *ReplsetSpec) validateForInstances() error {
+	if rs == nil || !rs.InstanceMode() {
+		return nil
+	}
+
+	if rs.Size != 0 {
+		return errors.Errorf("spec.replsets[%s].size must be 0 or absent when instances is set", rs.Name)
+	}
+
+	if rs.Arbiter.Enabled {
+		return errors.Errorf("spec.replsets[%s].arbiter.enabled must be false when instances is set", rs.Name)
+	}
+
+	if rs.NonVoting.Enabled {
+		return errors.Errorf("spec.replsets[%s].nonvoting.enabled must be false when instances is set", rs.Name)
+	}
+
+	if rs.Hidden.Enabled {
+		return errors.Errorf("spec.replsets[%s].hidden.enabled must be false when instances is set", rs.Name)
+	}
+	return nil
 }
