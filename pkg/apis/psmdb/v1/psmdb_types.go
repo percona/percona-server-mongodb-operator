@@ -907,33 +907,42 @@ type HorizonsSpec map[string]map[string]string
 
 type PrimaryPreferTagSelectorSpec map[string]string
 
-// +kubebuilder:validation:XValidation:rule="self.clusterRole != 'configsvr' || !has(self.instances)",message="instances[] cannot be specified for configServer"
+// ReplsetSpec defines the specification for a MongoDB replica set.
+// Any new field added here should also be added to InstanceSpec.
+//
+// +kubebuilder:validation:XValidation:rule="self.clusterRole != 'configsvr' || !has(self.instances)",message="configServer cannot have instances[]"
+// +kubebuilder:validation:XValidation:rule="has(self.volumeSpec) || has(self.instances)",message="volumeSpec should be specified"
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name        string          `json:"name,omitempty"`
-	Size        int32           `json:"size"`
-	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
-	Arbiter     Arbiter         `json:"arbiter,omitempty"`
-	Expose      ExposeTogglable `json:"expose,omitempty"`
-	// +kubebuilder:validation:Required
-	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
-	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
-	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	Name                     string                       `json:"name,omitempty"`
+	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
+	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	Storage                  *MongodSpecStorage           `json:"storage,omitempty"`
 	Configuration            MongoConfiguration           `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode              `json:"externalNodes,omitempty"`
-	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
-	Hidden                   HiddenSpec                   `json:"hidden,omitempty"`
 	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
-	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
-	Env                      []corev1.EnvVar              `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+
+	// The following fields may be overridden per-instance.
+
+	Env                      []corev1.EnvVar            `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+
+	// The following fields will be deprecated in favour of Instances[].
+
+	Size      int32         `json:"size"`
+	Arbiter   Arbiter       `json:"arbiter,omitempty"`
+	NonVoting NonVotingSpec `json:"nonvoting,omitempty"`
+	Hidden    HiddenSpec    `json:"hidden,omitempty"`
 
 	// Instances declares the replia set's topology as named member groups.
 	// Requires crVersion > 1.24.0.

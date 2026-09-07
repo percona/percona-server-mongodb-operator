@@ -1,8 +1,13 @@
 package v1
 
 import (
+	"fmt"
+	"slices"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // These instance names are reserved for producing the equivalent legacy Kubernetes objects (i.e, without the use of instances[]).
@@ -41,21 +46,13 @@ func IsReservedGroupName(name string) bool {
 type InstanceSpec struct {
 	MultiAZ `json:",inline"`
 
-	// Name is the group's stable identity. It is part of every Kubernetes object
-	// name derived for the group, so it cannot be changed in place: renaming a
-	// group removes it and creates a new one, which requires an initial sync
-	// onto fresh storage.
-	//
-	// Must be unique within the replica set. Either one of the reserved names
-	// (mongod, nonVoting, arbiter, hidden), which reproduce the object names of
-	// the equivalent legacy role, or a lowercase DNS-1123 label.
+	// Name of this member group. Must be unique within the replica set.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=54
 	Name string `json:"name"`
 
-	// Replicas is the number of members in this group. An explicit 0 keeps the
-	// group declared but scaled down; it is never defaulted to a running size.
+	// Replicas is the number of members in this group.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=0
 	Replicas int32 `json:"replicas"`
@@ -65,14 +62,10 @@ type InstanceSpec struct {
 	// for a reserved name is the behaviour of the equivalent legacy role.
 	RSConfig *MemberConfigSpec `json:"rsConfig,omitempty"`
 
-	// VolumeSpec replaces the replica set's storage for this group. Required
-	// for every data-bearing group. Must be absent for an arbiter-only group.
+	// VolumeSpec specifies the replica set's storage for this group.
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
-	// Configuration replaces the replica set's mongod configuration for this
-	// group. An explicit empty string means "no custom configuration", which is
-	// distinct from omitting the field.
-	Configuration *MongoConfiguration `json:"configuration,omitempty"`
+	// Specifiying the following fields will override the corresponding replicaset-level settings.
 
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
@@ -99,6 +92,7 @@ type MemberConfigSpec struct {
 	BuildIndexes *bool `json:"buildIndexes,omitempty"`
 
 	ArbiterOnly *bool `json:"arbiterOnly,omitempty"`
+
 	// +kubebuilder:validation:Minimum=0
 	SecondaryDelaySecs *int64 `json:"secondaryDelaySecs,omitempty"`
 
@@ -181,6 +175,11 @@ func (rs *ReplsetSpec) validateForInstances() error {
 		return nil
 	}
 
+	if rs.ClusterRole == ClusterRoleConfigSvr {
+		return errors.Errorf("spec.replsets[%s].instances is not supported for clusterRole %s: "+
+			"declare the config server replica set with size", rs.Name, ClusterRoleConfigSvr)
+	}
+
 	if rs.Size != 0 {
 		return errors.Errorf("spec.replsets[%s].size must be 0 or absent when instances is set", rs.Name)
 	}
@@ -196,5 +195,135 @@ func (rs *ReplsetSpec) validateForInstances() error {
 	if rs.Hidden.Enabled {
 		return errors.Errorf("spec.replsets[%s].hidden.enabled must be false when instances is set", rs.Name)
 	}
+
+	for _, ins := range rs.Instances {
+		if err := ins.validate(rs.Name); err != nil {
+			return err
+		}
+	}
+
+	// TODO: we need to validate name collisions between every StatefulSet name the CR would produce.
+	// For example: group "hot" in "rs0" and a base replica set named "rs0-hot" both will produce a StatefulSet named "rs0-hot".
+
 	return nil
 }
+
+func (is *InstanceSpec) validate(rsName string) error {
+	if is == nil {
+		return nil
+	}
+
+	if reason, blocked := blockedGroupNames[is.Name]; blocked {
+		return errors.Errorf("spec.replsets[%s].instances: instance name %q is reserved: %s",
+			rsName, is.Name, reason)
+	}
+
+	if IsReservedGroupName(is.Name) {
+		return nil
+	}
+
+	if errs := validation.IsDNS1123Label(is.Name); len(errs) > 0 {
+		return errors.Errorf("spec.replsets[%s].instances[%s].name must be a valid DNS-1123 label: %v", rsName, is.Name, errs)
+	}
+	return nil
+}
+
+func (r *ReplsetSpec) groupNames() []string {
+	if r.InstanceMode() {
+		names := make([]string, 0, len(r.Instances))
+		for i := range r.Instances {
+			names = append(names, r.Instances[i].Name)
+		}
+		return names
+	}
+
+	names := []string{ReservedGroupMongod}
+	if r.Arbiter.Enabled {
+		names = append(names, ReservedGroupArbiter)
+	}
+	if r.NonVoting.Enabled {
+		names = append(names, ReservedGroupNonVoting)
+	}
+	if r.Hidden.Enabled {
+		names = append(names, ReservedGroupHidden)
+	}
+	return names
+}
+
+func (r *ReplsetSpec) groupReplicas(name string) int32 {
+	if r.InstanceMode() {
+		if i := r.Instance(name); i != nil {
+			return i.Replicas
+		}
+		return 0
+	}
+	switch name {
+	case ReservedGroupArbiter:
+		return r.Arbiter.GetSize()
+	case ReservedGroupNonVoting:
+		return r.NonVoting.GetSize()
+	case ReservedGroupHidden:
+		return r.Hidden.GetSize()
+	default:
+		return r.Size
+	}
+}
+
+func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+	path := fmt.Sprintf("spec.replsets[%s].instances[%s]", rs.Name, i.Name)
+
+	if i.IsArbiterOnly() {
+		if i.VolumeSpec != nil {
+			return errors.Errorf("%s: arbiter-only instance must not declare volumeSpec: "+
+				"arbiters use an emptyDir for the mongod data path", path)
+		}
+	} else {
+		if i.VolumeSpec == nil {
+			return errors.Errorf("%s.volumeSpec is required for a data-bearing instance", path)
+		}
+		if err := i.VolumeSpec.reconcileOpts(); err != nil {
+			return errors.Wrapf(err, "%s.volumeSpec", path)
+		}
+	}
+
+	if i.LivenessProbe == nil {
+		i.LivenessProbe = rs.LivenessProbe.DeepCopy()
+	} else {
+		i.LivenessProbe = defaultLivenessProbe(cr, i.LivenessProbe)
+	}
+
+	if i.ReadinessProbe == nil {
+		i.ReadinessProbe = rs.ReadinessProbe.DeepCopy()
+	} else {
+		i.ReadinessProbe = defaultReadinessProbe(cr, i.ReadinessProbe, rs.Name, int(rs.GetPort()))
+	}
+
+	if len(i.Env) == 0 {
+		i.Env = slices.Clone(rs.Env)
+	}
+
+	if len(i.EnvFrom) == 0 {
+		i.EnvFrom = slices.Clone(rs.EnvFrom)
+	}
+
+	if i.PodSecurityContext == nil {
+		i.PodSecurityContext = rs.PodSecurityContext.DeepCopy()
+	}
+	if i.ContainerSecurityContext == nil {
+		i.ContainerSecurityContext = rs.ContainerSecurityContext.DeepCopy()
+	}
+
+	if i.ServiceAccountName == "" {
+		i.ServiceAccountName = rs.ServiceAccountName
+	}
+
+	//nolint:staticcheck
+	if err := i.MultiAZ.reconcileOpts(cr); err != nil {
+		return errors.Wrapf(err, "%s: reconcile multiAZ options", path)
+	}
+
+	return i.validateMemberConfig(rs)
+}
+
+// TODO
+func (i *InstanceSpec) validateMemberConfig(rs *ReplsetSpec) error { return nil }

@@ -63,6 +63,14 @@ const (
 	clusterNameMaxLen                = 50
 )
 
+const (
+	startupDelaySecondsFlag    = "--startupDelaySeconds"
+	timeoutSecondsDefault      = int32(5)
+	initialDelaySecondsDefault = int32(90)
+	periodSecondsDefault       = int32(10)
+	failureThresholdDefault    = int32(12)
+)
+
 // CheckNSetDefaults sets default options, overwrites wrong settings
 // and checks if other options' values valid
 func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform version.Platform) error {
@@ -171,19 +179,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 	}
 
-	timeoutSecondsDefault := int32(5)
-	initialDelaySecondsDefault := int32(90)
-	periodSecondsDefault := int32(10)
-	failureThresholdDefault := int32(12)
-	if cr.CompareVersion("1.4.0") >= 0 {
-		initialDelaySecondsDefault = int32(60)
-		periodSecondsDefault = int32(30)
-		failureThresholdDefault = int32(4)
+	for _, rs := range cr.Spec.Replsets {
+		if err := rs.validateForInstances(); err != nil {
+			return err
+		}
 	}
-	if cr.CompareVersion("1.10.0") >= 0 {
-		timeoutSecondsDefault = int32(10)
-	}
-	startupDelaySecondsFlag := "--startupDelaySeconds"
 
 	if !cr.Spec.Sharding.Enabled {
 		for i := range cr.Spec.Replsets {
@@ -458,97 +458,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			return errors.Errorf("%s storage engine is not supported for config server replica set", replset.Storage.Engine)
 		}
 
-		if replset.LivenessProbe == nil {
-			replset.LivenessProbe = new(LivenessProbeExtended)
-		}
+		replset.LivenessProbe = defaultLivenessProbe(cr, replset.LivenessProbe)
 
-		if replset.LivenessProbe.StartupDelaySeconds == 0 {
-			replset.LivenessProbe.StartupDelaySeconds = 2 * 60 * 60
-		}
-		if replset.LivenessProbe.Exec == nil {
-			replset.LivenessProbe.Exec = &corev1.ExecAction{
-				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
-			}
-
-			replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
-			if cr.TLSEnabled() {
-				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
-			}
-
-			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
-				replset.LivenessProbe.Exec.Command = append(
-					replset.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
-				)
-			}
-
-			if cr.CompareVersion("1.14.0") >= 0 {
-				replset.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
-			}
-		}
-
-		if replset.LivenessProbe.InitialDelaySeconds < 1 {
-			replset.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
-		}
-		if replset.LivenessProbe.TimeoutSeconds < 1 {
-			replset.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
-		}
-		if replset.LivenessProbe.PeriodSeconds < 1 {
-			replset.LivenessProbe.PeriodSeconds = periodSecondsDefault
-		}
-		if replset.LivenessProbe.FailureThreshold < 1 {
-			replset.LivenessProbe.FailureThreshold = failureThresholdDefault
-		}
-
-		if replset.ReadinessProbe == nil {
-			replset.ReadinessProbe = &corev1.Probe{}
-		}
-
-		if replset.ReadinessProbe.TCPSocket == nil && replset.ReadinessProbe.Exec == nil {
-			replset.ReadinessProbe.Exec = &corev1.ExecAction{
-				Command: []string{
-					"/opt/percona/mongodb-healthcheck",
-					"k8s", "readiness",
-					"--component", "mongod",
-				},
-			}
-			if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
-				replset.ReadinessProbe.Exec.Command = append(replset.ReadinessProbe.Exec.Command,
-					"--ssl", "--sslInsecure",
-					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-					"--sslPEMKeyFile", "/tmp/tls.pem")
-			}
-
-			if cr.CompareVersion("1.15.0") < 0 {
-				replset.ReadinessProbe.Exec = nil
-				replset.ReadinessProbe.TCPSocket = &corev1.TCPSocketAction{
-					Port: intstr.FromInt(int(replset.GetPort())),
-				}
-			}
-		}
-
-		if replset.ReadinessProbe.InitialDelaySeconds < 1 {
-			replset.ReadinessProbe.InitialDelaySeconds = 10
-		}
-		if replset.ReadinessProbe.TimeoutSeconds < 1 {
-			replset.ReadinessProbe.TimeoutSeconds = 2
-		}
-		if replset.ReadinessProbe.PeriodSeconds < 1 {
-			replset.ReadinessProbe.PeriodSeconds = 3
-		}
-		if replset.ReadinessProbe.SuccessThreshold < 1 {
-			replset.ReadinessProbe.SuccessThreshold = 1
-		}
-		if replset.ReadinessProbe.FailureThreshold < 1 {
-			if cr.CompareVersion("1.11.0") >= 0 && replset.Name == ConfigReplSetName {
-				replset.ReadinessProbe.FailureThreshold = 3
-			} else {
-				replset.ReadinessProbe.FailureThreshold = 8
-			}
-		}
+		replset.ReadinessProbe = defaultReadinessProbe(cr, replset.ReadinessProbe, replset.Name, int(replset.GetPort()))
 
 		if cr.CompareVersion("1.6.0") >= 0 && len(replset.ServiceAccountName) == 0 {
 			replset.ServiceAccountName = WorkloadSA
@@ -730,13 +642,15 @@ func (rs *ReplsetSpec) IsEncryptionEnabled() (bool, error) {
 
 // SetDefaults set default options for the replset
 func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, log logr.Logger) error {
-	if rs.VolumeSpec == nil {
+	if rs.VolumeSpec == nil && !rs.InstanceMode() {
 		return fmt.Errorf("replset %s: volumeSpec should be specified", rs.Name)
 	}
 
-	err := rs.VolumeSpec.reconcileOpts()
-	if err != nil {
-		return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
+	if rs.VolumeSpec != nil {
+		if err := rs.VolumeSpec.reconcileOpts(); err != nil {
+			return fmt.Errorf("replset %s VolumeSpec: %v", rs.Name, err)
+		}
+
 	}
 
 	if rs.Expose.Enabled {
@@ -1117,7 +1031,16 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 	}
 }
 
+func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
+	// TODO
+	return nil
+}
+
 func (rs *ReplsetSpec) checkSafeDefaults(unsafe UnsafeFlags) error {
+	if rs.InstanceMode() {
+		return rs.checkSafeInstanceDefaults(unsafe)
+	}
+
 	if !unsafe.ReplsetSize {
 		if rs.Arbiter.Enabled {
 			if rs.Arbiter.Size != 1 {
@@ -1342,4 +1265,105 @@ func validateOCIStorages(cr *PerconaServerMongoDB) error {
 	}
 
 	return nil
+}
+
+func defaultReadinessProbe(
+	cr *PerconaServerMongoDB,
+	probe *corev1.Probe,
+	rsName string,
+	port int) *corev1.Probe {
+	if probe == nil {
+		probe = &corev1.Probe{}
+	}
+
+	if probe.TCPSocket == nil && probe.Exec == nil {
+		probe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "readiness",
+				"--component", "mongod",
+			},
+		}
+		if cr.TLSEnabled() && cr.CompareVersion("1.22.0") >= 0 {
+			probe.Exec.Command = append(probe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
+		}
+
+		if cr.CompareVersion("1.15.0") < 0 {
+			probe.Exec = nil
+			probe.TCPSocket = &corev1.TCPSocketAction{
+				Port: intstr.FromInt(int(port)),
+			}
+		}
+	}
+
+	if probe.InitialDelaySeconds < 1 {
+		probe.InitialDelaySeconds = 10
+	}
+	if probe.TimeoutSeconds < 1 {
+		probe.TimeoutSeconds = 2
+	}
+	if probe.PeriodSeconds < 1 {
+		probe.PeriodSeconds = 3
+	}
+	if probe.SuccessThreshold < 1 {
+		probe.SuccessThreshold = 1
+	}
+	if probe.FailureThreshold < 1 {
+		if cr.CompareVersion("1.11.0") >= 0 && rsName == ConfigReplSetName {
+			probe.FailureThreshold = 3
+		} else {
+			probe.FailureThreshold = 8
+		}
+	}
+	return probe
+}
+
+func defaultLivenessProbe(cr *PerconaServerMongoDB, probe *LivenessProbeExtended) *LivenessProbeExtended {
+	if probe == nil {
+		probe = &LivenessProbeExtended{}
+	}
+	if probe.StartupDelaySeconds == 0 {
+		probe.StartupDelaySeconds = 2 * 60 * 60
+	}
+	if probe.Exec == nil {
+		probe.Exec = &corev1.ExecAction{
+			Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
+		}
+
+		probe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+		if cr.TLSEnabled() {
+			probe.Probe.Exec.Command = append(probe.Probe.Exec.Command,
+				"--ssl", "--sslInsecure",
+				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+				"--sslPEMKeyFile", "/tmp/tls.pem")
+		}
+
+		if !probe.CommandHas(startupDelaySecondsFlag) {
+			probe.Exec.Command = append(
+				probe.Exec.Command,
+				startupDelaySecondsFlag, strconv.Itoa(probe.StartupDelaySeconds),
+			)
+		}
+
+		if cr.CompareVersion("1.14.0") >= 0 {
+			probe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+		}
+	}
+
+	if probe.InitialDelaySeconds < 1 {
+		probe.InitialDelaySeconds = initialDelaySecondsDefault
+	}
+	if probe.TimeoutSeconds < 1 {
+		probe.TimeoutSeconds = timeoutSecondsDefault
+	}
+	if probe.PeriodSeconds < 1 {
+		probe.PeriodSeconds = periodSecondsDefault
+	}
+	if probe.FailureThreshold < 1 {
+		probe.FailureThreshold = failureThresholdDefault
+	}
+	return probe
 }

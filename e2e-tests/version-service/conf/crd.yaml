@@ -10232,8 +10232,6 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
-                          configuration:
-                            type: string
                           containerSecurityContext:
                             properties:
                               allowPrivilegeEscalation:
@@ -18437,8 +18435,12 @@ spec:
                       type: object
                   required:
                   - size
-                  - volumeSpec
                   type: object
+                  x-kubernetes-validations:
+                  - message: configServer cannot have instances[]
+                    rule: self.clusterRole != 'configsvr' || !has(self.instances)
+                  - message: volumeSpec should be specified
+                    rule: has(self.volumeSpec) || has(self.instances)
                 type: array
               revisionHistoryLimit:
                 format: int32
@@ -25694,8 +25696,6 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
-                            configuration:
-                              type: string
                             containerSecurityContext:
                               properties:
                                 allowPrivilegeEscalation:
@@ -33899,8 +33899,14 @@ spec:
                         type: object
                     required:
                     - size
-                    - volumeSpec
                     type: object
+                    x-kubernetes-validations:
+                    - message: cannot declare configsvrReplSet using instances[]
+                      rule: '!has(self.instances)'
+                    - message: configServer cannot have instances[]
+                      rule: self.clusterRole != 'configsvr' || !has(self.instances)
+                    - message: volumeSpec should be specified
+                      rule: has(self.volumeSpec) || has(self.instances)
                   enabled:
                     type: boolean
                   mongos:
