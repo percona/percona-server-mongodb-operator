@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1444,6 +1445,10 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Cont
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if err := r.resizeMongosPVCs(ctx, cr); err != nil {
+		return errors.Wrap(err, "resize mongos PVCs")
+	}
+
 	if err := r.reconcileMongosStatefulset(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile mongos")
 	}
@@ -1464,6 +1469,45 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 		return errors.Wrap(err, "delete config server")
 	}
 
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled {
+		return nil
+	}
+
+	pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
+	if pvcSpec == nil {
+		return nil
+	}
+
+	if rstRunning, err := r.isRestoreRunning(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to check running restores")
+	} else if rstRunning {
+		return nil
+	}
+
+	if uptodate, err := r.isAllSfsUpToDate(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to check if all sfs are up to date")
+	} else if !uptodate {
+		return nil
+	}
+
+	msSts := psmdb.MongosStatefulset(cr)
+	err := r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
+	if k8serrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
+	}
+	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
+		return nil
+	}
+
+	if err := r.resizeVolumesIfNeeded(ctx, cr, msSts, naming.MongosLabels(cr), psmdbconfig.MongosLogVolClaimName, *pvcSpec); err != nil {
+		return errors.Wrap(err, "resize mongos volumes")
+	}
 	return nil
 }
 
@@ -1496,6 +1540,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return nil
 	}
 
+	var currentVCT []corev1.PersistentVolumeClaim
+
 	sts := psmdb.MongosStatefulset(cr)
 	err = setControllerReference(cr, sts, r.scheme)
 	if err != nil {
@@ -1505,10 +1551,24 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
+	if err == nil && cr.CompareVersion("1.24.0") >= 0 {
+		currentVCT = sts.Spec.VolumeClaimTemplates
+		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+			return vct.Name == psmdbconfig.MongosLogVolClaimName
+		})
+		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
+		if hasLogVCT != wantLogVCT {
+			log.Info("Recreating mongos statefulset to change log storage")
+			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
+			}
+			return nil
+		}
 
-	customConfig, err := r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
-	if err != nil {
-		return errors.Wrap(err, "check if mongos custom configuration exists")
+		if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
+			log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sts.Name)
+			return nil
+		}
 	}
 
 	cfgPods, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
@@ -1540,7 +1600,34 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(keyfileSecretErr, "check keyfile secret for mongos")
 	}
 
-	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, customConfig, cfgInstances, keyfileSecretErr == nil)
+	configs := psmdb.StatefulConfigParams{}
+	configs.MongoDConf, err = r.getCustomConfig(ctx, cr.Namespace, naming.MongosCustomConfigName(cr))
+	if err != nil {
+		return errors.Wrap(err, "check if mongos custom configuration exists")
+	}
+
+	if cr.CompareVersion("1.24.0") >= 0 {
+		if cr.IsLogCollectorEnabled() {
+			configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
+			if err != nil {
+				return errors.Wrap(err, "check if log collection custom configuration exists")
+			}
+
+			configs.LogRotateConf, err = r.getCustomConfig(ctx, cr.Namespace, logrotate.ConfigMapName(cr.Name))
+			if err != nil {
+				return errors.Wrap(err, "check if log rotate configuration exists")
+			}
+
+			if cr.Spec.LogCollector.LogRotate != nil && cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
+				configs.LogRotateExtraConf, err = r.getCustomConfig(ctx, cr.Namespace, cr.Spec.LogCollector.LogRotate.ExtraConfig.Name)
+				if err != nil {
+					return errors.Wrap(err, "check if log rotate extra configuration exists")
+				}
+			}
+		}
+	}
+
+	templateSpec, err := psmdb.MongosTemplateSpec(cr, r.initImage, log, configs, cfgInstances, keyfileSecretErr == nil)
 	if err != nil {
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
@@ -1577,6 +1664,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 
 	sts.Spec = psmdb.MongosStatefulsetSpec(cr, templateSpec)
+
+	if len(currentVCT) > 0 {
+		// Pin the volumeClaimTemplates, they should never change here.
+		sts.Spec.VolumeClaimTemplates = currentVCT
+	}
 
 	err = r.createOrUpdate(ctx, sts)
 	if err != nil {

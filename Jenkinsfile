@@ -11,6 +11,7 @@ void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
@@ -57,6 +58,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
@@ -367,6 +369,7 @@ void runTest(Integer TEST_ID) {
                 export SKIP_DELETE=0
                 export COLUMNS=200
                 export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
                 export PATH="\$HOME/.local/bin:\$PATH"
