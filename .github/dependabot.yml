@@ -45,6 +45,14 @@ updates:
       interval: weekly
       day: "monday"
       time: "01:00"
+    groups:
+      k8s-ecosystem:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      go-openapi:
+        patterns:
+          - "github.com/go-openapi/*"
   - package-ecosystem: gomod
     commit-message:
       prefix: "CLOUD-727"
@@ -73,9 +81,3 @@ updates:
       interval: weekly
       day: "monday"
       time: "01:00"
-    groups:
-      k8s-ecosystem:
-        patterns:
-          - "k8s.io/*"
-          - "sigs.k8s.io/*"
-
