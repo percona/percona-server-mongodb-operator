@@ -26,7 +26,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	volumeSpec := rs.VolumeSpec
 
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
+		ls[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
 	}
 
 	switch ls[naming.LabelKubernetesComponent] {
