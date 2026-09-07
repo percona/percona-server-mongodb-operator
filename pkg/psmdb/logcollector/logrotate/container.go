@@ -26,7 +26,7 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container, error) {
+func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
 	}
@@ -81,8 +81,8 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
+				Name:      logVol.Name,
+				MountPath: logVol.MountPath,
 			},
 			{
 				Name:      config.BinVolumeName,

@@ -3212,8 +3212,9 @@ wait_all_pvc_resize() {
 	local expected_size=$1
 	local max_retry=${2:-120}
 	local sleep_time=${3:-5}
+	local selector=${4:-app.kubernetes.io/component=mongod}
 
-	for pvc in $(kubectl_bin get pvc -l app.kubernetes.io/component=mongod -o name); do
+	for pvc in $(kubectl_bin get pvc -l "${selector}" -o name); do
 		if ! wait_pvc_resize "$pvc" "$expected_size" "$max_retry" "$sleep_time"; then
 			return 1
 		fi
