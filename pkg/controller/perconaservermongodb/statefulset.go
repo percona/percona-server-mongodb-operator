@@ -17,6 +17,7 @@ import (
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
@@ -174,8 +175,19 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		SSLSecret:     sslSecret,
 		KeyfileExists: keyfileSecretErr == nil,
 	}
+
+	set, err := membergroup.Resolve(cr, rs)
+	if err != nil {
+		return nil, err
+	}
+	group, ok := set.GetByLabels(ls)
+	if !ok {
+		return nil, errors.Errorf("no member group for component %q in replset %s",
+			ls[naming.LabelKubernetesComponent], rs.Name)
+	}
+
 	sfsSpec, err := psmdb.StatefulSpec(
-		ctx, cr, rs, ls, r.initImage,
+		ctx, cr, rs, group, r.initImage,
 		configs,
 		secrets,
 	)

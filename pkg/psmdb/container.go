@@ -136,7 +136,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		MountPath: "/etc/users-secret",
 	})
 
-	if cr.CompareVersion("1.22.0") >= 0 && replset.HookScript.Specified() {
+	if cr.CompareVersion("1.22.0") >= 0 && group.MultiAZ.HookScript.Specified() {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.HookscriptVolClaimName,
 			MountPath: config.HookscriptMountPath,
