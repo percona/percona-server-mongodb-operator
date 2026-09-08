@@ -11,10 +11,12 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 type containerFnParams struct {
 	replset                  *api.ReplsetSpec
+	group                    membergroup.Group
 	name                     string
 	resources                corev1.ResourceRequirements
 	ikeyName                 string
@@ -30,6 +32,7 @@ type containerFnParams struct {
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
 	var (
 		replset                  = params.replset
+		group                    = params.group
 		name                     = params.name
 		resources                = params.resources
 		ikeyName                 = params.ikeyName
