@@ -221,17 +221,61 @@ func (i InstanceSpec) IsPrimaryEligible() bool {
 // IsDataBearing returns true if the instance holds data, i.e., it is not an arbiter.
 func (i InstanceSpec) IsDataBearing() bool { return !i.IsArbiterOnly() }
 
+// LegacyVotePolicy reports whether this replica set keeps the historical vote
+// algorithm (mongo.ConfigMembers.SetVotes). True for a legacy topology, and for
+// an instances[] topology whose groups are all reserved names with no rsConfig
+// at all: such input carries no explicit member intent, so the reserved names
+// still mean what they always meant. Any custom group, or any rsConfig on any
+// group, makes the whole replica set explicit.
+//
+// This is the single source of truth for the decision. membergroup.Resolve maps
+// it onto membergroup.PolicyLegacy / PolicyExplicit, and instanceCounts and
+// checkSafeInstanceDefaults consult it so that validation never enforces an
+// invariant the vote engine is not going to be asked to uphold.
+func (r *ReplsetSpec) UseLegacyVotePolicy() bool {
+	if !r.InstanceMode() {
+		return true
+	}
+	for i := range r.Instances {
+		if !IsReservedGroupName(r.Instances[i].Name) || r.Instances[i].HasMemberConfig() {
+			return false
+		}
+	}
+	return true
+}
+
+// resolvedMember returns the (votes, priority, dataBearing) for the instance.
+func (i InstanceSpec) resolvedMember(legacy bool) (votes, priority int32, dataBearing bool) {
+	if legacy {
+		switch i.Name {
+		case ReservedGroupArbiter:
+			return 1, 0, false
+		case ReservedGroupNonVoting:
+			return 0, 0, true
+		case ReservedGroupHidden:
+			return 1, 0, true
+		default: // ReservedGroupMongod
+			return 1, defaultInstancePriority, true
+		}
+	}
+	return i.GetVotes(1), i.ResolvedPriority(), i.IsDataBearing()
+}
+
 func (r *ReplsetSpec) instanceCounts() (members, voters, dataBearingVoters, primaryEligible int32) {
+	legacyPolicy := r.UseLegacyVotePolicy()
+
 	for j := range r.Instances {
 		i := &r.Instances[j]
+		votes, priority, dataBearing := i.resolvedMember(legacyPolicy)
+
 		members += i.Replicas
-		if i.GetVotes(1) > 0 {
+		if votes > 0 {
 			voters += i.Replicas
-			if i.IsDataBearing() {
+			if dataBearing {
 				dataBearingVoters += i.Replicas
 			}
 		}
-		if i.IsPrimaryEligible() {
+		if i.Replicas > 0 && votes > 0 && priority > 0 {
 			primaryEligible += i.Replicas
 		}
 	}

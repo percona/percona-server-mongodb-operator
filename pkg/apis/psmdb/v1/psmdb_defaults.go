@@ -1047,9 +1047,17 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 		return errors.Errorf("a replica set supports at most %d members, got %d",
 			maxReplsetMembers, members)
 	}
-	if voters > maxVotingMembers {
-		return errors.Errorf("a replica set supports at most %d voting members, got %d",
-			maxVotingMembers, voters)
+
+	if !rs.UseLegacyVotePolicy() {
+		if voters > maxVotingMembers {
+			return errors.Errorf("a replica set supports at most %d voting members, got %d. "+
+				"Move the surplus members to an instance group with rsConfig.votes: 0",
+				maxVotingMembers, voters)
+		}
+		if !unsafe.ReplsetSize && voters%2 == 0 {
+			return errors.Errorf("the number of voting members must be odd, got %d. "+
+				"Set spec.unsafeFlags.replsetSize to true to disable this check", voters)
+		}
 	}
 
 	if primaryEligible == 0 {
@@ -1057,16 +1065,10 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 			"replicas > 0 with votes > 0 and a nonzero effective priority")
 	}
 
-	if !unsafe.ReplsetSize {
-		if voters%2 == 0 {
-			return errors.Errorf("the number of voting members must be odd, got %d. "+
-				"Set spec.unsafeFlags.replsetSize to true to disable this check", voters)
-		}
-		if dataBearingVoters < minSafeDataBearingVoters {
-			return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
-				"Set spec.unsafeFlags.replsetSize to true to disable this check",
-				minSafeDataBearingVoters, dataBearingVoters)
-		}
+	if !unsafe.ReplsetSize && dataBearingVoters < minSafeDataBearingVoters {
+		return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
+			"Set spec.unsafeFlags.replsetSize to true to disable this check",
+			minSafeDataBearingVoters, dataBearingVoters)
 	}
 
 	mode, err := rs.Configuration.GetTLSMode()
