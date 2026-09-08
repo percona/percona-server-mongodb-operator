@@ -475,12 +475,20 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			return err
 		}
 
-		if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
-			return errors.Wrap(err, "set nonvoting defaults")
-		}
+		if replset.InstanceMode() {
+			for i := range replset.Instances {
+				if err := replset.Instances[i].SetDefaults(platform, cr, replset); err != nil {
+					return err
+				}
+			}
+		} else {
+			if err := replset.NonVoting.SetDefaults(cr, replset); err != nil {
+				return errors.Wrap(err, "set nonvoting defaults")
+			}
 
-		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
-			return errors.Wrap(err, "set nonvoting defaults")
+			if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
+				return errors.Wrap(err, "set hidden defaults")
+			}
 		}
 	}
 
