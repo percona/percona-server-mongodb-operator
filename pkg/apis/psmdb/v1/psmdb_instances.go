@@ -7,7 +7,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // These instance names are reserved for producing the equivalent legacy Kubernetes objects (i.e, without the use of instances[]).
@@ -18,21 +17,15 @@ const (
 	ReservedGroupHidden    = "hidden"
 )
 
-const maxPodNameLen = 63
+const (
+	maxReplsetMembers        = 50
+	maxVotingMembers         = 7
+	minSafeDataBearingVoters = 3
+	defaultInstancePriority  = 2
+)
 
 // InstancesMinCRVersion is the minimum CR version that supports the use of instances[].
 const InstancesMinCRVersion = "1.24.0"
-
-// blockedGroupNames are names that are neither reserved identities nor legal
-// custom names, because the object names or component labels they produce
-// collide with something the operator already owns.
-var blockedGroupNames = map[string]string{
-	"nv":        "it is the StatefulSet suffix of the reserved nonVoting group",
-	"nonvoting": `use "nonVoting"`,
-	"cfg":       "it is the config server component label",
-	"mongos":    "it is the mongos component label",
-	"search":    "it is the search component label",
-}
 
 func IsReservedGroupName(name string) bool {
 	switch name {
@@ -43,10 +36,15 @@ func IsReservedGroupName(name string) bool {
 }
 
 // InstanceSpec describes one named group of members inside a replica set.
+// +kubebuilder:validation:XValidation:rule="self.?rsConfig.?arbiterOnly.orValue(false) || has(self.volumeSpec)",message="volumeSpec is required for a data-bearing instance"
+// +kubebuilder:validation:XValidation:rule="!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.volumeSpec)",message="arbiterOnly instance must not declare volumeSpec: arbiters use an emptyDir for the mongod data path"
+// +kubebuilder:validation:XValidation:rule="!(self.name in ['nv','nonvoting','cfg','mongos','search'])",message="instance name is reserved by the operator: nv, nonvoting, cfg, mongos and search collide with generated object names or component labels (did you mean nonVoting?)"
 type InstanceSpec struct {
 	MultiAZ `json:",inline"`
 
 	// Name of this member group. Must be unique within the replica set.
+
+	// +kubebuilder:validation:XValidation:rule="format.dns1123Label().validate(self).hasValue()",message="instance name should be a valid dns1123 label"
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=54
@@ -76,6 +74,12 @@ type InstanceSpec struct {
 }
 
 // MemberConfigSpec exposes the subset of MongoDB replica set member document fields a group controls.
+// +kubebuilder:validation:XValidation:rule="!self.?arbiterOnly.orValue(false) || !self.?hidden.orValue(false)",message="arbiterOnly instance must not be hidden"
+// +kubebuilder:validation:XValidation:rule="!self.?arbiterOnly.orValue(false) || self.?votes.orValue(1) == 1",message="arbiterOnly instance must have votes=1"
+// +kubebuilder:validation:XValidation:rule="!self.?arbiterOnly.orValue(false) || self.?priority.orValue(0) == 0",message="arbiterOnly instance must have priority=0"
+// +kubebuilder:validation:XValidation:rule="!self.?arbiterOnly.orValue(false) || !has(self.tags)",message="arbiterOnly instance must not have tags"
+// +kubebuilder:validation:XValidation:rule="self.?votes.orValue(1) != 0 || self.?priority.orValue(0) == 0",message="votes=0 requires priority=0"
+// +kubebuilder:validation:XValidation:rule="!self.?hidden.orValue(false) || self.?priority.orValue(0) == 0",message="hidden=true requires priority=0"
 type MemberConfigSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000
@@ -92,6 +96,7 @@ type MemberConfigSpec struct {
 
 	ArbiterOnly *bool `json:"arbiterOnly,omitempty"`
 
+	// +kubebuilder:validation:MaxProperties=32
 	Tags map[string]string `json:"tags,omitempty"`
 }
 
@@ -150,117 +155,12 @@ func (i InstanceSpec) GetTags() map[string]string {
 	return i.RSConfig.Tags
 }
 
-func (rs *ReplsetSpec) validateForInstances() error {
-	if rs == nil || !rs.InstanceMode() {
-		return nil
-	}
-
-	if rs.ClusterRole == ClusterRoleConfigSvr {
-		return errors.Errorf("spec.replsets[%s].instances is not supported for clusterRole %s: "+
-			"declare the config server replica set with size", rs.Name, ClusterRoleConfigSvr)
-	}
-
-	if rs.Size != 0 {
-		return errors.Errorf("spec.replsets[%s].size must be 0 or absent when instances is set", rs.Name)
-	}
-
-	if rs.Arbiter.Enabled {
-		return errors.Errorf("spec.replsets[%s].arbiter.enabled must be false when instances is set", rs.Name)
-	}
-
-	if rs.NonVoting.Enabled {
-		return errors.Errorf("spec.replsets[%s].nonvoting.enabled must be false when instances is set", rs.Name)
-	}
-
-	if rs.Hidden.Enabled {
-		return errors.Errorf("spec.replsets[%s].hidden.enabled must be false when instances is set", rs.Name)
-	}
-
-	for _, ins := range rs.Instances {
-		if err := ins.validate(rs.Name); err != nil {
-			return err
-		}
-	}
-
-	// TODO: we need to validate name collisions between every StatefulSet name the CR would produce.
-	// For example: group "hot" in "rs0" and a base replica set named "rs0-hot" both will produce a StatefulSet named "rs0-hot".
-
-	return nil
-}
-
-func (is *InstanceSpec) validate(rsName string) error {
-	if is == nil {
-		return nil
-	}
-
-	if reason, blocked := blockedGroupNames[is.Name]; blocked {
-		return errors.Errorf("spec.replsets[%s].instances: instance name %q is reserved: %s",
-			rsName, is.Name, reason)
-	}
-
-	if IsReservedGroupName(is.Name) {
-		return nil
-	}
-
-	if errs := validation.IsDNS1123Label(is.Name); len(errs) > 0 {
-		return errors.Errorf("spec.replsets[%s].instances[%s].name must be a valid DNS-1123 label: %v", rsName, is.Name, errs)
-	}
-	return nil
-}
-
-func (r *ReplsetSpec) groupNames() []string {
-	if r.InstanceMode() {
-		names := make([]string, 0, len(r.Instances))
-		for i := range r.Instances {
-			names = append(names, r.Instances[i].Name)
-		}
-		return names
-	}
-
-	names := []string{ReservedGroupMongod}
-	if r.Arbiter.Enabled {
-		names = append(names, ReservedGroupArbiter)
-	}
-	if r.NonVoting.Enabled {
-		names = append(names, ReservedGroupNonVoting)
-	}
-	if r.Hidden.Enabled {
-		names = append(names, ReservedGroupHidden)
-	}
-	return names
-}
-
-func (r *ReplsetSpec) groupReplicas(name string) int32 {
-	if r.InstanceMode() {
-		if i := r.Instance(name); i != nil {
-			return i.Replicas
-		}
-		return 0
-	}
-	switch name {
-	case ReservedGroupArbiter:
-		return r.Arbiter.GetSize()
-	case ReservedGroupNonVoting:
-		return r.NonVoting.GetSize()
-	case ReservedGroupHidden:
-		return r.Hidden.GetSize()
-	default:
-		return r.Size
-	}
-}
-
 func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
 	path := fmt.Sprintf("spec.replsets[%s].instances[%s]", rs.Name, i.Name)
 
-	if i.IsArbiterOnly() {
-		if i.VolumeSpec != nil {
-			return errors.Errorf("%s: arbiter-only instance must not declare volumeSpec: "+
-				"arbiters use an emptyDir for the mongod data path", path)
-		}
-	} else {
-		if i.VolumeSpec == nil {
-			return errors.Errorf("%s.volumeSpec is required for a data-bearing instance", path)
-		}
+	// Presence and absence of volumeSpec are CEL rules; only the option
+	// normalization is left.
+	if i.VolumeSpec != nil {
 		if err := i.VolumeSpec.reconcileOpts(); err != nil {
 			return errors.Wrapf(err, "%s.volumeSpec", path)
 		}
@@ -302,8 +202,64 @@ func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		return errors.Wrapf(err, "%s: reconcile multiAZ options", path)
 	}
 
-	return i.validateMemberConfig(rs)
+	return nil
 }
 
-// TODO
-func (i *InstanceSpec) validateMemberConfig(rs *ReplsetSpec) error { return nil }
+// ResolvedPriority returns the effective priority of the instance, taking into account arbiter, hidden, and voting status.
+func (i InstanceSpec) ResolvedPriority() int32 {
+	if i.IsArbiterOnly() || i.IsHidden() || i.GetVotes(1) == 0 {
+		return 0
+	}
+	return i.GetPriority(defaultInstancePriority)
+}
+
+// IsPrimaryEligible returns true if the instance is eligible to become the primary in the replica set.
+func (i InstanceSpec) IsPrimaryEligible() bool {
+	return i.Replicas > 0 && i.GetVotes(1) > 0 && i.ResolvedPriority() > 0
+}
+
+// IsDataBearing returns true if the instance holds data, i.e., it is not an arbiter.
+func (i InstanceSpec) IsDataBearing() bool { return !i.IsArbiterOnly() }
+
+func (r *ReplsetSpec) instanceCounts() (members, voters, dataBearingVoters, primaryEligible int32) {
+	for j := range r.Instances {
+		i := &r.Instances[j]
+		members += i.Replicas
+		if i.GetVotes(1) > 0 {
+			voters += i.Replicas
+			if i.IsDataBearing() {
+				dataBearingVoters += i.Replicas
+			}
+		}
+		if i.IsPrimaryEligible() {
+			primaryEligible += i.Replicas
+		}
+	}
+
+	for _, ext := range r.ExternalNodes {
+		if ext == nil {
+			continue
+		}
+		members++
+		if ext.Votes > 0 {
+			voters++
+			if !ext.ArbiterOnly {
+				dataBearingVoters++
+			}
+		}
+	}
+
+	return members, voters, dataBearingVoters, primaryEligible
+}
+
+func DerivedStatefulSetName(clusterName, rsName, groupName string) string {
+	base := clusterName + "-" + rsName
+	switch groupName {
+	case ReservedGroupMongod:
+		return base
+	case ReservedGroupNonVoting:
+		return base + "-nv"
+	default:
+		return base + "-" + groupName
+	}
+}

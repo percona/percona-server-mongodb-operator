@@ -179,11 +179,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 	}
 
-	for _, rs := range cr.Spec.Replsets {
-		if err := rs.validateForInstances(); err != nil {
-			return err
-		}
-	}
+	// TODO: we need to validate name collisions between every StatefulSet name the CR would produce.
+	// For example: group "hot" in "rs0" and a base replica set named "rs0-hot" both will produce a StatefulSet named "rs0-hot".
+	// This needs the cluster name and every replica set, so it cannot be a
+	// field-scoped CEL rule; a root-scoped rule would be possible but costly.
+	// for _, rs := range cr.Spec.Replsets {
+	// }
 
 	if !cr.Spec.Sharding.Enabled {
 		for i := range cr.Spec.Replsets {
@@ -1040,7 +1041,42 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 }
 
 func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
-	// TODO
+	members, voters, dataBearingVoters, primaryEligible := rs.instanceCounts()
+
+	if members > maxReplsetMembers {
+		return errors.Errorf("a replica set supports at most %d members, got %d",
+			maxReplsetMembers, members)
+	}
+	if voters > maxVotingMembers {
+		return errors.Errorf("a replica set supports at most %d voting members, got %d",
+			maxVotingMembers, voters)
+	}
+
+	if primaryEligible == 0 {
+		return errors.New("no instance can hold the primary: at least one instance needs " +
+			"replicas > 0 with votes > 0 and a nonzero effective priority")
+	}
+
+	if !unsafe.ReplsetSize {
+		if voters%2 == 0 {
+			return errors.Errorf("the number of voting members must be odd, got %d. "+
+				"Set spec.unsafeFlags.replsetSize to true to disable this check", voters)
+		}
+		if dataBearingVoters < minSafeDataBearingVoters {
+			return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
+				"Set spec.unsafeFlags.replsetSize to true to disable this check",
+				minSafeDataBearingVoters, dataBearingVoters)
+		}
+	}
+
+	mode, err := rs.Configuration.GetTLSMode()
+	if err != nil {
+		return errors.Wrap(err, "get tls mode")
+	}
+	if mode != "" {
+		return errors.New("tlsMode must be set using spec.tls.mode")
+	}
+
 	return nil
 }
 

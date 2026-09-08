@@ -10743,6 +10743,7 @@ spec:
                               tags:
                                 additionalProperties:
                                   type: string
+                                maxProperties: 32
                                 type: object
                               votes:
                                 format: int32
@@ -10750,6 +10751,23 @@ spec:
                                 minimum: 0
                                 type: integer
                             type: object
+                            x-kubernetes-validations:
+                            - message: arbiterOnly instance must not be hidden
+                              rule: '!self.?arbiterOnly.orValue(false) || !self.?hidden.orValue(false)'
+                            - message: arbiterOnly instance must have votes=1
+                              rule: '!self.?arbiterOnly.orValue(false) || self.?votes.orValue(1)
+                                == 1'
+                            - message: arbiterOnly instance must have priority=0
+                              rule: '!self.?arbiterOnly.orValue(false) || self.?priority.orValue(0)
+                                == 0'
+                            - message: arbiterOnly instance must not have tags
+                              rule: '!self.?arbiterOnly.orValue(false) || !has(self.tags)'
+                            - message: votes=0 requires priority=0
+                              rule: self.?votes.orValue(1) != 0 || self.?priority.orValue(0)
+                                == 0
+                            - message: hidden=true requires priority=0
+                              rule: '!self.?hidden.orValue(false) || self.?priority.orValue(0)
+                                == 0'
                           runtimeClassName:
                             type: string
                           serviceAccountName:
@@ -12642,6 +12660,17 @@ spec:
                         - name
                         - replicas
                         type: object
+                        x-kubernetes-validations:
+                        - message: volumeSpec is required for a data-bearing instance
+                          rule: self.?rsConfig.?arbiterOnly.orValue(false) || has(self.volumeSpec)
+                        - message: 'arbiterOnly instance must not declare volumeSpec:
+                            arbiters use an emptyDir for the mongod data path'
+                          rule: '!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.volumeSpec)'
+                        - message: 'instance name is reserved by the operator: nv,
+                            nonvoting, cfg, mongos and search collide with generated
+                            object names or component labels (did you mean nonVoting?)'
+                          rule: '!(self.name in [''nv'',''nonvoting'',''cfg'',''mongos'',''search''])'
+                      maxItems: 50
                       minItems: 1
                       type: array
                       x-kubernetes-list-map-keys:
@@ -18432,9 +18461,26 @@ spec:
                   type: object
                   x-kubernetes-validations:
                   - message: configServer cannot have instances[]
-                    rule: self.clusterRole != 'configsvr' || !has(self.instances)
-                  - message: volumeSpec should be specified
-                    rule: has(self.volumeSpec) || has(self.instances)
+                    rule: self.?clusterRole.orValue('') != 'configsvr' || !has(self.instances)
+                  - message: 'exactly one of volumeSpec or instances[] must be set:
+                      volumeSpec is required in legacy mode and must be absent when
+                      instances[] is used, where each instance declares its own'
+                    rule: has(self.volumeSpec) != has(self.instances)
+                  - message: 'size must be absent when instances[] is set: declare
+                      instances[].replicas instead'
+                    rule: '!has(self.instances) || self.?size.orValue(0) == 0'
+                  - message: 'arbiter must be absent when instances[] is set: declare
+                      an instance with rsConfig.arbiterOnly instead'
+                    rule: '!has(self.instances) || (!self.?arbiter.?enabled.orValue(false)
+                      && self.?arbiter.?size.orValue(0) == 0)'
+                  - message: 'nonvoting must be absent when instances[] is set: declare
+                      an instance named nonVoting instead'
+                    rule: '!has(self.instances) || (!self.?nonvoting.?enabled.orValue(false)
+                      && self.?nonvoting.?size.orValue(0) == 0)'
+                  - message: 'hidden must be absent when instances[] is set: declare
+                      an instance named hidden instead'
+                    rule: '!has(self.instances) || (!self.?hidden.?enabled.orValue(false)
+                      && self.?hidden.?size.orValue(0) == 0)'
                 type: array
               revisionHistoryLimit:
                 format: int32
@@ -26201,6 +26247,7 @@ spec:
                                 tags:
                                   additionalProperties:
                                     type: string
+                                  maxProperties: 32
                                   type: object
                                 votes:
                                   format: int32
@@ -26208,6 +26255,23 @@ spec:
                                   minimum: 0
                                   type: integer
                               type: object
+                              x-kubernetes-validations:
+                              - message: arbiterOnly instance must not be hidden
+                                rule: '!self.?arbiterOnly.orValue(false) || !self.?hidden.orValue(false)'
+                              - message: arbiterOnly instance must have votes=1
+                                rule: '!self.?arbiterOnly.orValue(false) || self.?votes.orValue(1)
+                                  == 1'
+                              - message: arbiterOnly instance must have priority=0
+                                rule: '!self.?arbiterOnly.orValue(false) || self.?priority.orValue(0)
+                                  == 0'
+                              - message: arbiterOnly instance must not have tags
+                                rule: '!self.?arbiterOnly.orValue(false) || !has(self.tags)'
+                              - message: votes=0 requires priority=0
+                                rule: self.?votes.orValue(1) != 0 || self.?priority.orValue(0)
+                                  == 0
+                              - message: hidden=true requires priority=0
+                                rule: '!self.?hidden.orValue(false) || self.?priority.orValue(0)
+                                  == 0'
                             runtimeClassName:
                               type: string
                             serviceAccountName:
@@ -28100,6 +28164,18 @@ spec:
                           - name
                           - replicas
                           type: object
+                          x-kubernetes-validations:
+                          - message: volumeSpec is required for a data-bearing instance
+                            rule: self.?rsConfig.?arbiterOnly.orValue(false) || has(self.volumeSpec)
+                          - message: 'arbiterOnly instance must not declare volumeSpec:
+                              arbiters use an emptyDir for the mongod data path'
+                            rule: '!self.?rsConfig.?arbiterOnly.orValue(false) ||
+                              !has(self.volumeSpec)'
+                          - message: 'instance name is reserved by the operator: nv,
+                              nonvoting, cfg, mongos and search collide with generated
+                              object names or component labels (did you mean nonVoting?)'
+                            rule: '!(self.name in [''nv'',''nonvoting'',''cfg'',''mongos'',''search''])'
+                        maxItems: 50
                         minItems: 1
                         type: array
                         x-kubernetes-list-map-keys:
@@ -33892,9 +33968,26 @@ spec:
                     - message: cannot declare configsvrReplSet using instances[]
                       rule: '!has(self.instances)'
                     - message: configServer cannot have instances[]
-                      rule: self.clusterRole != 'configsvr' || !has(self.instances)
-                    - message: volumeSpec should be specified
-                      rule: has(self.volumeSpec) || has(self.instances)
+                      rule: self.?clusterRole.orValue('') != 'configsvr' || !has(self.instances)
+                    - message: 'exactly one of volumeSpec or instances[] must be set:
+                        volumeSpec is required in legacy mode and must be absent when
+                        instances[] is used, where each instance declares its own'
+                      rule: has(self.volumeSpec) != has(self.instances)
+                    - message: 'size must be absent when instances[] is set: declare
+                        instances[].replicas instead'
+                      rule: '!has(self.instances) || self.?size.orValue(0) == 0'
+                    - message: 'arbiter must be absent when instances[] is set: declare
+                        an instance with rsConfig.arbiterOnly instead'
+                      rule: '!has(self.instances) || (!self.?arbiter.?enabled.orValue(false)
+                        && self.?arbiter.?size.orValue(0) == 0)'
+                    - message: 'nonvoting must be absent when instances[] is set:
+                        declare an instance named nonVoting instead'
+                      rule: '!has(self.instances) || (!self.?nonvoting.?enabled.orValue(false)
+                        && self.?nonvoting.?size.orValue(0) == 0)'
+                    - message: 'hidden must be absent when instances[] is set: declare
+                        an instance named hidden instead'
+                      rule: '!has(self.instances) || (!self.?hidden.?enabled.orValue(false)
+                        && self.?hidden.?size.orValue(0) == 0)'
                   enabled:
                     type: boolean
                   mongos:
