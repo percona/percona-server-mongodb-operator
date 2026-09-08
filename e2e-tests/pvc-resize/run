@@ -15,6 +15,10 @@ function patch_pvc_request() {
 }
 
 function get_default_storageclass() {
+	if [[ "$EKS" -eq 1 ]]; then
+		echo "gp3-resizable"
+		return 0
+	fi
 	kubectl_bin get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}'
 }
 
@@ -190,6 +194,8 @@ wait_all_pvc_resize "2Gi" 120 5 "${rs0_pvc_selector}"
 
 echo
 
+last_configured_storage="2Gi"
+
 if [[ "$EKS" -eq 1 || -n "$OPENSHIFT" ]]; then
 	# AWS rate limits PVC expansion for the same EBS volume (1 expand operation in every 6 hours),
 	# so we need to delete and recreate the cluster
@@ -206,20 +212,22 @@ if [[ "$EKS" -eq 1 || -n "$OPENSHIFT" ]]; then
 	sleep 10
 
 	wait_cluster_consistency "$cluster"
+	last_configured_storage="1Gi"
 fi
 
 desc 'create resourcequota'
 
-# rs0 holds 3x2Gi, cfg holds 3x1Gi and the mongos logs hold 2x1Gi, so 11Gi is in
-# use. We're setting the quota to 12Gi, so only one rs0 PVC can grow to 3Gi. the
-# rest fail with an exceeded quota error, which the operator handles by reverting
-# the storage request in the spec back to the configured size and keeping the
-# cluster ready
+# cfg holds 3x1Gi and the mongos logs hold 2x1Gi. rs0 holds 3x2Gi, or 3x1Gi if
+# the cluster was recreated above, so 11Gi or 8Gi is in use. We're setting the
+# quota to 12Gi, so one rs0 PVC (two after a recreate) can grow to 3Gi. the rest
+# fail with an exceeded quota error, which the operator handles by reverting the
+# storage request in the spec back to the configured size and keeping the cluster
+# ready
 
 apply_resourcequota 12Gi
 patch_pvc_request "${cluster}" "3Gi"
 
-wait_pvc_request_revert "${cluster}" "2Gi"
+wait_pvc_request_revert "${cluster}" "${last_configured_storage}"
 wait_cluster_status ${cluster} "ready"
 echo
 
