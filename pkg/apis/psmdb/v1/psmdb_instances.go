@@ -21,7 +21,9 @@ const (
 	maxReplsetMembers        = 50
 	maxVotingMembers         = 7
 	minSafeDataBearingVoters = 3
-	defaultInstancePriority  = 2
+
+	defaultInstancePriority = 2
+	defaultVotes            = 1
 )
 
 // InstancesMinCRVersion is the minimum CR version that supports the use of instances[].
@@ -126,16 +128,16 @@ func (i InstanceSpec) HasMemberConfig() bool {
 	return i.RSConfig != nil
 }
 
-func (i InstanceSpec) GetPriority(def int32) int32 {
+func (i InstanceSpec) GetPriority() int32 {
 	if i.RSConfig == nil || i.RSConfig.Priority == nil {
-		return def
+		return defaultInstancePriority
 	}
 	return *i.RSConfig.Priority
 }
 
-func (i InstanceSpec) GetVotes(def int32) int32 {
+func (i InstanceSpec) GetVotes() int32 {
 	if i.RSConfig == nil || i.RSConfig.Votes == nil {
-		return def
+		return defaultVotes
 	}
 	return *i.RSConfig.Votes
 }
@@ -207,15 +209,15 @@ func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 
 // ResolvedPriority returns the effective priority of the instance, taking into account arbiter, hidden, and voting status.
 func (i InstanceSpec) ResolvedPriority() int32 {
-	if i.IsArbiterOnly() || i.IsHidden() || i.GetVotes(1) == 0 {
+	if i.IsArbiterOnly() || i.IsHidden() || i.GetVotes() == 0 {
 		return 0
 	}
-	return i.GetPriority(defaultInstancePriority)
+	return i.GetPriority()
 }
 
 // IsPrimaryEligible returns true if the instance is eligible to become the primary in the replica set.
 func (i InstanceSpec) IsPrimaryEligible() bool {
-	return i.Replicas > 0 && i.GetVotes(1) > 0 && i.ResolvedPriority() > 0
+	return i.Replicas > 0 && i.GetVotes() > 0 && i.ResolvedPriority() > 0
 }
 
 // IsDataBearing returns true if the instance holds data, i.e., it is not an arbiter.
@@ -258,7 +260,7 @@ func (i InstanceSpec) resolvedMember(legacy bool) (votes, priority int32, dataBe
 			return 1, defaultInstancePriority, true
 		}
 	}
-	return i.GetVotes(1), i.ResolvedPriority(), i.IsDataBearing()
+	return i.GetVotes(), i.ResolvedPriority(), i.IsDataBearing()
 }
 
 func (r *ReplsetSpec) instanceCounts() (members, voters, dataBearingVoters, primaryEligible int32) {
