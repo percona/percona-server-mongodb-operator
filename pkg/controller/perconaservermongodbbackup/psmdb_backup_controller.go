@@ -5,6 +5,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -62,13 +63,40 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBBackup{
-		client:     mgr.GetClient(),
-		apiReader:  mgr.GetAPIReader(),
-		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
-		clientcmd:  cli,
-		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		client:      mgr.GetClient(),
+		apiReader:   mgr.GetAPIReader(),
+		scheme:      mgr.GetScheme(),
+		newPBMFunc:  backup.NewPBM,
+		clientcmd:   cli,
+		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		reconcileIn: getReconcileInterval(),
 	}, nil
+}
+
+// getReconcileInterval returns the requeue interval from the BACKUP_RECONCILE_INTERVAL
+// environment variable, or the default of 5 seconds if not set or invalid.
+func getReconcileInterval() time.Duration {
+	defaultInterval := 5 * time.Second
+
+	interval := os.Getenv("BACKUP_RECONCILE_INTERVAL")
+	if interval == "" {
+		return defaultInterval
+	}
+
+	d, err := time.ParseDuration(interval)
+	if err != nil {
+		log := logf.Log.WithName("psmdbbackup-controller")
+		log.Info("Invalid BACKUP_RECONCILE_INTERVAL value, using default (5s)", "value", interval, "error", err, "default", defaultInterval)
+		return defaultInterval
+	}
+
+	if d < defaultInterval {
+		log := logf.Log.WithName("psmdbbackup-controller")
+		log.Info("BACKUP_RECONCILE_INTERVAL must be at least 5s, using 5s", "value", interval, "default", defaultInterval)
+		return defaultInterval
+	}
+
+	return d
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -100,7 +128,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -115,7 +144,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	defer log.V(1).Info("Reconcile finished")
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
