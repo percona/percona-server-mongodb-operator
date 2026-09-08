@@ -943,19 +943,9 @@ func (in *MemberConfigSpec) DeepCopyInto(out *MemberConfigSpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.BuildIndexes != nil {
-		in, out := &in.BuildIndexes, &out.BuildIndexes
-		*out = new(bool)
-		**out = **in
-	}
 	if in.ArbiterOnly != nil {
 		in, out := &in.ArbiterOnly, &out.ArbiterOnly
 		*out = new(bool)
-		**out = **in
-	}
-	if in.SecondaryDelaySecs != nil {
-		in, out := &in.SecondaryDelaySecs, &out.SecondaryDelaySecs
-		*out = new(int64)
 		**out = **in
 	}
 	if in.Tags != nil {

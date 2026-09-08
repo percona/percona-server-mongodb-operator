@@ -8506,17 +8506,11 @@ spec:
                             properties:
                               arbiterOnly:
                                 type: boolean
-                              buildIndexes:
-                                type: boolean
                               hidden:
                                 type: boolean
                               priority:
                                 format: int32
                                 maximum: 1000
-                                minimum: 0
-                                type: integer
-                              secondaryDelaySecs:
-                                format: int64
                                 minimum: 0
                                 type: integer
                               tags:
@@ -23970,17 +23964,11 @@ spec:
                               properties:
                                 arbiterOnly:
                                   type: boolean
-                                buildIndexes:
-                                  type: boolean
                                 hidden:
                                   type: boolean
                                 priority:
                                   format: int32
                                   maximum: 1000
-                                  minimum: 0
-                                  type: integer
-                                secondaryDelaySecs:
-                                  format: int64
                                   minimum: 0
                                   type: integer
                                 tags:

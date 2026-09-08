@@ -85,16 +85,12 @@ type MemberConfigSpec struct {
 	// +kubebuilder:validation:Maximum=1
 	Votes *int32 `json:"votes,omitempty"`
 
+	// Hidden keeps the member out of the hello command output. Hidden members
 	// require a direct connection: they are not reachable through normal
 	// tag-based secondary routing or through mongos.
 	Hidden *bool `json:"hidden,omitempty"`
 
-	BuildIndexes *bool `json:"buildIndexes,omitempty"`
-
 	ArbiterOnly *bool `json:"arbiterOnly,omitempty"`
-
-	// +kubebuilder:validation:Minimum=0
-	SecondaryDelaySecs *int64 `json:"secondaryDelaySecs,omitempty"`
 
 	Tags map[string]string `json:"tags,omitempty"`
 }
@@ -145,22 +141,6 @@ func (i InstanceSpec) IsHidden() bool {
 
 func (i InstanceSpec) IsArbiterOnly() bool {
 	return i.RSConfig != nil && i.RSConfig.ArbiterOnly != nil && *i.RSConfig.ArbiterOnly
-}
-
-// BuildsIndexes defaults to true, matching the MongoDB default and the value
-// the operator has always written.
-func (i InstanceSpec) BuildsIndexes() bool {
-	if i.RSConfig == nil || i.RSConfig.BuildIndexes == nil {
-		return true
-	}
-	return *i.RSConfig.BuildIndexes
-}
-
-func (i InstanceSpec) GetDelaySecs() *int64 {
-	if i.RSConfig == nil {
-		return nil
-	}
-	return i.RSConfig.SecondaryDelaySecs
 }
 
 func (i InstanceSpec) GetTags() map[string]string {
