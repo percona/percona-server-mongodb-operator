@@ -155,7 +155,7 @@ String detectMongoVersion() {
                 exit 1
             fi
 
-            mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+\.[0-9]+)([.-].*)?$#\\2#p')
+            mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')
             if [ -z "$mongo_version" ]; then
                 echo "Unable to detect MongoDB version from image: $mongo_image" >&2
                 exit 1
