@@ -153,7 +153,7 @@ function wait_mongos_log_vct() {
 	local retry=0
 
 	echo -n "Waiting for statefulset/${cluster}-mongos log volumeClaimTemplate to be ${expected}"
-	until [[ $(kubectl_bin get sts "${cluster}-mongos" -o jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}' 2>/dev/null) == "${expected}" ]]; do
+	until [[ $(kubectl_bin get sts "${cluster}-mongos" -o jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}' 2>/dev/null || true) == "${expected}" ]]; do
 		if [[ $retry -ge 60 ]]; then
 			echo
 			echo "statefulset/${cluster}-mongos log volumeClaimTemplate was not updated to ${expected}, max retries exceeded"
