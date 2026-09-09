@@ -418,7 +418,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript.Specified() {
 		name := multiAZ.HookScript.ConfigMapRef.Name
 		if name == "" {
-			name = naming.GroupHookScriptConfigMapName(cr, replset, group.Name)
+			name = naming.GroupHookScriptConfigMapName(cr, replset, group.Component)
 		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
