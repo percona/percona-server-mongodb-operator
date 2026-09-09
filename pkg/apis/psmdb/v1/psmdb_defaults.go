@@ -1062,15 +1062,17 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 		}
 	}
 
-	if primaryEligible == 0 {
-		return errors.New("no instance can hold the primary: at least one instance needs " +
-			"replicas > 0 with votes > 0 and a nonzero effective priority")
-	}
+	if !unsafe.ReplsetSize {
+		if primaryEligible == 0 {
+			return errors.New("no instance can hold the primary: at least one instance needs " +
+				"replicas > 0 with votes > 0 and a nonzero effective priority")
+		}
 
-	if !unsafe.ReplsetSize && dataBearingVoters < minSafeDataBearingVoters {
-		return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
-			"Set spec.unsafeFlags.replsetSize to true to disable this check",
-			minSafeDataBearingVoters, dataBearingVoters)
+		if dataBearingVoters < minSafeDataBearingVoters {
+			return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
+				"Set spec.unsafeFlags.replsetSize to true to disable this check",
+				minSafeDataBearingVoters, dataBearingVoters)
+		}
 	}
 
 	mode, err := rs.Configuration.GetTLSMode()
