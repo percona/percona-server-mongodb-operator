@@ -130,36 +130,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	configName := group.ConfigName
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
-	switch ls[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
-		containerName = naming.ContainerArbiter
-		size = replset.Arbiter.Size
-		multiAZ = replset.Arbiter.MultiAZ
-		resources = replset.Arbiter.Resources
-	case naming.ComponentNonVoting:
-		containerName = naming.ContainerNonVoting
-		size = replset.NonVoting.Size
-		multiAZ = replset.NonVoting.MultiAZ
-		resources = replset.NonVoting.Resources
-		podSecurityContext = replset.NonVoting.PodSecurityContext
-		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		configName = naming.NonVotingConfigMapName(cr, replset)
-		livenessProbe = replset.NonVoting.LivenessProbe
-		readinessProbe = replset.NonVoting.ReadinessProbe
-		volumeSpec = replset.NonVoting.VolumeSpec
-	case naming.ComponentHidden:
-		containerName = naming.ContainerHidden
-		size = replset.Hidden.Size
-		multiAZ = replset.Hidden.MultiAZ
-		resources = replset.Hidden.Resources
-		podSecurityContext = replset.Hidden.PodSecurityContext
-		containerSecurityContext = replset.Hidden.ContainerSecurityContext
-		configName = naming.HiddenConfigMapName(cr, replset)
-		livenessProbe = replset.Hidden.LivenessProbe
-		readinessProbe = replset.Hidden.ReadinessProbe
-		volumeSpec = replset.Hidden.VolumeSpec
-	}
-
 	customLabels := make(map[string]string, len(ls))
 	maps.Copy(customLabels, ls)
 
