@@ -55,7 +55,7 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 
 	if msSts.ObjectMeta.Generation != msSts.Status.ObservedGeneration {
 		log.Info("waiting for mongos statefulset to be observed",
-			"generation", msSts.ObjectMeta.Generation,
+			"generation", msSts.Generation,
 			"observedGeneration", msSts.Status.ObservedGeneration)
 		return nil
 	}
