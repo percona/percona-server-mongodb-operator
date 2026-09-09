@@ -47,6 +47,7 @@ import (
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -536,59 +537,26 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-	matchLabels := naming.MongodLabels(cr, replset)
-
-	_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+	set, err := membergroup.Resolve(cr, replset)
 	if err != nil {
-		err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
-		return err
+		return errors.Wrapf(err, "resolve member groups for %s", replset.Name)
 	}
 
-	if replset.Arbiter.Enabled {
-		matchLabels = naming.ArbiterLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
-			return err
-		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete arbiter statefulset: %s", naming.ArbiterStatefulSetName(cr, replset))
+	for _, group := range set.GetAll() {
+		if _, err := r.reconcileStatefulSet(ctx, cr, replset, group); err != nil {
+			return errors.Errorf("reconcile StatefulSet %s for %s: %v", group.STSName, replset.Name, err)
 		}
 	}
 
-	if replset.NonVoting.Enabled {
-		matchLabels = naming.NonVotingLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
-			return err
-		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete non voting statefulset: %s", naming.NonVotingStatefulSetName(cr, replset))
-		}
-	}
-
-	if replset.Hidden.Enabled {
-		matchLabels = naming.HiddenLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile hidden StatefulSet for %s: %v", replset.Name, err)
-			return err
-		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete hidden statefulset: %s", naming.HiddenStatefulSetName(cr, replset))
-		}
+	if err := r.cleanupRemovedInstances(ctx, cr, replset, set); err != nil {
+		return errors.Wrapf(err, "retire removed groups for replset %s", replset.Name)
 	}
 
 	if err := r.reconcileSearch(ctx, cr, replset); err != nil {
 		return errors.Wrapf(err, "reconcile search for replset %s", replset.Name)
 	}
 
-	_, ok := cr.Status.Replsets[replset.Name]
-	if !ok {
+	if _, ok := cr.Status.Replsets[replset.Name]; !ok {
 		cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
 	}
 
@@ -2043,4 +2011,65 @@ func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedNam
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) cleanupRemovedInstances(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) error {
+	log := logf.FromContext(ctx).WithName("retireGroups").WithValues("replset", rs.Name)
+
+	observed := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &observed, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			naming.LabelKubernetesInstance: cr.Name,
+			naming.LabelKubernetesReplset:  rs.Name,
+		}),
+	}); err != nil {
+		return errors.Wrap(err, "list statefulsets")
+	}
+
+	desired := make(map[string]struct{}, set.Len())
+	for _, name := range set.GetStatefulSetNames() {
+		desired[name] = struct{}{}
+	}
+
+	for i := range observed.Items {
+		sts := &observed.Items[i]
+
+		// not declared in []instances
+		switch sts.Labels[naming.LabelKubernetesComponent] {
+		case naming.ComponentMongos, naming.ComponentSearch:
+			continue
+		}
+		if !metav1.IsControlledBy(sts, cr) {
+			continue
+		}
+		if _, ok := desired[sts.Name]; ok {
+			continue
+		}
+
+		if sts.Status.Replicas > 0 || (sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0) {
+			if sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0 {
+				log.V(1).Info("waiting for retiring group pods to terminate", "statefulset", sts.Name)
+				continue
+			}
+			log.Info("scaling down retiring group", "statefulset", sts.Name)
+			sts.Spec.Replicas = new(int32(0))
+			if err := r.client.Update(ctx, sts); err != nil {
+				return errors.Wrapf(err, "scale down retiring statefulset %s", sts.Name)
+			}
+			continue
+		}
+
+		log.Info("deleting retired group workload", "statefulset", sts.Name)
+		if err := k8sutils.DeleteIfExists(ctx, r.client, sts); err != nil {
+			return errors.Wrapf(err, "delete retired statefulset %s", sts.Name)
+		}
+	}
+
+	return nil
 }

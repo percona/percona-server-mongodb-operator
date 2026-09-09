@@ -64,11 +64,13 @@ const (
 )
 
 const (
-	startupDelaySecondsFlag    = "--startupDelaySeconds"
-	timeoutSecondsDefault      = int32(5)
-	initialDelaySecondsDefault = int32(90)
-	periodSecondsDefault       = int32(10)
-	failureThresholdDefault    = int32(12)
+	startupDelaySecondsFlag = "--startupDelaySeconds"
+
+	// LivenessProbe defaults
+	livenessProbeTimeoutSecondsDefault      = int32(10)
+	livenessProbeInitialDelaySecondsDefault = int32(60)
+	livenessProbePeriodSecondsDefault       = int32(30)
+	livenessProbeFailureThresholdDefault    = int32(4)
 )
 
 // CheckNSetDefaults sets default options, overwrites wrong settings
@@ -277,16 +279,16 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 
 		if cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds < 1 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = initialDelaySecondsDefault
+			cr.Spec.Sharding.Mongos.LivenessProbe.InitialDelaySeconds = livenessProbeInitialDelaySecondsDefault
 		}
 		if cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds < 1 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = timeoutSecondsDefault
+			cr.Spec.Sharding.Mongos.LivenessProbe.TimeoutSeconds = livenessProbeTimeoutSecondsDefault
 		}
 		if cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds < 1 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = periodSecondsDefault
+			cr.Spec.Sharding.Mongos.LivenessProbe.PeriodSeconds = livenessProbePeriodSecondsDefault
 		}
 		if cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold < 1 {
-			cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = failureThresholdDefault
+			cr.Spec.Sharding.Mongos.LivenessProbe.FailureThreshold = livenessProbeFailureThresholdDefault
 		}
 
 		if cr.Spec.Sharding.Mongos.ReadinessProbe == nil {
@@ -1400,16 +1402,16 @@ func defaultLivenessProbe(cr *PerconaServerMongoDB, probe *LivenessProbeExtended
 	}
 
 	if probe.InitialDelaySeconds < 1 {
-		probe.InitialDelaySeconds = initialDelaySecondsDefault
+		probe.InitialDelaySeconds = livenessProbeInitialDelaySecondsDefault
 	}
 	if probe.TimeoutSeconds < 1 {
-		probe.TimeoutSeconds = timeoutSecondsDefault
+		probe.TimeoutSeconds = livenessProbeTimeoutSecondsDefault
 	}
 	if probe.PeriodSeconds < 1 {
-		probe.PeriodSeconds = periodSecondsDefault
+		probe.PeriodSeconds = livenessProbePeriodSecondsDefault
 	}
 	if probe.FailureThreshold < 1 {
-		probe.FailureThreshold = failureThresholdDefault
+		probe.FailureThreshold = livenessProbeFailureThresholdDefault
 	}
 	return probe
 }

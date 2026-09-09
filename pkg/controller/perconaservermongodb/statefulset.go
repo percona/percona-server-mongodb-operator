@@ -20,30 +20,17 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
+func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	group membergroup.Group,
+) (*appsv1.StatefulSet, error) {
 	log := logf.FromContext(ctx)
 
-	pdbspec := rs.PodDisruptionBudget
-	volumeSpec := rs.VolumeSpec
-
-	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		ls[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
-	}
-
-	switch ls[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
-		pdbspec = rs.Arbiter.PodDisruptionBudget
-	case naming.ComponentNonVoting:
-		pdbspec = rs.NonVoting.PodDisruptionBudget
-		volumeSpec = rs.NonVoting.VolumeSpec
-	case naming.ComponentHidden:
-		pdbspec = rs.Hidden.PodDisruptionBudget
-		volumeSpec = rs.Hidden.VolumeSpec
-	}
-
-	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
+	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, group)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get StatefulSet for replset %s", rs.Name)
+		return nil, errors.Wrapf(err, "get StatefulSet %s for replset %s", group.STSName, rs.Name)
 	}
 
 	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
@@ -56,11 +43,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
+	// TODO: if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group); err != nil {
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group.VolumeSpec, group.Labels); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 
-	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
+	// TODO: if err := r.reconcilePVCs(ctx, cr, sfs, group); err != nil {
+	if err := r.reconcilePVCs(ctx, cr, sfs, group.Labels, group.VolumeSpec); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
@@ -80,7 +69,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
 
-	err = r.reconcilePDB(ctx, cr, pdbspec, ls, cr.Namespace, sfs)
+	err = r.reconcilePDB(ctx, cr, group.PDB(), group.Labels, cr.Namespace, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
@@ -92,37 +81,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
-	sfsName := cr.Name + "-" + rs.Name
-	mongodCustomConfigName := naming.MongodCustomConfigName(cr, rs)
-
-	if rs.ClusterRole == api.ClusterRoleConfigSvr {
-		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
-	}
-
-	switch ls[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
-		sfsName += "-" + naming.ComponentArbiter
-	case naming.ComponentNonVoting:
-		sfsName += "-" + naming.ComponentNonVotingShort
-		mongodCustomConfigName = naming.NonVotingConfigMapName(cr, rs)
-	case naming.ComponentHidden:
-		sfsName += "-" + naming.ComponentHidden
-		mongodCustomConfigName = naming.HiddenConfigMapName(cr, rs)
-	}
-
-	sfs := psmdb.NewStatefulSet(sfsName, cr.Namespace)
-	err := setControllerReference(cr, sfs, r.scheme)
-	if err != nil {
+func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	group membergroup.Group,
+) (*appsv1.StatefulSet, error) {
+	sfs := psmdb.NewStatefulSet(group.STSName, cr.Namespace)
+	if err := setControllerReference(cr, sfs, r.scheme); err != nil {
 		return nil, errors.Wrapf(err, "set owner ref for StatefulSet %s", sfs.Name)
 	}
 
-	err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, sfs)
-	if client.IgnoreNotFound(err) != nil {
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), sfs); client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrapf(err, "get StatefulSet %s", sfs.Name)
 	}
 
-	mongodCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, mongodCustomConfigName)
+	mongodCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, group.ConfigName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
 	}
@@ -176,21 +150,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		KeyfileExists: keyfileSecretErr == nil,
 	}
 
-	set, err := membergroup.Resolve(cr, rs)
-	if err != nil {
-		return nil, err
-	}
-	group, ok := set.GetByLabels(ls)
-	if !ok {
-		return nil, errors.Errorf("no member group for component %q in replset %s",
-			ls[naming.LabelKubernetesComponent], rs.Name)
-	}
-
-	sfsSpec, err := psmdb.StatefulSpec(
-		ctx, cr, rs, group, r.initImage,
-		configs,
-		secrets,
-	)
+	sfsSpec, err := psmdb.StatefulSpec(ctx, cr, rs, group, r.initImage, configs, secrets)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
