@@ -1183,39 +1183,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 	}
 
 	for _, rs := range repls {
-		if err := reconcileConfigMap(rs, naming.MongodCustomConfigName(cr, rs), string(rs.Configuration)); err != nil {
-			return errors.Wrap(err, "failed to reconcile config map")
-		}
-		component := naming.ComponentMongod
-		if rs.ClusterRole == api.ClusterRoleConfigSvr {
-			component = api.ConfigReplSetName
-		}
-		if err := reconcileHookscript(rs, component, rs.HookScript); err != nil {
-			return errors.Wrap(err, "failed to reconcile hookscript")
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
 
-		if rs.NonVoting.Enabled {
-			if err := reconcileConfigMap(rs, naming.NonVotingConfigMapName(cr, rs), string(rs.NonVoting.Configuration)); err != nil {
-				return errors.Wrap(err, "failed to reconcile config map")
+		want := make(map[string]struct{}, set.Len()*2)
+		for _, group := range set.GetAll() {
+			want[group.ConfigName] = struct{}{}
+			if err := reconcileConfigMap(rs, group.ConfigName, string(group.Configuration)); err != nil {
+				return errors.Wrapf(err, "reconcile config map for group %s", group.Name)
 			}
-			if err := reconcileHookscript(rs, naming.ComponentNonVoting, rs.NonVoting.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
-			}
-		}
 
-		if rs.Hidden.Enabled {
-			if err := reconcileConfigMap(rs, naming.HiddenConfigMapName(cr, rs), string(rs.Hidden.Configuration)); err != nil {
-				return errors.Wrap(err, "failed to reconcile config map")
-			}
-			if err := reconcileHookscript(rs, naming.ComponentHidden, rs.Hidden.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
+			hookName := naming.GroupHookScriptConfigMapName(cr, rs, group.Component)
+			want[hookName] = struct{}{}
+			if err := reconcileHookscript(rs, group.Component, group.MultiAZ.HookScript); err != nil {
+				return errors.Wrapf(err, "reconcile hookscript for group %s", group.Name)
 			}
 		}
 
-		if rs.Arbiter.Enabled {
-			if err := reconcileHookscript(rs, naming.ComponentArbiter, rs.Arbiter.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
-			}
+		if err := r.cleanupStaleGroupConfigs(ctx, cr, rs, want); err != nil {
+			return errors.Wrapf(err, "clean up retired group configuration for replset %s", rs.Name)
 		}
 	}
 
@@ -2068,6 +2056,50 @@ func (r *ReconcilePerconaServerMongoDB) cleanupRemovedInstances(
 		log.Info("deleting retired group workload", "statefulset", sts.Name)
 		if err := k8sutils.DeleteIfExists(ctx, r.client, sts); err != nil {
 			return errors.Wrapf(err, "delete retired statefulset %s", sts.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) cleanupStaleGroupConfigs(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	want map[string]struct{},
+) error {
+	log := logf.FromContext(ctx)
+
+	list := new(corev1.ConfigMapList)
+	if err := r.client.List(ctx, list, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)),
+	}); err != nil {
+		return errors.Wrap(err, "list config maps")
+	}
+
+	prefix := cr.Name + "-" + rs.Name + "-"
+
+	for i := range list.Items {
+		cm := &list.Items[i]
+		if !metav1.IsControlledBy(cm, cr) {
+			continue
+		}
+		if !strings.HasPrefix(cm.Name, prefix) {
+			continue
+		}
+		if _, ok := want[cm.Name]; ok {
+			continue
+		}
+
+		// separate sub-system, ignore
+		if cm.Name == naming.SearchConfigMapName(cr, rs) {
+			continue
+		}
+
+		log.Info("deleting configuration of retired group", "configMap", cm.Name)
+		if err := k8sutils.DeleteIfExists(ctx, r.client, cm); err != nil {
+			return errors.Wrapf(err, "delete config map %s", cm.Name)
 		}
 	}
 
