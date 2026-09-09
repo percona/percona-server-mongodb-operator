@@ -48,6 +48,20 @@ platformSkips:
     - name: multi-cluster-service
       reason: requires GKE Multi-Cluster Services
 
+mongoVersionSkips:
+  - version: [6, 0]
+    tests:
+      - name: vector-search
+        reason: requires MongoDB 8.3+
+  - version: [7, 0]
+    tests:
+      - name: vector-search
+        reason: requires MongoDB 8.3+
+  - version: [8, 0]
+    tests:
+      - name: vector-search
+        reason: requires MongoDB 8.3+
+
 # suites: pr, release, minikube, distro, backups
 # groups: backup, chaos, core, monitoring, networking, pitr, security, sharding, storage, tls, upgrade, users
 tests:

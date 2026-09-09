@@ -9,7 +9,7 @@ Test metadata: e2e-tests/tests.yaml
 Examples:
   uv run e2e-tests/select_tests.py list --suite pr
   uv run e2e-tests/select_tests.py list --suite release --platform eks \\
-      --operator-mode cluster-wide
+      --operator-mode cluster-wide --mongo-version 8.0
   uv run e2e-tests/select_tests.py list --suite pr --group backup
   uv run e2e-tests/select_tests.py list --suite pr -o csv
 """
@@ -33,7 +33,8 @@ examples:
   select_tests.py list --suite pr
 
   # Release suite for a platform + operator mode
-  select_tests.py list --suite release --platform eks --operator-mode cluster-wide
+  select_tests.py list --suite release --platform eks --operator-mode cluster-wide \\
+      --mongo-version 8.0
 
   # Tests in a group
   select_tests.py list --suite pr --group backup --platform gke
@@ -49,8 +50,26 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 
 def skip_names(entries: list[Any]) -> set[str]:
-    """platformSkips entries may be plain names or {name, reason} objects."""
+    """Skip entries may be plain names or {name, reason} objects."""
     return {e["name"] if isinstance(e, dict) else e for e in (entries or [])}
+
+
+def parse_mongo_version(value: str) -> tuple[int, int]:
+    parts = value.split(".")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise argparse.ArgumentTypeError("expected MAJOR.MINOR, for example 8.0")
+    return int(parts[0]), int(parts[1])
+
+
+def mongo_skip_names(
+    version_groups: list[dict[str, Any]], version: tuple[int, int] | None
+) -> set[str]:
+    if version is None:
+        return set()
+    for group in version_groups:
+        if group.get("version") == list(version):
+            return skip_names(group.get("tests", []))
+    return set()
 
 
 def collect_meta(tests: dict[str, Any], platform_skips: dict[str, Any]) -> dict[str, list[str]]:
@@ -72,13 +91,16 @@ def collect_meta(tests: dict[str, Any], platform_skips: dict[str, Any]) -> dict[
 def universe(
     tests: dict[str, Any],
     platform_skips: dict[str, Any],
+    mongo_version_skips: list[dict[str, Any]],
     suite: str,
     platform: str | None,
+    mongo_version: tuple[int, int] | None,
     operator_mode: str | None,
     groups: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Restrict selectable tests by suite, platform, operator mode, groups."""
+    """Restrict selectable tests by suite, platform, MongoDB version, mode, groups."""
     skipped = skip_names(platform_skips.get(platform, [])) if platform else set()
+    skipped.update(mongo_skip_names(mongo_version_skips, mongo_version))
     want_groups = set(groups or ())
     out = {}
     for name, meta in tests.items():
@@ -125,6 +147,12 @@ def add_filter_args(p: argparse.ArgumentParser, meta: dict[str, list[str]]) -> N
         help=f"Apply platformSkips. Known: {', '.join(meta['platforms']) or '?'}",
     )
     p.add_argument(
+        "--mongo-version",
+        type=parse_mongo_version,
+        metavar="MAJOR.MINOR",
+        help="Apply mongoVersionSkips for an exact MongoDB major.minor version.",
+    )
+    p.add_argument(
         "-m",
         "--operator-mode",
         metavar="MODE",
@@ -157,13 +185,20 @@ def add_output_args(p: argparse.ArgumentParser) -> None:
     )
 
 
-def load_context() -> tuple[dict[str, Any], dict[str, Any]]:
+def load_context() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     manifest = load_yaml(TESTS_YAML)
-    return manifest.get("tests", {}), manifest.get("platformSkips", {})
+    return (
+        manifest.get("tests", {}),
+        manifest.get("platformSkips", {}),
+        manifest.get("mongoVersionSkips", []),
+    )
 
 
 def filtered_universe(
-    args: argparse.Namespace, all_tests: dict[str, Any], platform_skips: dict[str, Any]
+    args: argparse.Namespace,
+    all_tests: dict[str, Any],
+    platform_skips: dict[str, Any],
+    mongo_version_skips: list[dict[str, Any]],
 ) -> dict[str, Any]:
     if args.platform and args.platform not in platform_skips:
         print(
@@ -173,21 +208,27 @@ def filtered_universe(
     return universe(
         all_tests,
         platform_skips,
+        mongo_version_skips,
         args.suite,
         args.platform,
+        args.mongo_version,
         args.operator_mode,
         getattr(args, "groups", None),
     )
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    all_tests, platform_skips = load_context()
-    tests = filtered_universe(args, all_tests, platform_skips)
+    all_tests, platform_skips, mongo_version_skips = load_context()
+    tests = filtered_universe(args, all_tests, platform_skips, mongo_version_skips)
     names = sorted(tests)
     if args.verbose:
+        mongo_version = (
+            ".".join(str(part) for part in args.mongo_version) if args.mongo_version else None
+        )
         print(
             f"suite={args.suite} platform={args.platform} "
-            f"operator_mode={args.operator_mode} count={len(names)}",
+            f"mongo_version={mongo_version} operator_mode={args.operator_mode} "
+            f"count={len(names)}",
             file=sys.stderr,
         )
     emit(names, args.format)

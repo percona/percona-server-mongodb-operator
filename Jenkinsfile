@@ -145,11 +145,35 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
+String detectMongoVersion() {
+    return sh(
+        script: '''
+            set -eu
+            mongo_image=$(yq -r '.spec.image' deploy/cr.yaml)
+            if [ -z "$mongo_image" ] || [ "$mongo_image" = "null" ]; then
+                echo "MongoDB image not found in deploy/cr.yaml" >&2
+                exit 1
+            fi
+
+            mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+\.[0-9]+)([.-].*)?$#\\2#p')
+            if [ -z "$mongo_version" ]; then
+                echo "Unable to detect MongoDB version from image: $mongo_image" >&2
+                exit 1
+            fi
+
+            printf '%s' "$mongo_version"
+        ''',
+        returnStdout: true
+    ).trim()
+}
+
 void initTests() {
     echo "Populating tests into the tests array!"
+    def mongoVersion = detectMongoVersion()
+    echo "Detected MongoDB version: ${mongoVersion}"
 
     def output = sh(
-        script: 'export PATH="$HOME/.local/bin:$PATH"; uv run e2e-tests/select_tests.py list --suite pr --platform gke --operator-mode cluster-wide --format lines',
+        script: "export PATH=\"\$HOME/.local/bin:\$PATH\"; uv run e2e-tests/select_tests.py list --suite pr --platform gke --operator-mode cluster-wide --mongo-version ${mongoVersion} --format lines",
         returnStdout: true
     ).trim()
     def records = output.split('\n').findAll { it }
