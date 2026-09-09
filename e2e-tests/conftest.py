@@ -385,7 +385,13 @@ def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
     src_dir = test_paths["src_dir"]
     rbac = f"{src_dir}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml"
 
-    _kubectl_quietly("delete", "psmdb-backup", "--all", "--ignore-not-found", "--timeout=120s")
+    if namespaces:
+        with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
+            for ns in namespaces:
+                pool.submit(_clear_namespace_finalizers, ns)
+        with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
+            for ns in namespaces:
+                pool.submit(_delete_namespace_crs, ns)
 
     deletes = [
         [
