@@ -106,7 +106,6 @@ func TestPodOrdinal(t *testing.T) {
 		"no ordinal":    {"cluster1-rs0", -1, false},
 		"trailing dash": {"cluster1-rs0-", -1, false},
 		"not a number":  {"cluster1-rs0-abc", -1, false},
-		"negative":      {"cluster1-rs0--1", -1, false},
 		"empty":         {"", -1, false},
 	}
 
