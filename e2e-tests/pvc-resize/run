@@ -147,6 +147,28 @@ function wait_mongos_pvc_request_revert() {
 	echo "psmdb/${cluster} mongos log storage request reverted to ${expected}"
 }
 
+function wait_mongos_log_vct() {
+	local cluster=$1
+	local expected=$2
+	local retry=0
+
+	echo -n "Waiting for statefulset/${cluster}-mongos log volumeClaimTemplate to be ${expected}"
+	until [[ $(kubectl_bin get sts "${cluster}-mongos" -o jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}' 2>/dev/null) == "${expected}" ]]; do
+		if [[ $retry -ge 60 ]]; then
+			echo
+			echo "statefulset/${cluster}-mongos log volumeClaimTemplate was not updated to ${expected}, max retries exceeded"
+			exit 1
+		fi
+		echo -n "."
+		sleep 5
+
+		retry=$((retry + 1))
+	done
+
+	echo
+	echo "statefulset/${cluster}-mongos log volumeClaimTemplate is ${expected}"
+}
+
 set_debug
 
 if [[ "$EKS" -eq 1 ]]; then
@@ -318,9 +340,8 @@ wait_cluster_consistency "$cluster" 42
 echo
 
 wait_all_pvc_resize "2Gi" 120 5 "${mongos_pvc_selector}"
-kubectl_bin wait --for=create statefulset "${cluster}-mongos" --timeout=60s
-kubectl_bin wait --for=jsonpath='{.spec.volumeClaimTemplates[?(@.metadata.name=="mongos-logs")].spec.resources.requests.storage}'=2Gi \
-	statefulset "${cluster}-mongos" --timeout=120s
+wait_mongos_log_vct "${cluster}" "2Gi"
+wait_for_running "${cluster}-mongos" 2
 
 desc "test mongos log PVC downscale"
 
