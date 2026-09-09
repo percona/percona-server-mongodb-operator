@@ -3,8 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(
@@ -179,7 +178,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
+	util.SortPodsByOrdinalDesc(list.Items)
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
@@ -466,7 +465,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	// Descending order would deadlock: pod-N is deleted, but the controller keeps failing
 	// on pod-0 and never re-creates pod-N. Ascending order keeps the pod we delete the same
 	// pod the controller is stuck on, so every deletion lets it advance one ordinal.
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
+	util.SortPodsByOrdinalAsc(list.Items)
 
 	for _, pod := range list.Items {
 		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
@@ -479,25 +478,6 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	log.Info("smart update finished for mongos statefulset")
 
 	return nil
-}
-
-func sortPodsByOrdinal(pods []corev1.Pod, less func(i, j int) bool) {
-	sort.Slice(pods, func(i, j int) bool {
-		oi, oj := podOrdinal(&pods[i]), podOrdinal(&pods[j])
-		return less(oi, oj)
-	})
-}
-
-func podOrdinal(pod *corev1.Pod) int {
-	val, ok := pod.GetLabels()[appsv1.PodIndexLabel]
-	if !ok {
-		return -1
-	}
-	ordinal, err := strconv.Atoi(val)
-	if err != nil || ordinal < 0 {
-		return -1
-	}
-	return ordinal
 }
 
 func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, cr *api.PerconaServerMongoDB, stsList *appsv1.StatefulSetList) (bool, error) {
