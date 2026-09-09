@@ -8286,6 +8286,9 @@ spec:
                             maxLength: 54
                             minLength: 1
                             type: string
+                            x-kubernetes-validations:
+                            - message: instance name should be a valid dns1123 label
+                              rule: '!format.dns1123Label().validate(self).hasValue()'
                           nodeSelector:
                             additionalProperties:
                               type: string
@@ -16234,7 +16237,7 @@ spec:
                   type: object
                   x-kubernetes-validations:
                   - message: configServer cannot have instances[]
-                    rule: self.?clusterRole.orValue('') != 'configsvr' || !has(self.instances)
+                    rule: self.?clusterRole.orValue("") != 'configsvr' || !has(self.instances)
                   - message: 'exactly one of volumeSpec or instances[] must be set:
                       volumeSpec is required in legacy mode and must be absent when
                       instances[] is used, where each instance declares its own'
@@ -23790,6 +23793,9 @@ spec:
                               maxLength: 54
                               minLength: 1
                               type: string
+                              x-kubernetes-validations:
+                              - message: instance name should be a valid dns1123 label
+                                rule: '!format.dns1123Label().validate(self).hasValue()'
                             nodeSelector:
                               additionalProperties:
                                 type: string
@@ -31741,7 +31747,7 @@ spec:
                     - message: cannot declare configsvrReplSet using instances[]
                       rule: '!has(self.instances)'
                     - message: configServer cannot have instances[]
-                      rule: self.?clusterRole.orValue('') != 'configsvr' || !has(self.instances)
+                      rule: self.?clusterRole.orValue("") != 'configsvr' || !has(self.instances)
                     - message: 'exactly one of volumeSpec or instances[] must be set:
                         volumeSpec is required in legacy mode and must be absent when
                         instances[] is used, where each instance declares its own'

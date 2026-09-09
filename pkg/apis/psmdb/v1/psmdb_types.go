@@ -910,7 +910,7 @@ type PrimaryPreferTagSelectorSpec map[string]string
 // ReplsetSpec defines the specification for a MongoDB replica set.
 // Any new field added here should also be added to InstanceSpec.
 //
-// +kubebuilder:validation:XValidation:rule="self.?clusterRole.orValue(”) != 'configsvr' || !has(self.instances)",message="configServer cannot have instances[]"
+// +kubebuilder:validation:XValidation:rule="self.?clusterRole.orValue(\"\") != 'configsvr' || !has(self.instances)",message="configServer cannot have instances[]"
 // +kubebuilder:validation:XValidation:rule="has(self.volumeSpec) != has(self.instances)",message="exactly one of volumeSpec or instances[] must be set: volumeSpec is required in legacy mode and must be absent when instances[] is used, where each instance declares its own"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || self.?size.orValue(0) == 0",message="size must be absent when instances[] is set: declare instances[].replicas instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?arbiter.?enabled.orValue(false) && self.?arbiter.?size.orValue(0) == 0)",message="arbiter must be absent when instances[] is set: declare an instance with rsConfig.arbiterOnly instead"

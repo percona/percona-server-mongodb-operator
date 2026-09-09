@@ -46,7 +46,7 @@ type InstanceSpec struct {
 
 	// Name of this member group. Must be unique within the replica set.
 
-	// +kubebuilder:validation:XValidation:rule="format.dns1123Label().validate(self).hasValue()",message="instance name should be a valid dns1123 label"
+	// +kubebuilder:validation:XValidation:rule="!format.dns1123Label().validate(self).hasValue()",message="instance name should be a valid dns1123 label"
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=54
