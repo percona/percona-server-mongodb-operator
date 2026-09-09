@@ -60,6 +60,7 @@ func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Grou
 	for i := range rs.Instances {
 		inst := &rs.Instances[i]
 
+		member := resolveMemberConfig(inst, policy)
 		g := Group{
 			Name:                     inst.Name,
 			Replicas:                 inst.Replicas,
@@ -72,9 +73,9 @@ func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Grou
 			ContainerSecurityContext: inst.ContainerSecurityContext.DeepCopy(),
 			Env:                      copySlice(inst.Env),
 			EnvFrom:                  copySlice(inst.EnvFrom),
-			Member:                   resolveMemberConfig(inst, policy),
-			DataBearing:              inst.IsDataBearing(),
-			PrimaryEligible:          inst.IsPrimaryEligible(),
+			Member:                   member,
+			DataBearing:              !member.ArbiterOnly,
+			PrimaryEligible:          member.Votes > 0 && member.Priority > 0, // configuration only
 			Source: SourceRef{
 				ReplsetName:  rs.Name,
 				InstanceName: inst.Name,
