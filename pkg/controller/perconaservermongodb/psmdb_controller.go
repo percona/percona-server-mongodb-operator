@@ -618,7 +618,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			}
 		}
 
-		if rs, ok := cr.Status.Replsets[replset.Name]; ok {
+		if rs, ok := cr.Status.Replsets[replset.Name]; ok && members != nil {
 			rs.Members = make(map[string]api.ReplsetMemberStatus)
 			maps.Copy(rs.Members, members)
 			cr.Status.Replsets[replset.Name] = rs
