@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -191,11 +193,19 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 					DefaultRWConcern: tc.rwConcern,
 				},
 			}
+			arbiter := api.Arbiter{Enabled: tc.arbiterEnabled}
+			if tc.arbiterEnabled {
+				arbiter.Size = 1
+			}
 			rs := &api.ReplsetSpec{
-				Arbiter:       api.Arbiter{Enabled: tc.arbiterEnabled},
+				Arbiter:       arbiter,
 				ExternalNodes: tc.externalNodes,
 			}
-			assert.Equal(t, tc.want, shouldSetDefaultRWConcern(cr, rs))
+
+			set, err := membergroup.Resolve(cr, rs)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.want, shouldSetDefaultRWConcern(cr, set, rs))
 		})
 	}
 }
