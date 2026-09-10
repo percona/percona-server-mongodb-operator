@@ -277,7 +277,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 			if !in {
 				log.Info("adding rs to shard", "rs", rsName)
-				err := r.handleRsAddToShard(ctx, cr, replset, pods.Items[0], mongosPods[0])
+				err := r.handleRsAddToShard(ctx, cr, replset, set, mongosPods[0])
 				if err != nil {
 					return api.AppStateError, nil, errors.Wrap(err, "add shard")
 				}
@@ -820,17 +820,30 @@ func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, c
 	}
 }
 
-func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, rspod corev1.Pod,
+// handleRsAddToShard registers the replica set with the sharded cluster.
+//
+// The seed host has to be an electable member. mongos discovers the rest of the
+// set from it, and neither a hidden member (absent from the hello response) nor
+// an arbiter (holds no data) can serve that role. bootstrapPod applies that
+// rule, and it knows the owning group's container name, which is not "mongod"
+// for every group.
+func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	set *membergroup.Set,
 	mongosPod corev1.Pod,
 ) error {
-	if !isContainerAndPodRunning(rspod, "mongod") || !isPodReady(rspod) {
-		return errors.Errorf("rsPod %s is not ready", rspod.Name)
-	}
 	if !isContainerAndPodRunning(mongosPod, "mongos") || !isPodReady(mongosPod) {
 		return errors.New("mongos pod is not ready")
 	}
 
-	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, rspod)
+	rspod, _, err := r.bootstrapPod(ctx, cr, replset, set)
+	if err != nil {
+		return errors.Wrap(err, "get seed pod")
+	}
+
+	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, *rspod)
 	if err != nil {
 		return errors.Wrapf(err, "get rsPod %s host", rspod.Name)
 	}
@@ -874,51 +887,50 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
 ) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
-	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
-			continue
-		}
+	pod, group, err := r.bootstrapPod(ctx, cr, replset, set)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get bootstrap pod")
+	}
 
-		replsetName := replset.Name
-		name, err := replset.CustomReplsetName()
-		if err == nil {
-			replsetName = name
-		}
+	replsetName := replset.Name
+	if name, err := replset.CustomReplsetName(); err == nil {
+		replsetName = name
+	}
 
-		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
+	log.Info("initiating replset", "replset", replsetName, "pod", pod.Name, "group", group.Name)
 
-		member, err := r.getConfigMemberForPod(ctx, cr, replset, set, 0, &pod)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "get config member for pod %s", pod.Name)
-		}
+	member, err := r.getConfigMemberForPod(ctx, cr, replset, set, 0, pod)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get config member for pod %s", pod.Name)
+	}
 
-		memberBytes, err := json.Marshal(member)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "marshall member to json")
-		}
+	memberBytes, err := json.Marshal(member)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "marshall member to json")
+	}
 
-		var errb, outb bytes.Buffer
+	var errb, outb bytes.Buffer
 
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
-		}
+	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, []string{"mongod", "--version"}, nil, &outb, &errb, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
+	}
 
-		mongoCmd := "mongosh"
-		if strings.Contains(outb.String(), "v4.4") || strings.Contains(outb.String(), "v5.0") {
-			mongoCmd = "mongo"
-		}
+	mongoCmd := "mongosh"
+	if strings.Contains(outb.String(), "v4.4") || strings.Contains(outb.String(), "v5.0") {
+		mongoCmd = "mongo"
+	}
 
-		if cr.TLSEnabled() {
-			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
-		}
+	if cr.TLSEnabled() {
+		mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+	}
 
-		mongoCmd += fmt.Sprintf(" --port %d", replset.GetPort())
+	mongoCmd += fmt.Sprintf(" --port %d", replset.GetPort())
 
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
-				`
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf(
+			`
 				cat <<-EOF | %s
 				rs.initiate(
 					{
@@ -931,60 +943,64 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
 				)
 				EOF
 			`, mongoCmd, replsetName, memberBytes),
-		}
-
-		errb.Reset()
-		outb.Reset()
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
-		}
-
-		backoff := wait.Backoff{
-			Steps:    5,
-			Duration: 50 * time.Millisecond,
-			Factor:   5.0,
-			Jitter:   0.1,
-		}
-		err = retry.OnError(backoff, func(err error) bool { return true }, func() error {
-			var stderr, stdout bytes.Buffer
-
-			hello := []string{"sh", "-c",
-				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'"}
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
-			if err != nil {
-				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
-			}
-
-			out := strings.TrimSpace(stdout.String())
-			if out != "true" {
-				return errors.Errorf("%s is not the writable primary", pod.Name)
-			}
-
-			log.Info(pod.Name+" is the writable primary", "replset", replsetName)
-
-			return nil
-		})
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "wait for replset initialization")
-		}
-		log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
-
-		if err := r.createUserAdminIfNeeded(ctx, cr, &pod, replsetName, mongoCmd); err != nil {
-			return nil, nil, err
-		}
-
-		return &pod, &api.ReplsetMemberStatus{
-			Name:     member.Host,
-			State:    mongo.MemberStatePrimary,
-			StateStr: mongo.MemberStateStrings[mongo.MemberStatePrimary],
-		}, nil
 	}
 
-	return nil, nil, errNoRunningMongodContainers
+	errb.Reset()
+	outb.Reset()
+	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, cmd, nil, &outb, &errb, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
+	}
+
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 50 * time.Millisecond,
+		Factor:   5.0,
+		Jitter:   0.1,
+	}
+	err = retry.OnError(backoff, func(err error) bool { return true }, func() error {
+		var stderr, stdout bytes.Buffer
+
+		hello := []string{"sh", "-c",
+			mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'"}
+		err := r.clientcmd.Exec(ctx, pod, group.ContainerName, hello, nil, &stdout, &stderr, false)
+		if err != nil {
+			return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		}
+
+		out := strings.TrimSpace(stdout.String())
+		if out != "true" {
+			return errors.Errorf("%s is not the writable primary", pod.Name)
+		}
+
+		log.Info(pod.Name+" is the writable primary", "replset", replsetName)
+
+		return nil
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "wait for replset initialization")
+	}
+	log.Info("replset initialized", "replset", replsetName, "pod", pod.Name)
+
+	if err := r.createUserAdminIfNeeded(ctx, cr, pod, replsetName, group, mongoCmd); err != nil {
+		return nil, nil, err
+	}
+
+	return pod, &api.ReplsetMemberStatus{
+		Name:     member.Host,
+		State:    mongo.MemberStatePrimary,
+		StateStr: mongo.MemberStateStrings[mongo.MemberStatePrimary],
+	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, pod *corev1.Pod, replsetName, mongoCmd string) error {
+func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	pod *corev1.Pod,
+	replsetName string,
+	group *membergroup.Group,
+	mongoCmd string,
+) error {
 	log := logf.FromContext(ctx)
 
 	userAdmin, err := getInternalCredentials(ctx, r.client, cr, api.RoleUserAdmin)
@@ -992,7 +1008,7 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 		return errors.Wrap(err, "failed to get userAdmin credentials")
 	}
 
-	canAuth, err := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+	canAuth, err := r.userAdminCanAuthenticate(ctx, pod, group, mongoCmd, userAdmin.Username, userAdmin.Password)
 	if err != nil {
 		return err
 	}
@@ -1009,9 +1025,9 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 		fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password)),
 	}
 
-	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false)
+	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, cmd, nil, &outb, &errb, false)
 	if err != nil {
-		canAuth, authErr := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
+		canAuth, authErr := r.userAdminCanAuthenticate(ctx, pod, group, mongoCmd, userAdmin.Username, userAdmin.Password)
 		if authErr != nil {
 			return fmt.Errorf("exec add admin user: %v / %s / %s; check userAdmin authentication: %v", err, outb.String(), errb.String(), authErr)
 		}
@@ -1026,7 +1042,11 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Context, pod *corev1.Pod, mongoCmd, user, pwd string) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(
+	ctx context.Context,
+	pod *corev1.Pod,
+	group *membergroup.Group,
+	mongoCmd, user, pwd string) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	var outb, errb bytes.Buffer
@@ -1040,7 +1060,7 @@ func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Con
 		),
 	}
 
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false); err != nil {
+	if err := r.clientcmd.Exec(ctx, pod, group.ContainerName, cmd, nil, &outb, &errb, false); err != nil {
 		if isMongoAuthFailure(err, outb.String(), errb.String()) {
 			log.V(1).Info("userAdmin authentication failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
 			return false, nil
@@ -1407,4 +1427,46 @@ func isPodReady(pod corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// bootstrapPod returns a member suitable for initiating the replica set,
+// creating system users, and joining the cluster as a shard.
+func (r *ReconcilePerconaServerMongoDB) bootstrapPod(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) (*corev1.Pod, *membergroup.Group, error) {
+	eligible := set.GetPrimaryEligible()
+	if len(eligible) == 0 {
+		return nil, nil, errors.Errorf(
+			"replset %s has no primary-eligible member group", rs.Name)
+	}
+
+	// Highest configured priority first, then by name for a stable choice.
+	sort.SliceStable(eligible, func(i, j int) bool {
+		if eligible[i].Member.Priority != eligible[j].Member.Priority {
+			return eligible[i].Member.Priority > eligible[j].Member.Priority
+		}
+		return eligible[i].Name < eligible[j].Name
+	})
+
+	for _, group := range eligible {
+		pods, err := psmdb.GetGroupPods(ctx, r.client, cr, rs, group)
+		if err != nil {
+			return nil, nil, err
+		}
+		for i := range pods.Items {
+			pod := &pods.Items[i]
+			if ordinal, ok := naming.PodOrdinal(pod.Name); !ok || ordinal >= int(group.Replicas) {
+				continue
+			}
+			if isContainerAndPodRunning(*pod, group.ContainerName) && isPodReady(*pod) {
+				return pod, &group, nil
+			}
+		}
+	}
+
+	return nil, nil, errors.Wrapf(errNoRunningMongodContainers,
+		"replset %s has no ready primary-eligible member pod", rs.Name)
 }
