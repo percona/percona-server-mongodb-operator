@@ -377,7 +377,6 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(
 	}
 
 	requiresZeroPriority := member.ArbiterOnly || member.Hidden || member.Votes == 0
-
 	switch {
 	case overrides.Priority != nil:
 		if requiresZeroPriority && *overrides.Priority != 0 {
@@ -386,8 +385,8 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(
 				rs.Name, pod.Name, group.Name)
 		}
 		member.Priority = *overrides.Priority
-	case !requiresZeroPriority && compareTags(member.Tags, rs.PrimaryPreferTagSelector):
-		member.Priority = group.Member.Priority + 1
+	case member.Priority > 0 && compareTags(member.Tags, rs.PrimaryPreferTagSelector):
+		member.Priority++
 	}
 
 	return member, nil
