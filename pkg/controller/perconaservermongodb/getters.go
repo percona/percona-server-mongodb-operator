@@ -19,17 +19,39 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
-func (r *ReconcilePerconaServerMongoDB) getMongodPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
-	mongodPods := corev1.PodList{}
-	err := r.client.List(ctx,
-		&mongodPods,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
-		},
-	)
+// memberReplsets returns every replica set that owns member workloads: the
+// shards plus the config server.
+//
+// The config server is included regardless of spec.sharding.enabled, because
+// its pods and volumes outlive the moment sharding is switched off.
+func memberReplsets(cr *api.PerconaServerMongoDB) []*api.ReplsetSpec {
+	repls := make([]*api.ReplsetSpec, 0, len(cr.Spec.Replsets)+1)
+	if cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+	}
+	for _, rs := range cr.Spec.Replsets {
+		if rs != nil {
+			repls = append(repls, rs)
+		}
+	}
+	return repls
+}
 
-	return mongodPods, err
+// getMemberPods returns the pods of every member group of every replica set,
+// the config server included.
+func (r *ReconcilePerconaServerMongoDB) getMemberPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
+	list := corev1.PodList{}
+
+	for _, rs := range memberReplsets(cr) {
+		pods, err := psmdb.GetOutdatedRSPods(ctx, r.client, cr, rs.Name)
+		if err != nil {
+			return list, errors.Wrapf(err, "get pods of replset %s", rs.Name)
+		}
+
+		list.Items = append(list.Items, pods.Items...)
+	}
+
+	return list, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -65,6 +87,10 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Contex
 	return list.Items[0], err
 }
 
+// getRsStatefulset returns the base StatefulSet of a replica set.
+//
+// Deprecated for member operations: an instances[] topology may have no base
+// workload at all. Use getMemberStatefulsets or getGroupStatefulset.
 func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
 
@@ -73,22 +99,44 @@ func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr
 	return sts, err
 }
 
-// getRsStatefulset returns the base StatefulSet of a replica set.
-//
-// Deprecated for member operations: an instances[] topology may have no base
-// workload at all. Use getMemberStatefulsets or getGroupStatefulset.
-func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
+// getShardsWithWorkloads returns the names of the shard replica sets that
+// still have member workloads in the cluster. The config server, mongos and
+// search are excluded.
+func (r *ReconcilePerconaServerMongoDB) getShardsWithWorkloads(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]struct{}, error) {
 	list := appsv1.StatefulSetList{}
 
-	err := r.client.List(ctx,
+	if err := r.client.List(ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
+			LabelSelector: labels.SelectorFromSet(naming.ClusterLabels(cr)),
 		},
-	)
+	); err != nil {
+		return nil, errors.Wrap(err, "list statefulsets")
+	}
 
-	return list, err
+	names := make(map[string]struct{}, len(list.Items))
+	for i := range list.Items {
+		sts := &list.Items[i]
+
+		switch sts.Labels[naming.LabelKubernetesComponent] {
+		case naming.ComponentMongos, naming.ComponentSearch:
+			continue
+		}
+
+		if !metav1.IsControlledBy(sts, cr) {
+			continue
+		}
+
+		name := sts.Labels[naming.LabelKubernetesReplset]
+		if name == "" || name == api.ConfigReplSetName {
+			continue
+		}
+
+		names[name] = struct{}{}
+	}
+
+	return names, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetsExceptMongos(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
@@ -154,18 +202,31 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.
 	return list, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getMongodPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
+// getMemberPVCs returns the persistent volume claims of every member group of every replica set.
+func (r *ReconcilePerconaServerMongoDB) getMemberPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
 	list := corev1.PersistentVolumeClaimList{}
 
-	err := r.client.List(ctx,
-		&list,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(naming.MongodLabels(cr, nil)),
-		},
-	)
+	notSearch, err := labels.NewRequirement(naming.LabelKubernetesComponent, selection.NotEquals, []string{naming.ComponentSearch})
+	if err != nil {
+		return list, errors.Wrap(err, "get selector requirement")
+	}
 
-	return list, err
+	for _, rs := range memberReplsets(cr) {
+		pvcs := corev1.PersistentVolumeClaimList{}
+		if err := r.client.List(ctx,
+			&pvcs,
+			&client.ListOptions{
+				Namespace:     cr.Namespace,
+				LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)).Add(*notSearch),
+			},
+		); err != nil {
+			return list, errors.Wrapf(err, "get pvcs of replset %s", rs.Name)
+		}
+
+		list.Items = append(list.Items, pvcs.Items...)
+	}
+
+	return list, nil
 }
 
 // getMemberStatefulsets returns every member workload of a replica set: all

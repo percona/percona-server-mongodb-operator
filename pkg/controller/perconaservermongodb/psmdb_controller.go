@@ -670,15 +670,15 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 		return errors.Wrap(err, "check and set defaults")
 	}
 
-	mongodPods, err := r.getMongodPods(ctx, cr)
+	memberPods, err := r.getMemberPods(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get mongod pods")
+		return errors.Wrap(err, "get member pods")
 	}
 	mongosPods, err := r.getMongosPods(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get mongos pods")
 	}
-	if len(mongodPods.Items) != 0 || len(mongosPods.Items) != 0 {
+	if len(memberPods.Items) != 0 || len(mongosPods.Items) != 0 {
 		return nil
 	}
 
@@ -760,15 +760,15 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 		return errors.Wrap(cfgErr, "failed to get cfg replset")
 	}
 
-	rs, rsErr := r.getMongodStatefulsets(ctx, cr)
+	shards, rsErr := r.getShardsWithWorkloads(ctx, cr)
 	if rsErr != nil && !k8serrors.IsNotFound(rsErr) {
 		return errors.Wrap(rsErr, "failed to get all replsets")
 	}
 
 	if !cr.Spec.Sharding.Enabled {
 		// means we have already had sharded cluster and try to disable sharding
-		if cfgErr == nil && len(rs.Items) > 1 {
-			return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
+		if cfgErr == nil && len(shards) > 1 {
+			return errors.Errorf("failed to disable sharding with %d active replsets", len(shards))
 		}
 
 		// means we want to run multiple replsets without sharding
@@ -1001,23 +1001,22 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 			logf.FromContext(ctx).Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
 			fallthrough
 		case naming.FinalizerDeletePVC:
-			// remove orphan pvc
-			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
+			memberPVCs, err := r.getMemberPVCs(ctx, cr)
 			if err != nil {
 				return err
 			}
-			mongodPods, err := r.getMongodPods(ctx, cr)
+			memberPods, err := r.getMemberPods(ctx, cr)
 			if err != nil {
 				return err
 			}
-			mongodPodsMap := make(map[string]bool)
-			for _, pod := range mongodPods.Items {
-				mongodPodsMap[pod.Name] = true
+			memberPodsMap := make(map[string]bool, len(memberPods.Items))
+			for _, pod := range memberPods.Items {
+				memberPodsMap[pod.Name] = true
 			}
-			for _, pvc := range mongodPVCs.Items {
+			for _, pvc := range memberPVCs.Items {
 				if after, ok := strings.CutPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"); ok {
 					podName := after
-					if _, ok := mongodPodsMap[podName]; !ok {
+					if _, ok := memberPodsMap[podName]; !ok {
 						// remove the orphan pvc
 						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
 						err := r.client.Delete(ctx, &pvc)
