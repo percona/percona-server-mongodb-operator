@@ -149,9 +149,9 @@ String detectMongoVersion() {
     return sh(
         script: '''
             set -eu
-            mongo_image=$(yq -r '.spec.image' deploy/cr.yaml)
-            if [ -z "$mongo_image" ] || [ "$mongo_image" = "null" ]; then
-                echo "MongoDB image not found in deploy/cr.yaml" >&2
+            mongo_image=${IMAGE_MONGOD:-}
+            if [ -z "$mongo_image" ]; then
+                echo "IMAGE_MONGOD environment variable is not set" >&2
                 exit 1
             fi
 
