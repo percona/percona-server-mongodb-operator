@@ -329,8 +329,7 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		set, err := membergroup.Resolve(cr, rs)
 		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set, pods)
+		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set)
 		require.NoError(t, err)
 		require.NotNil(t, pod)
 		require.NotNil(t, primary)
@@ -350,8 +349,7 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		set, err := membergroup.Resolve(cr, rs)
 		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set, pods)
+		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set)
 		require.NoError(t, err)
 		require.NotNil(t, pod)
 		require.NotNil(t, primary)
@@ -369,8 +367,7 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		set, err := membergroup.Resolve(cr, rs)
 		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		_, _, err = r.handleReplsetInit(ctx, cr, rs, set, pods)
+		_, _, err = r.handleReplsetInit(ctx, cr, rs, set)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exec add admin user")
 		assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before createUser and before giving up")
@@ -385,8 +382,7 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		set, err := membergroup.Resolve(cr, rs)
 		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		_, _, err = r.handleReplsetInit(ctx, cr, rs, set, pods)
+		_, _, err = r.handleReplsetInit(ctx, cr, rs, set)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exec userAdmin authentication check")
 		assert.Equal(t, int32(0), atomic.LoadInt32(&exec.createUserCalls), "createUser should not run when auth check itself fails")

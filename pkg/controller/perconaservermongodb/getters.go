@@ -87,6 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Contex
 	return list.Items[0], err
 }
 
+// TODO: remove this
 // getRsStatefulset returns the base StatefulSet of a replica set.
 //
 // Deprecated for member operations: an instances[] topology may have no base

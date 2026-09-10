@@ -152,7 +152,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			if errors.As(err, &topology.ServerSelectionError{}) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
 				log.Error(err, "FULL CLUSTER CRASH")
 
-				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, pods.Items)
+				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, set)
 				if err != nil {
 					return api.AppStateError, nil, errors.Wrap(err, "handle ReplicaSetNoPrimary")
 				}
@@ -163,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateError, nil, errors.Wrap(err, "dial")
 		}
 
-		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, set, pods.Items)
+		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, set)
 		if err != nil {
 			if errors.Is(err, errNoRunningMongodContainers) {
 				return api.AppStateInit, nil, nil
@@ -524,7 +524,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 	}
 
 	// sort config members by priority, descending
-	sort.Slice(members, func(i, j int) bool {
+	sort.SliceStable(members, func(i, j int) bool {
 		return members[i].Priority > members[j].Priority
 	})
 
@@ -883,7 +883,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
 	cr *api.PerconaServerMongoDB,
 	replset *api.ReplsetSpec,
 	set *membergroup.Set,
-	pods []corev1.Pod,
 ) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -1080,33 +1079,43 @@ func isMongoAuthFailure(err error, stdout, stderr string) bool {
 		strings.Contains(msg, "unauthorized")
 }
 
-func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
+// handleReplicaSetNoPrimary recovers a replica set that has lost its primary
+// by rewriting the live configuration with force.
+func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	set *membergroup.Set,
+) error {
 	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
 
-	for _, pod := range pods {
-		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
-			continue
-		}
-
-		log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
-		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod)
-		if err != nil {
-			return errors.Wrap(err, "get standalone mongo client")
-		}
-
-		cfg, err := cli.ReadConfig(ctx)
-		if err != nil {
-			return errors.Wrap(err, "read replset config")
-		}
-
-		if err := cli.WriteConfig(ctx, cfg, true); err != nil {
-			return errors.Wrap(err, "reconfigure replset")
-		}
-
-		return nil
+	pod, _, err := r.getEligibleMemberPod(ctx, cr, replset, set, IsReadyDataBearingPod)
+	if err != nil {
+		return errors.Wrap(err, "get a member to recover from")
 	}
 
-	return errNoRunningMongodContainers
+	log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
+	cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, *pod)
+	if err != nil {
+		return errors.Wrap(err, "get standalone mongo client")
+	}
+
+	defer func() {
+		if err := cli.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	cfg, err := cli.ReadConfig(ctx)
+	if err != nil {
+		return errors.Wrap(err, "read replset config")
+	}
+
+	if err := cli.WriteConfig(ctx, cfg, true); err != nil {
+		return errors.Wrap(err, "reconfigure replset")
+	}
+
+	return nil
 }
 
 func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Role {
@@ -1385,21 +1394,6 @@ func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, c
 	}
 	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
 	return ok, nil
-}
-
-// isMongodPod returns a boolean reflecting if a pod
-// is running a mongod container
-func isMongodPod(pod corev1.Pod) bool {
-	return getPodContainer(&pod, "mongod") != nil
-}
-
-func getPodContainer(pod *corev1.Pod, containerName string) *corev1.Container {
-	for _, cont := range pod.Spec.Containers {
-		if cont.Name == containerName {
-			return &cont
-		}
-	}
-	return nil
 }
 
 // isContainerAndPodRunning returns a boolean reflecting if

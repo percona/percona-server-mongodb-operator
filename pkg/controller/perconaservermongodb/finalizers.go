@@ -16,6 +16,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 var (
@@ -236,7 +237,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteReplsetPods(ctx context.Context, c
 			if len(pods.Items) != int(*sts.Spec.Replicas) {
 				return errWaitingTermination
 			}
-			err = r.setPrimary(ctx, cr, rs, pods.Items[0])
+
+			set, err := membergroup.Resolve(cr, rs)
+			if err != nil {
+				return errors.Wrap(err, "resolve member group")
+			}
+			err = r.setPrimary(ctx, cr, rs, set, pods.Items[0])
 			if err != nil {
 				return errors.Wrap(err, "set primary")
 			}

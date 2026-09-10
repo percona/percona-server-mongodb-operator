@@ -35,7 +35,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 
 	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
 	if ok {
-		if err := r.smartUpdate(ctx, cr, sfs, rs); err != nil {
+		if err := r.smartUpdate(ctx, cr, sfs, rs, group); err != nil {
 			return nil, errors.Wrap(err, "failed to run smartUpdate")
 		}
 
@@ -74,7 +74,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
 	}
 
-	if err := r.smartUpdate(ctx, cr, sfs, rs); err != nil {
+	if err := r.smartUpdate(ctx, cr, sfs, rs, group); err != nil {
 		return nil, errors.Wrap(err, "failed to run smartUpdate")
 	}
 
