@@ -1116,6 +1116,76 @@ func (m ConfigMember) String() string {
 	return fmt.Sprintf("{votes: %d, priority: %d}", m.Votes, m.Priority)
 }
 
+func countVoters(m ConfigMembers) int {
+	voters := 0
+	for _, member := range m {
+		if member.Votes > 0 {
+			voters++
+		}
+	}
+	return voters
+}
+
+// nextVoteChange picks which outstanding votes change ApplyMemberConfig should
+// apply in a given pass, and reports whether one is outstanding that cannot be
+// applied at all.
+//
+// MongoDB accepts a single voting-member change per ordinary reconfiguration,
+// and the resulting config has to be legal on its own: at least one voting
+// member, at most MaxVotingMembers of them. Which change is safe therefore
+// depends on the live voter count, not on the order members happen to sit in
+// the config. A swap - one member gaining a vote while another loses one --
+// is the case that bites: at the ceiling the removal has to go first, and at a
+// single voter the addition does.
+//
+// Growing is preferred while there is headroom, because the intermediate
+// config then tolerates at least as many failures as the one it replaces.
+// Shrinking first would pass through a smaller set: a three-voter set dropped
+// to two tolerates no failure at all, where four tolerates one.
+//
+// External members are never candidates; ExternalNodesChanged owns those.
+// They are still counted, because MongoDB's limit is over the whole config.
+func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, bool) {
+	voters := countVoters(m)
+
+	add, remove := -1, -1
+	for i := range m {
+		cur := &m[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok || want.Votes == cur.Votes {
+			continue
+		}
+
+		if want.Votes > cur.Votes {
+			if add < 0 {
+				add = i
+			}
+			continue
+		}
+		if remove < 0 {
+			remove = i
+		}
+	}
+
+	switch {
+	case add >= 0 && voters+1 <= MaxVotingMembers:
+		return add, false
+	case remove >= 0 && voters-1 >= 1:
+		return remove, false
+	case add < 0 && remove < 0:
+		return -1, false
+	default:
+		// Something is outstanding, but neither direction leaves a legal
+		// config. Retrying cannot help.
+		return -1, true
+	}
+}
+
 // ApplyMemberConfig reconciles the mutable member settings of the live config
 // against the desired list, matching members by host.
 //
@@ -1153,8 +1223,16 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		desired[member.Host] = member
 	}
 
+	voteIdx, voteBlocked := m.nextVoteChange(desired)
+	if voteBlocked {
+		return false, false, errors.Errorf(
+			"replset config has %d voting members and the requested votes changes "+
+				"cannot be applied one at a time without leaving between 1 and %d. "+
+				"Adjust the declared votes so the total stays in range",
+			countVoters(*m), MaxVotingMembers)
+	}
+
 	changed := false
-	voteApplied := false
 	votePending := false
 
 	for i := range *m {
@@ -1176,7 +1254,14 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 				cur.Host, cur.ArbiterOnly, want.ArbiterOnly)
 		}
 
-		if want.Priority != cur.Priority {
+		voteDeferred := want.Votes != cur.Votes && i != voteIdx
+
+		// Priority is coupled to votes: MongoDB rejects a member that has a
+		// priority above zero and no vote. Raising the priority in this pass
+		// while the votes change waits for the next one would produce exactly
+		// that, so a member whose vote change is deferred keeps its priority
+		// too, and both move together on the pass that applies the vote.
+		if !voteDeferred && want.Priority != cur.Priority {
 			log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
 			cur.Priority = want.Priority
 			changed = true
@@ -1204,7 +1289,7 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		}
 
 		if want.Votes != cur.Votes {
-			if voteApplied {
+			if voteDeferred {
 				// Another voting change is outstanding. Leave it for the next
 				// reconciliation, after the live config has been re-read and
 				// this one has committed.
@@ -1213,7 +1298,6 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 			}
 			log.Info("Votes changed", "host", cur.Host, "old", cur.Votes, "new", want.Votes)
 			cur.Votes = want.Votes
-			voteApplied = true
 			changed = true
 		}
 	}

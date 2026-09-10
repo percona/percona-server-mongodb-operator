@@ -2,6 +2,7 @@ package mongo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1344,6 +1345,29 @@ func dbm(id int, host string, votes, priority int) mongo.ConfigMember {
 	}
 }
 
+// members8 builds an eight-member set where the first `voting` members vote
+// with priority 2 and the rest are non-voting with priority 0.
+func members8(voting int) mongo.ConfigMembers {
+	out := make(mongo.ConfigMembers, 0, 8)
+	for i := range 8 {
+		if i < voting {
+			out = append(out, dbm(i, fmt.Sprintf("h%d", i), 1, 2))
+			continue
+		}
+		out = append(out, dbm(i, fmt.Sprintf("h%d", i), 0, 0))
+	}
+	return out
+}
+
+// ceilingSwap is the desired state for a 7-voter set that hands h6's vote to
+// h7, leaving the total unchanged.
+func ceilingSwap() mongo.ConfigMembers {
+	d := members8(7)
+	d[6] = dbm(6, "h6", 0, 0)
+	d[7] = dbm(7, "h7", 1, 2)
+	return d
+}
+
 func TestApplyMemberConfig(t *testing.T) {
 	// live/desired are the inputs; want is the expected state of live after the
 	// call, so every case also asserts that nothing else was touched.
@@ -1434,13 +1458,70 @@ func TestApplyMemberConfig(t *testing.T) {
 		},
 		{
 			// MongoDB permits only one voting-member change per ordinary
-			// reconfiguration, so the second one waits for the next pass.
+			// reconfiguration, so the second one waits for the next pass. h2
+			// keeps priority 2 meanwhile: a member that still votes may not be
+			// dropped to priority 0 ahead of its vote.
 			name:        "two vote changes: only one applied, rest pending",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
-			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 1, 0)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 1, 2)},
 			wantChanged: true,
 			wantPending: true,
+		},
+		{
+			// At the ceiling the addition would make 8 voters, which MongoDB
+			// rejects outright, so the removal has to go first.
+			name:    "swap at the voting ceiling removes before it adds",
+			live:    members8(7),
+			desired: ceilingSwap(),
+			want: func() mongo.ConfigMembers {
+				w := members8(7)
+				w[6] = dbm(6, "h6", 0, 0)
+				return w
+			}(),
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			name:        "ceiling swap converges on the second pass",
+			live:        members8(7),
+			desired:     ceilingSwap(),
+			calls:       2,
+			want:        ceilingSwap(),
+			wantChanged: true,
+		},
+		{
+			// The mirror case: removing the only vote would leave zero voters,
+			// so the addition goes first.
+			name:        "swap at a single voter adds before it removes",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// Both directions are legal here. Growing first is preferred: four
+			// voters tolerate a failure where two do not.
+			name:        "growth is preferred while there is headroom",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2), dbm(3, "h3", 0, 0)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0), dbm(3, "h3", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2), dbm(3, "h3", 1, 2)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// An eighth voter with nothing to give its vote up: no single step
+			// leaves a legal config, and retrying cannot help.
+			name: "a votes change that cannot leave a legal config is rejected",
+			live: members8(7),
+			desired: func() mongo.ConfigMembers {
+				d := members8(7)
+				d[7] = dbm(7, "h7", 1, 2)
+				return d
+			}(),
+			want:    members8(7),
+			wantErr: "voting members",
 		},
 		{
 			name:        "second pass converges the remaining vote",
