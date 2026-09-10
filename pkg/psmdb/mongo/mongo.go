@@ -1115,3 +1115,108 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 func (m ConfigMember) String() string {
 	return fmt.Sprintf("{votes: %d, priority: %d}", m.Votes, m.Priority)
 }
+
+// ApplyMemberConfig reconciles the mutable member settings of the live config
+// against the desired list, matching members by host.
+//
+// It reports:
+//   - changed:             the caller must bump the version and write the config
+//   - votingChangePending: at least one more votes change is outstanding, so the
+//     caller must re-read the live config and call again on the next pass
+//
+// Contract:
+//   - Mutable in place: priority, hidden, tags, horizons. Removing a desired
+//     value clears the applied one.
+//   - At most one votes change per call. MongoDB permits only one voting-member
+//     change in an ordinary reconfiguration, and routine convergence must not
+//     use a forced reconfiguration to bypass that.
+//   - arbiterOnly is creation-only. A requested change is returned as an error
+//     and the live config is left untouched: the operator must not silently
+//     convert a data-bearing member into an arbiter.
+//   - buildIndexes and secondaryDelaySecs/slaveDelay are not compared at all.
+//     Neither is exposed on the CRD, so the desired value is always
+//     the same, and a member somebody changed by hand outside the operator must
+//     not make every reconciliation fail or be silently reverted.
+//   - External members (tag external=true) and hosts absent from the desired
+//     list are skipped; ExternalNodesChanged and RemoveOld own those.
+//   - Member IDs are never modified; AddNew and RemoveOld own ID assignment.
+//
+// This is the PolicyExplicit counterpart of SetVotes. SetVotes must not be
+// called for an explicit topology: it derives votes from role tags, caps voting
+// membership and removes a vote for parity, all of which would overwrite what
+// the user asked for.
+func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith ConfigMembers) (bool, bool, error) {
+	log := logf.FromContext(ctx)
+
+	desired := make(map[string]ConfigMember, len(compareWith))
+	for _, member := range compareWith {
+		desired[member.Host] = member
+	}
+
+	changed := false
+	voteApplied := false
+	votePending := false
+
+	for i := range *m {
+		cur := &(*m)[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok {
+			continue
+		}
+
+		if want.ArbiterOnly != cur.ArbiterOnly {
+			return false, false, errors.Errorf(
+				"member %s: arbiterOnly cannot be changed on an existing member "+
+					"(live %t, desired %t). Remove the instance and declare a new one",
+				cur.Host, cur.ArbiterOnly, want.ArbiterOnly)
+		}
+
+		if want.Priority != cur.Priority {
+			log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
+			cur.Priority = want.Priority
+			changed = true
+		}
+
+		if want.Hidden != cur.Hidden {
+			log.Info("Hidden changed", "host", cur.Host, "old", cur.Hidden, "new", want.Hidden)
+			cur.Hidden = want.Hidden
+			changed = true
+		}
+
+		// Arbiters carry no tags in MongoDB, so only compare them for
+		// data-bearing members. A removed key must disappear, which is why this
+		// is an equality check and not a merge.
+		if !cur.ArbiterOnly && !reflect.DeepEqual(want.Tags, cur.Tags) {
+			log.Info("Tags changed", "host", cur.Host, "old", cur.Tags, "new", want.Tags)
+			cur.Tags = want.Tags
+			changed = true
+		}
+
+		if !reflect.DeepEqual(want.Horizons, cur.Horizons) {
+			log.Info("Horizons changed", "host", cur.Host, "old", cur.Horizons, "new", want.Horizons)
+			cur.Horizons = want.Horizons
+			changed = true
+		}
+
+		if want.Votes != cur.Votes {
+			if voteApplied {
+				// Another voting change is outstanding. Leave it for the next
+				// reconciliation, after the live config has been re-read and
+				// this one has committed.
+				votePending = true
+				continue
+			}
+			log.Info("Votes changed", "host", cur.Host, "old", cur.Votes, "new", want.Votes)
+			cur.Votes = want.Votes
+			voteApplied = true
+			changed = true
+		}
+	}
+
+	return changed, votePending, nil
+}

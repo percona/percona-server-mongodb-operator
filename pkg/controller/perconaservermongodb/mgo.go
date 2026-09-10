@@ -612,17 +612,13 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		}
 	}
 
-	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(members, unsafePSA)
-	if !reflect.DeepEqual(currMembers, cnf.Members) {
-		cnf.Version++
+	pending, err := applyMemberConfig(ctx, cli, &cnf, members, set, unsafePSA)
+	if err != nil {
+		return rsMembers, 0, errors.Wrapf(err, "apply member config: replset %s", rs.Name)
+	}
 
-		log.Info("Configuring member votes and priorities", "replset", rs.Name)
-
-		err := cli.WriteConfig(ctx, cnf, false)
-		if err != nil {
-			return rsMembers, 0, errors.Wrap(err, "set votes: write mongo config")
-		}
+	if pending {
+		return rsMembers, 0, nil
 	}
 
 	rsStatus, err = cli.RSStatus(ctx)
@@ -633,6 +629,71 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 	liveMembers := countLiveMembers(rsStatus, cnf, rs, rsMembers)
 
 	return rsMembers, liveMembers, nil
+}
+
+// applyMemberConfig converges the mutable settings of the live replset config
+// on the desired members and writes the config back if anything changed.
+//
+// The two topology policies converge differently:
+//   - PolicyImplicit derives votes and priorities from the members themselves
+//     via SetVotes, and writes the config in a single reconfiguration.
+//   - PolicyExplicit applies what the user declared per member group through
+//     ApplyMemberConfig, which changes at most one member's votes per call.
+//
+// It reports pending when another voting change is still outstanding: the
+// caller must stop and let the next reconciliation re-read the live config and
+// call again.
+func applyMemberConfig(
+	ctx context.Context,
+	cli mongo.Client,
+	cnf *mongo.RSConfig,
+	members mongo.ConfigMembers,
+	set *membergroup.Set,
+	unsafePSA bool,
+) (bool, error) {
+	log := logf.FromContext(ctx)
+	rsName := set.GetReplsetName()
+
+	if set.GetPolicy() == membergroup.PolicyImplicit {
+		currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
+		cnf.Members.SetVotes(members, unsafePSA)
+		if reflect.DeepEqual(currMembers, cnf.Members) {
+			return false, nil
+		}
+
+		cnf.Version++
+
+		log.Info("Configuring member votes and priorities", "replset", rsName)
+
+		if err := cli.WriteConfig(ctx, *cnf, false); err != nil {
+			return false, errors.Wrap(err, "set votes: write mongo config")
+		}
+
+		return false, nil
+	}
+
+	changed, votePending, err := cnf.Members.ApplyMemberConfig(ctx, members)
+	if err != nil {
+		return false, err
+	}
+
+	if changed {
+		cnf.Version++
+
+		log.Info("Applying member configuration", "replset", rsName,
+			"votingChangePending", votePending)
+
+		if err := cli.WriteConfig(ctx, *cnf, false); err != nil {
+			return false, errors.Wrap(err, "apply member config: write mongo config")
+		}
+	}
+
+	if votePending {
+		log.V(1).Info("More voting changes outstanding, will continue next reconcile",
+			"replset", rsName)
+	}
+
+	return votePending, nil
 }
 
 // countLiveMembers counts the members reported as live (primary, secondary or
