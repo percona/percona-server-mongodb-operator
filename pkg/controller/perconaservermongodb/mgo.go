@@ -25,6 +25,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
@@ -49,28 +50,44 @@ func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string, int) {
 	return readConcern, writeConcernW, writeConcernWTimeout
 }
 
+func isUnsafePSA(cr *api.PerconaServerMongoDB, set *membergroup.Set) bool {
+	if !cr.Spec.Unsafe.ReplsetSize {
+		return false
+	}
+	mongod, ok := set.GetByName(naming.GroupMongod)
+	return ok &&
+		mongod.Replicas == 2 &&
+		set.GetArbiterMemberCount() == 1 &&
+		set.GetNonVotingMemberCount() == 0
+}
+
 // PSA replsets need the explicit push since MongoDB's implicit default is w:1; user-set
 // values must also be propagated. Sharded clusters are handled via mongos.
-func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) bool {
+func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, set *membergroup.Set, replset *api.ReplsetSpec) bool {
 	if cr.Spec.Sharding.Enabled {
 		return false
 	}
 
-	externalArbiterFound := false
 	for _, ext := range replset.ExternalNodes {
-		if ext.ArbiterOnly {
-			externalArbiterFound = true
-			break
+		if ext != nil && ext.ArbiterOnly {
+			return true
 		}
 	}
 
-	return replset.Arbiter.Enabled || externalArbiterFound || cr.Spec.DefaultRWConcern != nil
+	// Any arbiter in any group changes the implicit default write concern, so
+	// the explicit default has to be set before the topology change lands.
+	return set.GetArbiterMemberCount() > 0 || cr.Spec.DefaultRWConcern != nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
 	replsetSize := replset.GetSize()
+
+	set, err := membergroup.Resolve(cr, replset)
+	if err != nil {
+		return api.AppStateError, nil, errors.Wrap(err, "resolve member group")
+	}
 
 	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
 	if err != nil {
@@ -146,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			return api.AppStateError, nil, errors.Wrap(err, "dial")
 		}
 
-		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, pods.Items)
+		pod, primary, err := r.handleReplsetInit(ctx, cr, replset, set, pods.Items)
 		if err != nil {
 			if errors.Is(err, errNoRunningMongodContainers) {
 				return api.AppStateInit, nil, nil
@@ -275,7 +292,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	if shouldSetDefaultRWConcern(cr, replset) {
+	if shouldSetDefaultRWConcern(cr, set, replset) {
 		readConcern, writeConcernW, writeConcernWTimeout := defaultRWConcern(cr)
 		err := cli.SetDefaultRWConcern(ctx, readConcern, writeConcernW, writeConcernWTimeout)
 		// SetDefaultRWConcern introduced in MongoDB 4.4
@@ -284,7 +301,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	rsMembers, liveMembers, err := r.updateConfigMembers(ctx, cli, cr, replset)
+	rsMembers, liveMembers, err := r.updateConfigMembers(ctx, cli, cr, replset, set)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "failed to update config members")
 	}
@@ -298,42 +315,112 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 	return api.AppStateInit, rsMembers, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, id int, pod *corev1.Pod) (mongo.ConfigMember, error) {
+func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+	id int,
+	pod *corev1.Pod,
+) (mongo.ConfigMember, error) {
 	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, *pod)
 	if err != nil {
 		return mongo.ConfigMember{}, errors.Wrapf(err, "get host for pod %s", pod.Name)
 	}
 
+	group, ok := set.GetByLabels(pod.Labels)
+	if !ok {
+		return mongo.ConfigMember{}, errors.Errorf(
+			"pod %s belongs to no declared member group (component %q) in replset %s",
+			pod.Name, pod.Labels[naming.LabelKubernetesComponent], rs.Name)
+	}
+
 	member := mongo.ConfigMember{
-		ID:           id,
-		Host:         host,
+		ID:   id,
+		Host: host,
+		// Always true. buildIndexes is not exposed (D4) and the operator has
+		// always written true for every member.
 		BuildIndexes: true,
-		Priority:     mongo.DefaultPriority,
-		Votes:        mongo.DefaultVotes,
+		Priority:     group.Member.Priority,
+		Votes:        group.Member.Votes,
+		Hidden:       group.Member.Hidden,
+		ArbiterOnly:  group.Member.ArbiterOnly,
+	}
+
+	if horizons, ok := rs.GetHorizons(true)[pod.Name]; ok && len(horizons) > 0 {
+		member.Horizons = horizons
 	}
 
 	overrides := rs.ReplsetOverrides[pod.Name]
+
+	identityTags := mongo.ReplsetTags{
+		"nodeName":    pod.Spec.NodeName,
+		"podName":     pod.Name,
+		"serviceName": cr.Name,
+	}
+	nodeLabels, labelErr := psmdb.GetNodeLabels(ctx, r.client, cr, *pod)
+	if labelErr == nil {
+		identityTags["region"] = nodeLabels[corev1.LabelTopologyRegion]
+		identityTags["zone"] = nodeLabels[corev1.LabelTopologyZone]
+	}
+
+	if set.GetPolicy() == membergroup.PolicyImplicit {
+		return r.setImplicitMemberConfig(member, group, rs, overrides, identityTags), nil
+	}
+
+	if !member.ArbiterOnly {
+		member.Tags = util.MapMerge(
+			util.MapCopy(group.Member.Tags),
+			overrides.Tags,
+			identityTags,
+		)
+	}
+
+	requiresZeroPriority := member.ArbiterOnly || member.Hidden || member.Votes == 0
+
+	switch {
+	case overrides.Priority != nil:
+		if requiresZeroPriority && *overrides.Priority != 0 {
+			return mongo.ConfigMember{}, errors.Errorf(
+				"spec.replsets[%s].replsetOverrides[%s].priority: instance %q requires priority 0",
+				rs.Name, pod.Name, group.Name)
+		}
+		member.Priority = *overrides.Priority
+	case !requiresZeroPriority && compareTags(member.Tags, rs.PrimaryPreferTagSelector):
+		member.Priority = group.Member.Priority + 1
+	}
+
+	return member, nil
+}
+
+// setImplicitMemberConfig is used when member config is inferred implicitly,
+// i.e, when using the base replset and hidden, non-voting, or arbiter blocks (and not using []instances)
+func (r *ReconcilePerconaServerMongoDB) setImplicitMemberConfig(
+	member mongo.ConfigMember,
+	group membergroup.Group,
+	rs *api.ReplsetSpec,
+	overrides api.ReplsetOverride,
+	identityTags mongo.ReplsetTags,
+) mongo.ConfigMember {
+	member.Priority = mongo.DefaultPriority
+	member.Votes = mongo.DefaultVotes
+	member.Hidden = false
+	member.ArbiterOnly = false
 
 	if overrides.Priority != nil {
 		member.Priority = *overrides.Priority
 	}
 
-	horizons, ok := rs.GetHorizons(true)[pod.Name]
-	if ok && len(horizons) > 0 {
-		member.Horizons = horizons
-	}
-
 	tags := util.MapMerge(mongo.ReplsetTags{
-		"nodeName":    pod.Spec.NodeName,
-		"podName":     pod.Name,
-		"serviceName": cr.Name,
+		"nodeName":    identityTags["nodeName"],
+		"podName":     identityTags["podName"],
+		"serviceName": identityTags["serviceName"],
 	}, overrides.Tags)
 
-	labels, err := psmdb.GetNodeLabels(ctx, r.client, cr, *pod)
-	if err == nil {
+	if _, ok := identityTags["region"]; ok {
 		tags = util.MapMerge(tags, mongo.ReplsetTags{
-			"region": labels[corev1.LabelTopologyRegion],
-			"zone":   labels[corev1.LabelTopologyZone],
+			"region": identityTags["region"],
+			"zone":   identityTags["zone"],
 		})
 	}
 
@@ -341,28 +428,24 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForPod(ctx context.Contex
 		member.Priority = mongo.DefaultPriority + 1
 	}
 
-	switch pod.Labels[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
+	switch group.Name {
+	case naming.GroupArbiter:
 		member.ArbiterOnly = true
 		member.Priority = 0
-	case naming.ComponentMongod, "cfg":
-		member.Tags = tags
-	case naming.ComponentNonVoting:
-		member.Tags = util.MapMerge(mongo.ReplsetTags{
-			naming.ComponentNonVoting: "true",
-		}, tags)
+	case naming.GroupNonVoting:
+		member.Tags = util.MapMerge(mongo.ReplsetTags{naming.ComponentNonVoting: "true"}, tags)
 		member.Priority = 0
 		member.Votes = 0
-	case naming.ComponentHidden:
+	case naming.GroupHidden:
 		member.Hidden = true
-		member.Tags = util.MapMerge(mongo.ReplsetTags{
-			naming.ComponentHidden: "true",
-		}, tags)
+		member.Tags = util.MapMerge(mongo.ReplsetTags{naming.ComponentHidden: "true"}, tags)
 		member.Priority = 0
 		member.Votes = 1
+	default: // mongod, including the config server
+		member.Tags = tags
 	}
 
-	return member, nil
+	return member
 }
 
 func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, extNode api.ExternalNode) mongo.ConfigMember {
@@ -402,11 +485,17 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	return member
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (map[string]api.ReplsetMemberStatus, int, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
+	ctx context.Context,
+	cli mongo.Client,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) (map[string]api.ReplsetMemberStatus, int, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	rsMembers := make(map[string]api.ReplsetMemberStatus)
-	unsafePSA := cr.Spec.Unsafe.ReplsetSize && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
+	unsafePSA := isUnsafePSA(cr, set)
 
 	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
@@ -424,17 +513,15 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	members := mongo.ConfigMembers{}
-	for key, pod := range pods.Items {
+	for key := range pods.Items {
 		if key >= mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
-
-		member, err := r.getConfigMemberForPod(ctx, cr, rs, key, &pod)
+		member, err := r.getConfigMemberForPod(ctx, cr, rs, set, key, &pods.Items[key])
 		if err != nil {
-			return rsMembers, 0, errors.Wrapf(err, "get config member for pod %s", pod.Name)
+			return rsMembers, 0, errors.Wrapf(err, "get config member for pod %s", pods.Items[key].Name)
 		}
-
 		members = append(members, member)
 	}
 
@@ -718,7 +805,13 @@ func (r *ReconcilePerconaServerMongoDB) handleRsAddToShard(ctx context.Context, 
 // This must be run from within the running container to utilize the MongoDB Localhost Exception.
 //
 // See: https://www.mongodb.com/docs/manual/core/localhost-exception/
-func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
+func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	set *membergroup.Set,
+	pods []corev1.Pod,
+) (*corev1.Pod, *api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
 	for _, pod := range pods {
@@ -734,7 +827,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		log.Info("initiating replset", "replset", replsetName, "pod", pod.Name)
 
-		member, err := r.getConfigMemberForPod(ctx, cr, replset, 0, &pod)
+		member, err := r.getConfigMemberForPod(ctx, cr, replset, set, 0, &pod)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "get config member for pod %s", pod.Name)
 		}
