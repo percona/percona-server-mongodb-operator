@@ -151,8 +151,13 @@ String detectMongoVersion() {
             set -eu
             mongo_image=${IMAGE_MONGOD:-}
             if [ -z "$mongo_image" ]; then
-                echo "IMAGE_MONGOD environment variable is not set" >&2
-                exit 1
+                assignment=$(sed -n '/^export IMAGE_MONGOD=/{p;q;}' e2e-tests/vars)
+                if [ -z "$assignment" ]; then
+                    echo "IMAGE_MONGOD assignment not found in e2e-tests/vars" >&2
+                    exit 1
+                fi
+                eval "$assignment"
+                mongo_image=$IMAGE_MONGOD
             fi
 
             mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')
