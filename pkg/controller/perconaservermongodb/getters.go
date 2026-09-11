@@ -67,26 +67,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 	return mongosPods, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (appsv1.StatefulSet, error) {
-	list := appsv1.StatefulSetList{}
-
-	ls := naming.ArbiterLabels(cr, rs)
-
-	err := r.client.List(ctx,
-		&list,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(ls),
-		},
-	)
-
-	if len(list.Items) != 1 {
-		return appsv1.StatefulSet{}, errors.Errorf("invalid sfs arbiter count: %d", len(list.Items))
-	}
-
-	return list.Items[0], err
-}
-
 // TODO: remove this
 // getRsStatefulset returns the base StatefulSet of a replica set.
 //
