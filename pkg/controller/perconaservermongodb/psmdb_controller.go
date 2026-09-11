@@ -727,20 +727,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 		return nil
 	}
 
-	for _, rs := range cr.Spec.Replsets {
-		if cr.Status.State == api.AppStateStopping {
+	if cr.Status.State == api.AppStateStopping {
+		for _, rs := range cr.Spec.Replsets {
 			log.Info("pausing cluster", "replset", rs.Name)
 		}
-
-		set, err := membergroup.Resolve(cr, rs)
-		if err != nil {
-			return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
-		}
-		target, _, err := r.shutdownTarget(ctx, cr, rs, set)
-		if err != nil {
-			return errors.Wrapf(err, "compute shutdown target for replset %s", rs.Name)
-		}
-		r.applyShutdownTarget(rs, target)
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
