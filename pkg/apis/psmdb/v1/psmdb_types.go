@@ -72,16 +72,17 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 // +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
 type PerconaServerMongoDBSpec struct {
-	Pause                        bool                                 `json:"pause,omitempty"`
-	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
-	CRVersion                    string                               `json:"crVersion,omitempty"`
-	Platform                     *version.Platform                    `json:"platform,omitempty"`
-	Image                        string                               `json:"image"`
-	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	Pause             bool                          `json:"pause,omitempty"`
+	Unmanaged         bool                          `json:"unmanaged,omitempty"`
+	CRVersion         string                        `json:"crVersion,omitempty"`
+	Platform          *version.Platform             `json:"platform,omitempty"`
+	Image             string                        `json:"image"`
+	ImagePullSecrets  []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	UnsafeConf        bool                          `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe            UnsafeFlags                   `json:"unsafeFlags,omitempty"`
+	IgnoreLabels      []string                      `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations []string                      `json:"ignoreAnnotations,omitempty"`
+	// +kubebuilder:validation:MaxItems=50
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                       BackupSpec                           `json:"backup,omitempty"`
@@ -912,12 +913,15 @@ type PrimaryPreferTagSelectorSpec map[string]string
 //
 // +kubebuilder:validation:XValidation:rule="self.?clusterRole.orValue(\"\") != 'configsvr' || !has(self.instances)",message="configServer cannot have instances[]"
 // +kubebuilder:validation:XValidation:rule="has(self.volumeSpec) != has(self.instances)",message="exactly one of volumeSpec or instances[] must be set: volumeSpec is required in legacy mode and must be absent when instances[] is used, where each instance declares its own"
+// +kubebuilder:validation:XValidation:rule="has(self.instances) || has(self.size)",message="a replicaset must either declare a size or set named instances"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || self.?size.orValue(0) == 0",message="size must be absent when instances[] is set: declare instances[].replicas instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?arbiter.?enabled.orValue(false) && self.?arbiter.?size.orValue(0) == 0)",message="arbiter must be absent when instances[] is set: declare an instance with rsConfig.arbiterOnly instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?nonvoting.?enabled.orValue(false) && self.?nonvoting.?size.orValue(0) == 0)",message="nonvoting must be absent when instances[] is set: declare an instance named nonVoting instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?hidden.?enabled.orValue(false) && self.?hidden.?size.orValue(0) == 0)",message="hidden must be absent when instances[] is set: declare an instance named hidden instead"
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
+
+	// The following fields are applicable replicaset-wide.
 
 	Name                     string                       `json:"name,omitempty"`
 	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
@@ -943,6 +947,7 @@ type ReplsetSpec struct {
 
 	// The following fields will be deprecated in favour of Instances[].
 
+	// +optional
 	Size      int32         `json:"size"`
 	Arbiter   Arbiter       `json:"arbiter,omitempty"`
 	NonVoting NonVotingSpec `json:"nonvoting,omitempty"`

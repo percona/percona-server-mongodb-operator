@@ -16229,8 +16229,6 @@ spec:
                               type: string
                           type: object
                       type: object
-                  required:
-                  - size
                   type: object
                   x-kubernetes-validations:
                   - message: configServer cannot have instances[]
@@ -16239,6 +16237,9 @@ spec:
                       volumeSpec is required in legacy mode and must be absent when
                       instances[] is used, where each instance declares its own'
                     rule: has(self.volumeSpec) != has(self.instances)
+                  - message: a replicaset must either declare a size or set named
+                      instances
+                    rule: has(self.instances) || has(self.size)
                   - message: 'size must be absent when instances[] is set: declare
                       instances[].replicas instead'
                     rule: '!has(self.instances) || self.?size.orValue(0) == 0'
@@ -16254,6 +16255,7 @@ spec:
                       an instance named hidden instead'
                     rule: '!has(self.instances) || (!self.?hidden.?enabled.orValue(false)
                       && self.?hidden.?size.orValue(0) == 0)'
+                maxItems: 50
                 type: array
               revisionHistoryLimit:
                 format: int32
@@ -31734,8 +31736,6 @@ spec:
                                 type: string
                             type: object
                         type: object
-                    required:
-                    - size
                     type: object
                     x-kubernetes-validations:
                     - message: cannot declare configsvrReplSet using instances[]
@@ -31746,6 +31746,9 @@ spec:
                         volumeSpec is required in legacy mode and must be absent when
                         instances[] is used, where each instance declares its own'
                       rule: has(self.volumeSpec) != has(self.instances)
+                    - message: a replicaset must either declare a size or set named
+                        instances
+                      rule: has(self.instances) || has(self.size)
                     - message: 'size must be absent when instances[] is set: declare
                         instances[].replicas instead'
                       rule: '!has(self.instances) || self.?size.orValue(0) == 0'
