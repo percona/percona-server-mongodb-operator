@@ -2,16 +2,13 @@ package perconaservermongodb
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -19,10 +16,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
-var (
-	errWaitingTermination  = errors.New("waiting pods to be deleted")
-	errWaitingFirstPrimary = errors.New("waiting first pod to become primary")
-)
+var errWaitingTermination = errors.New("waiting pods to be deleted")
 
 func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr *api.PerconaServerMongoDB) (shouldReconcile bool, err error) {
 	log := logf.FromContext(ctx)
@@ -129,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 		if err := r.deleteReplset(ctx, cr, rs); err != nil {
 			rsDeleted = false
 			switch err {
-			case errWaitingTermination, errWaitingFirstPrimary:
+			case errWaitingTermination:
 				log.Info("deleting rs pods", "rs", rs.Name, "status", err.Error())
 				continue
 			default:
@@ -150,108 +144,34 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 	return nil
 }
 
+// deleteReplset shrinks a replica set one step per pass, leaving the member
+// holding every acknowledged write until last.
+//
+// It deletes nothing itself. Each pass writes smaller counts onto the working
+// copy of the spec and reports errWaitingTermination; the StatefulSet
+// reconciliation later in the same pass pushes those counts, and the
+// StatefulSet controller removes the pods. nil means the replica set is gone.
+//
+// shutdownTarget owns the ordering, and is shared with reconcilePause so that
+// pausing and deleting shut a replica set down the same way.
 func (r *ReconcilePerconaServerMongoDB) deleteReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
-	// It's okay to delete arbiter + non-voting + hidden at the same time.
-	// None of them can be the primary.
-	if rs.Arbiter.Enabled {
-		rs.Arbiter.Size = 0
-	}
-	if rs.NonVoting.Enabled {
-		rs.NonVoting.Size = 0
-	}
-	if rs.Hidden.Enabled {
-		rs.Hidden.Size = 0
-	}
-
-	return r.deleteReplsetPods(ctx, cr, rs)
-}
-
-func (r *ReconcilePerconaServerMongoDB) deleteReplsetPods(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
-	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
+	set, err := membergroup.Resolve(cr, rs)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrap(err, "get rs statefulset")
+		return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 	}
 
-	pods := &corev1.PodList{}
-	err = r.client.List(ctx,
-		pods,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
-		},
-	)
+	target, done, err := r.shutdownTarget(ctx, cr, rs, set)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrap(err, "get rs pods")
+		return errors.Wrapf(err, "compute shutdown target for replset %s", rs.Name)
 	}
 
-	// `k8sclient.List` returns unsorted list of pods
-	// We should sort pods to be sure that the first pod is the primary
-	sort.Slice(pods.Items, func(i, j int) bool {
-		return pods.Items[i].Name < pods.Items[j].Name
-	})
+	r.applyShutdownTarget(rs, target)
 
-	switch {
-	case *sts.Spec.Replicas == 0:
-		rs.Size = 0
-		if len(pods.Items) == 0 {
-			return nil
-		}
-		return errWaitingTermination
-	case *sts.Spec.Replicas == 1 || len(pods.Items) == 1:
-		rs.Size = 1
-		// If there is one pod left, we need to be sure that it's the primary.
-		if len(pods.Items) != 1 {
-			return errWaitingTermination
-		}
-
-		firstPod := pods.Items[0]
-		// If it's not ready, we can delete it
-		if isContainerAndPodRunning(firstPod, "mongod") && isPodReady(firstPod) {
-			isPrimary, err := r.isPodPrimary(ctx, cr, firstPod, rs)
-			if err != nil {
-				return errors.Wrap(err, "is pod primary")
-			}
-			if !isPrimary {
-				return errWaitingFirstPrimary
-			}
-			// If true, we should resize the replset to 0
-		}
-
-		rs.Size = 0
-		return errWaitingTermination
-	default:
-		// If statefulset size is bigger then 1 we should set the first pod as primary.
-		// After that we can continue the resize of statefulset.
-		rs.Size = *sts.Spec.Replicas
-		isPrimary, err := r.isPodPrimary(ctx, cr, pods.Items[0], rs)
-		if err != nil {
-			return errors.Wrap(err, "is pod primary")
-		}
-		if !isPrimary {
-			if len(pods.Items) != int(*sts.Spec.Replicas) {
-				return errWaitingTermination
-			}
-
-			set, err := membergroup.Resolve(cr, rs)
-			if err != nil {
-				return errors.Wrap(err, "resolve member group")
-			}
-			err = r.setPrimary(ctx, cr, rs, set, pods.Items[0])
-			if err != nil {
-				return errors.Wrap(err, "set primary")
-			}
-			return errWaitingFirstPrimary
-		}
-
-		rs.Size = 1
-		return errWaitingTermination
+	if done {
+		return nil
 	}
+
+	return errWaitingTermination
 }
 
 func (r *ReconcilePerconaServerMongoDB) deletePvcFinalizer(ctx context.Context, cr *api.PerconaServerMongoDB) error {

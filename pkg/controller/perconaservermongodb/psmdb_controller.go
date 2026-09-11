@@ -731,8 +731,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 		if cr.Status.State == api.AppStateStopping {
 			log.Info("pausing cluster", "replset", rs.Name)
 		}
-		rs.Arbiter.Enabled = false
-		rs.NonVoting.Enabled = false
+
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+		}
+		target, _, err := r.shutdownTarget(ctx, cr, rs, set)
+		if err != nil {
+			return errors.Wrapf(err, "compute shutdown target for replset %s", rs.Name)
+		}
+		r.applyShutdownTarget(rs, target)
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
@@ -2245,4 +2253,216 @@ func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
 	}
 
 	return target, nil
+}
+
+// shutdownTarget returns the member count each group should be scaled to on
+// a given reconciliation while the replica set is shutting down, and whether
+// the shutdown is complete.
+//
+// Ordering is based on replica set quorum and observed primary state.
+// A group that cannot hold the primary may still vote (hidden members vote,
+// arbiters vote). Dropping them alongside the primary's group would lose
+// quorum mid-shutdown.
+//
+// Phases:
+//  1. Every non-voting group goes to zero immediately.
+//  2. Voting groups that do not hold the live primary are drained one member
+//     per pass while more than one voting member remains.
+//  3. The group holding the live primary is drained last, lowest ordinal
+//     surviving, so the final member standing is the one holding every
+//     acknowledged write.
+//
+// It is not a pure computation: phase 3 steps the primary down onto the lowest
+// ordinal when it is not already there, because a StatefulSet removes its
+// highest ordinal first.
+func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) (map[string]int32, bool, error) {
+	log := logf.FromContext(ctx).WithName("shutdown").WithValues("replset", rs.Name)
+
+	type observedGroup struct {
+		group membergroup.Group
+		// pods is every pod of the group, terminating ones included: the
+		// shutdown is only finished once they have all gone.
+		pods []corev1.Pod
+		// live excludes pods that are already terminating. Targets come from
+		// this, because counting a terminating pod would scale the StatefulSet
+		// back to the size it has just left.
+		live       []corev1.Pod
+		primary    bool
+		primaryPod string
+	}
+
+	target := make(map[string]int32, set.Len())
+	observed := make([]observedGroup, 0, set.Len())
+	totalRunning := 0
+
+	for _, group := range set.GetAll() {
+		pods, err := psmdb.GetGroupPods(ctx, r.client, cr, rs, group)
+		if err != nil {
+			return nil, false, err
+		}
+
+		og := observedGroup{group: group, pods: pods.Items}
+		for i := range pods.Items {
+			if pods.Items[i].DeletionTimestamp == nil {
+				og.live = append(og.live, pods.Items[i])
+			}
+		}
+
+		target[group.Name] = 0
+		totalRunning += len(og.pods)
+		observed = append(observed, og)
+	}
+
+	if totalRunning == 0 {
+		return target, true, nil
+	}
+
+	// Locate the live primary. It can be in any group, including one whose
+	// desired configuration no longer permits an election.
+	primaryGroup := ""
+	readyDataBearing := 0
+	for i := range observed {
+		og := &observed[i]
+		if !og.group.DataBearing {
+			continue
+		}
+		for j := range og.live {
+			pod := og.live[j]
+			if !isContainerAndPodRunning(pod, og.group.ContainerName) || !isPodReady(pod) {
+				continue
+			}
+			readyDataBearing++
+
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, rs)
+			if err != nil {
+				return nil, false, errors.Wrapf(err, "is pod %s primary", pod.Name)
+			}
+			if isPrimary {
+				og.primary = true
+				og.primaryPod = pod.Name
+				primaryGroup = og.group.Name
+				break
+			}
+		}
+		if og.primary {
+			break
+		}
+	}
+
+	// Phase 1: non-voting groups go straight to zero. None of them affects
+	// quorum.
+	votingLive := 0
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Member.Votes == 0 {
+			target[og.group.Name] = 0
+			continue
+		}
+		target[og.group.Name] = int32(len(og.live))
+		votingLive += len(og.live)
+	}
+
+	// Phase 2: drain one voting non-primary member per pass.
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Member.Votes == 0 || og.primary || len(og.live) == 0 {
+			continue
+		}
+		// Never take the last voter down here. Leaving it to phase 3 keeps it
+		// alive until the primary's group is drained instead of dying alongside it.
+		if votingLive <= 1 {
+			break
+		}
+		target[og.group.Name] = int32(len(og.live)) - 1
+		log.V(1).Info("draining voting member", "group", og.group.Name,
+			"from", len(og.live), "to", target[og.group.Name])
+		return target, false, nil
+	}
+
+	// Phase 3: only the primary's group has voting members left. Drain it to
+	// one, then to zero.
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Name != primaryGroup {
+			continue
+		}
+
+		if len(og.live) <= 1 {
+			target[og.group.Name] = 0
+			return target, false, nil
+		}
+
+		// A StatefulSet removes its highest ordinal first, so the primary has
+		// to sit on the lowest one before this group may shrink. Otherwise the
+		// member holding the newest writes is the first to go.
+		if og.live[0].Name != og.primaryPod {
+			// Hold at the current size either way: nothing may shrink until the
+			// primary has moved.
+			target[og.group.Name] = int32(len(og.live))
+
+			if len(og.live) != len(og.pods) {
+				log.V(1).Info("waiting for terminating pods before moving the primary",
+					"group", og.group.Name)
+				return target, false, nil
+			}
+
+			log.Info("moving the primary to the lowest ordinal before shrinking",
+				"group", og.group.Name, "pod", og.live[0].Name)
+			if err := r.setPrimary(ctx, cr, rs, set, og.live[0]); err != nil {
+				return nil, false, errors.Wrap(err, "set primary")
+			}
+
+			return target, false, nil
+		}
+
+		target[og.group.Name] = int32(len(og.live)) - 1
+		return target, false, nil
+	}
+
+	// No primary was observed. If a data bearing node exists, wait for one to be elected
+	// before scaling down everything.
+	if readyDataBearing > 0 {
+		log.Info("no primary at the moment, holding the shutdown until one is elected")
+		return target, false, nil
+	}
+
+	// Nothing is ready, so nothing can be elected and there is no last writer
+	// left to protect. Take it all down.
+	log.Info("no ready data-bearing member, shutting every member group down")
+	for name := range target {
+		target[name] = 0
+	}
+	return target, false, nil
+}
+
+// applyShutdownTarget writes the target into the working copy of the spec so
+// downstream StatefulSet reconciliation scales the workloads. It never touches
+// a group that is absent from the target.
+func (r *ReconcilePerconaServerMongoDB) applyShutdownTarget(rs *api.ReplsetSpec, target map[string]int32) {
+	if rs.InstanceMode() {
+		for name, want := range target {
+			if inst := rs.Instance(name); inst != nil {
+				inst.Replicas = want
+			}
+		}
+		return
+	}
+
+	for name, want := range target {
+		switch name {
+		case naming.GroupMongod:
+			rs.Size = want
+		case naming.GroupArbiter:
+			rs.Arbiter.Size = want
+		case naming.GroupNonVoting:
+			rs.NonVoting.Size = want
+		case naming.GroupHidden:
+			rs.Hidden.Size = want
+		}
+	}
 }
