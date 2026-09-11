@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -449,3 +451,45 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 		})
 	})
 })
+
+func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
+	const cmName = "test-cluster-cfg"
+
+	build := func() (*psmdbv1.PerconaServerMongoDB, *ReconcilePerconaServerMongoDB) {
+		cr := newTestCR()
+		cr.UID = "test-uid"
+		isController := true
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cmName,
+				Namespace: cr.Namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "psmdb.percona.com/v1",
+					Kind:       "PerconaServerMongoDB",
+					Name:       cr.Name,
+					UID:        cr.UID,
+					Controller: &isController,
+				}},
+			},
+		}
+		return cr, buildFakeClient(cr, cm)
+	}
+
+	t.Run("delete returns NotFound", func(t *testing.T) {
+		cr, r := build()
+		cl := interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+			return k8serrors.NewNotFound(corev1.Resource("configmaps"), obj.GetName())
+		})
+
+		require.NoError(t, deleteConfigMapIfExists(t.Context(), cl, cr, cmName))
+	})
+
+	t.Run("delete fails for another reason", func(t *testing.T) {
+		cr, r := build()
+		cl := interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+			return errors.New("boom")
+		})
+
+		require.Error(t, deleteConfigMapIfExists(t.Context(), cl, cr, cmName))
+	})
+}

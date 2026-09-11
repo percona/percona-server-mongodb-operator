@@ -251,7 +251,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				}
 
 				log.Info("CA is not up to date. Recreating secret", "secret", secret.Name)
-				if err := r.client.Delete(ctx, secret); err != nil {
+				// The cache can be behind the API server, so a secret that is
+				// already gone is the state this path wants.
+				if err := r.client.Delete(ctx, secret); err != nil && !k8serrors.IsNotFound(err) {
 					return err
 				}
 			}
@@ -384,7 +386,8 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 
 		// If secret was already updated, we should delete the old one
 		if bytes.Equal(mergedCA, secret.Data["ca.crt"]) {
-			if err := r.client.Delete(ctx, oldSecret); err != nil {
+			// As above, an old secret that is already gone is not a failure.
+			if err := r.client.Delete(ctx, oldSecret); err != nil && !k8serrors.IsNotFound(err) {
 				return err
 			}
 			log.Info("new ca is already in secret, deleting old secret")
