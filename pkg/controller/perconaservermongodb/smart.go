@@ -33,7 +33,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 ) error {
 	log := logf.FromContext(ctx).
 		WithName("SmartUpdate").
-		WithValues("statefulset", sfs.Name, "replset", replset.Name)
+		WithValues("statefulset", sfs.Name, "replset", replset.Name, "group", group.Name)
 
 	if group.Replicas == 0 {
 		return nil
@@ -100,7 +100,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	if err != nil {
 		return errors.Wrapf(err, "resolve member groups for %s", replset.Name)
 	}
-	unavailable, err := r.replsetHasUnavailableVoters(ctx, cr, replset, set)
+	unavailable, err := r.replsetHasUnavailableVoters(ctx, cr, set)
 	if err != nil {
 		return errors.Wrap(err, "check replset voter availability")
 	}
@@ -183,17 +183,22 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
-		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
-		if err != nil {
-			return errors.Wrap(err, "is pod primary")
-		}
-		if isPrimary {
-			primaryPod = pod
-			log.Info("primary pod detected", "pod", pod.Name)
-			continue
+		// Only ask a group that can hold data. An arbiter is never the primary,
+		// and replicates no admin database for the probe to authenticate
+		// against, so asking fails rather than answers.
+		if group.DataBearing {
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+			if err != nil {
+				return errors.Wrap(err, "is pod primary")
+			}
+			if isPrimary {
+				primaryPod = pod
+				log.Info("primary pod detected", "pod", pod.Name)
+				continue
+			}
 		}
 
-		log.Info("apply changes to secondary pod", "pod", pod.Name)
+		log.Info("apply changes to pod", "pod", pod.Name)
 
 		if err := updatePod(&pod); err != nil {
 			return err
@@ -248,7 +253,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 func (r *ReconcilePerconaServerMongoDB) replsetHasUnavailableVoters(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
-	rs *api.ReplsetSpec,
 	set *membergroup.Set,
 ) (bool, error) {
 	for _, group := range set.GetAll() {
@@ -361,9 +365,9 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(
 			continue
 		}
 
-		// Arbiters cannot be frozen or stepped down.
-		group, ok := set.GetByLabels(pod.Labels)
-		if ok && !group.DataBearing {
+		// Arbiters cannot be frozen or stepped down, and cannot even be
+		// connected to as clusterAdmin.
+		if isArbiterPod(&pod, set) {
 			continue
 		}
 
@@ -619,6 +623,21 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(
 	}
 
 	return errors.New("reach pod wait limit")
+}
+
+// isArbiterPod returns true if the pod contains an arbiter container
+func isArbiterPod(pod *corev1.Pod, set *membergroup.Set) bool {
+	if group, ok := set.GetByLabels(pod.Labels); ok {
+		return !group.DataBearing
+	}
+
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == naming.ContainerArbiter {
+			return true
+		}
+	}
+
+	return false
 }
 
 func isMemberContainer(name string) bool {
