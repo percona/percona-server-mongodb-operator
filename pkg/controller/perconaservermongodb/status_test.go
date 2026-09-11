@@ -60,6 +60,12 @@ func mockReadyReplsetSts(name, namespace, crName, rsName, component string, repl
 				naming.LabelKubernetesReplset:   rsName,
 				naming.LabelKubernetesComponent: component,
 			},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: api.SchemeGroupVersion.String(),
+				Kind:       "PerconaServerMongoDB",
+				Name:       crName,
+				Controller: new(true),
+			}},
 		},
 		Status: appsv1.StatefulSetStatus{
 			ReadyReplicas:     replicas,

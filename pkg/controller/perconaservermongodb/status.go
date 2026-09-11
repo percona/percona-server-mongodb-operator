@@ -21,6 +21,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *api.PerconaServerMongoDB, reconcileErr error, clusterState api.AppState) error {
@@ -306,12 +307,22 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 		return false, nil
 	}
 
-	statefulSets := make([]string, 0, len(cr.Spec.Replsets)+2)
-	for _, rs := range cr.Spec.Replsets {
-		statefulSets = append(statefulSets, naming.MongodStatefulSetName(cr, rs))
+	replsets := make([]*api.ReplsetSpec, 0, len(cr.Spec.Replsets)+1)
+	replsets = append(replsets, cr.Spec.Replsets...)
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
+
+	var statefulSets []string
+	for _, rs := range replsets {
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return false, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+		}
+		statefulSets = append(statefulSets, set.GetStatefulSetNames()...)
+	}
+
 	if cr.Spec.Sharding.Enabled {
-		statefulSets = append(statefulSets, naming.MongodStatefulSetName(cr, cr.Spec.Sharding.ConfigsvrReplSet))
 		statefulSets = append(statefulSets, naming.MongosStatefulSetName(cr))
 	}
 
@@ -321,7 +332,10 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 	for _, name := range statefulSets {
 		sts := &appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, sts); err != nil {
-			return false, client.IgnoreNotFound(err)
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return false, errors.Wrapf(err, "get statefulset %s", name)
 		}
 
 		pods := corev1.PodList{}
@@ -371,14 +385,21 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
-	sts := &appsv1.StatefulSet{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + rsSpec.Name, Namespace: cr.Namespace}, sts)
+	// A PVC resize in any group holds the replica set in Init. There may be no
+	// base StatefulSet to read the annotation from.
+	stsList, err := r.getMemberStatefulsets(ctx, cr, rsSpec)
 	if err != nil {
-		return api.ReplsetStatus{}, client.IgnoreNotFound(err)
+		return api.ReplsetStatus{}, err
 	}
 
-	if sts.Annotations[api.AnnotationPVCResizeInProgress] != "" {
-		return api.ReplsetStatus{Status: api.AppStateInit}, nil
+	// No workloads yet, so there is nothing to report
+	if len(stsList.Items) == 0 {
+		return api.ReplsetStatus{}, nil
+	}
+	for i := range stsList.Items {
+		if stsList.Items[i].Annotations[api.AnnotationPVCResizeInProgress] != "" {
+			return api.ReplsetStatus{Status: api.AppStateInit}, nil
+		}
 	}
 
 	list, err := psmdb.GetRSPods(ctx, r.client, cr, rsSpec.Name)

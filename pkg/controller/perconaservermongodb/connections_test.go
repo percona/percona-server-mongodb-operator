@@ -356,6 +356,13 @@ func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int
 			Name:      fmt.Sprintf("%s-%s", cr.Name, rs.Name),
 			Namespace: cr.Namespace,
 			Labels:    ls,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: api.SchemeGroupVersion.String(),
+				Kind:       "PerconaServerMongoDB",
+				Name:       cr.Name,
+				UID:        cr.UID,
+				Controller: new(true),
+			}},
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,

@@ -67,19 +67,6 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 	return mongosPods, err
 }
 
-// TODO: remove this
-// getRsStatefulset returns the base StatefulSet of a replica set.
-//
-// Deprecated for member operations: an instances[] topology may have no base
-// workload at all. Use getMemberStatefulsets or getGroupStatefulset.
-func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
-	sts := appsv1.StatefulSet{}
-
-	err := r.client.Get(ctx, naming.ReplsetNamespacedName(cr, rs), &sts)
-
-	return sts, err
-}
-
 // getShardsWithWorkloads returns the names of the shard replica sets that
 // still have member workloads in the cluster. The config server, mongos and
 // search are excluded.
