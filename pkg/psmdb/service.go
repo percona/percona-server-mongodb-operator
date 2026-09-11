@@ -408,9 +408,14 @@ func GetServiceMeshAddr(cr *api.PerconaServerMongoDB, pod string, port int32) st
 		":" + strconv.Itoa(int(port))
 }
 
+// GetMCSHost returns the ReplicaSet pod hostname using the MultiCluster FQDN, without a port.
+func GetMCSHost(cr *api.PerconaServerMongoDB, pod string) string {
+	return fmt.Sprintf("%s.%s.%s", pod, cr.Namespace, cr.Spec.MultiCluster.DNSSuffix)
+}
+
 // GetMCSAddr returns ReplicaSet pod address using MultiCluster FQDN
 func GetMCSAddr(cr *api.PerconaServerMongoDB, pod string, port int32) string {
-	return fmt.Sprintf("%s.%s.%s:%d", pod, cr.Namespace, cr.Spec.MultiCluster.DNSSuffix, port)
+	return fmt.Sprintf("%s:%d", GetMCSHost(cr, pod), port)
 }
 
 var ErrServiceNotExists = errors.New("service doesn't exist")
