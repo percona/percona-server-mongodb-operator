@@ -426,30 +426,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
 	}
 
-	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)
+	err = r.cleanupReplsetShards(ctx, cr)
 	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	for _, rr := range stsForDeletion {
-		log.Info("Deleting STS component from replst", "sts", rr.sts.Name, "rs", rr.rsName, "port", rr.rsPort)
-
-		err = r.checkIfUserDataExistInRS(ctx, cr, rr.rsName, rr.rsPort)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rr.rsName)
-		}
-
-		if rr.sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
-			err = r.removeRSFromShard(ctx, cr, rr.rsName)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
-			}
-		}
-
-		err = r.client.Delete(ctx, &rr.sts)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
-		}
+		return reconcile.Result{}, errors.Wrap(err, "cleanup replset shards")
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
@@ -534,6 +513,35 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) cleanupReplsetShards(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	for _, rsd := range replsetsToRemove(stsForDeletion) {
+		if err := r.checkIfUserDataExistInRS(ctx, cr, rsd.name, rsd.port); err != nil {
+			return errors.Wrapf(err, "check remove posibility for rs %s", rsd.name)
+		}
+
+		if err := r.removeRSFromShard(ctx, cr, rsd.name); err != nil {
+			return errors.Wrapf(err, "failed to remove rs %s", rsd.name)
+		}
+
+		for i := range rsd.workloads {
+			sts := &rsd.workloads[i]
+			log.Info("Deleting STS component from replset",
+				"sts", sts.Name, "rs", rsd.name, "port", rsd.port)
+
+			if err := r.client.Delete(ctx, sts); err != nil {
+				return errors.Wrapf(err, "failed to remove rs %s", rsd.name)
+			}
+		}
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
@@ -783,20 +791,42 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 // safeDownscale ensures replica set pods downscaled one by one and returns true if a downscale is in progress
 func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	isDownscale := false
+
 	for _, rs := range cr.Spec.Replsets {
-		sf, err := r.getRsStatefulset(ctx, cr, rs.Name)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return false, errors.Wrap(err, "get rs statefulset")
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return false, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
 
-		if k8serrors.IsNotFound(err) {
-			continue
+		target, err := r.downscaleTarget(ctx, cr, set)
+		if err != nil {
+			return false, err
 		}
 
-		// downscale 1 pod on each reconciliation
-		if *sf.Spec.Replicas-rs.Size > 1 {
-			rs.Size = *sf.Spec.Replicas - 1
+		for _, group := range set.GetAll() {
+			want, ok := target[group.Name]
+			if !ok || want == group.Replicas {
+				continue
+			}
 			isDownscale = true
+
+			if rs.InstanceMode() {
+				if inst := rs.Instance(group.Name); inst != nil {
+					inst.Replicas = want
+				}
+				continue
+			}
+
+			switch group.Name {
+			case naming.GroupMongod:
+				rs.Size = want
+			case naming.GroupArbiter:
+				rs.Arbiter.Size = want
+			case naming.GroupNonVoting:
+				rs.NonVoting.Size = want
+			case naming.GroupHidden:
+				rs.Hidden.Size = want
+			}
 		}
 	}
 
@@ -807,6 +837,60 @@ type statefulSetWithReplicaNameAndPort struct {
 	sts    appsv1.StatefulSet
 	rsName string
 	rsPort int32
+}
+
+// removedReplset is every workload of one no-longer-declared replica set,
+// together with what the replica-set-level cleanup needs from it.
+type removedReplset struct {
+	name      string
+	port      int32
+	workloads []appsv1.StatefulSet
+}
+
+// replsetsToRemove groups the workloads scheduled for deletion by the replica
+// set that owned them, so replica-set operations run once each rather than
+// once per group.
+//
+// Ordering is by replica set name for a stable sequence, and within a replica
+// set the caller's order is preserved: getSTSForDeletionWithTheirRSDetails
+// sorts so that secondary workloads go before the base one.
+func replsetsToRemove(removed []statefulSetWithReplicaNameAndPort) []removedReplset {
+	byName := make(map[string][]statefulSetWithReplicaNameAndPort, len(removed))
+	names := make([]string, 0, len(removed))
+
+	for _, item := range removed {
+		if _, ok := byName[item.rsName]; !ok {
+			names = append(names, item.rsName)
+		}
+		byName[item.rsName] = append(byName[item.rsName], item)
+	}
+
+	sort.Strings(names)
+
+	out := make([]removedReplset, 0, len(names))
+	for _, name := range names {
+		items := byName[name]
+
+		rs := removedReplset{name: name, port: replsetPort(items)}
+		for _, item := range items {
+			rs.workloads = append(rs.workloads, item.sts)
+		}
+
+		out = append(out, rs)
+	}
+
+	return out
+}
+
+func replsetPort(items []statefulSetWithReplicaNameAndPort) int32 {
+	for _, item := range items {
+		if item.sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+			continue
+		}
+		return item.rsPort
+	}
+
+	return api.DefaultMongoPort
 }
 
 // getSTSForDeletionWithTheirRSDetails identifies StatefulSets that should be deleted and returns them
@@ -836,7 +920,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx 
 
 	for _, sts := range existingSTSList.Items {
 		component := sts.Labels[naming.LabelKubernetesComponent]
-		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
+		if component == naming.ContainerMongos || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
@@ -861,20 +945,20 @@ func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx 
 	return removed, nil
 }
 
+// getComponentPortFromSTS returns the port a workload serves MongoDB on.
 func getComponentPortFromSTS(sts appsv1.StatefulSet, componentName string) (int32, error) {
 	for _, container := range sts.Spec.Template.Spec.Containers {
-		if container.Name == componentName {
-			if len(container.Ports) > 0 {
-				return container.Ports[0].ContainerPort, nil
-			}
-			return 0, fmt.Errorf("no ports found for container %s", componentName)
+		if !isMemberContainer(container.Name) {
+			continue
 		}
+		if len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, nil
+		}
+		return 0, fmt.Errorf("no ports found for container %s", container.Name)
 	}
 
-	// With this check we are catching cases like arbiter and non-voting
-	// where the container name is different from the component name. For now,
-	// we don't modify the ports of these components.
-	if componentName != "mongod" {
+	// Nothing to read a port from, so this is not a member workload at all
+	if componentName != naming.ComponentMongod {
 		return api.DefaultMongoPort, nil
 	}
 
@@ -2103,4 +2187,62 @@ func (r *ReconcilePerconaServerMongoDB) cleanupStaleGroupConfigs(
 	}
 
 	return nil
+}
+
+// downscaleTarget returns the member count each group should be reconciled to
+// on a given pass.
+//
+// At most one member is removed per replica set per reconciliation. Removing
+// one voter from every group independently could take a majority offline in a
+// single pass. The returned map is a temporary target only: the
+// user-requested counts in the CR are never overwritten.
+func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	set *membergroup.Set,
+) (map[string]int32, error) {
+	target := make(map[string]int32, set.Len()) // group -> replicas mapping
+	budget := 1                                 // how many members are downscaled each pass
+
+	for _, group := range set.GetAll() {
+		target[group.Name] = group.Replicas
+
+		// Only voting members are rate-limited
+		if group.Member.Votes == 0 {
+			continue
+		}
+
+		sts := new(appsv1.StatefulSet)
+		err := r.client.Get(ctx,
+			types.NamespacedName{Name: group.STSName, Namespace: cr.Namespace}, sts)
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get statefulset %s", group.STSName)
+		}
+		if sts.Spec.Replicas == nil {
+			continue
+		}
+
+		observed := *sts.Spec.Replicas
+		gap := observed - group.Replicas
+
+		if gap <= 0 {
+			continue
+		}
+
+		if budget == 0 {
+			// Hold this group at its observed size until a later pass.
+			target[group.Name] = observed
+			continue
+		}
+		budget--
+
+		if gap > 1 {
+			target[group.Name] = observed - 1
+		}
+	}
+
+	return target, nil
 }
