@@ -2,18 +2,20 @@ package perconaservermongodb
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcileServices(ctx context.Context, cr *api.PerconaServerMongoDB, repls []*api.ReplsetSpec) error {
@@ -180,58 +182,76 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 	return nil
 }
 
+// expectedExternalServiceNames returns the per-pod service names the replica
+// set's groups require. A per-pod service is named after its pod, so this is
+// exactly the union of every group's desired pod names.
+func (r *ReconcilePerconaServerMongoDB) expectedExternalServiceNames(
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) map[string]struct{} {
+	names := make(map[string]struct{}, set.GetTotalMemberCount())
+	if !rs.Expose.Enabled {
+		return names
+	}
+	for _, group := range set.GetAll() {
+		for _, pod := range group.DesiredPodNames(cr, rs) {
+			names[pod] = struct{}{}
+		}
+	}
+	return names
+}
+
 func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	if cr.Spec.Pause {
 		return nil
 	}
 
-	// needed just for labels
-	service := psmdb.ExternalService(cr, replset, cr.Name+"-"+replset.Name)
-
-	svcNames := make(map[string]struct{}, replset.Size)
-	if replset.Expose.Enabled {
-		for i := 0; i < int(replset.Size); i++ {
-			svcNames[service.Name+"-"+strconv.Itoa(i)] = struct{}{}
-		}
-
-		if replset.NonVoting.Enabled {
-			for i := 0; i < int(replset.NonVoting.Size); i++ {
-				svcNames[service.Name+"-"+naming.ComponentNonVotingShort+"-"+strconv.Itoa(i)] = struct{}{}
-			}
-		}
-
-		if replset.Hidden.Enabled {
-			for i := 0; i < int(replset.Hidden.Size); i++ {
-				svcNames[service.Name+"-"+naming.ComponentHidden+"-"+strconv.Itoa(i)] = struct{}{}
-			}
-		}
-
-		if replset.Arbiter.Enabled {
-			for i := 0; i < int(replset.Arbiter.Size); i++ {
-				svcNames[service.Name+"-"+naming.ComponentArbiter+"-"+strconv.Itoa(i)] = struct{}{}
-			}
-		}
+	set, err := membergroup.Resolve(cr, replset)
+	if err != nil {
+		return errors.Wrapf(err, "resolve member groups for replset %s", replset.Name)
 	}
 
-	// clear old services
+	svcNames := r.expectedExternalServiceNames(cr, replset, set)
+
 	svcList := &corev1.ServiceList{}
-	err := r.client.List(
-		ctx,
-		svcList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(service.Labels),
-		},
-	)
-	if err != nil {
+	if err := r.client.List(ctx, svcList, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(psmdb.ExternalService(cr, replset, cr.GetName()+"-"+replset.Name).GetLabels()),
+	}); err != nil {
 		return errors.Wrap(err, "get current services")
 	}
 
-	for _, svc := range svcList.Items {
-		if _, ok := svcNames[svc.Name]; !ok {
-			if err := r.client.Delete(ctx, &svc); err != nil {
-				return errors.Wrapf(err, "delete service %s", svc.Name)
+	for i := range svcList.Items {
+		svc := &svcList.Items[i]
+		if _, ok := svcNames[svc.Name]; ok {
+			continue
+		}
+
+		// A per-pod service is named after its pod. While that pod still
+		// exists, a scale-down victim, or a member of a retiring group
+		// needs its service. MongoHost resolves an exposed member through it, so
+		// removing it first would cut the operator off from the member it
+		// still has to reconfigure out of the replica set.
+		//
+		// Once expose is off, MongoHost returns the headless-service name instead and these are
+		// pure leftovers, keeping them would leave a load balancer billing and an
+		// external endpoint open after the user asked for neither.
+		if replset.Expose.Enabled {
+			pod := new(corev1.Pod)
+			err := r.client.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: cr.Namespace}, pod)
+			if err == nil {
+				logf.FromContext(ctx).V(1).Info(
+					"keeping service of a still-running member", "service", svc.Name)
+				continue
 			}
+			if !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "get pod %s", svc.Name)
+			}
+		}
+
+		if err := r.client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete service %s", svc.Name)
 		}
 	}
 

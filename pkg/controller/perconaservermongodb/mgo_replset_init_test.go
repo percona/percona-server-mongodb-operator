@@ -19,6 +19,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -325,8 +326,10 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		}
 		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
+
+		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set)
 		require.NoError(t, err)
 		require.NotNil(t, pod)
 		require.NotNil(t, primary)
@@ -343,9 +346,10 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 			createUserErr:             errors.New("MongoServerError: Command createUser requires authentication"),
 		}
 		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		pod, primary, err := r.handleReplsetInit(ctx, cr, rs, set)
 		require.NoError(t, err)
 		require.NotNil(t, pod)
 		require.NotNil(t, primary)
@@ -360,9 +364,10 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 			authCheckErr:  errors.New("Authentication failed"),
 		}
 		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		_, _, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		_, _, err = r.handleReplsetInit(ctx, cr, rs, set)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exec add admin user")
 		assert.Equal(t, int32(2), atomic.LoadInt32(&exec.authCheckCalls), "auth check should be attempted before createUser and before giving up")
@@ -374,8 +379,10 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		}
 		r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
 
-		pods := []corev1.Pod{*fakeMongodPod(cr, rs, cr.Name+"-"+rs.Name+"-0")}
-		_, _, err := r.handleReplsetInit(ctx, cr, rs, pods)
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
+
+		_, _, err = r.handleReplsetInit(ctx, cr, rs, set)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exec userAdmin authentication check")
 		assert.Equal(t, int32(0), atomic.LoadInt32(&exec.createUserCalls), "createUser should not run when auth check itself fails")

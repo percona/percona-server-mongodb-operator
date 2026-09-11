@@ -47,6 +47,7 @@ import (
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/secret"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -425,30 +426,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "failed to reconcile users")
 	}
 
-	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)
+	err = r.cleanupReplsetShards(ctx, cr)
 	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	for _, rr := range stsForDeletion {
-		log.Info("Deleting STS component from replst", "sts", rr.sts.Name, "rs", rr.rsName, "port", rr.rsPort)
-
-		err = r.checkIfUserDataExistInRS(ctx, cr, rr.rsName, rr.rsPort)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "check remove posibility for rs %s", rr.rsName)
-		}
-
-		if rr.sts.Labels[naming.LabelKubernetesComponent] == "mongod" {
-			err = r.removeRSFromShard(ctx, cr, rr.rsName)
-			if err != nil {
-				return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
-			}
-		}
-
-		err = r.client.Delete(ctx, &rr.sts)
-		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "failed to remove rs %s", rr.rsName)
-		}
+		return reconcile.Result{}, errors.Wrap(err, "cleanup replset shards")
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
@@ -535,60 +515,56 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	return rr, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
-	matchLabels := naming.MongodLabels(cr, replset)
-
-	_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
+func (r *ReconcilePerconaServerMongoDB) cleanupReplsetShards(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	log := logf.FromContext(ctx)
+	stsForDeletion, err := r.getSTSForDeletionWithTheirRSDetails(ctx, cr)
 	if err != nil {
-		err = errors.Errorf("reconcile StatefulSet for %s: %v", replset.Name, err)
 		return err
 	}
 
-	if replset.Arbiter.Enabled {
-		matchLabels = naming.ArbiterLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile Arbiter StatefulSet for %s: %v", replset.Name, err)
-			return err
+	for _, rsd := range replsetsToRemove(stsForDeletion) {
+		if err := r.checkIfUserDataExistInRS(ctx, cr, rsd.name, rsd.port); err != nil {
+			return errors.Wrapf(err, "check remove posibility for rs %s", rsd.name)
 		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.ArbiterStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete arbiter statefulset: %s", naming.ArbiterStatefulSetName(cr, replset))
+
+		if err := r.removeRSFromShard(ctx, cr, rsd.name); err != nil {
+			return errors.Wrapf(err, "failed to remove rs %s", rsd.name)
+		}
+
+		for i := range rsd.workloads {
+			sts := &rsd.workloads[i]
+			log.Info("Deleting STS component from replset",
+				"sts", sts.Name, "rs", rsd.name, "port", rsd.port)
+
+			if err := r.client.Delete(ctx, sts); err != nil {
+				return errors.Wrapf(err, "failed to remove rs %s", rsd.name)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	set, err := membergroup.Resolve(cr, replset)
+	if err != nil {
+		return errors.Wrapf(err, "resolve member groups for %s", replset.Name)
+	}
+
+	for _, group := range set.GetAll() {
+		if _, err := r.reconcileStatefulSet(ctx, cr, replset, group); err != nil {
+			return errors.Errorf("reconcile StatefulSet %s for %s: %v", group.STSName, replset.Name, err)
 		}
 	}
 
-	if replset.NonVoting.Enabled {
-		matchLabels = naming.NonVotingLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile nonVoting StatefulSet for %s: %v", replset.Name, err)
-			return err
-		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.NonVotingStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete non voting statefulset: %s", naming.NonVotingStatefulSetName(cr, replset))
-		}
-	}
-
-	if replset.Hidden.Enabled {
-		matchLabels = naming.HiddenLabels(cr, replset)
-		_, err := r.reconcileStatefulSet(ctx, cr, replset, matchLabels)
-		if err != nil {
-			err = errors.Errorf("reconcile hidden StatefulSet for %s: %v", replset.Name, err)
-			return err
-		}
-	} else {
-		if err := k8sutils.DeleteIfExists(ctx, r.client, psmdb.NewStatefulSet(naming.HiddenStatefulSetName(cr, replset), cr.Namespace)); err != nil {
-			return errors.Wrapf(err, "failed to delete hidden statefulset: %s", naming.HiddenStatefulSetName(cr, replset))
-		}
+	if err := r.cleanupRemovedInstances(ctx, cr, replset, set); err != nil {
+		return errors.Wrapf(err, "retire removed groups for replset %s", replset.Name)
 	}
 
 	if err := r.reconcileSearch(ctx, cr, replset); err != nil {
 		return errors.Wrapf(err, "reconcile search for replset %s", replset.Name)
 	}
 
-	_, ok := cr.Status.Replsets[replset.Name]
-	if !ok {
+	if _, ok := cr.Status.Replsets[replset.Name]; !ok {
 		cr.Status.Replsets[replset.Name] = api.ReplsetStatus{}
 	}
 
@@ -650,7 +626,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 			}
 		}
 
-		if rs, ok := cr.Status.Replsets[replset.Name]; ok {
+		if rs, ok := cr.Status.Replsets[replset.Name]; ok && members != nil {
 			rs.Members = make(map[string]api.ReplsetMemberStatus)
 			maps.Copy(rs.Members, members)
 			cr.Status.Replsets[replset.Name] = rs
@@ -702,15 +678,15 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 		return errors.Wrap(err, "check and set defaults")
 	}
 
-	mongodPods, err := r.getMongodPods(ctx, cr)
+	memberPods, err := r.getMemberPods(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get mongod pods")
+		return errors.Wrap(err, "get member pods")
 	}
 	mongosPods, err := r.getMongosPods(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get mongos pods")
 	}
-	if len(mongodPods.Items) != 0 || len(mongosPods.Items) != 0 {
+	if len(memberPods.Items) != 0 || len(mongosPods.Items) != 0 {
 		return nil
 	}
 
@@ -751,12 +727,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 		return nil
 	}
 
-	for _, rs := range cr.Spec.Replsets {
-		if cr.Status.State == api.AppStateStopping {
+	if cr.Status.State == api.AppStateStopping {
+		for _, rs := range cr.Spec.Replsets {
 			log.Info("pausing cluster", "replset", rs.Name)
 		}
-		rs.Arbiter.Enabled = false
-		rs.NonVoting.Enabled = false
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
@@ -792,15 +766,15 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 		return errors.Wrap(cfgErr, "failed to get cfg replset")
 	}
 
-	rs, rsErr := r.getMongodStatefulsets(ctx, cr)
+	shards, rsErr := r.getShardsWithWorkloads(ctx, cr)
 	if rsErr != nil && !k8serrors.IsNotFound(rsErr) {
 		return errors.Wrap(rsErr, "failed to get all replsets")
 	}
 
 	if !cr.Spec.Sharding.Enabled {
 		// means we have already had sharded cluster and try to disable sharding
-		if cfgErr == nil && len(rs.Items) > 1 {
-			return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
+		if cfgErr == nil && len(shards) > 1 {
+			return errors.Errorf("failed to disable sharding with %d active replsets", len(shards))
 		}
 
 		// means we want to run multiple replsets without sharding
@@ -815,20 +789,42 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 // safeDownscale ensures replica set pods downscaled one by one and returns true if a downscale is in progress
 func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	isDownscale := false
+
 	for _, rs := range cr.Spec.Replsets {
-		sf, err := r.getRsStatefulset(ctx, cr, rs.Name)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return false, errors.Wrap(err, "get rs statefulset")
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return false, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
 
-		if k8serrors.IsNotFound(err) {
-			continue
+		target, err := r.downscaleTarget(ctx, cr, set)
+		if err != nil {
+			return false, err
 		}
 
-		// downscale 1 pod on each reconciliation
-		if *sf.Spec.Replicas-rs.Size > 1 {
-			rs.Size = *sf.Spec.Replicas - 1
+		for _, group := range set.GetAll() {
+			want, ok := target[group.Name]
+			if !ok || want == group.Replicas {
+				continue
+			}
 			isDownscale = true
+
+			if rs.InstanceMode() {
+				if inst := rs.Instance(group.Name); inst != nil {
+					inst.Replicas = want
+				}
+				continue
+			}
+
+			switch group.Name {
+			case naming.GroupMongod:
+				rs.Size = want
+			case naming.GroupArbiter:
+				rs.Arbiter.Size = want
+			case naming.GroupNonVoting:
+				rs.NonVoting.Size = want
+			case naming.GroupHidden:
+				rs.Hidden.Size = want
+			}
 		}
 	}
 
@@ -839,6 +835,60 @@ type statefulSetWithReplicaNameAndPort struct {
 	sts    appsv1.StatefulSet
 	rsName string
 	rsPort int32
+}
+
+// removedReplset is every workload of one no-longer-declared replica set,
+// together with what the replica-set-level cleanup needs from it.
+type removedReplset struct {
+	name      string
+	port      int32
+	workloads []appsv1.StatefulSet
+}
+
+// replsetsToRemove groups the workloads scheduled for deletion by the replica
+// set that owned them, so replica-set operations run once each rather than
+// once per group.
+//
+// Ordering is by replica set name for a stable sequence, and within a replica
+// set the caller's order is preserved: getSTSForDeletionWithTheirRSDetails
+// sorts so that secondary workloads go before the base one.
+func replsetsToRemove(removed []statefulSetWithReplicaNameAndPort) []removedReplset {
+	byName := make(map[string][]statefulSetWithReplicaNameAndPort, len(removed))
+	names := make([]string, 0, len(removed))
+
+	for _, item := range removed {
+		if _, ok := byName[item.rsName]; !ok {
+			names = append(names, item.rsName)
+		}
+		byName[item.rsName] = append(byName[item.rsName], item)
+	}
+
+	sort.Strings(names)
+
+	out := make([]removedReplset, 0, len(names))
+	for _, name := range names {
+		items := byName[name]
+
+		rs := removedReplset{name: name, port: replsetPort(items)}
+		for _, item := range items {
+			rs.workloads = append(rs.workloads, item.sts)
+		}
+
+		out = append(out, rs)
+	}
+
+	return out
+}
+
+func replsetPort(items []statefulSetWithReplicaNameAndPort) int32 {
+	for _, item := range items {
+		if item.sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+			continue
+		}
+		return item.rsPort
+	}
+
+	return api.DefaultMongoPort
 }
 
 // getSTSForDeletionWithTheirRSDetails identifies StatefulSets that should be deleted and returns them
@@ -868,7 +918,7 @@ func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx 
 
 	for _, sts := range existingSTSList.Items {
 		component := sts.Labels[naming.LabelKubernetesComponent]
-		if component == "mongos" || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
+		if component == naming.ContainerMongos || sts.Name == cr.Name+"-"+api.ConfigReplSetName {
 			continue
 		}
 
@@ -893,20 +943,20 @@ func (r *ReconcilePerconaServerMongoDB) getSTSForDeletionWithTheirRSDetails(ctx 
 	return removed, nil
 }
 
+// getComponentPortFromSTS returns the port a workload serves MongoDB on.
 func getComponentPortFromSTS(sts appsv1.StatefulSet, componentName string) (int32, error) {
 	for _, container := range sts.Spec.Template.Spec.Containers {
-		if container.Name == componentName {
-			if len(container.Ports) > 0 {
-				return container.Ports[0].ContainerPort, nil
-			}
-			return 0, fmt.Errorf("no ports found for container %s", componentName)
+		if !isMemberContainer(container.Name) {
+			continue
 		}
+		if len(container.Ports) > 0 {
+			return container.Ports[0].ContainerPort, nil
+		}
+		return 0, fmt.Errorf("no ports found for container %s", container.Name)
 	}
 
-	// With this check we are catching cases like arbiter and non-voting
-	// where the container name is different from the component name. For now,
-	// we don't modify the ports of these components.
-	if componentName != "mongod" {
+	// Nothing to read a port from, so this is not a member workload at all
+	if componentName != naming.ComponentMongod {
 		return api.DefaultMongoPort, nil
 	}
 
@@ -1033,23 +1083,22 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 			logf.FromContext(ctx).Info("The value delete-psmdb-pvc is deprecated and will be deleted in 1.20.0. Use percona.com/delete-psmdb-pvc instead")
 			fallthrough
 		case naming.FinalizerDeletePVC:
-			// remove orphan pvc
-			mongodPVCs, err := r.getMongodPVCs(ctx, cr)
+			memberPVCs, err := r.getMemberPVCs(ctx, cr)
 			if err != nil {
 				return err
 			}
-			mongodPods, err := r.getMongodPods(ctx, cr)
+			memberPods, err := r.getMemberPods(ctx, cr)
 			if err != nil {
 				return err
 			}
-			mongodPodsMap := make(map[string]bool)
-			for _, pod := range mongodPods.Items {
-				mongodPodsMap[pod.Name] = true
+			memberPodsMap := make(map[string]bool, len(memberPods.Items))
+			for _, pod := range memberPods.Items {
+				memberPodsMap[pod.Name] = true
 			}
-			for _, pvc := range mongodPVCs.Items {
+			for _, pvc := range memberPVCs.Items {
 				if after, ok := strings.CutPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"); ok {
 					podName := after
-					if _, ok := mongodPodsMap[podName]; !ok {
+					if _, ok := memberPodsMap[podName]; !ok {
 						// remove the orphan pvc
 						logf.FromContext(ctx).Info("remove orphan pvc", "pvc", pvc.Name)
 						err := r.client.Delete(ctx, &pvc)
@@ -1215,39 +1264,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 	}
 
 	for _, rs := range repls {
-		if err := reconcileConfigMap(rs, naming.MongodCustomConfigName(cr, rs), string(rs.Configuration)); err != nil {
-			return errors.Wrap(err, "failed to reconcile config map")
-		}
-		component := naming.ComponentMongod
-		if rs.ClusterRole == api.ClusterRoleConfigSvr {
-			component = api.ConfigReplSetName
-		}
-		if err := reconcileHookscript(rs, component, rs.HookScript); err != nil {
-			return errors.Wrap(err, "failed to reconcile hookscript")
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
 
-		if rs.NonVoting.Enabled {
-			if err := reconcileConfigMap(rs, naming.NonVotingConfigMapName(cr, rs), string(rs.NonVoting.Configuration)); err != nil {
-				return errors.Wrap(err, "failed to reconcile config map")
+		want := make(map[string]struct{}, set.Len()*2)
+		for _, group := range set.GetAll() {
+			want[group.ConfigName] = struct{}{}
+			if err := reconcileConfigMap(rs, group.ConfigName, string(group.Configuration)); err != nil {
+				return errors.Wrapf(err, "reconcile config map for group %s", group.Name)
 			}
-			if err := reconcileHookscript(rs, naming.ComponentNonVoting, rs.NonVoting.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
-			}
-		}
 
-		if rs.Hidden.Enabled {
-			if err := reconcileConfigMap(rs, naming.HiddenConfigMapName(cr, rs), string(rs.Hidden.Configuration)); err != nil {
-				return errors.Wrap(err, "failed to reconcile config map")
-			}
-			if err := reconcileHookscript(rs, naming.ComponentHidden, rs.Hidden.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
+			hookName := naming.GroupHookScriptConfigMapName(cr, rs, group.Component)
+			want[hookName] = struct{}{}
+			if err := reconcileHookscript(rs, group.Component, group.MultiAZ.HookScript); err != nil {
+				return errors.Wrapf(err, "reconcile hookscript for group %s", group.Name)
 			}
 		}
 
-		if rs.Arbiter.Enabled {
-			if err := reconcileHookscript(rs, naming.ComponentArbiter, rs.Arbiter.HookScript); err != nil {
-				return errors.Wrap(err, "failed to reconcile hookscript")
-			}
+		if err := r.cleanupStaleGroupConfigs(ctx, cr, rs, want); err != nil {
+			return errors.Wrapf(err, "clean up retired group configuration for replset %s", rs.Name)
 		}
 	}
 
@@ -2043,4 +2080,379 @@ func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedNam
 	}
 
 	return false, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) cleanupRemovedInstances(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) error {
+	log := logf.FromContext(ctx).WithName("retireGroups").WithValues("replset", rs.Name)
+
+	observed := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &observed, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			naming.LabelKubernetesInstance: cr.Name,
+			naming.LabelKubernetesReplset:  rs.Name,
+		}),
+	}); err != nil {
+		return errors.Wrap(err, "list statefulsets")
+	}
+
+	desired := make(map[string]struct{}, set.Len())
+	for _, name := range set.GetStatefulSetNames() {
+		desired[name] = struct{}{}
+	}
+
+	for i := range observed.Items {
+		sts := &observed.Items[i]
+
+		// not declared in []instances
+		switch sts.Labels[naming.LabelKubernetesComponent] {
+		case naming.ComponentMongos, naming.ComponentSearch:
+			continue
+		}
+		if !metav1.IsControlledBy(sts, cr) {
+			continue
+		}
+		if _, ok := desired[sts.Name]; ok {
+			continue
+		}
+
+		if sts.Status.Replicas > 0 || (sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0) {
+			if sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0 {
+				log.V(1).Info("waiting for retiring group pods to terminate", "statefulset", sts.Name)
+				continue
+			}
+			log.Info("scaling down retiring group", "statefulset", sts.Name)
+			sts.Spec.Replicas = new(int32(0))
+			if err := r.client.Update(ctx, sts); err != nil {
+				return errors.Wrapf(err, "scale down retiring statefulset %s", sts.Name)
+			}
+			continue
+		}
+
+		log.Info("deleting retired group workload", "statefulset", sts.Name)
+		if err := k8sutils.DeleteIfExists(ctx, r.client, sts); err != nil {
+			return errors.Wrapf(err, "delete retired statefulset %s", sts.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) cleanupStaleGroupConfigs(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	want map[string]struct{},
+) error {
+	log := logf.FromContext(ctx)
+
+	list := new(corev1.ConfigMapList)
+	if err := r.client.List(ctx, list, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)),
+	}); err != nil {
+		return errors.Wrap(err, "list config maps")
+	}
+
+	prefix := cr.Name + "-" + rs.Name + "-"
+
+	for i := range list.Items {
+		cm := &list.Items[i]
+		if !metav1.IsControlledBy(cm, cr) {
+			continue
+		}
+		if !strings.HasPrefix(cm.Name, prefix) {
+			continue
+		}
+		if _, ok := want[cm.Name]; ok {
+			continue
+		}
+
+		// separate sub-system, ignore
+		if cm.Name == naming.SearchConfigMapName(cr, rs) {
+			continue
+		}
+
+		log.Info("deleting configuration of retired group", "configMap", cm.Name)
+		if err := k8sutils.DeleteIfExists(ctx, r.client, cm); err != nil {
+			return errors.Wrapf(err, "delete config map %s", cm.Name)
+		}
+	}
+
+	return nil
+}
+
+// downscaleTarget returns the member count each group should be reconciled to
+// on a given pass.
+//
+// At most one member is removed per replica set per reconciliation. Removing
+// one voter from every group independently could take a majority offline in a
+// single pass. The returned map is a temporary target only: the
+// user-requested counts in the CR are never overwritten.
+func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	set *membergroup.Set,
+) (map[string]int32, error) {
+	target := make(map[string]int32, set.Len()) // group -> replicas mapping
+	budget := 1                                 // how many members are downscaled each pass
+
+	for _, group := range set.GetAll() {
+		target[group.Name] = group.Replicas
+
+		// Only voting members are rate-limited
+		if group.Member.Votes == 0 {
+			continue
+		}
+
+		sts := new(appsv1.StatefulSet)
+		err := r.client.Get(ctx,
+			types.NamespacedName{Name: group.STSName, Namespace: cr.Namespace}, sts)
+		if k8serrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get statefulset %s", group.STSName)
+		}
+		if sts.Spec.Replicas == nil {
+			continue
+		}
+
+		observed := *sts.Spec.Replicas
+		gap := observed - group.Replicas
+
+		if gap <= 0 {
+			continue
+		}
+
+		if budget == 0 {
+			// Hold this group at its observed size until a later pass.
+			target[group.Name] = observed
+			continue
+		}
+		budget--
+
+		if gap > 1 {
+			target[group.Name] = observed - 1
+		}
+	}
+
+	return target, nil
+}
+
+// shutdownTarget returns the member count each group should be scaled to on
+// a given reconciliation while the replica set is shutting down, and whether
+// the shutdown is complete.
+//
+// Ordering is based on replica set quorum and observed primary state.
+// A group that cannot hold the primary may still vote (hidden members vote,
+// arbiters vote). Dropping them alongside the primary's group would lose
+// quorum mid-shutdown.
+//
+// Phases:
+//  1. Every non-voting group goes to zero immediately.
+//  2. Voting groups that do not hold the live primary are drained one member
+//     per pass while more than one voting member remains.
+//  3. The group holding the live primary is drained last, lowest ordinal
+//     surviving, so the final member standing is the one holding every
+//     acknowledged write.
+//
+// It is not a pure computation: phase 3 steps the primary down onto the lowest
+// ordinal when it is not already there, because a StatefulSet removes its
+// highest ordinal first.
+func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+) (map[string]int32, bool, error) {
+	log := logf.FromContext(ctx).WithName("shutdown").WithValues("replset", rs.Name)
+
+	type observedGroup struct {
+		group membergroup.Group
+		// pods is every pod of the group, terminating ones included: the
+		// shutdown is only finished once they have all gone.
+		pods []corev1.Pod
+		// live excludes pods that are already terminating. Targets come from
+		// this, because counting a terminating pod would scale the StatefulSet
+		// back to the size it has just left.
+		live       []corev1.Pod
+		primary    bool
+		primaryPod string
+	}
+
+	target := make(map[string]int32, set.Len())
+	observed := make([]observedGroup, 0, set.Len())
+	totalRunning := 0
+
+	for _, group := range set.GetAll() {
+		pods, err := psmdb.GetGroupPods(ctx, r.client, cr, rs, group)
+		if err != nil {
+			return nil, false, err
+		}
+
+		og := observedGroup{group: group, pods: pods.Items}
+		for i := range pods.Items {
+			if pods.Items[i].DeletionTimestamp == nil {
+				og.live = append(og.live, pods.Items[i])
+			}
+		}
+
+		target[group.Name] = 0
+		totalRunning += len(og.pods)
+		observed = append(observed, og)
+	}
+
+	if totalRunning == 0 {
+		return target, true, nil
+	}
+
+	// Locate the live primary. It can be in any group, including one whose
+	// desired configuration no longer permits an election.
+	primaryGroup := ""
+	readyDataBearing := 0
+	for i := range observed {
+		og := &observed[i]
+		if !og.group.DataBearing {
+			continue
+		}
+		for j := range og.live {
+			pod := og.live[j]
+			if !isContainerAndPodRunning(pod, og.group.ContainerName) || !isPodReady(pod) {
+				continue
+			}
+			readyDataBearing++
+
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, rs)
+			if err != nil {
+				return nil, false, errors.Wrapf(err, "is pod %s primary", pod.Name)
+			}
+			if isPrimary {
+				og.primary = true
+				og.primaryPod = pod.Name
+				primaryGroup = og.group.Name
+				break
+			}
+		}
+		if og.primary {
+			break
+		}
+	}
+
+	// Phase 1: non-voting groups go straight to zero. None of them affects
+	// quorum.
+	votingLive := 0
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Member.Votes == 0 {
+			target[og.group.Name] = 0
+			continue
+		}
+		target[og.group.Name] = int32(len(og.live))
+		votingLive += len(og.live)
+	}
+
+	// Phase 2: drain one voting non-primary member per pass.
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Member.Votes == 0 || og.primary || len(og.live) == 0 {
+			continue
+		}
+		// Never take the last voter down here. Leaving it to phase 3 keeps it
+		// alive until the primary's group is drained instead of dying alongside it.
+		if votingLive <= 1 {
+			break
+		}
+		target[og.group.Name] = int32(len(og.live)) - 1
+		log.V(1).Info("draining voting member", "group", og.group.Name,
+			"from", len(og.live), "to", target[og.group.Name])
+		return target, false, nil
+	}
+
+	// Phase 3: only the primary's group has voting members left. Drain it to
+	// one, then to zero.
+	for i := range observed {
+		og := &observed[i]
+		if og.group.Name != primaryGroup {
+			continue
+		}
+
+		if len(og.live) <= 1 {
+			target[og.group.Name] = 0
+			return target, false, nil
+		}
+
+		// A StatefulSet removes its highest ordinal first, so the primary has
+		// to sit on the lowest one before this group may shrink. Otherwise the
+		// member holding the newest writes is the first to go.
+		if og.live[0].Name != og.primaryPod {
+			// Hold at the current size either way: nothing may shrink until the
+			// primary has moved.
+			target[og.group.Name] = int32(len(og.live))
+
+			if len(og.live) != len(og.pods) {
+				log.V(1).Info("waiting for terminating pods before moving the primary",
+					"group", og.group.Name)
+				return target, false, nil
+			}
+
+			log.Info("moving the primary to the lowest ordinal before shrinking",
+				"group", og.group.Name, "pod", og.live[0].Name)
+			if err := r.setPrimary(ctx, cr, rs, set, og.live[0]); err != nil {
+				return nil, false, errors.Wrap(err, "set primary")
+			}
+
+			return target, false, nil
+		}
+
+		target[og.group.Name] = int32(len(og.live)) - 1
+		return target, false, nil
+	}
+
+	// No primary was observed. If a data bearing node exists, wait for one to be elected
+	// before scaling down everything.
+	if readyDataBearing > 0 {
+		log.Info("no primary at the moment, holding the shutdown until one is elected")
+		return target, false, nil
+	}
+
+	// Nothing is ready, so nothing can be elected and there is no last writer
+	// left to protect. Take it all down.
+	log.Info("no ready data-bearing member, shutting every member group down")
+	for name := range target {
+		target[name] = 0
+	}
+	return target, false, nil
+}
+
+// applyShutdownTarget writes the target into the working copy of the spec so
+// downstream StatefulSet reconciliation scales the workloads. It never touches
+// a group that is absent from the target.
+func (r *ReconcilePerconaServerMongoDB) applyShutdownTarget(rs *api.ReplsetSpec, target map[string]int32) {
+	if rs.InstanceMode() {
+		for name, want := range target {
+			if inst := rs.Instance(name); inst != nil {
+				inst.Replicas = want
+			}
+		}
+		return
+	}
+
+	for name, want := range target {
+		switch name {
+		case naming.GroupMongod:
+			rs.Size = want
+		case naming.GroupArbiter:
+			rs.Arbiter.Size = want
+		case naming.GroupNonVoting:
+			rs.NonVoting.Size = want
+		case naming.GroupHidden:
+			rs.Hidden.Size = want
+		}
+	}
 }

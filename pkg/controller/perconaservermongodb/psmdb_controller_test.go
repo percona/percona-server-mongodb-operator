@@ -284,7 +284,7 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 
 			err = k8sClient.Create(ctx, cr)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+			Expect(err.Error()).To(ContainSubstring("exactly one of volumeSpec or instances[] must be set"))
 		})
 
 		It("should reject an additional replset without volumeSpec", func() {
@@ -298,7 +298,7 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 
 			err = k8sClient.Create(ctx, cr)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("volumeSpec: Required value"))
+			Expect(err.Error()).To(ContainSubstring("exactly one of volumeSpec or instances[] must be set"))
 		})
 
 		It("should allow an additional replset that specifies volumeSpec", func() {

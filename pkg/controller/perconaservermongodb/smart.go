@@ -3,8 +3,6 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +20,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(
@@ -29,12 +29,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	cr *api.PerconaServerMongoDB,
 	sfs *appsv1.StatefulSet,
 	replset *api.ReplsetSpec,
+	group membergroup.Group,
 ) error {
 	log := logf.FromContext(ctx).
 		WithName("SmartUpdate").
-		WithValues("statefulset", sfs.Name, "replset", replset.Name)
+		WithValues("statefulset", sfs.Name, "replset", replset.Name, "group", group.Name)
 
-	if replset.Size == 0 {
+	if group.Replicas == 0 {
 		return nil
 	}
 
@@ -42,19 +43,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	matchLabels := naming.RSLabels(cr, replset)
-
-	label, ok := sfs.Labels[naming.LabelKubernetesComponent]
-	if ok {
-		matchLabels[naming.LabelKubernetesComponent] = label
-	}
-
 	list := corev1.PodList{}
 	if err := r.client.List(ctx,
 		&list,
 		&k8sclient.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(matchLabels),
+			LabelSelector: labels.SelectorFromSet(group.Labels),
 		},
 	); err != nil {
 		return fmt.Errorf("get pod list: %v", err)
@@ -99,20 +93,26 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	waitLimit := int(replset.LivenessProbe.InitialDelaySeconds)
+	// Disruption safety is a replica-set-level property. Separate PDBs and
+	// StatefulSets give no combined MongoDB quorum guarantee, and a group-local
+	// readiness check cannot see an unavailable voter in a sibling group.
+	set, err := membergroup.Resolve(cr, replset)
+	if err != nil {
+		return errors.Wrapf(err, "resolve member groups for %s", replset.Name)
+	}
+	unavailable, err := r.replsetHasUnavailableVoters(ctx, cr, set)
+	if err != nil {
+		return errors.Wrap(err, "check replset voter availability")
+	}
+	if unavailable {
+		log.Info("can't start/continue 'SmartUpdate': a voting member of this replica set is unavailable")
+		return nil
+	}
+
+	waitLimit := int(group.LivenessProbe.InitialDelaySeconds)
 
 	updatePod := func(pod *corev1.Pod) error {
-		updateRevision := sfs.Status.UpdateRevision
-		if pod.Labels[naming.LabelKubernetesComponent] == "arbiter" {
-			arbiterSfs, err := r.getArbiterStatefulset(ctx, cr, replset)
-			if err != nil {
-				return errors.Wrap(err, "failed to get arbiter statefulset")
-			}
-
-			updateRevision = arbiterSfs.Status.UpdateRevision
-		}
-
-		if err := r.applyNWait(ctx, cr, updateRevision, pod, waitLimit); err != nil {
+		if err := r.applyNWait(ctx, cr, sfs.Status.UpdateRevision, pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
 		return nil
@@ -134,7 +134,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && rsStatus.Members != nil {
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && len(rsStatus.Members) > 0 {
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
 				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "members", rsStatus.Members)
@@ -166,7 +166,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
 	if !ok && hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
@@ -179,32 +179,35 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
+	util.SortPodsByOrdinalDesc(list.Items)
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
-		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
-		if err != nil {
-			return errors.Wrap(err, "is pod primary")
-		}
-		if isPrimary {
-			primaryPod = pod
-			log.Info("primary pod detected", "pod", pod.Name)
-			continue
+		// Only ask a group that can hold data. An arbiter is never the primary,
+		// and replicates no admin database for the probe to authenticate
+		// against, so asking fails rather than answers.
+		if group.DataBearing {
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+			if err != nil {
+				return errors.Wrap(err, "is pod primary")
+			}
+			if isPrimary {
+				primaryPod = pod
+				log.Info("primary pod detected", "pod", pod.Name)
+				continue
+			}
 		}
 
-		log.Info("apply changes to secondary pod", "pod", pod.Name)
+		log.Info("apply changes to pod", "pod", pod.Name)
 
 		if err := updatePod(&pod); err != nil {
 			return err
 		}
 	}
 
-	component := sfs.Labels[naming.LabelKubernetesComponent]
-	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
-	// If the primary is external, we can't match it with a running pod and it'll have an empty name
-	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
-		forceStepDown := replset.Size == 1
+	// Step down only when this group actually holds the live primary
+	if len(primaryPod.Name) > 0 {
+		forceStepDown := set.GetDataBearingVoterCount() == 1
 		log.Info("doing step down...", "force", forceStepDown)
 		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 		if err != nil {
@@ -239,6 +242,41 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+// replsetHasUnavailableVoters reports whether any voting member of the replica
+// set is not ready, across every group.
+//
+// SmartUpdate must not disrupt a member while quorum is already at risk
+// somewhere else in the replica set. PodDisruptionBudgets alone cannot express
+// this: they are per-workload, and MongoDB quorum is per-replica-set.
+func (r *ReconcilePerconaServerMongoDB) replsetHasUnavailableVoters(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	set *membergroup.Set,
+) (bool, error) {
+	for _, group := range set.GetAll() {
+		if group.Member.Votes == 0 || group.Replicas == 0 {
+			continue
+		}
+
+		sts := new(appsv1.StatefulSet)
+		err := r.client.Get(ctx,
+			types.NamespacedName{Name: group.STSName, Namespace: cr.Namespace}, sts)
+		if k8sErrors.IsNotFound(err) {
+			// A declared voting group with no workload yet: not available.
+			return true, nil
+		}
+		if err != nil {
+			return false, errors.Wrapf(err, "get statefulset %s", group.STSName)
+		}
+
+		if sts.Status.ReadyReplicas < group.Replicas {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
@@ -293,7 +331,13 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 	})
 }
 
-func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
+func (r *ReconcilePerconaServerMongoDB) setPrimary(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	set *membergroup.Set,
+	expectedPrimary corev1.Pod,
+) error {
 	primary, err := r.isPodPrimary(ctx, cr, expectedPrimary, rs)
 	if err != nil {
 		return errors.Wrap(err, "is pod primary")
@@ -302,41 +346,55 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		return nil
 	}
 
-	sts, err := r.getRsStatefulset(ctx, cr, rs.Name)
+	// The replacement must be selected from the whole replica set: the observed
+	// primary can live in any group, and so can the healthy, caught-up member
+	// we want to hand the primary to.
+	pods, err := psmdb.GetOutdatedRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
-		return errors.Wrap(err, "get rs statefulset")
-	}
-	pods := &corev1.PodList{}
-	err = r.client.List(ctx,
-		pods,
-		&k8sclient.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "get rs statefulset")
+		return errors.Wrap(err, "get replset pods")
 	}
 
 	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items)
 
-	var primaryPod corev1.Pod
-	for _, pod := range pods.Items {
+	candidates := make([]corev1.Pod, 0, len(pods.Items)) // these pods will be fronzen
+	var primaryPod corev1.Pod                            // this holds the current primary pod
+
+	for i := range pods.Items {
+		pod := pods.Items[i]
 		if expectedPrimary.Name == pod.Name {
 			continue
 		}
-		primary, err := r.isPodPrimary(ctx, cr, pod, rs)
+
+		// Arbiters cannot be frozen or stepped down, and cannot even be
+		// connected to as clusterAdmin.
+		if isArbiterPod(&pod, set) {
+			continue
+		}
+
+		isPrimary, err := r.isPodPrimary(ctx, cr, pod, rs)
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
-		// If we found a primary, we need to call `replSetStepDown` on it after calling `replSetFreeze` on all other pods
-		if primary {
+		if isPrimary {
 			primaryPod = pod
 			continue
 		}
-		err = r.freezePod(ctx, cr, rs, pod, sleepSeconds)
-		if err != nil {
-			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
+
+		candidates = append(candidates, pod)
+	}
+
+	if primaryPod.Name == "" {
+		logf.FromContext(ctx).Info(
+			"no primary to step down, leaving members electable",
+			"replset", rs.Name, "expectedPrimary", expectedPrimary.Name)
+		return nil
+	}
+
+	// Freeze every other candidate first, so the step down below can only be
+	// won by expectedPrimary.
+	for i := range candidates {
+		if err := r.freezePod(ctx, cr, rs, candidates[i], sleepSeconds); err != nil {
+			return errors.Wrapf(err, "failed to freeze %s pod", candidates[i].Name)
 		}
 	}
 
@@ -466,7 +524,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	// Descending order would deadlock: pod-N is deleted, but the controller keeps failing
 	// on pod-0 and never re-creates pod-N. Ascending order keeps the pod we delete the same
 	// pod the controller is stuck on, so every deletion lets it advance one ordinal.
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
+	util.SortPodsByOrdinalAsc(list.Items)
 
 	for _, pod := range list.Items {
 		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
@@ -479,25 +537,6 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	log.Info("smart update finished for mongos statefulset")
 
 	return nil
-}
-
-func sortPodsByOrdinal(pods []corev1.Pod, less func(i, j int) bool) {
-	sort.Slice(pods, func(i, j int) bool {
-		oi, oj := podOrdinal(&pods[i]), podOrdinal(&pods[j])
-		return less(oi, oj)
-	})
-}
-
-func podOrdinal(pod *corev1.Pod) int {
-	val, ok := pod.GetLabels()[appsv1.PodIndexLabel]
-	if !ok {
-		return -1
-	}
-	ordinal, err := strconv.Atoi(val)
-	if err != nil || ordinal < 0 {
-		return -1
-	}
-	return ordinal
 }
 
 func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, cr *api.PerconaServerMongoDB, stsList *appsv1.StatefulSetList) (bool, error) {
@@ -550,7 +589,13 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	updateRevision string,
+	pod *corev1.Pod,
+	waitLimit int,
+) error {
 	for range waitLimit {
 		time.Sleep(time.Second * 1)
 
@@ -566,8 +611,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 
 		ready := false
 		for _, container := range pod.Status.ContainerStatuses {
-			switch container.Name {
-			case naming.ContainerMongod, naming.ContainerMongos, naming.ContainerNonVoting, naming.ContainerArbiter, naming.ContainerHidden:
+			if isMemberContainer(container.Name) {
 				ready = container.Ready
 			}
 		}
@@ -579,6 +623,30 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 	}
 
 	return errors.New("reach pod wait limit")
+}
+
+// isArbiterPod returns true if the pod contains an arbiter container
+func isArbiterPod(pod *corev1.Pod, set *membergroup.Set) bool {
+	if group, ok := set.GetByLabels(pod.Labels); ok {
+		return !group.DataBearing
+	}
+
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == naming.ContainerArbiter {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isMemberContainer(name string) bool {
+	switch name {
+	case naming.ContainerMongod, naming.ContainerMongos,
+		naming.ContainerNonVoting, naming.ContainerArbiter, naming.ContainerHidden:
+		return true
+	}
+	return false
 }
 
 func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {

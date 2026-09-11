@@ -21,6 +21,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -151,7 +152,17 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 				scheme: s,
 			}
 
-			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+			// Only the three fields reconcilePVCs reads. Resolving a real set
+			// would overwrite the hand-built labels this fixture shares with its
+			// StatefulSet and PVCs.
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				Labels:      labels,
+				VolumeSpec:  rs.VolumeSpec,
+				DataBearing: true,
+			}
+
+			err = r.reconcilePVCs(t.Context(), cr, sts, group)
 			if tt.expectErrContains != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectErrContains)
@@ -267,7 +278,14 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 				scheme: scheme,
 			}
 
-			err := r.reconcilePVCs(ctx, cr, sts, labels, cr.Spec.Replsets[0].VolumeSpec)
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				Labels:      labels,
+				VolumeSpec:  cr.Spec.Replsets[0].VolumeSpec,
+				DataBearing: true,
+			}
+
+			err := r.reconcilePVCs(ctx, cr, sts, group)
 			require.NoError(t, err)
 
 			gotSTS := new(appsv1.StatefulSet)

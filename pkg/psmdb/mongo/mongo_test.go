@@ -1,6 +1,8 @@
 package mongo_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1326,6 +1328,336 @@ func TestVoting(t *testing.T) {
 			if votes != 0 && !c.unsafePSA {
 				assert.Falsef(t, votes%2 == 0, "total votes (%d) should be an odd number", votes)
 			}
+		})
+	}
+}
+
+// dbm builds a data-bearing member as the operator writes one: BuildIndexes is
+// always true and the podName identity tag is always present.
+func dbm(id int, host string, votes, priority int) mongo.ConfigMember {
+	return mongo.ConfigMember{
+		ID:           id,
+		Host:         host,
+		Votes:        votes,
+		Priority:     priority,
+		BuildIndexes: true,
+		Tags:         mongo.ReplsetTags{"podName": host},
+	}
+}
+
+// members8 builds an eight-member set where the first `voting` members vote
+// with priority 2 and the rest are non-voting with priority 0.
+func members8(voting int) mongo.ConfigMembers {
+	out := make(mongo.ConfigMembers, 0, 8)
+	for i := range 8 {
+		if i < voting {
+			out = append(out, dbm(i, fmt.Sprintf("h%d", i), 1, 2))
+			continue
+		}
+		out = append(out, dbm(i, fmt.Sprintf("h%d", i), 0, 0))
+	}
+	return out
+}
+
+// ceilingSwap is the desired state for a 7-voter set that hands h6's vote to
+// h7, leaving the total unchanged.
+func ceilingSwap() mongo.ConfigMembers {
+	d := members8(7)
+	d[6] = dbm(6, "h6", 0, 0)
+	d[7] = dbm(7, "h7", 1, 2)
+	return d
+}
+
+func TestApplyMemberConfig(t *testing.T) {
+	// live/desired are the inputs; want is the expected state of live after the
+	// call, so every case also asserts that nothing else was touched.
+	// wantChanged/wantPending are the return values of the LAST call when
+	// calls > 1.
+	cases := []struct {
+		name        string
+		live        mongo.ConfigMembers
+		desired     mongo.ConfigMembers
+		calls       int // defaults to 1
+		want        mongo.ConfigMembers
+		wantChanged bool
+		wantPending bool
+		wantErr     string
+	}{
+		{
+			name:    "no changes",
+			live:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+		},
+		{
+			name:        "priority changed",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 10), dbm(1, "h1", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 10), dbm(1, "h1", 1, 2)},
+			wantChanged: true,
+		},
+		{
+			name: "hidden changed",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			desired: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 0)
+				m.Hidden = true
+				return m
+			}()},
+			want: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 0)
+				m.Hidden = true
+				return m
+			}()},
+			wantChanged: true,
+		},
+		{
+			name: "tag added",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			desired: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.Tags = mongo.ReplsetTags{"podName": "h0", "workload": "analytics"}
+				return m
+			}()},
+			want: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.Tags = mongo.ReplsetTags{"podName": "h0", "workload": "analytics"}
+				return m
+			}()},
+			wantChanged: true,
+		},
+		{
+			// A removed key must disappear
+			name: "tag removed",
+			live: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.Tags = mongo.ReplsetTags{"podName": "h0", "workload": "analytics"}
+				return m
+			}()},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			wantChanged: true,
+		},
+		{
+			name: "horizons removed",
+			live: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.Horizons = map[string]string{"ext": "example.com:27017"}
+				return m
+			}()},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			wantChanged: true,
+		},
+		{
+			name:        "single vote change applies, nothing pending",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			wantChanged: true,
+		},
+		{
+			// MongoDB permits only one voting-member change per ordinary
+			// reconfiguration, so the second one waits for the next pass. h2
+			// keeps priority 2 meanwhile: a member that still votes may not be
+			// dropped to priority 0 ahead of its vote.
+			name:        "two vote changes: only one applied, rest pending",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 1, 2)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// At the ceiling the addition would make 8 voters, which MongoDB
+			// rejects outright, so the removal has to go first.
+			name:    "swap at the voting ceiling removes before it adds",
+			live:    members8(7),
+			desired: ceilingSwap(),
+			want: func() mongo.ConfigMembers {
+				w := members8(7)
+				w[6] = dbm(6, "h6", 0, 0)
+				return w
+			}(),
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			name:        "ceiling swap converges on the second pass",
+			live:        members8(7),
+			desired:     ceilingSwap(),
+			calls:       2,
+			want:        ceilingSwap(),
+			wantChanged: true,
+		},
+		{
+			// The mirror case: removing the only vote would leave zero voters,
+			// so the addition goes first.
+			name:        "swap at a single voter adds before it removes",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// Both directions are legal here. Growing first is preferred: four
+			// voters tolerate a failure where two do not.
+			name:        "growth is preferred while there is headroom",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2), dbm(3, "h3", 0, 0)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0), dbm(3, "h3", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2), dbm(3, "h3", 1, 2)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// An eighth voter with nothing to give its vote up: no single step
+			// leaves a legal config, and retrying cannot help.
+			name: "a votes change that cannot leave a legal config is rejected",
+			live: members8(7),
+			desired: func() mongo.ConfigMembers {
+				d := members8(7)
+				d[7] = dbm(7, "h7", 1, 2)
+				return d
+			}(),
+			want:    members8(7),
+			wantErr: "voting members",
+		},
+		{
+			name:        "second pass converges the remaining vote",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
+			calls:       2,
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
+			wantChanged: true,
+		},
+		{
+			// No parity or cap rule may re-add or strip a vote once converged:
+			// this is the whole point of not calling SetVotes here.
+			name:        "explicit votes survive repeated reconciliation",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			calls:       5,
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			wantChanged: false, // converged on the first call, no-op thereafter
+		},
+		{
+			name: "arbiterOnly change is rejected",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			desired: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 0)
+				m.ArbiterOnly = true
+				m.Tags = nil
+				return m
+			}()},
+			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			wantErr: "arbiterOnly cannot be changed",
+		},
+		{
+			// ExternalNodesChanged owns these; ApplyMemberConfig must not touch
+			// them even when the desired list disagrees.
+			name: "external member is skipped",
+			live: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "ext", 1, 1)
+				m.Tags = mongo.ReplsetTags{"external": "true"}
+				return m
+			}()},
+			desired: mongo.ConfigMembers{dbm(0, "ext", 0, 0)},
+			want: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "ext", 1, 1)
+				m.Tags = mongo.ReplsetTags{"external": "true"}
+				return m
+			}()},
+		},
+		{
+			// RemoveOld owns members that are gone from the desired list.
+			name:    "host absent from desired is left alone",
+			live:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "gone", 1, 2)},
+			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "gone", 1, 2)},
+		},
+		{
+			// AddNew and RemoveOld own ID assignment; matching is by host.
+			name:        "member IDs are never modified",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(100, "h0", 1, 5), dbm(101, "h1", 1, 2)},
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 5), dbm(1, "h1", 1, 2)},
+			wantChanged: true,
+		},
+		{
+			// Neither field is exposed on the CRD, so a value somebody set by
+			// hand must be neither reverted nor treated as an error.
+			name: "buildIndexes and delay set out of band are left as found",
+			live: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.BuildIndexes = false
+				m.SecondaryDelaySecs = new(int64(3600))
+				return m
+			}()},
+			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
+			want: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "h0", 1, 2)
+				m.BuildIndexes = false
+				m.SecondaryDelaySecs = new(int64(3600))
+				return m
+			}()},
+		},
+		{
+			// MongoDB arbiters carry no tags, so the tag comparison is skipped
+			// for them entirely.
+			name: "arbiter tags are not compared",
+			live: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "arb", 1, 0)
+				m.ArbiterOnly = true
+				m.Tags = nil
+				return m
+			}()},
+			desired: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "arb", 1, 0)
+				m.ArbiterOnly = true
+				return m
+			}()},
+			want: mongo.ConfigMembers{func() mongo.ConfigMember {
+				m := dbm(0, "arb", 1, 0)
+				m.ArbiterOnly = true
+				m.Tags = nil
+				return m
+			}()},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.Background()
+			live := c.live
+
+			calls := c.calls
+			if calls == 0 {
+				calls = 1
+			}
+
+			var (
+				changed bool
+				pending bool
+				err     error
+			)
+			for range calls {
+				changed, pending, err = live.ApplyMemberConfig(ctx, c.desired)
+				if err != nil {
+					break
+				}
+			}
+
+			if c.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), c.wantErr)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, c.wantChanged, changed, "changed")
+				assert.Equal(t, c.wantPending, pending, "votingChangePending")
+			}
+
+			assert.Equal(t, c.want, live, "live config after the call")
 		})
 	}
 }

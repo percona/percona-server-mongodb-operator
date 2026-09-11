@@ -2,8 +2,10 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -23,11 +27,24 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	group membergroup.Group,
+) error {
+	if !group.DataBearing || group.VolumeSpec == nil {
+		return nil
+	}
+
+	ls := group.Labels
+	volumeSpec := group.VolumeSpec
+
+	if err := r.fixVolumeLabels(ctx, sts, group); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
@@ -38,8 +55,24 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	return nil
 }
 
+// pvcPodName returns the pod owning a StatefulSet-created claim of the given
+// template, and reports whether the claim belongs to that StatefulSet at all.
+func pvcPodName(claimName, pvcName string, sts *appsv1.StatefulSet) (string, bool) {
+	ordinal, ok := strings.CutPrefix(pvcName, claimName+"-"+sts.Name+"-")
+	if !ok {
+		return "", false
+	}
+	if _, err := strconv.Atoi(ordinal); err != nil {
+		return "", false
+	}
+
+	return sts.Name + "-" + ordinal, true
+}
+
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
+	_, ok := pvcPodName(claimName, pvc.Name, sts)
+
+	return ok
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
@@ -340,62 +373,49 @@ func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Conte
 func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, originalSize resource.Quantity) error {
 	log := logf.FromContext(ctx)
 
-	orig := cr.DeepCopy()
-
 	component, ok := sts.Labels[naming.LabelKubernetesComponent]
 	if !ok {
 		return errors.New("missing component label")
 	}
 
 	switch component {
-	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
-		replset, ok := sts.Labels[naming.LabelKubernetesReplset]
-		if !ok {
-			return errors.New("missing replset label")
-		}
-
-		rs := cr.Spec.Replset(replset)
-		if rs == nil {
-			return errors.Errorf("replset %s not found in cr", replset)
-		}
-
-		volumeSpec := rs.VolumeSpec
-		switch component {
-		case naming.ComponentNonVoting:
-			volumeSpec = rs.NonVoting.VolumeSpec
-		case naming.ComponentHidden:
-			volumeSpec = rs.Hidden.VolumeSpec
-		}
-
-		if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.Resources.Requests == nil {
-			return errors.Errorf("missing volume spec for %s/%s", replset, component)
-		}
-
-		log.Info("Reverting volume template for replset", "replset", replset, "component", component, "originalSize", originalSize)
-		volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
 	case naming.ComponentMongos:
-		pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
-		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
-			return errors.New("missing log storage spec for mongos")
-		}
-
 		log.Info("Reverting volume template for mongos", "originalSize", originalSize)
-		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
-	case naming.ComponentConfigSrv:
-		log.Info("Reverting volume template for configsvr", "originalSize", originalSize)
-		cr.Spec.Sharding.ConfigsvrReplSet.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
-	default:
-		return errors.Errorf("unsupported component %s", component)
+		return r.writeMongosLogStorageRequest(ctx, cr, originalSize)
 	}
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
-		return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
+	rsName, ok := sts.Labels[naming.LabelKubernetesReplset]
+	if !ok {
+		return errors.New("missing replset label")
+	}
+	rs := cr.Spec.Replset(rsName)
+	if rs == nil {
+		return errors.Errorf("replset %s not found in cr", rsName)
 	}
 
-	return nil
+	set, err := membergroup.Resolve(cr, rs)
+	if err != nil {
+		return errors.Wrapf(err, "resolve member groups for replset %s", rsName)
+	}
+	group, ok := set.GetByComponent(component)
+	if !ok {
+		return errors.Errorf("no member group for component %s in replset %s", component, rsName)
+	}
+	if !group.DataBearing {
+		return errors.Errorf("group %s of replset %s has no data volume", group.Name, rsName)
+	}
+
+	log.Info("Reverting volume template",
+		"replset", rsName, "group", group.Name, "originalSize", originalSize)
+
+	// Rollback obeys the same ownership rule as expansion: it writes the
+	// owning group's storage.
+	return r.writeGroupStorageRequest(ctx, cr, group.Source, originalSize)
 }
 
-func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, group membergroup.Group) error {
+	ls := group.Labels
+	pvcSpec := group.VolumeSpec.PersistentVolumeClaim
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
 		Namespace:     sts.Namespace,
@@ -430,4 +450,159 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 	}
 
 	return nil
+}
+
+func setStorageRequest(pvc *psmdbv1.PVCSpec, size resource.Quantity) bool {
+	if pvc == nil || pvc.PersistentVolumeClaimSpec == nil {
+		return false
+	}
+	if pvc.Resources.Requests == nil {
+		pvc.Resources.Requests = corev1.ResourceList{}
+	}
+
+	pvc.Resources.Requests[corev1.ResourceStorage] = size
+	return true
+}
+
+// writeStorageRequest sets the requested storage size on whichever claim spec
+// locate picks out of the CR.
+func (r *ReconcilePerconaServerMongoDB) writeStorageRequest(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	what string,
+	size resource.Quantity,
+	locate func(*psmdbv1.PerconaServerMongoDB) (*psmdbv1.PVCSpec, error),
+) error {
+	log := logf.FromContext(ctx).WithName("storage")
+
+	setRequest := func(obj *psmdbv1.PerconaServerMongoDB) error {
+		target, err := locate(obj)
+		if err != nil {
+			return err
+		}
+		if !setStorageRequest(target, size) {
+			return errors.Errorf("%s does not use a PVC", what)
+		}
+		return nil
+	}
+
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		fresh := new(psmdbv1.PerconaServerMongoDB)
+		if err := r.client.Get(ctx, types.NamespacedName{
+			Name: cr.Name, Namespace: cr.Namespace,
+		}, fresh); err != nil {
+			return err
+		}
+
+		if err := setRequest(fresh); err != nil {
+			return err
+		}
+
+		log.Info("setting requested storage", "target", what, "size", size.String())
+
+		return r.client.Update(ctx, fresh)
+	})
+	if err != nil {
+		return err
+	}
+
+	// update the working copy so everything after this sees the updated size
+	if err := setRequest(cr); err != nil {
+		log.V(1).Info("could not mirror the storage request onto the working copy",
+			"target", what, "error", err.Error())
+	}
+
+	return nil
+}
+
+// writeGroupStorageRequest sets the requested storage size of the group
+// identified by source.
+func (r *ReconcilePerconaServerMongoDB) writeGroupStorageRequest(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	source membergroup.SourceRef,
+	size resource.Quantity,
+) error {
+	what := fmt.Sprintf("group %s of replset %s", groupLabelFor(source), source.ReplsetName)
+
+	return r.writeStorageRequest(ctx, cr, what, size,
+		func(fresh *psmdbv1.PerconaServerMongoDB) (*psmdbv1.PVCSpec, error) {
+			rs := fresh.Spec.Replset(source.ReplsetName)
+			if rs == nil {
+				return nil, errors.Errorf("replset %s not found in cr", source.ReplsetName)
+			}
+
+			volumeSpec, err := groupStorageTarget(rs, source)
+			if err != nil {
+				return nil, err
+			}
+
+			return &volumeSpec.PersistentVolumeClaim, nil
+		})
+}
+
+// writeMongosLogStorageRequest sets the requested size of the mongos log
+// volume. mongos is not a member group, so it has no SourceRef to resolve.
+func (r *ReconcilePerconaServerMongoDB) writeMongosLogStorageRequest(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	size resource.Quantity,
+) error {
+	return r.writeStorageRequest(ctx, cr, "mongos log storage", size,
+		func(fresh *psmdbv1.PerconaServerMongoDB) (*psmdbv1.PVCSpec, error) {
+			pvcSpec := fresh.Spec.Sharding.Mongos.LogStorage()
+			if pvcSpec == nil {
+				return nil, errors.New("missing log storage spec for mongos")
+			}
+
+			return pvcSpec, nil
+		})
+}
+
+// groupStorageTarget returns the VolumeSpec the group owns.
+func groupStorageTarget(rs *psmdbv1.ReplsetSpec, source membergroup.SourceRef) (*psmdbv1.VolumeSpec, error) {
+	if source.InstanceName != "" {
+		inst := rs.Instance(source.InstanceName)
+		if inst == nil {
+			return nil, errors.Errorf("instance %s not found in replset %s",
+				source.InstanceName, rs.Name)
+		}
+		if inst.VolumeSpec == nil {
+			// Only reachable for an arbiter-only group, which has no data
+			// volume. SetDefaults requires a volumeSpec on every other group.
+			return nil, errors.Errorf("instance %s of replset %s has no data volume to resize",
+				source.InstanceName, rs.Name)
+		}
+		return inst.VolumeSpec, nil
+	}
+
+	switch source.LegacyRole {
+	case "nonvoting":
+		if rs.NonVoting.VolumeSpec == nil {
+			return nil, errors.Errorf("replset %s nonvoting has no volume spec", rs.Name)
+		}
+		return rs.NonVoting.VolumeSpec, nil
+	case "hidden":
+		if rs.Hidden.VolumeSpec == nil {
+			return nil, errors.Errorf("replset %s hidden has no volume spec", rs.Name)
+		}
+		return rs.Hidden.VolumeSpec, nil
+	case "arbiter":
+		return nil, errors.Errorf("replset %s arbiter has no data volume", rs.Name)
+	default:
+		if rs.VolumeSpec == nil {
+			return nil, errors.Errorf("replset %s has no volume spec", rs.Name)
+		}
+		return rs.VolumeSpec, nil
+	}
+}
+
+func groupLabelFor(source membergroup.SourceRef) string {
+	if source.InstanceName != "" {
+		return source.InstanceName
+	}
+	if source.LegacyRole != "" {
+		return source.LegacyRole
+	}
+	return naming.GroupMongod
 }

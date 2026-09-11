@@ -1,4 +1,4 @@
-package perconaservermongodb
+package util
 
 import (
 	"strconv"
@@ -6,10 +6,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestSortPodsByOrdinal(t *testing.T) {
+func TestSortPodsByOrdinalAsc(t *testing.T) {
 	ordinalPod := func(i int) corev1.Pod {
 		return corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -23,7 +24,6 @@ func TestSortPodsByOrdinal(t *testing.T) {
 		desc        string
 		pods        []corev1.Pod
 		expectedOrd []string
-		less        func(i, j int) bool
 	}{
 		{
 			desc: "ascending",
@@ -53,10 +53,35 @@ func TestSortPodsByOrdinal(t *testing.T) {
 				"pod-9",
 				"pod-10",
 			},
-			less: func(i, j int) bool {
-				return i < j
-			},
 		},
+	}
+
+	for _, tc := range testCases {
+		in := tc.pods
+		SortPodsByOrdinalAsc(in)
+		for i := range in {
+			if in[i].Name != tc.expectedOrd[i] {
+				t.Errorf("%s: expected pod at index %d to be %s, got %s", tc.desc, i, tc.expectedOrd[i], in[i].Name)
+			}
+		}
+	}
+}
+
+func TestSortPodsByOrdinalDesc(t *testing.T) {
+	ordinalPod := func(i int) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "pod-" + strconv.Itoa(i),
+				Labels: map[string]string{appsv1.PodIndexLabel: strconv.Itoa(i)},
+			},
+		}
+	}
+
+	testCases := []struct {
+		desc        string
+		pods        []corev1.Pod
+		expectedOrd []string
+	}{
 		{
 			desc: "descending",
 			pods: []corev1.Pod{
@@ -85,15 +110,12 @@ func TestSortPodsByOrdinal(t *testing.T) {
 				"pod-1",
 				"pod-0",
 			},
-			less: func(i, j int) bool {
-				return i > j
-			},
 		},
 	}
 
 	for _, tc := range testCases {
 		in := tc.pods
-		sortPodsByOrdinal(in, tc.less)
+		SortPodsByOrdinalDesc(in)
 		for i := range in {
 			if in[i].Name != tc.expectedOrd[i] {
 				t.Errorf("%s: expected pod at index %d to be %s, got %s", tc.desc, i, tc.expectedOrd[i], in[i].Name)

@@ -20,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -38,6 +39,14 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	// The arbiter StatefulSet is only built for a group the resolver produces,
+	// and resolveLegacy only produces one when the role is enabled. Enabling it
+	// needs the size check relaxed: deploy/cr.yaml has size 3, and an arbiter
+	// requires an even size >= 4. unsafeFlags.replsetSize is read only by
+	// unsafePSA in mgo.go, never in the StatefulSet build path, so this does not
+	// affect the generated objects.
+	defaultCR.Spec.Replsets[0].Arbiter.Enabled = true
+	defaultCR.Spec.Unsafe.ReplsetSize = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
@@ -76,8 +85,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 		name           string
 		cr             *api.PerconaServerMongoDB
 		rsName         string
-		component      string
-		ls             map[string]string
+		group          string
 		crUpdate       func(cr *api.PerconaServerMongoDB)
 		additionalObjs []client.Object
 
@@ -87,63 +95,42 @@ func TestReconcileStatefulSet(t *testing.T) {
 			name:        "rs0-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-mongod.yaml"),
 		},
 		{
 			name:        "rs0-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentArbiter,
+			group:       naming.GroupArbiter,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-arbiter.yaml"),
 		},
 		{
 			name:        "rs0-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentNonVoting,
+			group:       naming.GroupNonVoting,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-nv.yaml"),
 		},
 		{
 			name:        "rs0-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentHidden,
+			group:       naming.GroupHidden,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-hidden.yaml"),
 		},
 		{
 			name:        "cfg-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
-		},
-		{
-			name:        "cfg-arbiter",
-			cr:          defaultCR.DeepCopy(),
-			rsName:      "cfg",
-			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
-		},
-		{
-			name:        "cfg-non-voting",
-			cr:          defaultCR.DeepCopy(),
-			rsName:      "cfg",
-			component:   naming.ComponentNonVoting,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
-		},
-		{
-			name:        "cfg-hidden",
-			cr:          defaultCR.DeepCopy(),
-			rsName:      "cfg",
-			component:   naming.ComponentHidden,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
 		},
 		{
 			name:        "rs0-logrotate",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-logrotate.yaml"),
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.LogCollector.LogRotate = &api.LogRotateSpec{
@@ -220,21 +207,17 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 			rs := tt.cr.Spec.Replset(tt.rsName)
 
-			var ls map[string]string
-			switch tt.component {
-			case naming.ComponentMongod:
-				ls = naming.MongodLabels(tt.cr, rs)
-			case naming.ComponentArbiter:
-				ls = naming.ArbiterLabels(tt.cr, rs)
-			case naming.ComponentNonVoting:
-				ls = naming.NonVotingLabels(tt.cr, rs)
-			case naming.ComponentHidden:
-				ls = naming.HiddenLabels(tt.cr, rs)
-			default:
-				t.Fatalf("unexpected component: %s", tt.component)
+			set, err := membergroup.Resolve(tt.cr, rs)
+			if err != nil {
+				t.Fatalf("resolve member groups: %v", err)
 			}
 
-			sts, err := r.reconcileStatefulSet(ctx, tt.cr, rs, ls)
+			group, ok := set.GetByName(tt.group)
+			if !ok {
+				t.Fatalf("no member group %q in replset %s (have %v)", tt.group, rs.Name, set.GetNames())
+			}
+
+			sts, err := r.reconcileStatefulSet(ctx, tt.cr, rs, group)
 			if err != nil {
 				t.Fatalf("reconcileStatefulSet() error = %v", err)
 			}
