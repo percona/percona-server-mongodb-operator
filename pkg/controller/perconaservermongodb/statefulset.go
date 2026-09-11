@@ -43,13 +43,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return sfs, nil
 	}
 
-	// TODO: if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group); err != nil {
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group.VolumeSpec, group.Labels); err != nil {
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 
 	// TODO: if err := r.reconcilePVCs(ctx, cr, sfs, group); err != nil {
-	if err := r.reconcilePVCs(ctx, cr, sfs, group.Labels, group.VolumeSpec); err != nil {
+	if err := r.reconcilePVCs(ctx, cr, sfs, group); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
