@@ -352,7 +352,9 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(
 
 	sleepSeconds := int(*rs.TerminationGracePeriodSeconds) * len(pods.Items)
 
-	var primaryPod corev1.Pod
+	candidates := make([]corev1.Pod, 0, len(pods.Items)) // these pods will be fronzen
+	var primaryPod corev1.Pod                            // this holds the current primary pod
+
 	for i := range pods.Items {
 		pod := pods.Items[i]
 		if expectedPrimary.Name == pod.Name {
@@ -373,13 +375,23 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(
 			primaryPod = pod
 			continue
 		}
-		if err := r.freezePod(ctx, cr, rs, pod, sleepSeconds); err != nil {
-			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
-		}
+
+		candidates = append(candidates, pod)
 	}
 
 	if primaryPod.Name == "" {
+		logf.FromContext(ctx).Info(
+			"no primary to step down, leaving members electable",
+			"replset", rs.Name, "expectedPrimary", expectedPrimary.Name)
 		return nil
+	}
+
+	// Freeze every other candidate first, so the step down below can only be
+	// won by expectedPrimary.
+	for i := range candidates {
+		if err := r.freezePod(ctx, cr, rs, candidates[i], sleepSeconds); err != nil {
+			return errors.Wrapf(err, "failed to freeze %s pod", candidates[i].Name)
+		}
 	}
 
 	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {
