@@ -229,17 +229,25 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 		}
 
 		// A per-pod service is named after its pod. While that pod still
-		// exists — a scale-down victim, or a member of a retiring group — it
-		// needs its service for connectivity and for the removal reconfig.
-		pod := new(corev1.Pod)
-		err := r.client.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: cr.Namespace}, pod)
-		if err == nil {
-			logf.FromContext(ctx).V(1).Info(
-				"keeping service of a still-running member", "service", svc.Name)
-			continue
-		}
-		if !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get pod %s", svc.Name)
+		// exists, a scale-down victim, or a member of a retiring group
+		// needs its service. MongoHost resolves an exposed member through it, so
+		// removing it first would cut the operator off from the member it
+		// still has to reconfigure out of the replica set.
+		//
+		// Once expose is off, MongoHost returns the headless-service name instead and these are
+		// pure leftovers, keeping them would leave a load balancer billing and an
+		// external endpoint open after the user asked for neither.
+		if replset.Expose.Enabled {
+			pod := new(corev1.Pod)
+			err := r.client.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: cr.Namespace}, pod)
+			if err == nil {
+				logf.FromContext(ctx).V(1).Info(
+					"keeping service of a still-running member", "service", svc.Name)
+				continue
+			}
+			if !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "get pod %s", svc.Name)
+			}
 		}
 
 		if err := r.client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
