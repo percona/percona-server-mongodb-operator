@@ -3,10 +3,12 @@ package v1
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // These instance names are reserved for producing the equivalent legacy Kubernetes objects (i.e, without the use of instances[]).
@@ -44,9 +46,7 @@ func IsReservedGroupName(name string) bool {
 type InstanceSpec struct {
 	MultiAZ `json:",inline"`
 
-	// Name of this member group. Must be unique within the replica set.
-
-	// +kubebuilder:validation:XValidation:rule="!format.dns1123Label().validate(self).hasValue()",message="instance name should be a valid dns1123 label"
+	// Name of this member group. Must be unique within the group, and a valid DNS-1123 label.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=54
@@ -159,6 +159,10 @@ func (i InstanceSpec) GetTags() map[string]string {
 
 func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
 	path := fmt.Sprintf("spec.replsets[%s].instances[%s]", rs.Name, i.Name)
+
+	if errs := validation.IsDNS1123Label(i.Name); len(errs) > 0 {
+		return errors.Errorf("%s.name: %s", path, strings.Join(errs, "; "))
+	}
 
 	// Presence and absence of volumeSpec are CEL rules; only the option
 	// normalization is left.

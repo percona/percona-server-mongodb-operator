@@ -8286,9 +8286,6 @@ spec:
                             maxLength: 54
                             minLength: 1
                             type: string
-                            x-kubernetes-validations:
-                            - message: instance name should be a valid dns1123 label
-                              rule: '!format.dns1123Label().validate(self).hasValue()'
                           nodeSelector:
                             additionalProperties:
                               type: string
@@ -23793,9 +23790,6 @@ spec:
                               maxLength: 54
                               minLength: 1
                               type: string
-                              x-kubernetes-validations:
-                              - message: instance name should be a valid dns1123 label
-                                rule: '!format.dns1123Label().validate(self).hasValue()'
                             nodeSelector:
                               additionalProperties:
                                 type: string
