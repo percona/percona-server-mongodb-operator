@@ -145,13 +145,46 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
+String detectMongoVersion() {
+    return sh(
+        script: '''
+            set -eu
+            mongo_image=${IMAGE_MONGOD:-}
+            if [ -z "$mongo_image" ]; then
+                assignment=$(sed -n '/^export IMAGE_MONGOD=/{p;q;}' e2e-tests/vars)
+                if [ -z "$assignment" ]; then
+                    echo "IMAGE_MONGOD assignment not found in e2e-tests/vars" >&2
+                    exit 1
+                fi
+                eval "$assignment"
+                mongo_image=$IMAGE_MONGOD
+            fi
+
+            mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')
+            if [ -z "$mongo_version" ]; then
+                echo "Unable to detect MongoDB version from image: $mongo_image" >&2
+                exit 1
+            fi
+
+            printf '%s' "$mongo_version"
+        ''',
+        returnStdout: true
+    ).trim()
+}
+
 void initTests() {
     echo "Populating tests into the tests array!"
+    def mongoVersion = detectMongoVersion()
+    echo "Detected MongoDB version: ${mongoVersion}"
 
-    def records = readCSV file: 'e2e-tests/run-pr.csv'
+    def output = sh(
+        script: "export PATH=\"\$HOME/.local/bin:\$PATH\"; uv run e2e-tests/select_tests.py list --suite pr --platform gke --operator-mode cluster-wide --mongo-version ${mongoVersion} --format lines",
+        returnStdout: true
+    ).trim()
+    def records = output.split('\n').findAll { it }
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
+        tests.add(["name": records[i], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
     markPassedTests()
@@ -597,8 +630,8 @@ pipeline {
                 }
             }
             steps {
-                initTests()
                 prepareNode()
+                initTests()
                 script {
                     if (AUTHOR_NAME == 'null') {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()

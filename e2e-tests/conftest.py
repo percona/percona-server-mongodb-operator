@@ -62,9 +62,17 @@ logger = logging.getLogger(__name__)
 
 _current_namespace: str | None = None
 
-# Shared with the bash harness (e2e-tests/functions). Override via
-# PYTEST_NAMESPACE_FILE so parallel Jenkins clusters don't race on one path.
-_NAMESPACE_FILE = os.environ.get("PYTEST_NAMESPACE_FILE", "/tmp/pytest_current_namespace")
+# Shared with the bash harness (e2e-tests/functions). Use a per-session default
+# so concurrent local runs cannot overwrite each other's namespace.
+_NAMESPACE_FILE = os.environ.get("PYTEST_NAMESPACE_FILE") or (
+    f"/tmp/pytest_current_namespace-{os.getpid()}"
+)
+os.environ["PYTEST_NAMESPACE_FILE"] = _NAMESPACE_FILE
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Discard namespace state left by an interrupted earlier run."""
+    Path(_NAMESPACE_FILE).unlink(missing_ok=True)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -377,7 +385,6 @@ def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
     src_dir = test_paths["src_dir"]
     rbac = f"{src_dir}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml"
 
-    # Finalizers first, while CRD APIs still exist. Do not wait on operator/storage.
     if namespaces:
         with ThreadPoolExecutor(max_workers=len(namespaces)) as pool:
             for ns in namespaces:
@@ -681,11 +688,13 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
     """Tear down a bash-wrapped test's namespace after diagnostics are collected."""
     yield
 
+    ns = _get_current_namespace()
+    Path(_NAMESPACE_FILE).unlink(missing_ok=True)
+
     if env_bool("SKIP_DELETE"):
         logger.info("SKIP_DELETE is set. Skipping bash test cleanup")
         return
 
-    ns = _get_current_namespace()
     namespaces = [ns] if ns else []
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
