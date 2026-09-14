@@ -2443,6 +2443,8 @@ create_infra_gh_release() {
 	local ns="$1"
 	local git_tag="$2"
 
+	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
+
 	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then
 		create_namespace "${OPERATOR_NS}"
@@ -2457,6 +2459,8 @@ create_infra_gh_release() {
 create_infra_gh() {
 	local ns="$1"
 	local git_tag="$2"
+
+	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
 
 	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then
