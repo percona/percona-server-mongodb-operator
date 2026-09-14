@@ -19,6 +19,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/fs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
+	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/oci"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
@@ -131,6 +132,45 @@ func TestPBMStorageConfig(t *testing.T) {
 		stg      api.BackupStorageSpec
 		expected config.StorageConf
 	}{
+		"minio": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
+						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
+						"AWS_SESSION_TOKEN":     []byte("some-session-token"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageMinio,
+				Minio: api.BackupStorageMinioSpec{
+					Bucket:            "operator-testing",
+					Prefix:            "psmdb",
+					Region:            "us-east-1",
+					EndpointURL:       "https://minio.example.com",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			config.StorageConf{
+				Type: storage.Minio,
+				Minio: &mio.Config{
+					Region:   "us-east-1",
+					Endpoint: "https://minio.example.com",
+					Bucket:   "operator-testing",
+					Prefix:   "psmdb",
+					Credentials: mio.Credentials{
+						AccessKeyID:     "some-access-key",
+						SecretAccessKey: "some-secret-key",
+						SessionToken:    "some-session-token",
+					},
+				},
+			},
+		},
 		"s3": {
 			[]client.Object{
 				&corev1.Secret{
@@ -141,6 +181,7 @@ func TestPBMStorageConfig(t *testing.T) {
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
+						"AWS_SESSION_TOKEN":     []byte("some-session-token"),
 					},
 				},
 			},
@@ -171,6 +212,7 @@ func TestPBMStorageConfig(t *testing.T) {
 					Credentials: s3.Credentials{
 						AccessKeyID:     "some-access-key",
 						SecretAccessKey: "some-secret-key",
+						SessionToken:    "some-session-token",
 					},
 				},
 			},
