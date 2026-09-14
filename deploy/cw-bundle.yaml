@@ -32531,6 +32531,8 @@ spec:
               value: 5s
             - name: BACKUP_RECONCILE_INTERVAL
               value: 5s
+            - name: RESTORE_RECONCILE_INTERVAL
+              value: 5s
             - name: DISABLE_TELEMETRY
               value: "false"
             - name: MAX_CONCURRENT_RECONCILES

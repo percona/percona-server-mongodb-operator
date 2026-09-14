@@ -5,7 +5,6 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -43,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -70,34 +70,8 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newPBMFunc:  backup.NewPBM,
 		clientcmd:   cli,
 		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
-		reconcileIn: getReconcileInterval(),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
-}
-
-// getReconcileInterval returns the requeue interval from the BACKUP_RECONCILE_INTERVAL
-// environment variable, or the default of 5 seconds if not set or invalid.
-func getReconcileInterval() time.Duration {
-	defaultInterval := 5 * time.Second
-
-	interval := os.Getenv("BACKUP_RECONCILE_INTERVAL")
-	if interval == "" {
-		return defaultInterval
-	}
-
-	d, err := time.ParseDuration(interval)
-	if err != nil {
-		log := logf.Log.WithName("psmdbbackup-controller")
-		log.Info("Invalid BACKUP_RECONCILE_INTERVAL value, using default (5s)", "value", interval, "error", err, "default", defaultInterval)
-		return defaultInterval
-	}
-
-	if d < defaultInterval {
-		log := logf.Log.WithName("psmdbbackup-controller")
-		log.Info("BACKUP_RECONCILE_INTERVAL must be at least 5s, using 5s", "value", interval, "default", defaultInterval)
-		return defaultInterval
-	}
-
-	return d
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
