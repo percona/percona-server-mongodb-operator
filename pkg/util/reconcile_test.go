@@ -1,15 +1,16 @@
-package perconaservermongodbbackup
+package util
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func TestGetReconcileInterval(t *testing.T) {
+func TestReconcileInterval(t *testing.T) {
+	const envVar = "TEST_RECONCILE_INTERVAL"
+
 	tests := []struct {
 		name     string
 		envValue string
@@ -55,17 +56,11 @@ func TestGetReconcileInterval(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				err := os.Unsetenv("BACKUP_RECONCILE_INTERVAL")
-				require.NoError(t, err)
-			}()
 			if tt.setEnv {
-				err := os.Setenv("BACKUP_RECONCILE_INTERVAL", tt.envValue)
-				require.NoError(t, err)
+				t.Setenv(envVar, tt.envValue)
 			}
 
-			got := getReconcileInterval()
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want, ReconcileInterval(log.Log, envVar))
 		})
 	}
 }
