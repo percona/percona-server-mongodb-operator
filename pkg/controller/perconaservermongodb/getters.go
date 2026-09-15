@@ -19,39 +19,40 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
-// memberReplsets returns every replica set that owns member workloads: the
-// shards plus the config server.
-//
-// The config server is included regardless of spec.sharding.enabled, because
-// its pods and volumes outlive the moment sharding is switched off.
-func memberReplsets(cr *api.PerconaServerMongoDB) []*api.ReplsetSpec {
-	repls := make([]*api.ReplsetSpec, 0, len(cr.Spec.Replsets)+1)
-	if cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		repls = append(repls, cr.Spec.Sharding.ConfigsvrReplSet)
+// isMemberWorkload reports whether the given labels belong to a replica set member
+// of this cluster.
+func isMemberWorkload(ls map[string]string) bool {
+	if ls[naming.LabelKubernetesReplset] == "" {
+		return false
 	}
-	for _, rs := range cr.Spec.Replsets {
-		if rs != nil {
-			repls = append(repls, rs)
-		}
+
+	switch ls[naming.LabelKubernetesComponent] {
+	case naming.ComponentMongos, naming.ComponentSearch:
+		return false
 	}
-	return repls
+
+	return true
 }
 
-// getMemberPods returns the pods of every member group of every replica set,
-// the config server included.
+// getMemberPods returns the pods of every member group of every replica set the cluster has workloads for.
 func (r *ReconcilePerconaServerMongoDB) getMemberPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
-	list := corev1.PodList{}
+	out := corev1.PodList{}
 
-	for _, rs := range memberReplsets(cr) {
-		pods, err := psmdb.GetOutdatedRSPods(ctx, r.client, cr, rs.Name)
-		if err != nil {
-			return list, errors.Wrapf(err, "get pods of replset %s", rs.Name)
-		}
-
-		list.Items = append(list.Items, pods.Items...)
+	pods := corev1.PodList{}
+	if err := r.client.List(ctx, &pods, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(naming.ClusterLabels(cr)),
+	}); err != nil {
+		return out, errors.Wrap(err, "list pods")
 	}
 
-	return list, nil
+	for i := range pods.Items {
+		if isMemberWorkload(pods.Items[i].Labels) {
+			out.Items = append(out.Items, pods.Items[i])
+		}
+	}
+
+	return out, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PodList, error) {
@@ -170,31 +171,26 @@ func (r *ReconcilePerconaServerMongoDB) getAllPVCs(ctx context.Context, cr *api.
 	return list, err
 }
 
-// getMemberPVCs returns the persistent volume claims of every member group of every replica set.
+// getMemberPVCs returns the persistent volume claims of every member group of
+// every replica set the cluster has volumes for.
 func (r *ReconcilePerconaServerMongoDB) getMemberPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) (corev1.PersistentVolumeClaimList, error) {
-	list := corev1.PersistentVolumeClaimList{}
+	out := corev1.PersistentVolumeClaimList{}
 
-	notSearch, err := labels.NewRequirement(naming.LabelKubernetesComponent, selection.NotEquals, []string{naming.ComponentSearch})
-	if err != nil {
-		return list, errors.Wrap(err, "get selector requirement")
+	pvcs := corev1.PersistentVolumeClaimList{}
+	if err := r.client.List(ctx, &pvcs, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(naming.ClusterLabels(cr)),
+	}); err != nil {
+		return out, errors.Wrap(err, "list pvcs")
 	}
 
-	for _, rs := range memberReplsets(cr) {
-		pvcs := corev1.PersistentVolumeClaimList{}
-		if err := r.client.List(ctx,
-			&pvcs,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(naming.RSLabels(cr, rs)).Add(*notSearch),
-			},
-		); err != nil {
-			return list, errors.Wrapf(err, "get pvcs of replset %s", rs.Name)
+	for i := range pvcs.Items {
+		if isMemberWorkload(pvcs.Items[i].Labels) {
+			out.Items = append(out.Items, pvcs.Items[i])
 		}
-
-		list.Items = append(list.Items, pvcs.Items...)
 	}
 
-	return list, nil
+	return out, nil
 }
 
 // getMemberStatefulsets returns every member workload of a replica set: all

@@ -1126,6 +1126,32 @@ func countVoters(m ConfigMembers) int {
 	return voters
 }
 
+// checkImmutable returns an error on the first member whose desired configuration asks for
+// a change MongoDB cannot make in place.
+func (m ConfigMembers) checkImmutable(desired map[string]ConfigMember) error {
+	for i := range m {
+		cur := &m[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok {
+			continue
+		}
+
+		if want.ArbiterOnly != cur.ArbiterOnly {
+			return errors.Errorf(
+				"member %s: arbiterOnly cannot be changed on an existing member "+
+					"(live %t, desired %t). Remove the instance and declare a new one",
+				cur.Host, cur.ArbiterOnly, want.ArbiterOnly)
+		}
+	}
+
+	return nil
+}
+
 // nextVoteChange picks which outstanding votes change ApplyMemberConfig should
 // apply in a given pass, and reports whether one is outstanding that cannot be
 // applied at all.
@@ -1223,6 +1249,11 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		desired[member.Host] = member
 	}
 
+	// Check if any immutable fields are being changed
+	if err := m.checkImmutable(desired); err != nil {
+		return false, false, err
+	}
+
 	voteIdx, voteBlocked := m.nextVoteChange(desired)
 	if voteBlocked {
 		return false, false, errors.Errorf(
@@ -1245,13 +1276,6 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		want, ok := desired[cur.Host]
 		if !ok {
 			continue
-		}
-
-		if want.ArbiterOnly != cur.ArbiterOnly {
-			return false, false, errors.Errorf(
-				"member %s: arbiterOnly cannot be changed on an existing member "+
-					"(live %t, desired %t). Remove the instance and declare a new one",
-				cur.Host, cur.ArbiterOnly, want.ArbiterOnly)
 		}
 
 		voteDeferred := want.Votes != cur.Votes && i != voteIdx

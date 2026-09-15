@@ -28,9 +28,6 @@ const (
 	defaultVotes            = 1
 )
 
-// InstancesMinCRVersion is the minimum CR version that supports the use of instances[].
-const InstancesMinCRVersion = "1.24.0"
-
 func IsReservedGroupName(name string) bool {
 	switch name {
 	case ReservedGroupMongod, ReservedGroupNonVoting, ReservedGroupArbiter, ReservedGroupHidden:
@@ -160,8 +157,10 @@ func (i InstanceSpec) GetTags() map[string]string {
 func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
 	path := fmt.Sprintf("spec.replsets[%s].instances[%s]", rs.Name, i.Name)
 
-	if errs := validation.IsDNS1123Label(i.Name); len(errs) > 0 {
-		return errors.Errorf("%s.name: %s", path, strings.Join(errs, "; "))
+	if !IsReservedGroupName(i.Name) {
+		if errs := validation.IsDNS1123Label(i.Name); len(errs) > 0 {
+			return errors.Errorf("%s.name: %s", path, strings.Join(errs, "; "))
+		}
 	}
 
 	// Presence and absence of volumeSpec are CEL rules; only the option
@@ -184,11 +183,11 @@ func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		i.ReadinessProbe = defaultReadinessProbe(cr, i.ReadinessProbe, rs.Name, int(rs.GetPort()))
 	}
 
-	if len(i.Env) == 0 {
+	if i.Env == nil {
 		i.Env = slices.Clone(rs.Env)
 	}
 
-	if len(i.EnvFrom) == 0 {
+	if i.EnvFrom == nil {
 		i.EnvFrom = slices.Clone(rs.EnvFrom)
 	}
 

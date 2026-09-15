@@ -101,7 +101,7 @@ const (
 )
 
 func resolveMemberConfig(inst *api.InstanceSpec, policy Policy) MemberConfig {
-	if policy == PolicyImplicit {
+	if policy == PolicyImplicit || (!inst.HasMemberConfig() && api.IsReservedGroupName(inst.Name)) {
 		switch inst.Name {
 		case api.ReservedGroupArbiter:
 			return MemberConfig{ArbiterOnly: true, Votes: legacyDefaultVotes, Priority: 0}

@@ -1542,6 +1542,24 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantChanged: false, // converged on the first call, no-op thereafter
 		},
 		{
+			// The mismatch is on the last member while the first has a pending
+			// priority change: nothing may be mutated for a spec that is refused.
+			name: "arbiterOnly change is rejected before anything is mutated",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 10),
+				dbm(1, "h1", 1, 2),
+				func() mongo.ConfigMember {
+					m := dbm(2, "h2", 1, 0)
+					m.ArbiterOnly = true
+					m.Tags = nil
+					return m
+				}(),
+			},
+			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			wantErr: "arbiterOnly cannot be changed",
+		},
+		{
 			name: "arbiterOnly change is rejected",
 			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
 			desired: mongo.ConfigMembers{func() mongo.ConfigMember {
