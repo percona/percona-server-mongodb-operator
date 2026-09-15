@@ -256,6 +256,10 @@ func (r *ReconcilePerconaServerMongoDB) replsetHasUnavailableVoters(
 	set *membergroup.Set,
 ) (bool, error) {
 	for _, group := range set.GetAll() {
+		// TODO: read the voter count from live replicaset.
+		// During a votes 1→0 transition, an unavailable member is skipped here even though
+		// it still votes in the live replica set, allowing SmartUpdate to delete another voter and
+		// potentially lose quorum.
 		if group.Member.Votes == 0 || group.Replicas == 0 {
 			continue
 		}
