@@ -276,3 +276,14 @@ func IsReadyDataBearingPod(group membergroup.Group, pod *corev1.Pod) bool {
 		isContainerAndPodRunning(*pod, group.ContainerName) &&
 		isPodReady(*pod)
 }
+
+func (r *ReconcilePerconaServerMongoDB) getGroupStatefulset(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	group membergroup.Group,
+) (*appsv1.StatefulSet, error) {
+	sts := new(appsv1.StatefulSet)
+	err := r.client.Get(ctx,
+		types.NamespacedName{Name: group.STSName, Namespace: cr.Namespace}, sts)
+	return sts, err
+}
