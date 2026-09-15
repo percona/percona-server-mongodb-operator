@@ -1383,9 +1383,9 @@ func defaultLivenessProbe(cr *PerconaServerMongoDB, probe *LivenessProbeExtended
 			Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 		}
 
-		probe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+		probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 		if cr.TLSEnabled() {
-			probe.Probe.Exec.Command = append(probe.Probe.Exec.Command,
+			probe.Exec.Command = append(probe.Probe.Exec.Command,
 				"--ssl", "--sslInsecure",
 				"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 				"--sslPEMKeyFile", "/tmp/tls.pem")

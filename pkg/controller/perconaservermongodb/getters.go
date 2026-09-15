@@ -240,18 +240,6 @@ func (r *ReconcilePerconaServerMongoDB) getMemberStatefulsets(
 	return out, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) getGroupStatefulset(
-	ctx context.Context,
-	cr *api.PerconaServerMongoDB,
-	rs *api.ReplsetSpec,
-	group membergroup.Group,
-) (*appsv1.StatefulSet, error) {
-	sts := new(appsv1.StatefulSet)
-	err := r.client.Get(ctx,
-		types.NamespacedName{Name: group.STSName, Namespace: cr.Namespace}, sts)
-	return sts, err
-}
-
 // getEligibleMemberPod returns a pod suitable for a specific operation, chosen
 // across every group of the replica set.
 //
