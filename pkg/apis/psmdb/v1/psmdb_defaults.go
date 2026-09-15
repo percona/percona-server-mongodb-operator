@@ -1050,7 +1050,12 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 			maxReplsetMembers, members)
 	}
 
-	if !rs.UseLegacyVotePolicy() {
+	if voters > maxVotingMembers {
+		return errors.Errorf("a replica set supports at most %d voting members, got %d",
+			maxVotingMembers, voters)
+	}
+
+	if !rs.UseImplicitVotePolicy() {
 		if voters > maxVotingMembers {
 			return errors.Errorf("a replica set supports at most %d voting members, got %d. "+
 				"Move the surplus members to an instance group with rsConfig.votes: 0",
@@ -1068,7 +1073,6 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 	}
 
 	if !unsafe.ReplsetSize {
-
 		if dataBearingVoters < minSafeDataBearingVoters {
 			return errors.Errorf("a replica set needs at least %d data-bearing voting members, got %d. "+
 				"Set spec.unsafeFlags.replsetSize to true to disable this check",

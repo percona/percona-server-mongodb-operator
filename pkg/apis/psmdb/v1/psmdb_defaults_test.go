@@ -501,6 +501,22 @@ func TestCheckSafeDefaults(t *testing.T) {
 			},
 			expectedErr: "the number of voting members must be odd, got 4. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
+
+		"instance mode with more than 7 voters (single instance)": {
+			rs: &ReplsetSpec{
+				Instances: []InstanceSpec{{Name: ReservedGroupMongod, Replicas: 9, RSConfig: &MemberConfigSpec{}}},
+			},
+			expectedErr: "a replica set supports at most 7 voting members, got 9",
+		},
+		"instance mode with more than 7 voters (two instances)": {
+			rs: &ReplsetSpec{
+				Instances: []InstanceSpec{
+					{Name: "inst1", Replicas: 3, RSConfig: &MemberConfigSpec{}},
+					{Name: "inst2", Replicas: 5, RSConfig: &MemberConfigSpec{}},
+				},
+			},
+			expectedErr: "a replica set supports at most 7 voting members, got 8",
+		},
 		"instance mode with unsafe replset size skips voter parity": {
 			rs: &ReplsetSpec{
 				Instances: []InstanceSpec{{Name: ReservedGroupMongod, Replicas: 4, RSConfig: &MemberConfigSpec{}}},

@@ -52,7 +52,7 @@ func Resolve(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (*Set, error) {
 // sequence.
 func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, Policy, error) {
 	policy := PolicyExplicit
-	if rs.UseLegacyVotePolicy() {
+	if rs.UseImplicitVotePolicy() {
 		policy = PolicyImplicit
 	}
 
