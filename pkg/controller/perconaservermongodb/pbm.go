@@ -754,7 +754,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 
 // pbmDiscoveryPod returns a pod suitable for reading the PBM agent version and
 // for opening a PBM connection, together with the group that owns it.
-func (r *ReconcilePerconaServerMongoDB) pbmDiscoveryPod(ctx context.Context, cr *api.PerconaServerMongoDB) (*corev1.Pod, *membergroup.Group, error) {
+func (r *ReconcilePerconaServerMongoDB) pbmDiscoveryPod(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) (*corev1.Pod, *membergroup.Group, error) {
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
