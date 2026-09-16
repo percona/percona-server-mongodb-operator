@@ -21,6 +21,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
@@ -529,26 +530,33 @@ func replsetOverridesUsed(cr *api.PerconaServerMongoDB) bool {
 }
 
 func pbmAgentHosts(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]string, error) {
-	replsets := cr.GetReplsets()
-
-	pods := make(map[string][]corev1.Pod)
-	for _, rs := range replsets {
-		podList, err := psmdb.GetRSPods(ctx, cl, cr, rs.Name)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get replset/%s pods", rs.Name)
-		}
-		pods[rs.Name] = podList.Items
-	}
-
 	hosts := make([]string, 0)
-	for _, rs := range replsets {
-		for _, pod := range pods[rs.Name] {
-			host, err := psmdb.MongoHost(ctx, cl, cr,
-				cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
-			if err != nil {
-				return hosts, errors.Wrapf(err, "get host for %s", pod.Name)
+
+	for _, rs := range cr.GetReplsets() {
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return nil, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+		}
+
+		// only data bearing instances are considered
+		for _, group := range set.GetDataBearing() {
+			if backup.EligibleForBackup(group, cr) != nil {
+				continue
 			}
-			hosts = append(hosts, host)
+
+			pods, err := psmdb.GetGroupPods(ctx, cl, cr, rs, group)
+			if err != nil {
+				return nil, errors.Wrapf(err, "get pods of group %s", group.Name)
+			}
+
+			for i := range pods.Items {
+				host, err := psmdb.MongoHost(ctx, cl, cr,
+					cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pods.Items[i])
+				if err != nil {
+					return hosts, errors.Wrapf(err, "get host for %s", pods.Items[i].Name)
+				}
+				hosts = append(hosts, host)
+			}
 		}
 	}
 
