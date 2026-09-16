@@ -12,10 +12,11 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
+func TestPrepareStatefulSetForPhysicalRestore(t *testing.T) {
 	nonRoot := true
 	allowPrivEsc := false
 	initSC := &corev1.SecurityContext{
@@ -158,8 +159,12 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Name:      sts.Name,
 				Namespace: sts.Namespace,
 			}
+			group := membergroup.Group{
+				STSName:       sts.Name,
+				ContainerName: naming.ContainerMongod,
+			}
 
-			err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			err := r.prepareStatefulSetForPhysicalRestore(ctx, cluster, sts, group, 27017)
 			assert.NoError(t, err)
 
 			updatedSTS := &appsv1.StatefulSet{}
