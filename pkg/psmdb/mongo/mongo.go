@@ -1222,7 +1222,8 @@ func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, boo
 //
 // Contract:
 //   - Mutable in place: priority, hidden, tags, horizons. Removing a desired
-//     value clears the applied one.
+//     value clears the applied one. Priority and hidden move together with the
+//     member's votes, because MongoDB validates all three against each other.
 //   - At most one votes change per call. MongoDB permits only one voting-member
 //     change in an ordinary reconfiguration, and routine convergence must not
 //     use a forced reconfiguration to bypass that.
@@ -1280,21 +1281,21 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 
 		voteDeferred := want.Votes != cur.Votes && i != voteIdx
 
-		// Priority is coupled to votes: MongoDB rejects a member that has a
-		// priority above zero and no vote. Raising the priority in this pass
-		// while the votes change waits for the next one would produce exactly
-		// that, so a member whose vote change is deferred keeps its priority
-		// too, and both move together on the pass that applies the vote.
-		if !voteDeferred && want.Priority != cur.Priority {
-			log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
-			cur.Priority = want.Priority
-			changed = true
-		}
+		// Priority and hidden are both coupled to votes, so a member whose
+		// vote change is deferred keeps them as they are: all three move on the
+		// pass that applies the vote.
+		if !voteDeferred {
+			if want.Priority != cur.Priority {
+				log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
+				cur.Priority = want.Priority
+				changed = true
+			}
 
-		if want.Hidden != cur.Hidden {
-			log.Info("Hidden changed", "host", cur.Host, "old", cur.Hidden, "new", want.Hidden)
-			cur.Hidden = want.Hidden
-			changed = true
+			if want.Hidden != cur.Hidden {
+				log.Info("Hidden changed", "host", cur.Host, "old", cur.Hidden, "new", want.Hidden)
+				cur.Hidden = want.Hidden
+				changed = true
+			}
 		}
 
 		// Arbiters carry no tags in MongoDB, so only compare them for
