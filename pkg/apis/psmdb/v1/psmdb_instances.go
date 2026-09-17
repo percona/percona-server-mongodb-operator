@@ -2,10 +2,10 @@ package v1
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -154,7 +154,7 @@ func (i InstanceSpec) GetTags() map[string]string {
 	return i.RSConfig.Tags
 }
 
-func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
+func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) error {
 	path := fmt.Sprintf("spec.replsets[%s].instances[%s]", rs.Name, i.Name)
 
 	if !IsReservedGroupName(i.Name) {
@@ -202,12 +202,69 @@ func (i *InstanceSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		i.ServiceAccountName = rs.ServiceAccountName
 	}
 
+	i.inheritMultiAZ(rs)
+
 	//nolint:staticcheck
 	if err := i.MultiAZ.reconcileOpts(cr); err != nil {
 		return errors.Wrapf(err, "%s: reconcile multiAZ options", path)
 	}
 
 	return nil
+}
+
+func (i *InstanceSpec) inheritMultiAZ(rs *ReplsetSpec) {
+	if i.MultiAZ.Affinity == nil && rs.MultiAZ.Affinity != nil {
+		i.MultiAZ.Affinity = rs.MultiAZ.Affinity.DeepCopy()
+	}
+	if i.MultiAZ.TopologySpreadConstraints == nil && rs.MultiAZ.TopologySpreadConstraints != nil {
+		i.MultiAZ.TopologySpreadConstraints = slices.Clone(rs.MultiAZ.TopologySpreadConstraints)
+	}
+	if i.MultiAZ.NodeSelector == nil && rs.MultiAZ.NodeSelector != nil {
+		i.MultiAZ.NodeSelector = maps.Clone(rs.MultiAZ.NodeSelector)
+	}
+	if i.MultiAZ.Tolerations == nil && rs.MultiAZ.Tolerations != nil {
+		i.MultiAZ.Tolerations = slices.Clone(rs.MultiAZ.Tolerations)
+	}
+	if i.MultiAZ.PriorityClassName == "" && rs.MultiAZ.PriorityClassName != "" {
+		i.MultiAZ.PriorityClassName = rs.MultiAZ.PriorityClassName
+	}
+	if i.MultiAZ.ServiceAccountName == "" && rs.MultiAZ.ServiceAccountName != "" {
+		i.MultiAZ.ServiceAccountName = rs.MultiAZ.ServiceAccountName
+	}
+	if i.MultiAZ.Annotations == nil && rs.MultiAZ.Annotations != nil {
+		i.MultiAZ.Annotations = maps.Clone(rs.MultiAZ.Annotations)
+	}
+	if i.MultiAZ.Labels == nil && rs.MultiAZ.Labels != nil {
+		i.MultiAZ.Labels = maps.Clone(rs.MultiAZ.Labels)
+	}
+	if i.MultiAZ.PodDisruptionBudget == nil && rs.MultiAZ.PodDisruptionBudget != nil {
+		i.MultiAZ.PodDisruptionBudget = rs.MultiAZ.PodDisruptionBudget.DeepCopy()
+	}
+	if i.MultiAZ.TerminationGracePeriodSeconds == nil && rs.MultiAZ.TerminationGracePeriodSeconds != nil {
+		i.MultiAZ.TerminationGracePeriodSeconds = new(int64(*rs.MultiAZ.TerminationGracePeriodSeconds))
+	}
+	if i.MultiAZ.RuntimeClassName == nil && rs.MultiAZ.RuntimeClassName != nil {
+		i.MultiAZ.RuntimeClassName = new(*rs.MultiAZ.RuntimeClassName)
+	}
+	if i.MultiAZ.HookScript.IsEmpty() && !rs.MultiAZ.HookScript.IsEmpty() {
+		i.MultiAZ.HookScript = rs.MultiAZ.HookScript
+	}
+	if !resourcesDeclared(i.MultiAZ.Resources) && resourcesDeclared(rs.MultiAZ.Resources) {
+		i.MultiAZ.Resources = *rs.MultiAZ.Resources.DeepCopy()
+	}
+	if i.MultiAZ.Sidecars == nil && rs.MultiAZ.Sidecars != nil {
+		i.MultiAZ.Sidecars = slices.Clone(rs.MultiAZ.Sidecars)
+	}
+	if i.MultiAZ.SidecarVolumes == nil && rs.MultiAZ.SidecarVolumes != nil {
+		i.MultiAZ.SidecarVolumes = slices.Clone(rs.MultiAZ.SidecarVolumes)
+	}
+	if i.MultiAZ.SidecarPVCs == nil && rs.MultiAZ.SidecarPVCs != nil {
+		i.MultiAZ.SidecarPVCs = slices.Clone(rs.MultiAZ.SidecarPVCs)
+	}
+}
+
+func resourcesDeclared(r corev1.ResourceRequirements) bool {
+	return len(r.Limits) > 0 || len(r.Requests) > 0 || len(r.Claims) > 0
 }
 
 // ResolvedPriority returns the effective priority of the instance, taking into account arbiter, hidden, and voting status.

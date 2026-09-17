@@ -554,6 +554,10 @@ type MultiAZ struct {
 	SidecarPVCs    []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
 }
 
+func (hs HookScriptSpec) IsEmpty() bool {
+	return hs.Script == "" && hs.ConfigMapRef.Name == ""
+}
+
 func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
 	withSidecars, noSkips = []corev1.Container{c}, true
 

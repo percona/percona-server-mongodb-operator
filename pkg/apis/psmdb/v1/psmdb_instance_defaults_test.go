@@ -9,8 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // testCR is the cluster an instance is defaulted against. crVersion and the
@@ -83,7 +81,7 @@ func TestInstanceSetDefaultsInherits(t *testing.T) {
 	rs := defaultedReplset(t)
 
 	inst := &InstanceSpec{Name: "hot", Replicas: 3, VolumeSpec: testVol("1Gi")}
-	require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
+	require.NoError(t, inst.SetDefaults(cr, rs))
 
 	assert.Equal(t, "rs-sa", inst.ServiceAccountName)
 	assert.Equal(t, rs.Env, inst.Env)
@@ -110,34 +108,6 @@ func TestInstanceSetDefaultsInherits(t *testing.T) {
 	})
 }
 
-func TestInstanceSetDefaultsDoesNotInherit(t *testing.T) {
-	cr := testCR(currentCRVersion, TLSModeDisabled)
-	rs := defaultedReplset(t)
-
-	inst := &InstanceSpec{Name: "hot", Replicas: 3, VolumeSpec: testVol("1Gi")}
-	require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
-
-	assert.Empty(t, inst.Resources.Requests,
-		"resources are per-instance; the replica set's are not a fallback")
-
-	require.NotNil(t, inst.PodDisruptionBudget)
-	assert.Nil(t, inst.PodDisruptionBudget.MinAvailable,
-		"the replica set's minAvailable is not inherited")
-	require.NotNil(t, inst.PodDisruptionBudget.MaxUnavailable)
-	assert.Equal(t, 1, inst.PodDisruptionBudget.MaxUnavailable.IntValue(),
-		"the instance gets the standard maxUnavailable default instead")
-
-	require.NotNil(t, inst.TerminationGracePeriodSeconds)
-	assert.Equal(t, int64(60), *inst.TerminationGracePeriodSeconds,
-		"the grace period is defaulted, not inherited from the replica set's 120")
-
-	assert.Empty(t, inst.Annotations, "replica-set annotations are not inherited")
-
-	require.NotNil(t, inst.Affinity)
-	require.NotNil(t, inst.Affinity.TopologyKey)
-	assert.Equal(t, "kubernetes.io/hostname", *inst.Affinity.TopologyKey)
-}
-
 func TestInstanceSetDefaultsKeepsDeclaredValues(t *testing.T) {
 	cr := testCR(currentCRVersion, TLSModeDisabled)
 	rs := defaultedReplset(t)
@@ -159,7 +129,7 @@ func TestInstanceSetDefaultsKeepsDeclaredValues(t *testing.T) {
 		LivenessProbe:            &LivenessProbeExtended{Probe: corev1.Probe{TimeoutSeconds: 42}},
 		ReadinessProbe:           &corev1.Probe{TimeoutSeconds: 41},
 	}
-	require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
+	require.NoError(t, inst.SetDefaults(cr, rs))
 
 	assert.Equal(t, "hot-sa", inst.ServiceAccountName)
 	assert.Equal(t, "4", inst.Resources.Requests.Cpu().String())
@@ -188,7 +158,7 @@ func TestInstanceSetDefaultsNormalizesVolumeSpec(t *testing.T) {
 
 	t.Run("access modes are filled in", func(t *testing.T) {
 		inst := &InstanceSpec{Name: "hot", Replicas: 1, VolumeSpec: testVol("1Gi")}
-		require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
+		require.NoError(t, inst.SetDefaults(cr, rs))
 
 		assert.Equal(t,
 			[]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -200,7 +170,7 @@ func TestInstanceSetDefaultsNormalizesVolumeSpec(t *testing.T) {
 			Name: "arb", Replicas: 1,
 			RSConfig: &MemberConfigSpec{ArbiterOnly: new(true), Votes: new(int32(1))},
 		}
-		require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
+		require.NoError(t, inst.SetDefaults(cr, rs))
 		assert.Nil(t, inst.VolumeSpec)
 	})
 
@@ -211,7 +181,7 @@ func TestInstanceSetDefaultsNormalizesVolumeSpec(t *testing.T) {
 				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{},
 			}},
 		}
-		err := inst.SetDefaults(version.PlatformKubernetes, cr, rs)
+		err := inst.SetDefaults(cr, rs)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "spec.replsets[rs0].instances[hot].volumeSpec")
 		assert.Contains(t, err.Error(), "volume.resources.storage can't be empty")
@@ -243,7 +213,7 @@ func TestInstanceSetDefaultsValidatesName(t *testing.T) {
 	for tn, tt := range tests {
 		t.Run(tn, func(t *testing.T) {
 			inst := &InstanceSpec{Name: tt.name, Replicas: 1, VolumeSpec: testVol("1Gi")}
-			err := inst.SetDefaults(version.PlatformKubernetes, cr, rs)
+			err := inst.SetDefaults(cr, rs)
 
 			if tt.wantErr == "" {
 				require.NoError(t, err)
@@ -264,7 +234,7 @@ func TestInstanceSetDefaultsRejectsShortGracePeriod(t *testing.T) {
 		MultiAZ: MultiAZ{TerminationGracePeriodSeconds: new(int64(5))},
 	}
 
-	err := inst.SetDefaults(version.PlatformKubernetes, cr, rs)
+	err := inst.SetDefaults(cr, rs)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "spec.replsets[rs0].instances[hot]")
 	assert.Contains(t, err.Error(), "terminationGracePeriodSeconds must be at least 30 seconds")
@@ -277,7 +247,7 @@ func TestInstanceSetDefaultsRejectsShortGracePeriod(t *testing.T) {
 			Name: "hot", Replicas: 1, VolumeSpec: testVol("1Gi"),
 			MultiAZ: MultiAZ{TerminationGracePeriodSeconds: new(int64(5))},
 		}
-		require.NoError(t, inst.SetDefaults(version.PlatformKubernetes, cr, rs))
+		require.NoError(t, inst.SetDefaults(cr, rs))
 		assert.Equal(t, int64(5), *inst.TerminationGracePeriodSeconds)
 	})
 }
