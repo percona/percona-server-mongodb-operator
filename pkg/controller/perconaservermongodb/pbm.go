@@ -23,7 +23,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -757,7 +756,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 func (r *ReconcilePerconaServerMongoDB) pbmDiscoveryPod(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) (*corev1.Pod, *membergroup.Group, error) {
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+		repls = append([]*psmdbv1.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
 	for _, rs := range repls {

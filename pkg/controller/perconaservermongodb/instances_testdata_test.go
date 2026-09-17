@@ -25,6 +25,8 @@ import (
 // mirror a PSA — an even voter count, or fewer than three data-bearing voters —
 // are rejected outright without spec.unsafeFlags.replsetSize, so a test that
 // needs one must ask for it here.
+//
+//nolint:unused // fixture for the instance-mode controller tests, which land with the controller changes
 func instanceCR(t *testing.T, name, ns string, instances []api.InstanceSpec, mutate ...func(*api.PerconaServerMongoDB)) *api.PerconaServerMongoDB {
 	t.Helper()
 
@@ -51,6 +53,8 @@ func instanceCR(t *testing.T, name, ns string, instances []api.InstanceSpec, mut
 
 // unsafeSize relaxes the replica-set size checks. Pass it to instanceCR for a
 // topology that is deliberately not production-safe.
+//
+//nolint:unused // see instanceCR
 func unsafeSize(cr *api.PerconaServerMongoDB) { cr.Spec.Unsafe.ReplsetSize = true }
 
 // resolveGroup resolves rs and returns the named group, failing the test if the

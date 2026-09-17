@@ -213,53 +213,53 @@ func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) er
 }
 
 func (i *InstanceSpec) inheritMultiAZ(rs *ReplsetSpec) {
-	if i.MultiAZ.Affinity == nil && rs.MultiAZ.Affinity != nil {
-		i.MultiAZ.Affinity = rs.MultiAZ.Affinity.DeepCopy()
+	if i.Affinity == nil && rs.Affinity != nil {
+		i.Affinity = rs.Affinity.DeepCopy()
 	}
-	if i.MultiAZ.TopologySpreadConstraints == nil && rs.MultiAZ.TopologySpreadConstraints != nil {
-		i.MultiAZ.TopologySpreadConstraints = slices.Clone(rs.MultiAZ.TopologySpreadConstraints)
+	if i.TopologySpreadConstraints == nil && rs.TopologySpreadConstraints != nil {
+		i.TopologySpreadConstraints = slices.Clone(rs.TopologySpreadConstraints)
 	}
-	if i.MultiAZ.NodeSelector == nil && rs.MultiAZ.NodeSelector != nil {
-		i.MultiAZ.NodeSelector = maps.Clone(rs.MultiAZ.NodeSelector)
+	if i.NodeSelector == nil && rs.NodeSelector != nil {
+		i.NodeSelector = maps.Clone(rs.NodeSelector)
 	}
-	if i.MultiAZ.Tolerations == nil && rs.MultiAZ.Tolerations != nil {
-		i.MultiAZ.Tolerations = slices.Clone(rs.MultiAZ.Tolerations)
+	if i.Tolerations == nil && rs.Tolerations != nil {
+		i.Tolerations = slices.Clone(rs.Tolerations)
 	}
-	if i.MultiAZ.PriorityClassName == "" && rs.MultiAZ.PriorityClassName != "" {
-		i.MultiAZ.PriorityClassName = rs.MultiAZ.PriorityClassName
+	if i.PriorityClassName == "" && rs.PriorityClassName != "" {
+		i.PriorityClassName = rs.PriorityClassName
 	}
-	if i.MultiAZ.ServiceAccountName == "" && rs.MultiAZ.ServiceAccountName != "" {
-		i.MultiAZ.ServiceAccountName = rs.MultiAZ.ServiceAccountName
+	if i.ServiceAccountName == "" && rs.ServiceAccountName != "" {
+		i.ServiceAccountName = rs.ServiceAccountName
 	}
-	if i.MultiAZ.Annotations == nil && rs.MultiAZ.Annotations != nil {
-		i.MultiAZ.Annotations = maps.Clone(rs.MultiAZ.Annotations)
+	if i.Annotations == nil && rs.Annotations != nil {
+		i.Annotations = maps.Clone(rs.Annotations)
 	}
-	if i.MultiAZ.Labels == nil && rs.MultiAZ.Labels != nil {
-		i.MultiAZ.Labels = maps.Clone(rs.MultiAZ.Labels)
+	if i.Labels == nil && rs.Labels != nil {
+		i.Labels = maps.Clone(rs.Labels)
 	}
-	if i.MultiAZ.PodDisruptionBudget == nil && rs.MultiAZ.PodDisruptionBudget != nil {
-		i.MultiAZ.PodDisruptionBudget = rs.MultiAZ.PodDisruptionBudget.DeepCopy()
+	if i.PodDisruptionBudget == nil && rs.PodDisruptionBudget != nil {
+		i.PodDisruptionBudget = rs.PodDisruptionBudget.DeepCopy()
 	}
-	if i.MultiAZ.TerminationGracePeriodSeconds == nil && rs.MultiAZ.TerminationGracePeriodSeconds != nil {
-		i.MultiAZ.TerminationGracePeriodSeconds = new(int64(*rs.MultiAZ.TerminationGracePeriodSeconds))
+	if i.TerminationGracePeriodSeconds == nil && rs.TerminationGracePeriodSeconds != nil {
+		i.TerminationGracePeriodSeconds = new(int64(*rs.TerminationGracePeriodSeconds))
 	}
-	if i.MultiAZ.RuntimeClassName == nil && rs.MultiAZ.RuntimeClassName != nil {
-		i.MultiAZ.RuntimeClassName = new(*rs.MultiAZ.RuntimeClassName)
+	if i.RuntimeClassName == nil && rs.RuntimeClassName != nil {
+		i.RuntimeClassName = new(*rs.RuntimeClassName)
 	}
-	if i.MultiAZ.HookScript.IsEmpty() && !rs.MultiAZ.HookScript.IsEmpty() {
-		i.MultiAZ.HookScript = rs.MultiAZ.HookScript
+	if i.HookScript.IsEmpty() && !rs.HookScript.IsEmpty() {
+		i.HookScript = rs.HookScript
 	}
-	if !resourcesDeclared(i.MultiAZ.Resources) && resourcesDeclared(rs.MultiAZ.Resources) {
-		i.MultiAZ.Resources = *rs.MultiAZ.Resources.DeepCopy()
+	if !resourcesDeclared(i.Resources) && resourcesDeclared(rs.Resources) {
+		i.Resources = *rs.Resources.DeepCopy()
 	}
-	if i.MultiAZ.Sidecars == nil && rs.MultiAZ.Sidecars != nil {
-		i.MultiAZ.Sidecars = slices.Clone(rs.MultiAZ.Sidecars)
+	if i.Sidecars == nil && rs.Sidecars != nil {
+		i.Sidecars = slices.Clone(rs.Sidecars)
 	}
-	if i.MultiAZ.SidecarVolumes == nil && rs.MultiAZ.SidecarVolumes != nil {
-		i.MultiAZ.SidecarVolumes = slices.Clone(rs.MultiAZ.SidecarVolumes)
+	if i.SidecarVolumes == nil && rs.SidecarVolumes != nil {
+		i.SidecarVolumes = slices.Clone(rs.SidecarVolumes)
 	}
-	if i.MultiAZ.SidecarPVCs == nil && rs.MultiAZ.SidecarPVCs != nil {
-		i.MultiAZ.SidecarPVCs = slices.Clone(rs.MultiAZ.SidecarPVCs)
+	if i.SidecarPVCs == nil && rs.SidecarPVCs != nil {
+		i.SidecarPVCs = slices.Clone(rs.SidecarPVCs)
 	}
 }
 
