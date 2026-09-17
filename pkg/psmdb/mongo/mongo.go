@@ -1281,10 +1281,16 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 
 		voteDeferred := want.Votes != cur.Votes && i != voteIdx
 
-		// Priority and hidden are both coupled to votes, so a member whose
-		// vote change is deferred keeps them as they are: all three move on the
-		// pass that applies the vote.
-		if !voteDeferred {
+		// Votes, priority and hidden move as one: MongoDB rejects a member
+		// that has a priority above zero and no vote, and a hidden member whose
+		// priority is not zero. A member whose vote change is deferred
+		// therefore keeps all three as they are.
+		if voteDeferred {
+			// Another member's votes change is going out in this pass. Leave
+			// this one for the next reconciliation, after the live config has
+			// been re-read and this one has committed.
+			votePending = true
+		} else {
 			if want.Priority != cur.Priority {
 				log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
 				cur.Priority = want.Priority
@@ -1294,6 +1300,12 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 			if want.Hidden != cur.Hidden {
 				log.Info("Hidden changed", "host", cur.Host, "old", cur.Hidden, "new", want.Hidden)
 				cur.Hidden = want.Hidden
+				changed = true
+			}
+
+			if want.Votes != cur.Votes {
+				log.Info("Votes changed", "host", cur.Host, "old", cur.Votes, "new", want.Votes)
+				cur.Votes = want.Votes
 				changed = true
 			}
 		}
@@ -1310,19 +1322,6 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		if !reflect.DeepEqual(want.Horizons, cur.Horizons) {
 			log.Info("Horizons changed", "host", cur.Host, "old", cur.Horizons, "new", want.Horizons)
 			cur.Horizons = want.Horizons
-			changed = true
-		}
-
-		if want.Votes != cur.Votes {
-			if voteDeferred {
-				// Another voting change is outstanding. Leave it for the next
-				// reconciliation, after the live config has been re-read and
-				// this one has committed.
-				votePending = true
-				continue
-			}
-			log.Info("Votes changed", "host", cur.Host, "old", cur.Votes, "new", want.Votes)
-			cur.Votes = want.Votes
 			changed = true
 		}
 	}
