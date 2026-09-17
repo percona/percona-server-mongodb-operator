@@ -477,7 +477,7 @@ func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
 
 	t.Run("delete returns NotFound", func(t *testing.T) {
 		cr, r := build()
-		cl := interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+		cl := interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
 			return k8serrors.NewNotFound(corev1.Resource("configmaps"), obj.GetName())
 		})
 
@@ -486,7 +486,7 @@ func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
 
 	t.Run("delete fails for another reason", func(t *testing.T) {
 		cr, r := build()
-		cl := interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+		cl := interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
 			return errors.New("boom")
 		})
 

@@ -321,7 +321,7 @@ func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
 	t.Run("delete returns NotFound", func(t *testing.T) {
 		cr := newTestCR()
 		r := buildFakeClient(secretsFor(cr)...)
-		r.client = interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
 			return k8serrors.NewNotFound(corev1.Resource("secrets"), obj.GetName())
 		})
 
@@ -331,7 +331,7 @@ func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
 	t.Run("delete fails for another reason", func(t *testing.T) {
 		cr := newTestCR()
 		r := buildFakeClient(secretsFor(cr)...)
-		r.client = interceptorClient(r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
 			return errors.New("boom")
 		})
 
@@ -339,6 +339,11 @@ func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
 	})
 }
 
-func interceptorClient(c client.Client, del func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error) client.Client {
-	return interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{Delete: del})
+func interceptorClient(t *testing.T, c client.Client, del func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error) client.Client {
+	t.Helper()
+
+	watcher, ok := c.(client.WithWatch)
+	require.True(t, ok, "interceptor.NewClient needs a client.WithWatch, got %T", c)
+
+	return interceptor.NewClient(watcher, interceptor.Funcs{Delete: del})
 }
