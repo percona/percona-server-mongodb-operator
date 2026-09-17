@@ -802,7 +802,7 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 		}
 
 		for _, group := range set.GetAll() {
-			want, ok := target[group.Name]
+			want, ok := target[group.STSName]
 			if !ok || want == group.Replicas {
 				continue
 			}
@@ -2082,6 +2082,53 @@ func getObjectByName(ctx context.Context, c client.Client, n types.NamespacedNam
 	return false, nil
 }
 
+// getStatefulSetsToRemove returns the member StatefulSets of a replica set that the
+// desired topology no longer declares, sorted by name.
+func (r *ReconcilePerconaServerMongoDB) getStatefulSetsToRemove(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	set *membergroup.Set,
+) ([]appsv1.StatefulSet, error) {
+	observed := appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, &observed, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			naming.LabelKubernetesInstance: cr.Name,
+			naming.LabelKubernetesReplset:  set.GetReplsetName(),
+		}),
+	}); err != nil {
+		return nil, errors.Wrap(err, "list statefulsets")
+	}
+
+	desired := make(map[string]struct{}, set.Len())
+	for _, name := range set.GetStatefulSetNames() {
+		desired[name] = struct{}{}
+	}
+
+	out := make([]appsv1.StatefulSet, 0)
+	for i := range observed.Items {
+		sts := observed.Items[i]
+
+		// Neither is a replica set member, so neither is ours to retire.
+		switch sts.Labels[naming.LabelKubernetesComponent] {
+		case naming.ComponentMongos, naming.ComponentSearch:
+			continue
+		}
+		if !metav1.IsControlledBy(&sts, cr) {
+			continue
+		}
+		if _, ok := desired[sts.Name]; ok {
+			continue
+		}
+
+		out = append(out, sts)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	return out, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) cleanupRemovedInstances(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
@@ -2090,47 +2137,49 @@ func (r *ReconcilePerconaServerMongoDB) cleanupRemovedInstances(
 ) error {
 	log := logf.FromContext(ctx).WithName("retireGroups").WithValues("replset", rs.Name)
 
-	observed := appsv1.StatefulSetList{}
-	if err := r.client.List(ctx, &observed, &client.ListOptions{
-		Namespace: cr.Namespace,
-		LabelSelector: labels.SelectorFromSet(map[string]string{
-			naming.LabelKubernetesInstance: cr.Name,
-			naming.LabelKubernetesReplset:  rs.Name,
-		}),
-	}); err != nil {
-		return errors.Wrap(err, "list statefulsets")
+	retiring, err := r.getStatefulSetsToRemove(ctx, cr, set)
+	if err != nil {
+		return err
+	}
+	if len(retiring) == 0 {
+		return nil
 	}
 
-	desired := make(map[string]struct{}, set.Len())
-	for _, name := range set.GetStatefulSetNames() {
-		desired[name] = struct{}{}
+	target, err := r.downscaleTarget(ctx, cr, set)
+	if err != nil {
+		return err
 	}
 
-	for i := range observed.Items {
-		sts := &observed.Items[i]
+	for i := range retiring {
+		sts := &retiring[i]
 
-		// not declared in []instances
-		switch sts.Labels[naming.LabelKubernetesComponent] {
-		case naming.ComponentMongos, naming.ComponentSearch:
-			continue
-		}
-		if !metav1.IsControlledBy(sts, cr) {
-			continue
-		}
-		if _, ok := desired[sts.Name]; ok {
-			continue
+		observed := int32(0)
+		if sts.Spec.Replicas != nil {
+			observed = *sts.Spec.Replicas
 		}
 
-		if sts.Status.Replicas > 0 || (sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0) {
-			if sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0 {
-				log.V(1).Info("waiting for retiring group pods to terminate", "statefulset", sts.Name)
+		if observed > 0 {
+			// Scale to the budgeted target rather than straight to zero.
+			// MongoDB drops one member from rs.conf() per reconciliation, so a
+			// workload emptied in one update leaves the rest of its members in
+			// the live config with no pod behind them -- and if they carried
+			// enough votes, no primary is left to reconfigure them away.
+			want, ok := target[sts.Name]
+			if !ok || want >= observed {
+				log.V(1).Info("holding retiring group until the next pass", "statefulset", sts.Name, "replicas", observed)
 				continue
 			}
-			log.Info("scaling down retiring group", "statefulset", sts.Name)
-			sts.Spec.Replicas = new(int32(0))
+
+			log.Info("scaling down retiring group", "statefulset", sts.Name, "from", observed, "to", want)
+			sts.Spec.Replicas = new(want)
 			if err := r.client.Update(ctx, sts); err != nil {
 				return errors.Wrapf(err, "scale down retiring statefulset %s", sts.Name)
 			}
+			continue
+		}
+
+		if sts.Status.Replicas > 0 {
+			log.V(1).Info("waiting for retiring group pods to terminate", "statefulset", sts.Name)
 			continue
 		}
 
@@ -2187,23 +2236,58 @@ func (r *ReconcilePerconaServerMongoDB) cleanupStaleGroupConfigs(
 	return nil
 }
 
-// downscaleTarget returns the member count each group should be reconciled to
-// on a given pass.
+// downscaleTarget returns the member count each workload should be reconciled
+// to on a given pass, keyed by StatefulSet name.
 //
 // At most one member is removed per replica set per reconciliation. Removing
 // one voter from every group independently could take a majority offline in a
 // single pass. The returned map is a temporary target only: the
 // user-requested counts in the CR are never overwritten.
+//
+// Workloads whose group has been deleted from the spec are budgeted here too,
+// and they are budgeted first. They are on their way out either way, and
+// holding one at its old size while a declared group shrinks only keeps its
+// members in rs.conf() for longer.
+//
+// The function is a pure read of cluster state, so safeDownscale and
+// cleanupRemovedInstances reach the same conclusion from separate calls in the
+// same reconciliation, and the budget is spent once between them.
 func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	set *membergroup.Set,
 ) (map[string]int32, error) {
-	target := make(map[string]int32, set.Len()) // group -> replicas mapping
+	target := make(map[string]int32, set.Len()) // statefulset -> replicas mapping
 	budget := 1                                 // how many members are downscaled each pass
 
+	retiring, err := r.getStatefulSetsToRemove(ctx, cr, set)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range retiring {
+		sts := &retiring[i]
+
+		observed := int32(0)
+		if sts.Spec.Replicas != nil {
+			observed = *sts.Spec.Replicas
+		}
+		if observed == 0 {
+			target[sts.Name] = 0
+			continue
+		}
+
+		if budget == 0 {
+			target[sts.Name] = observed
+			continue
+		}
+		budget--
+
+		target[sts.Name] = observed - 1
+	}
+
 	for _, group := range set.GetAll() {
-		target[group.Name] = group.Replicas
+		target[group.STSName] = group.Replicas
 
 		// Only voting members are rate-limited
 		if group.Member.Votes == 0 {
@@ -2232,13 +2316,13 @@ func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
 
 		if budget == 0 {
 			// Hold this group at its observed size until a later pass.
-			target[group.Name] = observed
+			target[group.STSName] = observed
 			continue
 		}
 		budget--
 
 		if gap > 1 {
-			target[group.Name] = observed - 1
+			target[group.STSName] = observed - 1
 		}
 	}
 
