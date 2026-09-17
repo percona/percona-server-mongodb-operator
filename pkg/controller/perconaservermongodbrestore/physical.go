@@ -519,12 +519,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 	replsets := cluster.GetAllReplsets()
 	for _, rs := range replsets {
-		groups, err := r.restoreGroups(ctx, cluster, rs)
+		set, err := membergroup.Resolve(cluster, rs)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
 
-		for _, group := range groups {
+		for _, group := range set.GetAll() {
 			sts := appsv1.StatefulSet{}
 			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: group.STSName}
 			if err := r.client.Get(ctx, nn, &sts); err != nil {
@@ -540,6 +540,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 			}
 
 			log.Info("Preparing statefulset for physical restore", "name", group.STSName)
+
+			if !group.DataBearing {
+				if err := r.pauseStatefulSetForPhysicalRestore(ctx, nn); err != nil {
+					return errors.Wrapf(err, "pause statefulset %s for physical restore", group.STSName)
+				}
+				continue
+			}
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				sts := appsv1.StatefulSet{}
@@ -559,33 +566,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				err := r.client.Get(ctx, nn, &sts)
-				if err != nil {
-					return err
-				}
-
-				orig := sts.DeepCopy()
-				zero := int32(0)
-
-				sts.Spec.Replicas = &zero
-
-				if sts.Annotations == nil {
-					sts.Annotations = make(map[string]string)
-				}
-				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
-
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
-			})
-			if err != nil {
-				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			if err := r.pauseStatefulSetForPhysicalRestore(ctx, nn); err != nil {
+				return errors.Wrapf(err, "pause statefulset %s for physical restore", stsName)
 			}
 		}
 	}
@@ -593,36 +575,29 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
+// pauseStatefulSetForPhysicalRestore scales a workload to zero and marks it as
+// taking part in the restore.
+func (r *ReconcilePerconaServerMongoDBRestore) pauseStatefulSetForPhysicalRestore(
+	ctx context.Context,
+	nn types.NamespacedName,
+) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		sts := appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, nn, &sts); err != nil {
+			return err
+		}
 
-	usersSecret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: psmdbv1.UserSecretName(cluster), Namespace: cluster.Namespace}, &usersSecret)
-	if err != nil {
-		return creds, errors.Wrap(err, "get secret")
-	}
+		orig := sts.DeepCopy()
 
-	switch role {
-	case psmdbv1.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminPassword])
-	case psmdbv1.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminPassword])
-	case psmdbv1.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminPassword])
-	case psmdbv1.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorPassword])
-	case psmdbv1.RoleBackup:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
+		sts.Spec.Replicas = new(int32(0))
 
-	return creds, nil
+		if sts.Annotations == nil {
+			sts.Annotations = make(map[string]string)
+		}
+		sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+		return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+	})
 }
 
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
