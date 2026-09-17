@@ -89,7 +89,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateError, nil, errors.Wrap(err, "resolve member group")
 	}
 
-	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
+	restoreInProgress, err := r.restoreInProgress(ctx, cr, set)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "check if restore in progress")
 	}
@@ -1382,18 +1382,23 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
-	sts := appsv1.StatefulSet{}
-	stsName := cr.Name + "-" + replset.Name
-	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
-	if err := r.client.Get(ctx, nn, &sts); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return false, nil
+func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, set *membergroup.Set) (bool, error) {
+	for _, stsName := range set.GetStatefulSetNames() {
+		sts := appsv1.StatefulSet{}
+		nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
+		if err := r.client.Get(ctx, nn, &sts); err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return false, errors.Wrapf(err, "get statefulset %s", stsName)
 		}
-		return false, errors.Wrapf(err, "get statefulset %s", stsName)
+
+		if _, ok := sts.Annotations[api.AnnotationRestoreInProgress]; ok {
+			return true, nil
+		}
 	}
-	_, ok := sts.Annotations[api.AnnotationRestoreInProgress]
-	return ok, nil
+
+	return false, nil
 }
 
 // isContainerAndPodRunning returns a boolean reflecting if
