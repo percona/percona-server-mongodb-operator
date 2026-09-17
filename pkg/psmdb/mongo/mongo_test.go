@@ -1345,6 +1345,13 @@ func dbm(id int, host string, votes, priority int) mongo.ConfigMember {
 	}
 }
 
+// hiddenm marks a member hidden. Hidden is only ever legal alongside priority
+// 0, so it is always applied to a member dbm already built with one.
+func hiddenm(m mongo.ConfigMember) mongo.ConfigMember {
+	m.Hidden = true
+	return m
+}
+
 // members8 builds an eight-member set where the first `voting` members vote
 // with priority 2 and the rest are non-voting with priority 0.
 func members8(voting int) mongo.ConfigMembers {
@@ -1465,6 +1472,80 @@ func TestApplyMemberConfig(t *testing.T) {
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
 			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 1, 2)},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			// Hidden is coupled to priority, which is coupled to votes
+			name: "hidden waits for a deferred vote change",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				hiddenm(dbm(1, "h1", 0, 0)),
+				hiddenm(dbm(2, "h2", 0, 0)),
+			},
+			want: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				hiddenm(dbm(1, "h1", 0, 0)),
+				dbm(2, "h2", 1, 2),
+			},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			name: "votes, priority and hidden converge together on the second pass",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				hiddenm(dbm(1, "h1", 0, 0)),
+				hiddenm(dbm(2, "h2", 0, 0)),
+			},
+			calls: 2,
+			want: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				hiddenm(dbm(1, "h1", 0, 0)),
+				hiddenm(dbm(2, "h2", 0, 0)),
+			},
+			wantChanged: true,
+		},
+		{
+			// Un-hiding is safe in either order
+			name: "unhiding is not deferred",
+			live: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				hiddenm(dbm(1, "h1", 0, 0)),
+				hiddenm(dbm(2, "h2", 0, 0)),
+			},
+			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			want: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				dbm(1, "h1", 1, 2),
+				hiddenm(dbm(2, "h2", 0, 0)),
+			},
+			wantChanged: true,
+			wantPending: true,
+		},
+		{
+			name: "tags apply to a member whose vote change is deferred",
+			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				dbm(1, "h1", 0, 0),
+				func() mongo.ConfigMember {
+					m := dbm(2, "h2", 0, 0)
+					m.Tags = mongo.ReplsetTags{"podName": "h2", "workload": "analytics"}
+					return m
+				}(),
+			},
+			want: mongo.ConfigMembers{
+				dbm(0, "h0", 1, 2),
+				dbm(1, "h1", 0, 0),
+				func() mongo.ConfigMember {
+					m := dbm(2, "h2", 1, 2)
+					m.Tags = mongo.ReplsetTags{"podName": "h2", "workload": "analytics"}
+					return m
+				}(),
+			},
 			wantChanged: true,
 			wantPending: true,
 		},
