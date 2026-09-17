@@ -102,6 +102,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
+	return r.createOrUpdateBackupTaskAt(ctx, cr, task, time.Now())
+}
+
+func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTaskAt(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec, now time.Time) error {
 	t := BackupScheduleJob{}
 	bj, ok := r.crons.backupJobs.Load(task.JobName(cr))
 	if ok {
@@ -124,15 +128,16 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 		logf.FromContext(ctx).Info(".keep option does not work with incremental backups", "name", task.Name, "namespace", cr.Namespace)
 	}
 
+	if err := r.catchUpMissedScheduledBackup(ctx, cr, task, now); err != nil {
+		r.crons.crons.Remove(jobID)
+		return err
+	}
+
 	r.crons.backupJobs.Store(task.JobName(cr), BackupScheduleJob{
 		BackupTaskSpec: task,
 		JobID:          jobID,
 		ClusterName:    cr.NamespacedName().String(),
 	})
-
-	if err := r.catchUpMissedScheduledBackup(ctx, cr, task); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -191,24 +196,33 @@ func (r *ReconcilePerconaServerMongoDB) createBackupTask(ctx context.Context, cr
 	log := logf.FromContext(ctx)
 
 	return func() {
-		localCr := &api.PerconaServerMongoDB{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
-		if k8sErrors.IsNotFound(err) {
-			log.Info("cluster is not found, deleting the job", "job", task.Name)
-			r.deleteBackupTask(cr, task)
-			return
-		}
-		bcp, err := backup.BackupFromTask(cr, &task)
-		if err != nil {
-			log.Error(err, "failed to create backup")
-			return
-		}
-		bcp.Namespace = cr.Namespace
-		err = r.client.Create(ctx, bcp)
-		if err != nil {
+		if err := r.createBackup(ctx, cr, task); err != nil {
 			log.Error(err, "failed to create backup")
 		}
 	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) createBackup(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
+	localCr := &api.PerconaServerMongoDB{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
+	if k8sErrors.IsNotFound(err) {
+		logf.FromContext(ctx).Info("cluster is not found, deleting the job", "job", task.Name)
+		r.deleteBackupTask(cr, task)
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "get cluster")
+	}
+
+	bcp, err := backup.BackupFromTask(cr, &task)
+	if err != nil {
+		return errors.Wrap(err, "build backup")
+	}
+	bcp.Namespace = cr.Namespace
+	if err := r.client.Create(ctx, bcp); err != nil {
+		return errors.Wrap(err, "create backup")
+	}
+	return nil
 }
 
 // missedCronTick reports whether schedule should have fired after last and
@@ -264,7 +278,7 @@ func (r *ReconcilePerconaServerMongoDB) latestScheduledBackup(ctx context.Contex
 // catchUpMissedScheduledBackup creates one backup when the in-memory cron
 // missed a tick (operator restart or eviction). Schedules are not Kubernetes
 // CronJobs, so robfig/cron does not catch up on its own.
-func (r *ReconcilePerconaServerMongoDB) catchUpMissedScheduledBackup(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec) error {
+func (r *ReconcilePerconaServerMongoDB) catchUpMissedScheduledBackup(ctx context.Context, cr *api.PerconaServerMongoDB, task api.BackupTaskSpec, now time.Time) error {
 	log := logf.FromContext(ctx)
 
 	latest, err := r.latestScheduledBackup(ctx, cr, task.Name)
@@ -278,7 +292,7 @@ func (r *ReconcilePerconaServerMongoDB) catchUpMissedScheduledBackup(ctx context
 		return nil
 	}
 
-	missed, err := missedCronTick(task.Schedule, latest.CreationTimestamp.Time, time.Now())
+	missed, err := missedCronTick(task.Schedule, latest.CreationTimestamp.Time, now)
 	if err != nil {
 		return err
 	}
@@ -295,7 +309,9 @@ func (r *ReconcilePerconaServerMongoDB) catchUpMissedScheduledBackup(ctx context
 	}
 
 	log.Info("catching up missed scheduled backup", "job", task.Name, "lastBackup", latest.Name, "schedule", task.Schedule)
-	r.createBackupTask(ctx, cr, task)()
+	if err := r.createBackup(ctx, cr, task); err != nil {
+		return errors.Wrap(err, "create catch-up backup")
+	}
 	return nil
 }
 

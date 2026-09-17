@@ -1,9 +1,13 @@
 package perconaservermongodb
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +19,25 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
+
+func stoppedCronRegistry() CronRegistry {
+	return CronRegistry{
+		crons:             cron.New(),
+		ensureVersionJobs: new(sync.Map),
+		backupJobs:        new(sync.Map),
+	}
+}
+
+type backupCreateErrorClient struct {
+	client.Client
+}
+
+func (c backupCreateErrorClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if _, ok := obj.(*api.PerconaServerMongoDBBackup); ok {
+		return errors.New("create backup failed")
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
 
 func TestMissedCronTick(t *testing.T) {
 	t.Parallel()
@@ -48,6 +71,7 @@ func TestMissedCronTick(t *testing.T) {
 func TestCatchUpMissedScheduledBackup(t *testing.T) {
 	t.Parallel()
 
+	now := time.Date(2026, 7, 13, 1, 5, 0, 0, time.UTC)
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
@@ -72,7 +96,7 @@ func TestCatchUpMissedScheduledBackup(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "cron-old",
 			Namespace:         "db",
-			CreationTimestamp: metav1.NewTime(time.Now().Add(-26 * time.Hour)),
+			CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
 			Labels:            naming.ScheduledBackupLabels(cr, &task),
 		},
 		Spec: api.PerconaServerMongoDBBackupSpec{
@@ -86,11 +110,10 @@ func TestCatchUpMissedScheduledBackup(t *testing.T) {
 	r := &ReconcilePerconaServerMongoDB{
 		client: cl,
 		scheme: scheme,
-		crons:  NewCronRegistry(),
+		crons:  stoppedCronRegistry(),
 	}
-	t.Cleanup(func() { r.crons.crons.Stop() })
 
-	require.NoError(t, r.createOrUpdateBackupTask(t.Context(), cr, task))
+	require.NoError(t, r.createOrUpdateBackupTaskAt(t.Context(), cr, task, now))
 
 	list := api.PerconaServerMongoDBBackupList{}
 	require.NoError(t, cl.List(t.Context(), &list, &client.ListOptions{Namespace: "db"}))
@@ -100,6 +123,7 @@ func TestCatchUpMissedScheduledBackup(t *testing.T) {
 func TestCatchUpMissedScheduledBackupSkipsFirstInstall(t *testing.T) {
 	t.Parallel()
 
+	now := time.Date(2026, 7, 13, 1, 5, 0, 0, time.UTC)
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
@@ -122,13 +146,68 @@ func TestCatchUpMissedScheduledBackupSkipsFirstInstall(t *testing.T) {
 	r := &ReconcilePerconaServerMongoDB{
 		client: cl,
 		scheme: scheme,
-		crons:  NewCronRegistry(),
+		crons:  stoppedCronRegistry(),
 	}
-	t.Cleanup(func() { r.crons.crons.Stop() })
 
-	require.NoError(t, r.createOrUpdateBackupTask(t.Context(), cr, task))
+	require.NoError(t, r.createOrUpdateBackupTaskAt(t.Context(), cr, task, now))
 
 	list := api.PerconaServerMongoDBBackupList{}
 	require.NoError(t, cl.List(t.Context(), &list, &client.ListOptions{Namespace: "db"}))
 	assert.Empty(t, list.Items, "first install must not immediately create a backup")
+}
+
+func TestCatchUpMissedScheduledBackupRetriesCreateError(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 13, 1, 5, 0, 0, time.UTC)
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "db"},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: "1.23.0",
+			Backup:    api.BackupSpec{Enabled: true},
+		},
+	}
+	task := api.BackupTaskSpec{
+		Name:        "daily",
+		Enabled:     true,
+		Schedule:    "0 1 * * *",
+		StorageName: "s3-us-west",
+	}
+	old := &api.PerconaServerMongoDBBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "cron-old",
+			Namespace:         "db",
+			CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
+			Labels:            naming.ScheduledBackupLabels(cr, &task),
+		},
+		Spec: api.PerconaServerMongoDBBackupSpec{
+			ClusterName: cr.Name,
+			StorageName: task.StorageName,
+		},
+		Status: api.PerconaServerMongoDBBackupStatus{State: api.BackupStateReady},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, old).Build()
+	r := &ReconcilePerconaServerMongoDB{
+		client: backupCreateErrorClient{Client: cl},
+		scheme: scheme,
+		crons:  stoppedCronRegistry(),
+	}
+
+	err := r.createOrUpdateBackupTaskAt(t.Context(), cr, task, now)
+	require.ErrorContains(t, err, "create catch-up backup")
+	_, stored := r.crons.backupJobs.Load(task.JobName(cr))
+	assert.False(t, stored, "failed catch-up must not mark the schedule as registered")
+	assert.Empty(t, r.crons.crons.Entries(), "failed catch-up must remove the cron entry")
+
+	r.client = cl
+	require.NoError(t, r.createOrUpdateBackupTaskAt(t.Context(), cr, task, now))
+
+	list := api.PerconaServerMongoDBBackupList{}
+	require.NoError(t, cl.List(t.Context(), &list, &client.ListOptions{Namespace: "db"}))
+	assert.Len(t, list.Items, 2, "the next reconcile must retry the catch-up backup")
 }
