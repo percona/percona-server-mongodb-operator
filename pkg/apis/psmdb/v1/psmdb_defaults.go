@@ -480,7 +480,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if replset.InstanceMode() {
 			for i := range replset.Instances {
-				if err := replset.Instances[i].SetDefaults(platform, cr, replset); err != nil {
+				if err := replset.Instances[i].SetDefaults(cr, replset); err != nil {
 					return err
 				}
 			}
