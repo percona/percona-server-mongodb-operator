@@ -474,7 +474,8 @@ net:
 				tt.mutateRS(rs)
 			}
 
-			got := defaultMongotConfig(cr, rs)
+			got, err := defaultMongotConfig(cr, rs)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
