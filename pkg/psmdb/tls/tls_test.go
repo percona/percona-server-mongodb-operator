@@ -4,7 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -85,4 +89,116 @@ func TestGetCertificateSans(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, actual)
+}
+
+func TestConfig(t *testing.T) {
+	tests := map[string]struct {
+		dnsMode            api.DNSMode
+		partialCert        bool
+		insecureSkipVerify bool
+	}{
+		"internal": {
+			dnsMode:            api.DNSModeInternal,
+			insecureSkipVerify: false,
+		},
+		"external": {
+			dnsMode:            api.DNSModeExternal,
+			insecureSkipVerify: true,
+		},
+		"internal with certificate missing sans": {
+			dnsMode:            api.DNSModeInternal,
+			partialCert:        true,
+			insecureSkipVerify: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "mydb",
+					Namespace: "myns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion:             version.Version(),
+					ClusterServiceDNSMode: tt.dnsMode,
+					Secrets:               &api.SecretsSpec{SSL: "mydb-ssl"},
+					Replsets:              []*api.ReplsetSpec{{Name: "rs0"}},
+				},
+			}
+			sans := GetCertificateSans(cr)
+			if tt.partialCert {
+				sans = []string{"localhost"}
+			}
+			caCert, tlsCert, tlsKey, err := Issue(sans)
+			require.NoError(t, err)
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "mydb-ssl",
+					Namespace: "myns",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(secret).Build()
+
+			cfg, err := Config(t.Context(), cl, cr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.insecureSkipVerify, cfg.InsecureSkipVerify)
+			assert.NotNil(t, cfg.RootCAs)
+			assert.Len(t, cfg.Certificates, 1)
+		})
+	}
+}
+
+func TestInsecureSkipVerify(t *testing.T) {
+	newCR := func(dnsMode api.DNSMode) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "mydb",
+				Namespace: "myns",
+			},
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion:             version.Version(),
+				ClusterServiceDNSMode: dnsMode,
+				Replsets:              []*api.ReplsetSpec{{Name: "rs0"}},
+			},
+		}
+	}
+
+	issueFor := func(t *testing.T, sans []string) []byte {
+		t.Helper()
+		_, tlsCert, _, err := Issue(sans)
+		require.NoError(t, err)
+		return tlsCert
+	}
+
+	t.Run("certificate covers all sans", func(t *testing.T) {
+		cr := newCR(api.DNSModeInternal)
+		assert.False(t, InsecureSkipVerify(cr, issueFor(t, GetCertificateSans(cr))))
+	})
+
+	t.Run("certificate has extra sans", func(t *testing.T) {
+		cr := newCR(api.DNSModeInternal)
+		assert.False(t, InsecureSkipVerify(cr, issueFor(t, append(GetCertificateSans(cr), "extra.example.com"))))
+	})
+
+	t.Run("certificate is missing a san", func(t *testing.T) {
+		cr := newCR(api.DNSModeInternal)
+		assert.True(t, InsecureSkipVerify(cr, issueFor(t, []string{"localhost"})))
+	})
+
+	t.Run("certificate is unparseable", func(t *testing.T) {
+		cr := newCR(api.DNSModeInternal)
+		assert.True(t, InsecureSkipVerify(cr, []byte("not-a-cert")))
+	})
+
+	t.Run("cluster dials addresses outside the sans", func(t *testing.T) {
+		cr := newCR(api.DNSModeExternal)
+		assert.True(t, InsecureSkipVerify(cr, issueFor(t, GetCertificateSans(cr))))
+	})
 }

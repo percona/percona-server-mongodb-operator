@@ -22,6 +22,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -650,7 +651,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cr.CompareVersion("1.20.0") >= 0 {
-		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		mongoDBURI = BuildMongoDBURI(ctx, cr, tlsEnabled, sslSecret)
 	}
 
 	c.Env = append(c.Env, []corev1.EnvVar{
@@ -763,15 +764,18 @@ func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	}
 }
 
-func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf(
-				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
-				config.SSLDir,
-			)
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
+
+			// the agent seeds from localhost but the driver then dials every replset
+			// member, so verification only holds if the certificate covers them all
+			if tls.PBMInsecureSkipVerify(cr, sslSecret.Data["tls.crt"]) {
+				uri += "&tlsInsecure=true"
+			}
 		}
 	}
 	return uri

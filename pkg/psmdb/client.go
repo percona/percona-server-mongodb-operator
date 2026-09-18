@@ -99,6 +99,11 @@ func MongosConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMo
 			return nil, errors.Wrap(err, "failed to get TLS config")
 		}
 
+		// per-pod mongos service names are not covered by the certificate SANs
+		if servicePerPod {
+			tlsCfg.InsecureSkipVerify = true
+		}
+
 		conf.TLSConf = &tlsCfg
 	}
 	return &conf, nil

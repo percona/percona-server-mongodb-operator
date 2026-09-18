@@ -1910,6 +1910,45 @@ func (cr *PerconaServerMongoDB) TLSEnabled() bool {
 	return true
 }
 
+// TLSInsecureSkipVerify reports whether the operator should skip TLS certificate
+// verification when connecting to the cluster. Verification is skipped only when
+// the operator may dial addresses that are not covered by the certificate SANs.
+func (cr *PerconaServerMongoDB) TLSInsecureSkipVerify() bool {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return true
+	}
+
+	switch cr.Spec.ClusterServiceDNSMode {
+	case DNSModeExternal, DNSModeServiceMesh:
+		return true
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if rs.hasUnverifiableHosts() {
+			return true
+		}
+	}
+
+	return cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet.hasUnverifiableHosts()
+}
+
+// hasUnverifiableHosts reports whether the replset has members reachable under
+// addresses the operator doesn't put into the certificate SANs.
+func (r *ReplsetSpec) hasUnverifiableHosts() bool {
+	if r == nil {
+		return false
+	}
+	if len(r.ExternalNodes) > 0 {
+		return true
+	}
+	for _, override := range r.ReplsetOverrides {
+		if override.Host != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (cr *PerconaServerMongoDB) UnsafeTLSDisabled() bool {
 	return (cr.CompareVersion("1.16.0") >= 0 && cr.Spec.Unsafe.TLS) || (cr.CompareVersion("1.16.0") < 0 && cr.Spec.UnsafeConf)
 }

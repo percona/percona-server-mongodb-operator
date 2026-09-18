@@ -674,3 +674,122 @@ func TestExternalNode_HostPort(t *testing.T) {
 		})
 	}
 }
+
+func TestTLSInsecureSkipVerify(t *testing.T) {
+	tests := map[string]struct {
+		crVersion string
+		dnsMode   DNSMode
+		replsets  []*ReplsetSpec
+		sharding  Sharding
+		expected  bool
+	}{
+		"old cr version": {
+			crVersion: "1.23.0",
+			dnsMode:   DNSModeInternal,
+			expected:  true,
+		},
+		"internal": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			expected:  false,
+		},
+		"external": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeExternal,
+			expected:  true,
+		},
+		"service mesh": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeServiceMesh,
+			expected:  true,
+		},
+		"replset host override": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			replsets: []*ReplsetSpec{
+				{Name: "rs0", ReplsetOverrides: ReplsetOverrides{"cluster-rs0-0": {Host: "rs0-0.example.com"}}},
+			},
+			expected: true,
+		},
+		"replset override without host": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			replsets: []*ReplsetSpec{
+				{Name: "rs0", ReplsetOverrides: ReplsetOverrides{"cluster-rs0-0": {Horizons: map[string]string{"ext": "rs0-0.example.com"}}}},
+			},
+			expected: false,
+		},
+		"configsvr host override": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			sharding: Sharding{
+				Enabled: true,
+				ConfigsvrReplSet: &ReplsetSpec{
+					Name:             ConfigReplSetName,
+					ReplsetOverrides: ReplsetOverrides{"cluster-cfg-0": {Host: "cfg-0.example.com"}},
+				},
+			},
+			expected: true,
+		},
+		"replset with external nodes": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			replsets: []*ReplsetSpec{
+				{Name: "rs0", ExternalNodes: []*ExternalNode{{Host: "rs0-3.example.com", Port: 27017}}},
+			},
+			expected: true,
+		},
+		"configsvr with external nodes": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			sharding: Sharding{
+				Enabled: true,
+				ConfigsvrReplSet: &ReplsetSpec{
+					Name:          ConfigReplSetName,
+					ExternalNodes: []*ExternalNode{{Host: "cfg-3.example.com", Port: 27017}},
+				},
+			},
+			expected: true,
+		},
+		"configsvr external nodes with sharding disabled": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			sharding: Sharding{
+				ConfigsvrReplSet: &ReplsetSpec{
+					Name:          ConfigReplSetName,
+					ExternalNodes: []*ExternalNode{{Host: "cfg-3.example.com", Port: 27017}},
+				},
+			},
+			expected: false,
+		},
+		"configsvr host override with sharding disabled": {
+			crVersion: "1.24.0",
+			dnsMode:   DNSModeInternal,
+			sharding: Sharding{
+				ConfigsvrReplSet: &ReplsetSpec{
+					Name:             ConfigReplSetName,
+					ReplsetOverrides: ReplsetOverrides{"cluster-cfg-0": {Host: "cfg-0.example.com"}},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			replsets := tt.replsets
+			if replsets == nil {
+				replsets = []*ReplsetSpec{{Name: "rs0"}}
+			}
+			cr := &PerconaServerMongoDB{
+				Spec: PerconaServerMongoDBSpec{
+					CRVersion:             tt.crVersion,
+					ClusterServiceDNSMode: tt.dnsMode,
+					Replsets:              replsets,
+					Sharding:              tt.sharding,
+				},
+			}
+			assert.Equal(t, tt.expected, cr.TLSInsecureSkipVerify())
+		})
+	}
+}
