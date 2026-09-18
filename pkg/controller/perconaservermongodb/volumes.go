@@ -515,8 +515,7 @@ func (r *ReconcilePerconaServerMongoDB) writeStorageRequest(
 	return nil
 }
 
-// writeGroupStorageRequest sets the requested storage size of the group
-// identified by source.
+// writeGroupStorageRequest sets the requested storage size of the group identified by source.
 func (r *ReconcilePerconaServerMongoDB) writeGroupStorageRequest(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDB,
