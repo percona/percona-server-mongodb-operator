@@ -103,7 +103,7 @@ func TestGetRSPods(t *testing.T) {
 		wantOutdated []string
 	}{
 		"legacy in a steady state": {
-			rs:           &api.ReplsetSpec{Name: "rs0", Size: 3, VolumeSpec: gettersVol()},
+			rs:           &api.ReplsetSpec{Name: "rs0", Size: new(int32(3)), VolumeSpec: gettersVol()},
 			workloads:    []workload{{naming.ComponentMongod, 3}},
 			wantDesired:  []string{"cluster1-rs0-0", "cluster1-rs0-1", "cluster1-rs0-2"},
 			wantOutdated: []string{"cluster1-rs0-0", "cluster1-rs0-1", "cluster1-rs0-2"},
@@ -111,7 +111,7 @@ func TestGetRSPods(t *testing.T) {
 		"legacy mid-downscale drops the surplus": {
 			// Five pods still exist but three are wanted. The two on their way
 			// out must not be reconfigured back into the replica set.
-			rs:          &api.ReplsetSpec{Name: "rs0", Size: 3, VolumeSpec: gettersVol()},
+			rs:          &api.ReplsetSpec{Name: "rs0", Size: new(int32(3)), VolumeSpec: gettersVol()},
 			workloads:   []workload{{naming.ComponentMongod, 5}},
 			wantDesired: []string{"cluster1-rs0-0", "cluster1-rs0-1", "cluster1-rs0-2"},
 			wantOutdated: []string{
@@ -123,7 +123,7 @@ func TestGetRSPods(t *testing.T) {
 			// The rewrite replaced "sort by name, slice to size" with an
 			// ordinal parse. Lexically, "-10" sorts between "-1" and "-2", so
 			// the old code would have kept pod 10 and dropped pod 2.
-			rs:        &api.ReplsetSpec{Name: "rs0", Size: 10, VolumeSpec: gettersVol()},
+			rs:        &api.ReplsetSpec{Name: "rs0", Size: new(int32(10)), VolumeSpec: gettersVol()},
 			workloads: []workload{{naming.ComponentMongod, 11}},
 			wantDesired: []string{
 				"cluster1-rs0-0", "cluster1-rs0-1", "cluster1-rs0-2", "cluster1-rs0-3",
@@ -138,7 +138,7 @@ func TestGetRSPods(t *testing.T) {
 		},
 		"legacy roles are truncated against their own size": {
 			rs: &api.ReplsetSpec{
-				Name: "rs0", Size: 2, VolumeSpec: gettersVol(),
+				Name: "rs0", Size: new(int32(2)), VolumeSpec: gettersVol(),
 				NonVoting: api.NonVotingSpec{Enabled: true, Size: 1, VolumeSpec: gettersVol()},
 				Arbiter:   api.Arbiter{Enabled: true, Size: 1},
 			},
@@ -206,7 +206,7 @@ func TestGetRSPods(t *testing.T) {
 		"search workloads are excluded from both views": {
 			// Search is not a replica set member. Including it would put a pod
 			// that runs no mongod into the member list.
-			rs:        &api.ReplsetSpec{Name: "rs0", Size: 2, VolumeSpec: gettersVol()},
+			rs:        &api.ReplsetSpec{Name: "rs0", Size: new(int32(2)), VolumeSpec: gettersVol()},
 			workloads: []workload{{naming.ComponentMongod, 2}, {naming.ComponentSearch, 2}},
 			wantDesired: []string{
 				"cluster1-rs0-0", "cluster1-rs0-1",
@@ -237,7 +237,7 @@ func TestGetRSPods(t *testing.T) {
 }
 
 func TestGetRSPodsForUndeclaredReplset(t *testing.T) {
-	rs0 := &api.ReplsetSpec{Name: "rs0", Size: 2, VolumeSpec: gettersVol()}
+	rs0 := &api.ReplsetSpec{Name: "rs0", Size: new(int32(2)), VolumeSpec: gettersVol()}
 	cr := gettersCR(rs0)
 
 	objs := buildObjects(cr, "rs0", []workload{{naming.ComponentMongod, 2}})

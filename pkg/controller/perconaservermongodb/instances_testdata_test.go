@@ -34,7 +34,7 @@ func instanceCR(t *testing.T, name, ns string, instances []api.InstanceSpec, mut
 	require.NoError(t, err)
 
 	rs := cr.Spec.Replsets[0]
-	rs.Size = 0
+	rs.Size = new(int32(0))
 	rs.VolumeSpec = nil
 	rs.Arbiter = api.Arbiter{}
 	rs.NonVoting = api.NonVotingSpec{}

@@ -259,7 +259,7 @@ func TestResolveLegacyGroupsOwnTheirConfig(t *testing.T) {
 
 	rs := &api.ReplsetSpec{
 		Name:          "rs0",
-		Size:          3,
+		Size:          new(int32(3)),
 		VolumeSpec:    baseVol,
 		Configuration: api.MongoConfiguration("base: true"),
 		NonVoting: api.NonVotingSpec{

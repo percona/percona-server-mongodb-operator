@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,9 +60,7 @@ func TestGetConfigMemberForPodImplicit(t *testing.T) {
 			"serviceName": "member-cr",
 		}
 		for _, e := range extra {
-			for k, v := range e {
-				tags[k] = v
-			}
+			maps.Copy(tags, e)
 		}
 		return tags
 	}
@@ -96,7 +95,7 @@ func TestGetConfigMemberForPodImplicit(t *testing.T) {
 		{
 			name: "arbiter carries no tags",
 			mutate: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 2
+				cr.Spec.Replsets[0].Size = new(int32(2))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 				cr.Spec.Unsafe.ReplsetSize = true
 			},

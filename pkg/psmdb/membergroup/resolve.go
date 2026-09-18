@@ -138,7 +138,7 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 
 	mongod := Group{
 		Name:                     naming.GroupMongod,
-		Replicas:                 rs.Size,
+		Replicas:                 rs.GetMongodSize(),
 		MultiAZ:                  *rs.MultiAZ.DeepCopy(),
 		VolumeSpec:               rs.VolumeSpec.DeepCopy(),
 		Configuration:            rs.Configuration,

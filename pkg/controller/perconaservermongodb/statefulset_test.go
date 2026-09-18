@@ -284,7 +284,7 @@ func instanceModeCR(t *testing.T, base *api.PerconaServerMongoDB) *api.PerconaSe
 	cr := base.DeepCopy()
 	rs := cr.Spec.Replsets[0]
 
-	rs.Size = 0
+	rs.Size = new(int32(0))
 	rs.VolumeSpec = nil
 	rs.Arbiter = api.Arbiter{}
 	rs.NonVoting = api.NonVotingSpec{}
@@ -424,7 +424,7 @@ func TestInstanceModeEquivalence(t *testing.T) {
 	}
 
 	legacy := build(t, func(cr *api.PerconaServerMongoDB) {
-		cr.Spec.Replsets[0].Size = 3
+		cr.Spec.Replsets[0].Size = new(int32(3))
 	})
 
 	rewritten := build(t, func(cr *api.PerconaServerMongoDB) {
@@ -433,7 +433,7 @@ func TestInstanceModeEquivalence(t *testing.T) {
 		// volumeSpec has to come along: in instance mode the replica set owns
 		// no storage.
 		vol := rs.VolumeSpec
-		rs.Size = 0
+		rs.Size = new(int32(0))
 		rs.VolumeSpec = nil
 		rs.Instances = []api.InstanceSpec{
 			{Name: naming.GroupMongod, Replicas: 3, VolumeSpec: vol},

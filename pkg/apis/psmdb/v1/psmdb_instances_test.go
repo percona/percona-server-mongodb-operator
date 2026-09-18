@@ -454,7 +454,7 @@ func TestReplsetGetSize(t *testing.T) {
 	}{
 		"legacy sums every enabled role": {
 			rs: ReplsetSpec{
-				Size:      3,
+				Size:      new(int32(3)),
 				Arbiter:   Arbiter{Enabled: true, Size: 1},
 				NonVoting: NonVotingSpec{Enabled: true, Size: 2},
 				Hidden:    HiddenSpec{Enabled: true, Size: 1},
@@ -463,7 +463,7 @@ func TestReplsetGetSize(t *testing.T) {
 		},
 		"a disabled role contributes nothing even with a size": {
 			rs: ReplsetSpec{
-				Size:      3,
+				Size:      new(int32(3)),
 				Arbiter:   Arbiter{Enabled: false, Size: 1},
 				NonVoting: NonVotingSpec{Enabled: false, Size: 2},
 			},
@@ -477,7 +477,7 @@ func TestReplsetGetSize(t *testing.T) {
 			// The CRD forbids setting both, but GetSize feeds member limits and
 			// status, so it must not double-count if one slips through.
 			rs: ReplsetSpec{
-				Size:      9,
+				Size:      new(int32(9)),
 				Arbiter:   Arbiter{Enabled: true, Size: 4},
 				Instances: []InstanceSpec{bare("a", 2), bare("b", 3)},
 			},
@@ -501,7 +501,7 @@ func TestReplsetInstanceLookup(t *testing.T) {
 	}}
 
 	assert.True(t, rs.InstanceMode())
-	assert.False(t, (&ReplsetSpec{Name: "rs0", Size: 3}).InstanceMode())
+	assert.False(t, (&ReplsetSpec{Name: "rs0", Size: new(int32(3))}).InstanceMode())
 
 	hot := rs.Instance("hot")
 	require.NotNil(t, hot)
@@ -512,5 +512,5 @@ func TestReplsetInstanceLookup(t *testing.T) {
 
 	assert.Nil(t, rs.Instance("gone"))
 	assert.Nil(t, rs.Instance(""), "an empty name must never match")
-	assert.Nil(t, (&ReplsetSpec{Name: "rs0", Size: 3}).Instance("hot"))
+	assert.Nil(t, (&ReplsetSpec{Name: "rs0", Size: new(int32(3))}).Instance("hot"))
 }

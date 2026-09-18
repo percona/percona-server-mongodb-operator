@@ -56,7 +56,7 @@ func arbiterInst(name string, replicas int32) api.InstanceSpec {
 
 // legacyRS builds a replica set in the pre-instances[] shape.
 func legacyRS(name string, size int32) *api.ReplsetSpec {
-	return &api.ReplsetSpec{Name: name, Size: size, VolumeSpec: vol("1Gi")}
+	return &api.ReplsetSpec{Name: name, Size: new(int32(size)), VolumeSpec: vol("1Gi")}
 }
 
 // instanceRS builds a replica set whose topology comes from instances[].

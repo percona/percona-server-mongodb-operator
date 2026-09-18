@@ -255,13 +255,13 @@ func TestApplyShutdownTarget(t *testing.T) {
 	}{
 		{
 			name: "legacy, every role zeroed",
-			rs: &api.ReplsetSpec{Name: "rs0", Size: 3,
+			rs: &api.ReplsetSpec{Name: "rs0", Size: new(int32(3)),
 				Arbiter:   api.Arbiter{Enabled: true, Size: 1},
 				NonVoting: api.NonVotingSpec{Enabled: true, Size: 2},
 				Hidden:    api.HiddenSpec{Enabled: true, Size: 1}},
 			target: map[string]int32{"mongod": 0, "arbiter": 0, "nonVoting": 0, "hidden": 0},
 			assert: func(t *testing.T, rs *api.ReplsetSpec) {
-				assert.Equal(t, int32(0), rs.Size)
+				assert.Equal(t, int32(0), rs.GetMongodSize())
 				assert.Equal(t, int32(0), rs.Arbiter.Size)
 				assert.Equal(t, int32(0), rs.NonVoting.Size)
 				assert.Equal(t, int32(0), rs.Hidden.Size)
@@ -269,13 +269,13 @@ func TestApplyShutdownTarget(t *testing.T) {
 		},
 		{
 			name: "legacy, a partial target leaves the rest alone",
-			rs: &api.ReplsetSpec{Name: "rs0", Size: 3,
+			rs: &api.ReplsetSpec{Name: "rs0", Size: new(int32(3)),
 				Arbiter:   api.Arbiter{Enabled: true, Size: 1},
 				NonVoting: api.NonVotingSpec{Enabled: true, Size: 2},
 				Hidden:    api.HiddenSpec{Enabled: true, Size: 1}},
 			target: map[string]int32{"mongod": 2},
 			assert: func(t *testing.T, rs *api.ReplsetSpec) {
-				assert.Equal(t, int32(2), rs.Size)
+				assert.Equal(t, int32(2), rs.GetMongodSize())
 				assert.Equal(t, int32(1), rs.Arbiter.Size)
 				assert.Equal(t, int32(2), rs.NonVoting.Size)
 				assert.Equal(t, int32(1), rs.Hidden.Size)
@@ -302,10 +302,10 @@ func TestApplyShutdownTarget(t *testing.T) {
 		},
 		{
 			name:   "legacy, an unknown group name is ignored",
-			rs:     &api.ReplsetSpec{Name: "rs0", Size: 3},
+			rs:     &api.ReplsetSpec{Name: "rs0", Size: new(int32(3))},
 			target: map[string]int32{"hot": 0},
 			assert: func(t *testing.T, rs *api.ReplsetSpec) {
-				assert.Equal(t, int32(3), rs.Size)
+				assert.Equal(t, int32(3), rs.GetMongodSize())
 			},
 		},
 	} {

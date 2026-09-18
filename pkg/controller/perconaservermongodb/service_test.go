@@ -63,7 +63,7 @@ func TestReconcileReplsetServices(t *testing.T) {
 			if rs.ClusterRole == api.ClusterRoleConfigSvr {
 				component = api.ConfigReplSetName
 			}
-			objs = append(objs, fakeStatefulset(cr, rs, rs.Size, "", component))
+			objs = append(objs, fakeStatefulset(cr, rs, rs.GetMongodSize(), "", component))
 			objs = append(objs, fakePodsForRS(cr, rs)...)
 		}
 		return objs
@@ -246,7 +246,7 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			name: "a scale-down victim keeps its service while its pod is up",
 			configure: func(rs *api.ReplsetSpec) {
 				rs.Expose.Enabled = true
-				rs.Size = 2
+				rs.Size = new(int32(2))
 			},
 			pods: []string{prefix + "-2"},
 			want: baseSvcs,
@@ -255,7 +255,7 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			name: "a scale-down victim loses its service once the pod is gone",
 			configure: func(rs *api.ReplsetSpec) {
 				rs.Expose.Enabled = true
-				rs.Size = 2
+				rs.Size = new(int32(2))
 			},
 			want: []string{prefix + "-0", prefix + "-1"},
 		},
@@ -286,7 +286,7 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
 
 			rs := cr.Spec.Replsets[0]
-			rs.Size = 3
+			rs.Size = new(int32(3))
 			tt.configure(rs)
 			cr.Spec.Pause = tt.pause
 
@@ -401,7 +401,7 @@ func TestExpectedExternalServiceNames(t *testing.T) {
 		{
 			name: "expose disabled contributes nothing at all",
 			legacy: func(c *api.PerconaServerMongoDB) {
-				c.Spec.Replsets[0].Size = 3
+				c.Spec.Replsets[0].Size = new(int32(3))
 				c.Spec.Replsets[0].NonVoting = api.NonVotingSpec{Enabled: true, Size: 2}
 				c.Spec.Replsets[0].Hidden = api.HiddenSpec{Enabled: true, Size: 1}
 			},
@@ -411,7 +411,7 @@ func TestExpectedExternalServiceNames(t *testing.T) {
 		{
 			name: "every legacy role contributes its pods",
 			legacy: func(c *api.PerconaServerMongoDB) {
-				c.Spec.Replsets[0].Size = 3
+				c.Spec.Replsets[0].Size = new(int32(3))
 				c.Spec.Replsets[0].NonVoting = api.NonVotingSpec{Enabled: true, Size: 2}
 				c.Spec.Replsets[0].Hidden = api.HiddenSpec{Enabled: true, Size: 1}
 				c.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}

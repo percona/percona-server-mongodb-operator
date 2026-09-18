@@ -951,8 +951,10 @@ type ReplsetSpec struct {
 
 	// The following fields will be deprecated in favour of Instances[].
 
+	// Size of the base mongod instance.
+	// Can be omitted when instances are specified.
 	// +optional
-	Size      int32         `json:"size"`
+	Size      *int32        `json:"size,omitempty"`
 	Arbiter   Arbiter       `json:"arbiter,omitempty"`
 	NonVoting NonVotingSpec `json:"nonvoting,omitempty"`
 	Hidden    HiddenSpec    `json:"hidden,omitempty"`
@@ -1052,7 +1054,21 @@ func (r ReplsetSpec) GetSize() int32 {
 		}
 		return size
 	}
-	return r.Size + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
+	return r.GetMongodSize() + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
+}
+
+// GetMongodSize returns the member count of the base mongod group, which is
+// zero for a replica set that declares no size at all.
+func (r ReplsetSpec) GetMongodSize() int32 {
+	if r.Size == nil {
+		return 0
+	}
+	return *r.Size
+}
+
+// SetMongodSize sets the base mongod group's member count.
+func (r *ReplsetSpec) SetMongodSize(size int32) {
+	r.Size = &size
 }
 
 type LivenessProbeExtended struct {

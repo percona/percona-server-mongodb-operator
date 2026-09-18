@@ -122,7 +122,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -144,7 +144,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -167,7 +167,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -201,7 +201,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -235,7 +235,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -270,7 +270,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -312,7 +312,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -385,7 +385,7 @@ func TestConnectionEndpoint(t *testing.T) {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
@@ -452,7 +452,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -471,7 +471,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -491,7 +491,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -511,7 +511,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -625,7 +625,7 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
@@ -642,7 +642,7 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			MongoImage:         "percona/percona-server-mongodb:4.0",
 		},
 	}
-	sts := fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, "some-revision", "mongod")
+	sts := fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].GetMongodSize(), "some-revision", "mongod")
 	pods := fakePodsForRS(cr, cr.Spec.Replsets[0])
 
 	testCases := []struct {

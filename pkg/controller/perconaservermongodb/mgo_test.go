@@ -590,7 +590,7 @@ func TestIsUnsafePSA(t *testing.T) {
 		{
 			name: "legacy PSA",
 			legacy: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 2
+				cr.Spec.Replsets[0].Size = new(int32(2))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 			},
 			unsafe: true, want: true,
@@ -598,7 +598,7 @@ func TestIsUnsafePSA(t *testing.T) {
 		{
 			name: "the same topology without the unsafe flag",
 			legacy: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 2
+				cr.Spec.Replsets[0].Size = new(int32(2))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 			},
 			unsafe: false, want: false,
@@ -606,7 +606,7 @@ func TestIsUnsafePSA(t *testing.T) {
 		{
 			name: "three data members and an arbiter is not a PSA",
 			legacy: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 3
+				cr.Spec.Replsets[0].Size = new(int32(3))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 			},
 			unsafe: true, want: false,
@@ -614,7 +614,7 @@ func TestIsUnsafePSA(t *testing.T) {
 		{
 			name: "a non-voting member takes it out of PSA",
 			legacy: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 2
+				cr.Spec.Replsets[0].Size = new(int32(2))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 				cr.Spec.Replsets[0].NonVoting = api.NonVotingSpec{Enabled: true, Size: 1}
 			},
@@ -623,7 +623,7 @@ func TestIsUnsafePSA(t *testing.T) {
 		{
 			name: "hidden members take it out of PSA",
 			legacy: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Size = 2
+				cr.Spec.Replsets[0].Size = new(int32(2))
 				cr.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
 				cr.Spec.Replsets[0].Hidden = api.HiddenSpec{Enabled: true, Size: 2}
 			},

@@ -296,7 +296,7 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 
 			cr.Spec.Replsets = append(cr.Spec.Replsets, &psmdbv1.ReplsetSpec{
 				Name: "rs1",
-				Size: 3,
+				Size: new(int32(3)),
 			})
 
 			err = k8sClient.Create(ctx, cr)
@@ -612,7 +612,7 @@ func TestSafeDownscale(t *testing.T) {
 
 		cr := legacyCR(t, "ds-cr", "ds", func(c *psmdbv1.PerconaServerMongoDB) {
 			c.Spec.Unsafe.ReplsetSize = true
-			c.Spec.Replsets[0].Size = 2
+			c.Spec.Replsets[0].Size = new(int32(2))
 			c.Spec.Replsets[0].NonVoting = psmdbv1.NonVotingSpec{Enabled: true, Size: 1}
 			c.Spec.Replsets[0].Hidden = psmdbv1.HiddenSpec{Enabled: true, Size: 1}
 		})
@@ -632,7 +632,7 @@ func TestSafeDownscale(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, isDownscale)
 
-		assert.Equal(t, int32(4), rs.Size,
+		assert.Equal(t, int32(4), rs.GetMongodSize(),
 			"the base group is stepped down by one, into rs.size")
 		assert.Equal(t, int32(1), rs.NonVoting.Size,
 			"a non-voting role is never rate limited, so its declared size stands")
@@ -655,7 +655,7 @@ func TestSafeDownscale(t *testing.T) {
 
 		assert.Equal(t, int32(4), rs.Instance("hot").Replicas,
 			"the instance entry carries the intermediate count")
-		assert.Equal(t, int32(0), rs.Size,
+		assert.Equal(t, int32(0), rs.GetMongodSize(),
 			"rs.size is not written in instance mode")
 	})
 }

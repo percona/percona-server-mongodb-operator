@@ -2571,6 +2571,11 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 		*out = new(VolumeSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Size != nil {
+		in, out := &in.Size, &out.Size
+		*out = new(int32)
+		**out = **in
+	}
 	in.Arbiter.DeepCopyInto(&out.Arbiter)
 	in.NonVoting.DeepCopyInto(&out.NonVoting)
 	in.Hidden.DeepCopyInto(&out.Hidden)

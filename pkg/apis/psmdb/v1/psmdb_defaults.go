@@ -170,7 +170,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		cr.Spec.Replsets = []*ReplsetSpec{
 			{
 				Name: defaultReplsetName + "0",
-				Size: defaultMongodSize,
+				Size: &defaultMongodSize,
 			},
 		}
 	} else {
@@ -1018,26 +1018,26 @@ func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
 			log.Info("Setting safe defaults, updating arbiter size", "oldSize", rs.Arbiter.Size, "newSize", 1)
 			rs.Arbiter.Size = 1
 		}
-		if rs.Size < minSafeReplicasetSizeWithArbiter {
+		if rs.GetMongodSize() < minSafeReplicasetSizeWithArbiter {
 			log.Info("Setting safe defaults, updating replset size",
-				"oldSize", rs.Size, "newSize", minSafeReplicasetSizeWithArbiter)
-			rs.Size = minSafeReplicasetSizeWithArbiter
+				"oldSize", rs.GetMongodSize(), "newSize", minSafeReplicasetSizeWithArbiter)
+			rs.SetMongodSize(minSafeReplicasetSizeWithArbiter)
 		}
-		if rs.Size%2 != 0 {
-			log.Info("Setting safe defaults, disabling arbiter due to odd replset size", "size", rs.Size)
+		if rs.GetMongodSize()%2 != 0 {
+			log.Info("Setting safe defaults, disabling arbiter due to odd replset size", "size", rs.GetMongodSize())
 			rs.Arbiter.Enabled = false
 			rs.Arbiter.Size = 0
 		}
 	} else {
-		if rs.Size < 2 {
+		if rs.GetMongodSize() < 2 {
 			log.Info("Setting safe defaults, updating replset size to meet the minimum number of replicas",
-				"oldSize", rs.Size, "newSize", defaultMongodSize)
-			rs.Size = defaultMongodSize
+				"oldSize", rs.GetMongodSize(), "newSize", defaultMongodSize)
+			rs.SetMongodSize(defaultMongodSize)
 		}
-		if rs.Size%2 == 0 {
+		if rs.GetMongodSize()%2 == 0 {
 			log.Info("Setting safe defaults, increasing replset size to have a odd number of replicas",
-				"oldSize", rs.Size, "newSize", rs.Size+1)
-			rs.Size++
+				"oldSize", rs.GetMongodSize(), "newSize", rs.GetMongodSize()+1)
+			rs.SetMongodSize(rs.GetMongodSize() + 1)
 		}
 	}
 }
@@ -1106,17 +1106,17 @@ func (rs *ReplsetSpec) checkSafeDefaults(unsafe UnsafeFlags) error {
 			if rs.Arbiter.Size != 1 {
 				return errors.New("arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check")
 			}
-			if rs.Size < minSafeReplicasetSizeWithArbiter {
+			if rs.GetMongodSize() < minSafeReplicasetSizeWithArbiter {
 				return errors.Errorf("replset size must be at least %d with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check", minSafeReplicasetSizeWithArbiter)
 			}
-			if rs.Size%2 != 0 {
+			if rs.GetMongodSize()%2 != 0 {
 				return errors.New("arbiter must disabled due to odd replset size. Set spec.unsafeFlags.replsetSize to true to disable this check")
 			}
 		} else {
-			if rs.Size < 2 {
+			if rs.GetMongodSize() < 2 {
 				return errors.Errorf("replset size must be at least %d. Set spec.unsafeFlags.replsetSize to true to disable this check", defaultMongodSize)
 			}
-			if rs.Size%2 == 0 {
+			if rs.GetMongodSize()%2 == 0 {
 				return errors.New("replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check")
 			}
 		}

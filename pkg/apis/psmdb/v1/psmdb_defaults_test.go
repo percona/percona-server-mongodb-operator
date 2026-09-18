@@ -27,41 +27,41 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"even number": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       4,
+				Size:       new(int32(4)),
 			},
 			&ReplsetSpec{
-				Size: 5,
+				Size: new(int32(5)),
 			},
 		},
 		"even number2": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 			},
 			&ReplsetSpec{
-				Size: 3,
+				Size: new(int32(3)),
 			},
 		},
 		"0 w/o arbiter ": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       0,
+				Size:       new(int32(0)),
 			},
 			&ReplsetSpec{
-				Size: 3,
+				Size: new(int32(3)),
 			},
 		},
 		"0 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       0,
+				Size:       new(int32(0)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -71,24 +71,24 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"1 w/o arbiter ": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       1,
+				Size:       new(int32(1)),
 			},
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 			},
 		},
 		"1 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       1,
+				Size:       new(int32(1)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -98,14 +98,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"odd with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -115,14 +115,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"odd with two arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -132,14 +132,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"odd with three arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    3,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -149,14 +149,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"even with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -166,14 +166,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"even4 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       4,
+				Size:       new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -183,14 +183,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"even with two arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -200,14 +200,14 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		"even with three arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    3,
 				},
 			},
 			&ReplsetSpec{
-				Size: 4,
+				Size: new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -220,7 +220,7 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: PerconaServerMongoDBSpec{
 			CRVersion: "1.15.0",
-			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
+			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},
 		},
 	}
@@ -257,28 +257,28 @@ func TestSetSafeDefault(t *testing.T) {
 		"even number": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       4,
+				Size:       new(int32(4)),
 			},
 			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"even number2": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 			},
 			"check safe defaults: replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"0 w/o arbiter ": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       0,
+				Size:       new(int32(0)),
 			},
 			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"0 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       0,
+				Size:       new(int32(0)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -289,14 +289,14 @@ func TestSetSafeDefault(t *testing.T) {
 		"1 w/o arbiter ": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       1,
+				Size:       new(int32(1)),
 			},
 			"check safe defaults: replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"1 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       1,
+				Size:       new(int32(1)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -307,7 +307,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"odd with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -318,7 +318,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"odd with two arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -329,7 +329,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"odd with three arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       3,
+				Size:       new(int32(3)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    3,
@@ -340,7 +340,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"even with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    1,
@@ -351,7 +351,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"even4 with arbiter": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       4,
+				Size:       new(int32(4)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -362,7 +362,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"even with two arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    2,
@@ -373,7 +373,7 @@ func TestSetSafeDefault(t *testing.T) {
 		"even with three arbiters": {
 			&ReplsetSpec{
 				VolumeSpec: vs,
-				Size:       2,
+				Size:       new(int32(2)),
 				Arbiter: Arbiter{
 					Enabled: true,
 					Size:    3,
@@ -387,7 +387,7 @@ func TestSetSafeDefault(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
 		Spec: PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
-			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: 3}, {Name: "rs1", Size: 3}},
+			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},
 		},
 	}
@@ -418,80 +418,80 @@ func TestCheckSafeDefaults(t *testing.T) {
 	}{
 		// legacy topology, no arbiter
 		"odd size": {
-			rs: &ReplsetSpec{Size: 3},
+			rs: &ReplsetSpec{Size: new(int32(3))},
 		},
 		"even size": {
-			rs:          &ReplsetSpec{Size: 4},
+			rs:          &ReplsetSpec{Size: new(int32(4))},
 			expectedErr: "replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"size 1": {
-			rs:          &ReplsetSpec{Size: 1},
+			rs:          &ReplsetSpec{Size: new(int32(1))},
 			expectedErr: "replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"size 0": {
-			rs:          &ReplsetSpec{Size: 0},
+			rs:          &ReplsetSpec{Size: new(int32(0))},
 			expectedErr: "replset size must be at least 3. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 
 		// legacy topology, arbiter enabled
 		"even size with arbiter": {
-			rs: &ReplsetSpec{Size: 4, Arbiter: Arbiter{Enabled: true, Size: 1}},
+			rs: &ReplsetSpec{Size: new(int32(4)), Arbiter: Arbiter{Enabled: true, Size: 1}},
 		},
 		"odd size with arbiter": {
-			rs:          &ReplsetSpec{Size: 5, Arbiter: Arbiter{Enabled: true, Size: 1}},
+			rs:          &ReplsetSpec{Size: new(int32(5)), Arbiter: Arbiter{Enabled: true, Size: 1}},
 			expectedErr: "arbiter must disabled due to odd replset size. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"size below minimum with arbiter": {
-			rs:          &ReplsetSpec{Size: 2, Arbiter: Arbiter{Enabled: true, Size: 1}},
+			rs:          &ReplsetSpec{Size: new(int32(2)), Arbiter: Arbiter{Enabled: true, Size: 1}},
 			expectedErr: "replset size must be at least 4 with arbiter. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"more than one arbiter": {
-			rs:          &ReplsetSpec{Size: 4, Arbiter: Arbiter{Enabled: true, Size: 2}},
+			rs:          &ReplsetSpec{Size: new(int32(4)), Arbiter: Arbiter{Enabled: true, Size: 2}},
 			expectedErr: "arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"arbiter enabled with size 0": {
-			rs:          &ReplsetSpec{Size: 4, Arbiter: Arbiter{Enabled: true, Size: 0}},
+			rs:          &ReplsetSpec{Size: new(int32(4)), Arbiter: Arbiter{Enabled: true, Size: 0}},
 			expectedErr: "arbiter size must be 1. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 
 		// unsafeFlags.replsetSize
 		"unsafe replset size skips size check": {
-			rs:     &ReplsetSpec{Size: 0},
+			rs:     &ReplsetSpec{Size: new(int32(0))},
 			unsafe: UnsafeFlags{ReplsetSize: true},
 		},
 		"unsafe replset size skips arbiter checks": {
-			rs:     &ReplsetSpec{Size: 2, Arbiter: Arbiter{Enabled: true, Size: 3}},
+			rs:     &ReplsetSpec{Size: new(int32(2)), Arbiter: Arbiter{Enabled: true, Size: 3}},
 			unsafe: UnsafeFlags{ReplsetSize: true},
 		},
 
 		// tls mode
 		"tls mode in configuration": {
-			rs:          &ReplsetSpec{Size: 3, Configuration: tlsModeConf},
+			rs:          &ReplsetSpec{Size: new(int32(3)), Configuration: tlsModeConf},
 			expectedErr: "tlsMode must be set using spec.tls.mode",
 		},
 		"tls mode is checked even with unsafe replset size": {
-			rs:          &ReplsetSpec{Size: 0, Configuration: tlsModeConf},
+			rs:          &ReplsetSpec{Size: new(int32(0)), Configuration: tlsModeConf},
 			unsafe:      UnsafeFlags{ReplsetSize: true},
 			expectedErr: "tlsMode must be set using spec.tls.mode",
 		},
 		"size check runs before tls mode check": {
-			rs:          &ReplsetSpec{Size: 4, Configuration: tlsModeConf},
+			rs:          &ReplsetSpec{Size: new(int32(4)), Configuration: tlsModeConf},
 			expectedErr: "replset size must be odd. Set spec.unsafeFlags.replsetSize to true to disable this check",
 		},
 		"invalid tls configuration": {
-			rs: &ReplsetSpec{Size: 3, Configuration: `net:
+			rs: &ReplsetSpec{Size: new(int32(3)), Configuration: `net:
   tls: requireTLS`},
 			expectedErr: "get tls mode: tls configuration is invalid",
 		},
 		"configuration without tls mode": {
-			rs: &ReplsetSpec{Size: 3, Configuration: `net:
+			rs: &ReplsetSpec{Size: new(int32(3)), Configuration: `net:
   port: 27017`},
 		},
 
 		// instances[] topology: checkSafeInstanceDefaults takes over
 		"instance mode ignores replset size": {
 			rs: &ReplsetSpec{
-				Size:      4,
+				Size:      new(int32(4)),
 				Instances: []InstanceSpec{{Name: ReservedGroupMongod, Replicas: 3}},
 			},
 		},

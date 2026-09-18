@@ -116,7 +116,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			require.NotEmpty(t, cr.Spec.Replsets)
 
 			rs := cr.Spec.Replsets[0]
-			rs.Size = 1
+			rs.Size = new(int32(1))
 			rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
 				corev1.ResourceStorage: requested,
 			}
@@ -213,7 +213,7 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 	require.NotEmpty(t, cr.Spec.Replsets)
 
 	rs := cr.Spec.Replsets[0]
-	rs.Size = 1
+	rs.Size = new(int32(1))
 	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
 		corev1.ResourceStorage: resource.MustParse(requestedSize),
 	}

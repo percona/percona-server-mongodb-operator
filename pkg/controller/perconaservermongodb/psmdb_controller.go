@@ -817,7 +817,7 @@ func (r *ReconcilePerconaServerMongoDB) safeDownscale(ctx context.Context, cr *a
 
 			switch group.Name {
 			case naming.GroupMongod:
-				rs.Size = want
+				rs.SetMongodSize(want)
 			case naming.GroupArbiter:
 				rs.Arbiter.Size = want
 			case naming.GroupNonVoting:
@@ -1614,7 +1614,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 
 	// wait all configsvr pods to prevent unnecessary updates to mongos
-	if int(cr.Spec.Sharding.ConfigsvrReplSet.Size) > len(cfgPods.Items) {
+	if int(cr.Spec.Sharding.ConfigsvrReplSet.GetMongodSize()) > len(cfgPods.Items) {
 		return nil
 	}
 
@@ -2530,7 +2530,7 @@ func (r *ReconcilePerconaServerMongoDB) applyShutdownTarget(rs *api.ReplsetSpec,
 	for name, want := range target {
 		switch name {
 		case naming.GroupMongod:
-			rs.Size = want
+			rs.SetMongodSize(want)
 		case naming.GroupArbiter:
 			rs.Arbiter.Size = want
 		case naming.GroupNonVoting:
