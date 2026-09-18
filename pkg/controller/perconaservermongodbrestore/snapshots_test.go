@@ -19,6 +19,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -77,16 +78,37 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 	assert.Equal(t, labels, pvc.Labels)
 }
 
-func TestReconcileSnapshotNew(t *testing.T) {
-	podZero := &corev1.Pod{
+// readyMongodPod builds the pod a restore execs PBM commands in.
+func readyMongodPod(t *testing.T, cluster *psmdbv1.PerconaServerMongoDB, ordinal int) *corev1.Pod {
+	t.Helper()
+
+	rs := cluster.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cluster, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName(naming.GroupMongod)
+	require.Truef(t, ok, "no mongod group in replset %s (have %v)", rs.Name, set.GetNames())
+
+	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster-rs0-0",
-			Namespace: "default",
+			Name:      naming.GroupPodName(cluster, rs, group.Name, ordinal),
+			Namespace: cluster.Namespace,
+			Labels:    group.Labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: group.ContainerName}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+			},
 		},
 	}
+}
 
-	r := fakeReconciler(podZero)
-
+func TestReconcileSnapshotNew(t *testing.T) {
 	cluster := &psmdbv1.PerconaServerMongoDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster",
@@ -117,6 +139,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 			PBMname: "my-pbm-restore",
 		},
 	}
+
+	r := fakeReconciler(readyMongodPod(t, cluster, 0))
 
 	status, err := r.reconcileSnapshotNew(t.Context(), restore, cluster)
 	assert.NoError(t, err)
@@ -971,14 +995,7 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 		},
 	}
 
-	podZero := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster-rs0-0",
-			Namespace: "default",
-		},
-	}
-
-	r := fakeReconciler(podZero)
+	r := fakeReconciler(readyMongodPod(t, cluster, 0))
 	status, err := r.reconcileExternalSnapshotRestore(ctx, restore, nil, cluster)
 	assert.NoError(t, err)
 	assert.Equal(t, psmdbv1.RestoreStateWaiting, status.State)
