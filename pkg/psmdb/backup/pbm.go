@@ -51,6 +51,7 @@ const (
 	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
 	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
 	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
+	AWSSessionTokenSecretKey         = "AWS_SESSION_TOKEN"
 	OSSAccessKeySecretKey            = "ALIBABA_ACCESS_KEY_ID"
 	OSSSecretAccessKeySecretKey      = "ALIBABA_ACCESS_KEY_SECRET"
 	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
@@ -393,6 +394,9 @@ func GetPBMStorageMinioConfig(
 			AccessKeyID:     storage.MaskedString(accessKey),
 			SecretAccessKey: storage.MaskedString(secretAccessKey),
 		}
+		if sessionToken, ok := s3secret.Data[AWSSessionTokenSecretKey]; ok {
+			storageConf.Minio.Credentials.SessionToken = storage.MaskedString(sessionToken)
+		}
 	}
 
 	if stg.Minio.Retryer != nil {
@@ -475,6 +479,9 @@ func GetPBMStorageS3Config(
 		storageConf.S3.Credentials = s3.Credentials{
 			AccessKeyID:     storage.MaskedString(s3secret.Data[AWSAccessKeySecretKey]),
 			SecretAccessKey: storage.MaskedString(s3secret.Data[AWSSecretAccessKeySecretKey]),
+		}
+		if sessionToken, ok := s3secret.Data[AWSSessionTokenSecretKey]; ok {
+			storageConf.S3.Credentials.SessionToken = storage.MaskedString(sessionToken)
 		}
 	}
 
