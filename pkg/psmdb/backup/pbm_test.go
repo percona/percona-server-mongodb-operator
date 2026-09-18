@@ -26,6 +26,7 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -929,4 +930,78 @@ func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
 	}
 
 	return cr
+}
+
+func TestGetMongoUri(t *testing.T) {
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/",
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt",
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster",
+					Namespace: "ns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "cluster-ssl"},
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+			usersSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      api.UserSecretName(cr),
+					Namespace: cr.Namespace,
+				},
+				Data: map[string][]byte{
+					"MONGODB_BACKUP_USER":     []byte("backup"),
+					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
+				},
+			}
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+
+			sslSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-ssl",
+					Namespace: cr.Namespace,
+				},
+				Data: map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := buildFakeClient(t, usersSecret, sslSecret)
+			t.Cleanup(func() {
+				_ = os.Remove("/tmp/ns-cluster-tls.pem")
+				_ = os.Remove("/tmp/ns-cluster-ca.crt")
+			})
+
+			uri, err := getMongoUri(t.Context(), cl, cr, []string{"cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017"}, tt.tlsEnabled)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedURI, uri)
+		})
+	}
 }

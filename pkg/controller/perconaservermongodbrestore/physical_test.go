@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,6 +13,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -31,6 +33,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		clusterInitSC       *corev1.SecurityContext
 		wantPbmInitSC       *corev1.SecurityContext
 		wantAWSChecksumEnvs bool
+		wantTLSInsecure     bool
 	}{
 		{
 			name:                "latest_version_with_InitContainerSecurityContext",
@@ -67,6 +70,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantTLSInsecure:     true,
 		},
 		{
 			name:                "1_22_without_InitContainerSecurityContext",
@@ -76,6 +80,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantTLSInsecure:     true,
 		},
 	}
 
@@ -99,6 +104,10 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 								MountPath: "/extra",
 							},
 						},
+					},
+					TLS: &psmdbv1.TLSSpec{
+						Mode:                     psmdbv1.TLSModePrefer,
+						AllowInvalidCertificates: new(tt.wantTLSInsecure),
 					},
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Secrets: &psmdbv1.SecretsSpec{
@@ -141,15 +150,18 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				},
 			}
 
+			caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(cluster))
+			require.NoError(t, err)
+
 			secretTLS := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      cluster.Spec.Secrets.SSL,
 					Namespace: cluster.Namespace,
 				},
 				Data: map[string][]byte{
-					"ca.crt":  {},
-					"tls.crt": {},
-					"tls.key": {},
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
 				},
 			}
 
@@ -159,7 +171,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Namespace: sts.Namespace,
 			}
 
-			err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
 			assert.NoError(t, err)
 
 			updatedSTS := &appsv1.StatefulSet{}
@@ -199,7 +211,10 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+			if tt.wantTLSInsecure {
+				expectedURI += "&tlsInsecure=true"
+			}
 
 			assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
 			assert.Equal(t, expectedURI, lastEnvVar.Value)

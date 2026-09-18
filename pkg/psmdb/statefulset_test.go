@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -757,6 +759,60 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 			} else {
 				assert.NotContains(t, c.VolumeMounts, tmpMount)
 			}
+		})
+	}
+}
+
+func TestBuildMongoDBURI(t *testing.T) {
+	const baseURI = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: baseURI,
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  baseURI + tlsOpts,
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster",
+					Namespace: "ns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+
+			sslSecret := new(corev1.Secret)
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+			sslSecret.Data = map[string][]byte{
+				"ca.crt":  caCert,
+				"tls.crt": tlsCert,
+				"tls.key": tlsKey,
+			}
+
+			assert.Equal(t, tt.expectedURI, BuildMongoDBURI(t.Context(), cr, tt.tlsEnabled, sslSecret))
 		})
 	}
 }

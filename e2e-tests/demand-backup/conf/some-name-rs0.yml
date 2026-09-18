@@ -6,6 +6,9 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
+  tls:
+    mode: preferTLS
+    allowInvalidCertificates: false
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup

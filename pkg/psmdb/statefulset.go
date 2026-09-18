@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -650,7 +651,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cr.CompareVersion("1.20.0") >= 0 {
-		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		mongoDBURI = BuildMongoDBURI(ctx, cr, tlsEnabled, sslSecret)
 	}
 
 	c.Env = append(c.Env, []corev1.EnvVar{
@@ -763,15 +764,15 @@ func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	}
 }
 
-func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf(
-				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
-				config.SSLDir,
-			)
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
+			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+				uri += "&tlsInsecure=true"
+			}
 		}
 	}
 	return uri
