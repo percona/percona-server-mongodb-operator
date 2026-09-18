@@ -69,9 +69,9 @@ func (r *ReconcilePerconaServerMongoDB) getMongosPods(ctx context.Context, cr *a
 }
 
 // getShardsWithWorkloads returns the names of the shard replica sets that
-// still have member workloads in the cluster. The config server, mongos and
-// search are excluded.
-func (r *ReconcilePerconaServerMongoDB) getShardsWithWorkloads(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]struct{}, error) {
+// still have member workloads in the cluster, sorted. The config server, mongos
+// and search are excluded.
+func (r *ReconcilePerconaServerMongoDB) getShardsWithWorkloads(ctx context.Context, cr *api.PerconaServerMongoDB) ([]string, error) {
 	list := appsv1.StatefulSetList{}
 
 	if err := r.client.List(ctx,
@@ -84,7 +84,8 @@ func (r *ReconcilePerconaServerMongoDB) getShardsWithWorkloads(ctx context.Conte
 		return nil, errors.Wrap(err, "list statefulsets")
 	}
 
-	names := make(map[string]struct{}, len(list.Items))
+	seen := make(map[string]struct{}, len(list.Items))
+	names := make([]string, 0, len(list.Items))
 	for i := range list.Items {
 		sts := &list.Items[i]
 
@@ -102,8 +103,14 @@ func (r *ReconcilePerconaServerMongoDB) getShardsWithWorkloads(ctx context.Conte
 			continue
 		}
 
-		names[name] = struct{}{}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
 	}
+
+	sort.Strings(names)
 
 	return names, nil
 }
