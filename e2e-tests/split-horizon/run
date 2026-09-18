@@ -79,6 +79,26 @@ main() {
 	wait_for_running "${cluster}-rs0" 3
 	wait_cluster_consistency ${cluster}
 
+	desc 'verify certificates are updated with new horizons'
+	wait_certificate "${cluster}-ssl"
+	wait_certificate "${cluster}-ssl-internal"
+	compare_kubectl "certificate/${cluster}-ssl" "-5horizons" "true"
+	compare_kubectl "certificate/${cluster}-ssl-internal" "-5horizons" "true"
+
+	for secret in "${cluster}-ssl" "${cluster}-ssl-internal"; do
+		wait_for_cert_san "${secret}" "some-name-rs0-3.clouddemo.xyz"
+		wait_for_cert_san "${secret}" "some-name-rs0-4.clouddemo.xyz"
+	done
+	wait_for_running "${cluster}-rs0" 3
+	wait_cluster_consistency ${cluster}
+
+	for secret in "${cluster}-ssl-old" "${cluster}-ssl-internal-old"; do
+		if kubectl_bin get secret "${secret}" >/dev/null 2>&1; then
+			echo "secret ${secret} should have been deleted after certificate update"
+			exit 1
+		fi
+	done
+
 	# scale up and down
 	kubectl_bin patch psmdb ${cluster} \
 		--type='json' \
@@ -102,7 +122,7 @@ main() {
 	run_mongo_tls "rs.conf().members.map(function(member) { return member.horizons }).sort((a, b) => a.external.localeCompare(b.external))" \
 		"clusterAdmin:clusterAdmin123456@some-name-rs0-0.clouddemo.xyz,some-name-rs0-1.clouddemo.xyz,some-name-rs0-2.clouddemo.xyz" \
 		mongodb "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match|Error saving history file:|does not match the remote host name' >"${tmp_dir}"/horizons.json
-	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons-3.json
+	diff "$test_dir"/compare/horizons-3.json "$tmp_dir"/horizons.json
 
 	desc "remove horizon configuration"
 

@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"sort"
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -9,11 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -457,5 +461,183 @@ func TestIsExternalIssuer(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, external)
 		})
+	}
+}
+
+func manualTLSSecret(t *testing.T, cr *api.PerconaServerMongoDB, name string, sans []string, caCrt, caKey []byte, owned bool) *corev1.Secret {
+	t.Helper()
+
+	tlsCrt, tlsKey, err := tls.IssueWithCA(sans, caCrt, caKey)
+	require.NoError(t, err)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+		},
+		Data: map[string][]byte{
+			"ca.crt":  caCrt,
+			"tls.crt": tlsCrt,
+			"tls.key": tlsKey,
+		},
+		Type: corev1.SecretTypeTLS,
+	}
+	if owned {
+		secret.OwnerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(cr, api.SchemeGroupVersion.WithKind("PerconaServerMongoDB")),
+		}
+	}
+	return secret
+}
+
+func manualCASecret(t *testing.T, cr *api.PerconaServerMongoDB) (*corev1.Secret, []byte, []byte) {
+	t.Helper()
+
+	caCrt, caKey, err := tls.IssueCA()
+	require.NoError(t, err)
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tls.ManualCASecretName(cr),
+			Namespace: cr.Namespace,
+		},
+		Data: map[string][]byte{
+			"ca.crt": caCrt,
+			"ca.key": caKey,
+		},
+	}, caCrt, caKey
+}
+
+func getTestSecret(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, name string) *corev1.Secret {
+	t.Helper()
+
+	secret := new(corev1.Secret)
+	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: name, Namespace: cr.Namespace}, secret))
+	return secret
+}
+
+func certSANs(t *testing.T, secret *corev1.Secret) []string {
+	t.Helper()
+
+	sans, err := tls.GetDNSNamesFromCert(secret.Data["tls.crt"])
+	require.NoError(t, err)
+	sort.Strings(sans)
+	return sans
+}
+
+func withHorizons(cr *api.PerconaServerMongoDB) *api.PerconaServerMongoDB {
+	cr = cr.DeepCopy()
+	cr.Spec.Replsets[0].Horizons = api.HorizonsSpec{
+		"test-cluster-rs0-0": {"external": "rs0-0.example.com"},
+		"test-cluster-rs0-1": {"external": "rs0-1.example.com"},
+	}
+	return cr
+}
+
+func TestReconcileSSL_Manual(t *testing.T) {
+	cr := newTestCR()
+	cr.UID = "cr-uid"
+
+	expectedSANs := func(cr *api.PerconaServerMongoDB) []string {
+		sans := tls.GetCertificateSans(cr)
+		sort.Strings(sans)
+		return sans
+	}
+
+	t.Run("creates CA and secrets", func(t *testing.T) {
+		r := buildFakeClient(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), cr))
+
+		ca := getTestSecret(t, r, cr, tls.ManualCASecretName(cr))
+		assert.NotEmpty(t, ca.Data["ca.crt"])
+		assert.NotEmpty(t, ca.Data["ca.key"])
+
+		for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+			secret := getTestSecret(t, r, cr, name)
+			assert.Equal(t, ca.Data["ca.crt"], secret.Data["ca.crt"])
+			assert.Equal(t, expectedSANs(cr), certSANs(t, secret))
+		}
+	})
+
+	t.Run("re-signs both secrets when horizons are added", func(t *testing.T) {
+		caSecret, caCrt, caKey := manualCASecret(t, cr)
+		r := buildFakeClient(cr, caSecret,
+			manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true),
+			manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true),
+		)
+
+		updated := withHorizons(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+
+		assert.Equal(t, caCrt, getTestSecret(t, r, cr, tls.ManualCASecretName(cr)).Data["ca.crt"])
+		for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+			secret := getTestSecret(t, r, cr, name)
+			assert.Equal(t, caCrt, secret.Data["ca.crt"])
+			assert.Equal(t, expectedSANs(updated), certSANs(t, secret))
+			assert.Contains(t, certSANs(t, secret), "rs0-0.example.com")
+		}
+	})
+
+	t.Run("creates missing internal secret and re-signs existing one", func(t *testing.T) {
+		caSecret, caCrt, caKey := manualCASecret(t, cr)
+		r := buildFakeClient(cr, caSecret,
+			manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true),
+		)
+
+		updated := withHorizons(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+
+		for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+			secret := getTestSecret(t, r, cr, name)
+			assert.Equal(t, caCrt, secret.Data["ca.crt"])
+			assert.Equal(t, expectedSANs(updated), certSANs(t, secret))
+		}
+	})
+
+	t.Run("skips re-signing without CA key", func(t *testing.T) {
+		_, caCrt, caKey := manualCASecret(t, cr)
+		ssl := manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
+		internal := manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
+		r := buildFakeClient(cr, ssl, internal)
+
+		require.NoError(t, r.reconcileSSL(t.Context(), withHorizons(cr)))
+
+		assert.Equal(t, ssl.Data, getTestSecret(t, r, cr, api.SSLSecretName(cr)).Data)
+		assert.Equal(t, internal.Data, getTestSecret(t, r, cr, api.SSLInternalSecretName(cr)).Data)
+	})
+
+	t.Run("leaves user-provided secret untouched", func(t *testing.T) {
+		caSecret, caCrt, caKey := manualCASecret(t, cr)
+		ssl := manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, false)
+		internal := manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, false)
+		r := buildFakeClient(cr, caSecret, ssl, internal)
+
+		require.NoError(t, r.reconcileSSL(t.Context(), withHorizons(cr)))
+
+		assert.Equal(t, ssl.Data, getTestSecret(t, r, cr, api.SSLSecretName(cr)).Data)
+		assert.Equal(t, internal.Data, getTestSecret(t, r, cr, api.SSLInternalSecretName(cr)).Data)
+	})
+}
+
+func TestUpdateCertManagerCerts_OldSecretAlreadyExists(t *testing.T) {
+	cr := newTestCR()
+	cr.Spec.TLS = &api.TLSSpec{}
+	_, caCrt, caKey := manualCASecret(t, cr)
+	ssl := manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
+	internal := manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
+	leftover := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      api.SSLSecretName(cr) + "-old",
+			Namespace: cr.Namespace,
+		},
+		Data: ssl.Data,
+	}
+	r := buildFakeClient(cr, ssl, internal, leftover)
+
+	require.NoError(t, r.updateCertManagerCerts(t.Context(), cr))
+
+	for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+		err := r.client.Get(t.Context(), types.NamespacedName{Name: name + "-old", Namespace: cr.Namespace}, new(corev1.Secret))
+		assert.True(t, k8serrors.IsNotFound(err), "%s-old should be cleaned up", name)
 	}
 }
