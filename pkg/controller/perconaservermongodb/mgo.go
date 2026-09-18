@@ -126,7 +126,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	// We don't retry if replset is initialized to not delay initialization,
+	// after init we start retrying to not force reconfig replset on a transient error
+	var opts []mongo.ConfigOption
+	if !cr.Status.Replsets[replset.Name].Initialized {
+		opts = append(opts, mongo.WithoutRetry())
+	}
+	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, opts...)
 	if err != nil {
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil, nil

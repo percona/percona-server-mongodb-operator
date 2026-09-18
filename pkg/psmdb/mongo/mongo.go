@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -16,7 +17,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/auth"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
+	"k8s.io/apimachinery/pkg/util/wait"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -31,6 +35,49 @@ type Config struct {
 	TLSConf     *tls.Config
 	Direct      bool
 	Timeout     time.Duration
+	AppName     string
+}
+
+// DialConfig is the Config used by a single Dial call, with the settings that
+// only matter while dialing.
+type DialConfig struct {
+	Config
+
+	// Backoff makes Dial retry on transient errors, optional
+	Backoff *wait.Backoff
+}
+
+type ConfigOption func(*DialConfig)
+
+func WithAppName(name string) ConfigOption {
+	return func(conf *DialConfig) {
+		conf.AppName = name
+	}
+}
+
+func WithBackoff(backoff *wait.Backoff) ConfigOption {
+	return func(conf *DialConfig) {
+		conf.Backoff = backoff
+	}
+}
+
+// WithoutRetry makes Dial give up on the first error
+func WithoutRetry() ConfigOption {
+	return func(conf *DialConfig) {
+		conf.Backoff = nil
+	}
+}
+
+// DefaultBackoff is the retry policy for callers which expect the connection
+// to succeed. Every attempt is additionally bounded by the connect timeout, so
+// Dial gives up after ~80s at worst.
+func DefaultBackoff() *wait.Backoff {
+	return &wait.Backoff{
+		Steps:    5,
+		Duration: 2 * time.Second,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}
 }
 
 func (conf *Config) URI() string {
@@ -99,6 +146,9 @@ func (conf *Config) Options() *options.ClientOptions {
 	if conf.ReplSetName != "" {
 		opts.SetReplicaSet(conf.ReplSetName)
 	}
+	if conf.AppName != "" {
+		opts.SetAppName(conf.AppName)
+	}
 	if conf.Username != "" || conf.Password != "" {
 		opts.SetAuth(options.Credential{
 			Password:   conf.Password,
@@ -157,10 +207,16 @@ func ToInterface(client *mongo.Client) Client {
 	return &mongoClient{client}
 }
 
-func Dial(ctx context.Context, conf *Config) (Client, error) {
-	opts := conf.Options()
+// Dial connects to mongo and verifies the connection with a ping.
+func Dial(ctx context.Context, c *Config, opts ...ConfigOption) (Client, error) {
+	conf := DialConfig{Config: *c}
+	for _, opt := range opts {
+		opt(&conf)
+	}
 
-	client, err := mongo.Connect(opts)
+	clientOpts := conf.Options()
+
+	client, err := mongo.Connect(clientOpts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo rs")
 	}
@@ -174,15 +230,68 @@ func Dial(ctx context.Context, conf *Config) (Client, error) {
 		}
 	}()
 
-	tCtx, cancel := context.WithTimeout(ctx, *opts.ConnectTimeout)
-	defer cancel()
+	ping := func() error {
+		tCtx, cancel := context.WithTimeout(ctx, *clientOpts.ConnectTimeout)
+		defer cancel()
 
-	err = client.Ping(tCtx, readpref.Primary())
+		return client.Ping(tCtx, readpref.Primary())
+	}
+
+	var backoff wait.Backoff
+	if conf.Backoff != nil {
+		backoff = *conf.Backoff
+	}
+
+	err = ping()
+	for isTransientError(err) && backoff.Steps > 1 {
+		log.Info("retrying mongo connection", "hosts", conf.Hosts, "error", err.Error())
+
+		if !sleep(ctx, backoff.Step()) {
+			break
+		}
+
+		err = ping()
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "ping mongo")
 	}
 
 	return ToInterface(client), nil
+}
+
+// sleep waits for d and reports whether it finished before ctx was done.
+func sleep(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// isTransientError reports whether err is a connection level failure that may succeed on a retry.
+func isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var authErr *auth.Error
+	if errors.As(err, &authErr) {
+		return false
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	if mongo.IsTimeout(err) || mongo.IsNetworkError(err) {
+		return true
+	}
+
+	return errors.As(err, &topology.ServerSelectionError{}) || errors.As(err, &topology.ConnectionError{})
 }
 
 func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error {
