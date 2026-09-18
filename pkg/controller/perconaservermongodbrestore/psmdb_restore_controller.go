@@ -641,27 +641,3 @@ func (r *ReconcilePerconaServerMongoDBRestore) restorePod(
 
 	return nil, nil, errors.Errorf("no ready data-bearing pod in replset %s", rs.Name)
 }
-
-// memberStatefulSetNames returns every data-bearing member statefulset.
-func (r *ReconcilePerconaServerMongoDBRestore) memberStatefulSetNames(
-	ctx context.Context,
-	cluster *psmdbv1.PerconaServerMongoDB,
-) ([]types.NamespacedName, error) {
-	out := make([]types.NamespacedName, 0)
-
-	for _, rs := range cluster.GetAllReplsets() {
-		groups, err := r.restoreGroups(ctx, cluster, rs)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, group := range groups {
-			out = append(out, types.NamespacedName{
-				Namespace: cluster.Namespace,
-				Name:      group.STSName,
-			})
-		}
-	}
-
-	return out, nil
-}

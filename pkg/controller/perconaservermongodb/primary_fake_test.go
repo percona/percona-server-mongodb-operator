@@ -23,9 +23,6 @@ import (
 type primaryProvider struct {
 	mu        sync.Mutex
 	primaries map[string]bool
-	// isMasterCalls records the pod name of every IsMaster call, in order, so a
-	// test can assert which members were asked and in what sequence.
-	isMasterCalls []string
 	// stepDowns records the hosts StepDown was called against.
 	stepDowns []string
 	// freezes records the hosts replSetFreeze was called against.
@@ -75,8 +72,6 @@ func (c *primaryFakeClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, 
 	c.provider.mu.Lock()
 	defer c.provider.mu.Unlock()
 
-	c.provider.isMasterCalls = append(c.provider.isMasterCalls, c.pod)
-
 	return &mongo.IsMasterResp{
 		IsMaster:   c.provider.primaries[c.pod],
 		OKResponse: mongo.OKResponse{OK: 1},
@@ -102,12 +97,4 @@ func (c *primaryFakeClient) Freeze(ctx context.Context, seconds int) error {
 	c.provider.freezes = append(c.provider.freezes, c.pod)
 
 	return nil
-}
-
-// calls returns a copy of the recorded IsMaster pod names.
-func (p *primaryProvider) calls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return append([]string(nil), p.isMasterCalls...)
 }
