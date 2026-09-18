@@ -1083,6 +1083,16 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 		return errors.New("tlsMode must be set using spec.tls.mode")
 	}
 
+	for i := range rs.Instances {
+		mode, err := rs.Instances[i].Configuration.GetTLSMode()
+		if err != nil {
+			return errors.Wrapf(err, "instance %s: get tls mode", rs.Instances[i].Name)
+		}
+		if mode != "" {
+			return errors.Errorf("instance %s: tlsMode must be set using spec.tls.mode", rs.Instances[i].Name)
+		}
+	}
+
 	return nil
 }
 

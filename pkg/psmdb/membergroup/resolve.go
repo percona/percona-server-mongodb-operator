@@ -66,7 +66,7 @@ func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Grou
 			Replicas:                 inst.Replicas,
 			MultiAZ:                  *inst.MultiAZ.DeepCopy(),
 			VolumeSpec:               inst.VolumeSpec.DeepCopy(),
-			Configuration:            rs.Configuration,
+			Configuration:            inst.Configuration,
 			LivenessProbe:            inst.LivenessProbe.DeepCopy(),
 			ReadinessProbe:           inst.ReadinessProbe.DeepCopy(),
 			PodSecurityContext:       inst.PodSecurityContext.DeepCopy(),
@@ -160,13 +160,10 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 
 	if rs.Arbiter.Enabled {
 		groups = append(groups, Group{
-			Name:     naming.GroupArbiter,
-			Replicas: rs.Arbiter.Size,
-			MultiAZ:  *rs.Arbiter.MultiAZ.DeepCopy(),
-			// Arbiters hold no data: an emptyDir is injected by the workload
-			// builder, so no VolumeSpec is resolved here.
-			VolumeSpec: nil,
-			// Arbiters mount and hash the base mongod configuration today.
+			Name:                     naming.GroupArbiter,
+			Replicas:                 rs.Arbiter.Size,
+			MultiAZ:                  *rs.Arbiter.MultiAZ.DeepCopy(),
+			VolumeSpec:               nil,
 			Configuration:            rs.Configuration,
 			LivenessProbe:            rs.LivenessProbe.DeepCopy(),
 			ReadinessProbe:           rs.ReadinessProbe.DeepCopy(),

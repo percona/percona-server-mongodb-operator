@@ -610,8 +610,9 @@ func TestResolveInstancesOwnTheirPodConfig(t *testing.T) {
 		api.InstanceSpec{Name: "hot", Replicas: 2, VolumeSpec: hotVol,
 			RSConfig: &api.MemberConfigSpec{Priority: new(int32(10)), Votes: new(int32(1))}},
 	)
-	// Configuration is replica-set-wide; instances do not override it.
+	// Configuration is per group
 	rs.Configuration = api.MongoConfiguration("shared: true")
+	rs.Instances[1].Configuration = api.MongoConfiguration("hot: true")
 
 	set, err := Resolve(testCR(), rs)
 	require.NoError(t, err)
@@ -625,9 +626,10 @@ func TestResolveInstancesOwnTheirPodConfig(t *testing.T) {
 	assert.Equal(t, "500Gi", cold.VolumeSpec.PersistentVolumeClaim.Resources.Requests.Storage().String())
 	assert.NotSame(t, hotVol, hot.VolumeSpec, "resolved volume spec must be a copy")
 
-	assert.Equal(t, api.MongoConfiguration("shared: true"), hot.Configuration)
-	assert.Equal(t, api.MongoConfiguration("shared: true"), cold.Configuration,
-		"mongod configuration is replica-set-wide; instances do not override it")
+	assert.Equal(t, api.MongoConfiguration("hot: true"), hot.Configuration,
+		"a group runs the mongod configuration it declares, not the replica set's")
+	assert.Empty(t, cold.Configuration,
+		"Resolve does not apply the replica-set fallback; SetDefaults does")
 
 	// Only hot can be elected: cold votes but has priority 0.
 	assert.True(t, hot.PrimaryEligible)
@@ -777,4 +779,124 @@ func TestResolveVoterCountUnderMixedInstanceConfig(t *testing.T) {
 		"nonVoting declares no rsConfig, so it keeps the legacy zero-vote meaning")
 	assert.Equal(t, int32(3), set.GetDataBearingVoterCount())
 	assert.Equal(t, int32(1), set.GetNonVotingMemberCount())
+}
+
+// TestReservedNamesReproduceLegacyConfiguration tests that a legacy replica
+// set rewritten as instances[] under the reserved names resolves to the same
+// ConfigMap, holding the same content, for every role.
+func TestReservedNamesReproduceLegacyConfiguration(t *testing.T) {
+	const (
+		rsConf     = "operationProfiling:\n  mode: slowOp\n"
+		nonVoting  = "storage:\n  wiredTiger:\n    engineConfig:\n      cacheSizeGB: 1\n"
+		hiddenConf = "operationProfiling:\n  mode: all\n"
+	)
+
+	for _, tt := range []struct {
+		name string
+		// per-role configuration the legacy CR declares
+		nvConf, hidConf api.MongoConfiguration
+	}{
+		{name: "no per-role configuration"},
+		{name: "per-role configuration on both roles", nvConf: nonVoting, hidConf: hiddenConf},
+		{name: "per-role configuration on one role", nvConf: nonVoting},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			legacy := legacyRS("rs0", 3)
+			legacy.Configuration = rsConf
+			legacy.Arbiter = api.Arbiter{Enabled: true, Size: 1}
+			legacy.NonVoting = api.NonVotingSpec{Enabled: true, Size: 2, Configuration: tt.nvConf, VolumeSpec: vol("1Gi")}
+			legacy.Hidden = api.HiddenSpec{Enabled: true, Size: 1, Configuration: tt.hidConf, VolumeSpec: vol("1Gi")}
+
+			rewritten := instanceRS("rs0",
+				implicitInst(api.ReservedGroupMongod, 3),
+				arbiterInst(api.ReservedGroupArbiter, 1),
+				api.InstanceSpec{Name: api.ReservedGroupNonVoting, Replicas: 2,
+					Configuration: tt.nvConf, VolumeSpec: vol("1Gi")},
+				api.InstanceSpec{Name: api.ReservedGroupHidden, Replicas: 1,
+					Configuration: tt.hidConf, VolumeSpec: vol("1Gi")},
+			)
+			rewritten.Configuration = rsConf
+			// SetDefaults resolves each group's configuration; Resolve only
+			// copies what it left behind.
+			for i := range rewritten.Instances {
+				require.NoError(t, rewritten.Instances[i].SetDefaults(testCR(), rewritten))
+			}
+
+			legacySet, err := Resolve(testCR(), legacy)
+			require.NoError(t, err)
+			rewrittenSet, err := Resolve(testCR(), rewritten)
+			require.NoError(t, err)
+
+			require.ElementsMatch(t, groupNames(legacySet.GetAll()), groupNames(rewrittenSet.GetAll()))
+
+			for _, want := range legacySet.GetAll() {
+				got, ok := rewrittenSet.GetByName(want.Name)
+				require.Truef(t, ok, "group %s missing from the rewritten replica set", want.Name)
+
+				assert.Equalf(t, want.ConfigName, got.ConfigName,
+					"group %s mounts a different ConfigMap after the rewrite", want.Name)
+				assert.Equalf(t, want.Configuration, got.Configuration,
+					"group %s runs different mongod configuration after the rewrite", want.Name)
+			}
+		})
+	}
+}
+
+// TestArbiterConfigurationWithoutMongodGroup covers the shape legacy cannot
+// produce: an arbiter in a replica set with no mongod group. There is nothing
+// to share a ConfigMap with, so it gets one of its own and may configure it.
+func TestArbiterConfigurationWithoutMongodGroup(t *testing.T) {
+	const own = "systemLog:\n  quiet: true\n"
+
+	rs := instanceRS("rs0",
+		inst("data", 3, nil),
+		arbiterInst("arbiter", 1),
+	)
+	rs.Configuration = "operationProfiling:\n  mode: slowOp\n"
+	rs.Instances[1].Configuration = own
+	for i := range rs.Instances {
+		require.NoError(t, rs.Instances[i].SetDefaults(testCR(), rs))
+	}
+
+	set, err := Resolve(testCR(), rs)
+	require.NoError(t, err)
+
+	arbiter, ok := set.GetByName("arbiter")
+	require.True(t, ok)
+
+	assert.Equal(t, "cluster1-rs0-arbiter", arbiter.ConfigName,
+		"with no mongod group the arbiter owns its ConfigMap")
+	assert.Equal(t, api.MongoConfiguration(own), arbiter.Configuration,
+		"and may therefore configure it")
+}
+
+func TestArbiterFollowsMongodGroupConfiguration(t *testing.T) {
+	const mongodOwn = "operationProfiling:\n  mode: all\n"
+
+	rs := instanceRS("rs0",
+		api.InstanceSpec{Name: api.ReservedGroupMongod, Replicas: 3,
+			Configuration: mongodOwn, VolumeSpec: vol("1Gi")},
+		arbiterInst(api.ReservedGroupArbiter, 1),
+	)
+	rs.Configuration = "operationProfiling:\n  mode: slowOp\n"
+	// The arbiter asks for something of its own; it shares mongod's ConfigMap,
+	// so it cannot have it.
+	rs.Instances[1].Configuration = "systemLog:\n  quiet: true\n"
+
+	for i := range rs.Instances {
+		require.NoError(t, rs.Instances[i].SetDefaults(testCR(), rs))
+	}
+
+	set, err := Resolve(testCR(), rs)
+	require.NoError(t, err)
+
+	mongod, ok := set.GetByName(api.ReservedGroupMongod)
+	require.True(t, ok)
+	arbiter, ok := set.GetByName(api.ReservedGroupArbiter)
+	require.True(t, ok)
+
+	assert.Equal(t, mongod.ConfigName, arbiter.ConfigName, "the arbiter shares the mongod group's ConfigMap")
+	assert.Equal(t, mongod.Configuration, arbiter.Configuration,
+		"and therefore its content, whichever group writes it last")
+	assert.Equal(t, api.MongoConfiguration(mongodOwn), arbiter.Configuration)
 }

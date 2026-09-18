@@ -71,6 +71,13 @@ func GroupConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpe
 	if id, ok := reservedGroups[group]; ok {
 		suffix = id.configSuffix
 	}
+
+	// legacy resolution above should apply only if a group named mongod is also present,
+	// otherwise treat this as any other instance group.
+	if group == GroupArbiter && rs.InstanceMode() && rs.Instance(GroupMongod) == nil {
+		suffix = group
+	}
+
 	return cr.Name + "-" + rs.Name + "-" + suffix
 }
 

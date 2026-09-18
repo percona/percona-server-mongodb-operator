@@ -8005,6 +8005,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          configuration:
+                            type: string
                           containerSecurityContext:
                             properties:
                               allowPrivilegeEscalation:
@@ -23511,6 +23513,8 @@ spec:
                               additionalProperties:
                                 type: string
                               type: object
+                            configuration:
+                              type: string
                             containerSecurityContext:
                               properties:
                                 allowPrivilegeEscalation:

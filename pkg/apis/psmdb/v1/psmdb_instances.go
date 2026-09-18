@@ -64,6 +64,9 @@ type InstanceSpec struct {
 
 	// Specifiying the following fields will override the corresponding replicaset-level settings.
 
+	// Configuration is the mongod configuration file for this group's members.
+	// All replicaset wide settings are read from the rs.Configuration, not the per-instance configuration.
+	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
@@ -163,8 +166,6 @@ func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) er
 		}
 	}
 
-	// Presence and absence of volumeSpec are CEL rules; only the option
-	// normalization is left.
 	if i.VolumeSpec != nil {
 		if err := i.VolumeSpec.reconcileOpts(); err != nil {
 			return errors.Wrapf(err, "%s.volumeSpec", path)
@@ -181,6 +182,11 @@ func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) er
 		i.ReadinessProbe = rs.ReadinessProbe.DeepCopy()
 	} else {
 		i.ReadinessProbe = defaultReadinessProbe(cr, i.ReadinessProbe, rs.Name, int(rs.GetPort()))
+	}
+
+	i.Configuration = i.resolveConfiguration(rs)
+	if err := i.Configuration.SetDefaults(); err != nil {
+		return errors.Wrapf(err, "%s.configuration", path)
 	}
 
 	if i.Env == nil {
@@ -210,6 +216,35 @@ func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) er
 	}
 
 	return nil
+}
+
+// resolveConfiguration returns the mongod configuration this group's members
+// run. A reserved group name exists to reproduce the legacy object
+// exactly: same ConfigMap name, same content so that rewriting a
+// legacy replica set as instances[] rolls nothing:
+// * nonVoting and hidden take only what they declare
+// * arbiter shares the mongod group's ConfigMap whenever there is one
+// * every other group falls back to the replica set's configuration
+func (i InstanceSpec) resolveConfiguration(rs *ReplsetSpec) MongoConfiguration {
+	switch i.Name {
+	case ReservedGroupNonVoting, ReservedGroupHidden:
+		return i.Configuration
+
+	case ReservedGroupArbiter:
+		// preserve compatibility with legacy behaviour
+		if mongod := rs.Instance(ReservedGroupMongod); mongod != nil {
+			if mongod.Configuration != "" {
+				return mongod.Configuration
+			}
+			return rs.Configuration
+		}
+	}
+
+	if i.Configuration != "" {
+		return i.Configuration
+	}
+
+	return rs.Configuration
 }
 
 func (i *InstanceSpec) inheritMultiAZ(rs *ReplsetSpec) {
