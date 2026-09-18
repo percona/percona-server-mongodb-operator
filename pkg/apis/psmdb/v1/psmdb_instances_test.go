@@ -318,12 +318,15 @@ func TestCheckSafeInstanceDefaults(t *testing.T) {
 			rs:      &ReplsetSpec{Instances: []InstanceSpec{declared("hot", 9, nil)}},
 			wantErr: "a replica set supports at most 7 voting members, got 9",
 		},
-		"beyond the voting ceiling under the implicit policy": {
-			// The cap is enforced whichever vote engine will run. Before
-			// cd7e79f81 this was only checked for explicit topologies, so a
-			// legacy-shaped instances[] could reach rs.initiate with 9 voters.
-			rs:      &ReplsetSpec{Instances: []InstanceSpec{bare(ReservedGroupMongod, 9)}},
-			wantErr: "a replica set supports at most 7 voting members, got 9",
+		"the voting ceiling does not apply under the implicit policy": {
+			rs: &ReplsetSpec{Instances: []InstanceSpec{bare(ReservedGroupMongod, 9)}},
+		},
+		"the voting ceiling does not apply under the implicit policy with legacy base + hidden beyond the ceiling": {
+			// 8 voters, SetVotes reduces to 7
+			rs: &ReplsetSpec{Instances: []InstanceSpec{
+				bare(ReservedGroupMongod, 5),
+				bare(ReservedGroupHidden, 3),
+			}},
 		},
 		"external nodes count toward the voting ceiling": {
 			rs: &ReplsetSpec{

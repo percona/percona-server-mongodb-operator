@@ -1050,12 +1050,12 @@ func (rs *ReplsetSpec) checkSafeInstanceDefaults(unsafe UnsafeFlags) error {
 			maxReplsetMembers, members)
 	}
 
-	if voters > maxVotingMembers {
-		return errors.Errorf("a replica set supports at most %d voting members, got %d",
-			maxVotingMembers, voters)
-	}
-
 	if !rs.UseImplicitVotePolicy() {
+		if voters > maxVotingMembers {
+			return errors.Errorf("a replica set supports at most %d voting members, got %d",
+				maxVotingMembers, voters)
+		}
+
 		if !unsafe.ReplsetSize && voters%2 == 0 {
 			return errors.Errorf("the number of voting members must be odd, got %d. "+
 				"Set spec.unsafeFlags.replsetSize to true to disable this check", voters)
