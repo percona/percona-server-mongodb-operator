@@ -10,15 +10,18 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func TestGetReconcileInterval(t *testing.T) {
@@ -449,3 +452,210 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 		})
 	})
 })
+
+// voting and nonVotingInst build instance groups for the downscale tables.
+func voting(name string, replicas int32) psmdbv1.InstanceSpec {
+	return psmdbv1.InstanceSpec{Name: name, Replicas: replicas, VolumeSpec: memberVol(),
+		RSConfig: &psmdbv1.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}}
+}
+
+func nonVotingInst(name string, replicas int32) psmdbv1.InstanceSpec {
+	return psmdbv1.InstanceSpec{Name: name, Replicas: replicas, VolumeSpec: memberVol(),
+		RSConfig: &psmdbv1.MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))}}
+}
+
+func TestDownscaleTarget(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		declared    []psmdbv1.InstanceSpec
+		observed    map[string]int32
+		nilReplicas map[string]bool
+		want        map[string]int32
+	}{
+		{
+			name:     "nothing to do",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 3)},
+			observed: map[string]int32{"mongod": 3},
+			want:     map[string]int32{"ds-cr-rs0": 3},
+		},
+		{
+			// One step needs no rate limiting: it is already one member.
+			name:     "a gap of one is taken in a single pass",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 2)},
+			observed: map[string]int32{"mongod": 3},
+			want:     map[string]int32{"ds-cr-rs0": 2},
+		},
+		{
+			name:     "a larger gap sheds one member per pass",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 2)},
+			observed: map[string]int32{"mongod": 5},
+			want:     map[string]int32{"ds-cr-rs0": 4},
+		},
+		{
+			// The budget is one per replica set, not one per group: the second
+			// group is held at the size its StatefulSet already has.
+			name:     "the second voting group is held at its observed size",
+			declared: []psmdbv1.InstanceSpec{voting("a", 1), voting("b", 1)},
+			observed: map[string]int32{"a": 3, "b": 3},
+			want:     map[string]int32{"ds-cr-rs0-a": 2, "ds-cr-rs0-b": 3},
+		},
+		{
+			// A non-voting member cannot cost quorum, so it drops straight to
+			// its declared count.
+			name:     "a non-voting group is not rate limited",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 3), nonVotingInst("nv", 0)},
+			observed: map[string]int32{"mongod": 3, "nv": 3},
+			want:     map[string]int32{"ds-cr-rs0": 3, "ds-cr-rs0-nv": 0},
+		},
+		{
+			name:     "a non-voting group does not spend the budget",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 2), nonVotingInst("nv", 0)},
+			observed: map[string]int32{"mongod": 5, "nv": 3},
+			want:     map[string]int32{"ds-cr-rs0": 4, "ds-cr-rs0-nv": 0},
+		},
+		{
+			name:     "a group with no statefulset yet is left at its declared count",
+			declared: []psmdbv1.InstanceSpec{voting("hot", 3)},
+			observed: nil,
+			want:     map[string]int32{"ds-cr-rs0-hot": 3},
+		},
+		{
+			name:        "a statefulset with no replicas set is left alone",
+			declared:    []psmdbv1.InstanceSpec{voting("hot", 3)},
+			observed:    map[string]int32{"hot": 3},
+			nilReplicas: map[string]bool{"hot": true},
+			want:        map[string]int32{"ds-cr-rs0-hot": 3},
+		},
+		{
+			// Growing is not downscaling; the budget is untouched.
+			name:     "an upscale passes through",
+			declared: []psmdbv1.InstanceSpec{voting("mongod", 5)},
+			observed: map[string]int32{"mongod": 3},
+			want:     map[string]int32{"ds-cr-rs0": 5},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			cr := instanceCR(t, "ds-cr", "ds", tt.declared, unsafeSize)
+			rs := cr.Spec.Replsets[0]
+
+			set, err := membergroup.Resolve(cr, rs)
+			require.NoError(t, err)
+
+			objs := []client.Object{cr}
+			for name, replicas := range tt.observed {
+				g := resolveGroup(t, cr, rs, name)
+				sts := groupSTS(cr, rs, g, replicas, replicas)
+				if tt.nilReplicas[name] {
+					sts.Spec.Replicas = nil
+				}
+				objs = append(objs, sts)
+			}
+
+			r := buildFakeClient(objs...)
+
+			got, err := r.downscaleTarget(ctx, cr, set)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDownscaleTargetBudgetsRetiringWorkloads(t *testing.T) {
+	ctx := t.Context()
+
+	declared := []psmdbv1.InstanceSpec{voting("data", 3), voting("analytics", 4)}
+	cr := instanceCR(t, "ds-cr", "ds", declared, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	full, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	objs := []client.Object{cr}
+	for _, g := range full.GetAll() {
+		objs = append(objs, groupSTS(cr, rs, g, g.Replicas, g.Replicas))
+	}
+	r := buildFakeClient(objs...)
+
+	// The user deletes analytics and shrinks data in the same edit.
+	rs.Instances = rs.Instances[:1]
+	rs.Instances[0].Replicas = 1
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	got, err := r.downscaleTarget(ctx, cr, set)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(3), got["ds-cr-rs0-analytics"],
+		"the retiring workload sheds one member")
+	assert.Equal(t, int32(3), got["ds-cr-rs0-data"],
+		"budget spent, so the declared group is held at its observed size")
+
+	// Once the retiring workload is empty the budget frees up again.
+	sts := new(appsv1.StatefulSet)
+	require.NoError(t, r.client.Get(ctx,
+		client.ObjectKey{Name: "ds-cr-rs0-analytics", Namespace: cr.Namespace}, sts))
+	sts.Spec.Replicas = new(int32(0))
+	require.NoError(t, r.client.Update(ctx, sts))
+
+	got, err = r.downscaleTarget(ctx, cr, set)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(0), got["ds-cr-rs0-analytics"])
+	assert.Equal(t, int32(2), got["ds-cr-rs0-data"], "the declared group resumes shrinking")
+}
+
+func TestSafeDownscale(t *testing.T) {
+	t.Run("legacy", func(t *testing.T) {
+		ctx := t.Context()
+
+		cr := legacyCR(t, "ds-cr", "ds", func(c *psmdbv1.PerconaServerMongoDB) {
+			c.Spec.Unsafe.ReplsetSize = true
+			c.Spec.Replsets[0].Size = 2
+			c.Spec.Replsets[0].NonVoting = psmdbv1.NonVotingSpec{Enabled: true, Size: 1}
+			c.Spec.Replsets[0].Hidden = psmdbv1.HiddenSpec{Enabled: true, Size: 1}
+		})
+		rs := cr.Spec.Replsets[0]
+
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
+
+		objs := []client.Object{cr}
+		for _, g := range set.GetAll() {
+			// every workload is larger than its declared size
+			objs = append(objs, groupSTS(cr, rs, g, g.Replicas+3, g.Replicas+3))
+		}
+		r := buildFakeClient(objs...)
+
+		isDownscale, err := r.safeDownscale(ctx, cr)
+		require.NoError(t, err)
+		assert.True(t, isDownscale)
+
+		assert.Equal(t, int32(4), rs.Size,
+			"the base group is stepped down by one, into rs.size")
+		assert.Equal(t, int32(1), rs.NonVoting.Size,
+			"a non-voting role is never rate limited, so its declared size stands")
+		assert.Equal(t, int32(4), rs.Hidden.Size,
+			"hidden is pinned at its observed size until the budget frees up")
+	})
+
+	t.Run("instances", func(t *testing.T) {
+		ctx := t.Context()
+
+		cr := instanceCR(t, "ds-cr", "ds", []psmdbv1.InstanceSpec{voting("hot", 1)}, unsafeSize)
+		rs := cr.Spec.Replsets[0]
+
+		g := resolveGroup(t, cr, rs, "hot")
+		r := buildFakeClient(cr, groupSTS(cr, rs, g, 5, 5))
+
+		isDownscale, err := r.safeDownscale(ctx, cr)
+		require.NoError(t, err)
+		assert.True(t, isDownscale)
+
+		assert.Equal(t, int32(4), rs.Instance("hot").Replicas,
+			"the instance entry carries the intermediate count")
+		assert.Equal(t, int32(0), rs.Size,
+			"rs.size is not written in instance mode")
+	})
+}
