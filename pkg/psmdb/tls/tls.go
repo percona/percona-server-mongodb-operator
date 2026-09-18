@@ -316,7 +316,7 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		}...)
 
-		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
+		if cr.CompareVersion("1.24.0") >= 0 || (cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0) {
 			horizonSans := make(map[string]struct{})
 			for _, podMap := range replset.GetHorizons(false) {
 				for _, domain := range podMap {
