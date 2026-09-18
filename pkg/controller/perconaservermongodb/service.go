@@ -2,6 +2,8 @@ package perconaservermongodb
 
 import (
 	"context"
+	"slices"
+	"sort"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -183,22 +185,24 @@ func (r *ReconcilePerconaServerMongoDB) exportServices(ctx context.Context, cr *
 }
 
 // expectedExternalServiceNames returns the per-pod service names the replica
-// set's groups require. A per-pod service is named after its pod, so this is
-// exactly the union of every group's desired pod names.
+// set's groups require, sorted. A per-pod service is named after its pod, so
+// this is exactly the union of every group's desired pod names.
 func (r *ReconcilePerconaServerMongoDB) expectedExternalServiceNames(
 	cr *api.PerconaServerMongoDB,
 	rs *api.ReplsetSpec,
 	set *membergroup.Set,
-) map[string]struct{} {
-	names := make(map[string]struct{}, set.GetTotalMemberCount())
+) []string {
+	names := make([]string, 0, set.GetTotalMemberCount())
 	if !rs.Expose.Enabled {
 		return names
 	}
+
 	for _, group := range set.GetAll() {
-		for _, pod := range group.DesiredPodNames(cr, rs) {
-			names[pod] = struct{}{}
-		}
+		names = append(names, group.DesiredPodNames(cr, rs)...)
 	}
+
+	sort.Strings(names)
+
 	return names
 }
 
@@ -224,7 +228,8 @@ func (r *ReconcilePerconaServerMongoDB) removeOutdatedServices(ctx context.Conte
 
 	for i := range svcList.Items {
 		svc := &svcList.Items[i]
-		if _, ok := svcNames[svc.Name]; ok {
+		// Linear, but both sides are bounded by the replica set's member count.
+		if slices.Contains(svcNames, svc.Name) {
 			continue
 		}
 
