@@ -8,12 +8,14 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -178,7 +180,10 @@ func TestRemoveOutdatedServices(t *testing.T) {
 		name      string
 		configure func(rs *api.ReplsetSpec)
 		pause     bool
-		want      []string
+		// pods that exist while removeOutdatedServices runs. A per-pod service
+		// is named after its pod, so these are service names too.
+		pods []string
+		want []string
 	}{
 		{
 			name: "exposed replset without special members keeps only base services",
@@ -238,6 +243,31 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			want: allSvcs,
 		},
 		{
+			name: "a scale-down victim keeps its service while its pod is up",
+			configure: func(rs *api.ReplsetSpec) {
+				rs.Expose.Enabled = true
+				rs.Size = 2
+			},
+			pods: []string{prefix + "-2"},
+			want: baseSvcs,
+		},
+		{
+			name: "a scale-down victim loses its service once the pod is gone",
+			configure: func(rs *api.ReplsetSpec) {
+				rs.Expose.Enabled = true
+				rs.Size = 2
+			},
+			want: []string{prefix + "-0", prefix + "-1"},
+		},
+		{
+			name: "turning expose off deletes per-pod services even while the pods are up",
+			configure: func(rs *api.ReplsetSpec) {
+				rs.Expose.Enabled = false
+			},
+			pods: baseSvcs,
+			want: nil,
+		},
+		{
 			name: "paused cluster keeps all services untouched",
 			configure: func(rs *api.ReplsetSpec) {
 				rs.Expose.Enabled = true
@@ -261,6 +291,11 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			cr.Spec.Pause = tt.pause
 
 			objs := append([]client.Object{cr}, seedServices(cr, rs)...)
+			for _, name := range tt.pods {
+				objs = append(objs, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+				})
+			}
 			r := buildFakeClient(objs...)
 
 			require.NoError(t, r.removeOutdatedServices(ctx, cr, rs))
@@ -353,4 +388,137 @@ func TestRemoveStaleExternalDNSAnnotations(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.old)
 		})
 	}
+}
+
+func TestExpectedExternalServiceNames(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		legacy    func(*api.PerconaServerMongoDB)
+		instances []api.InstanceSpec
+		expose    bool
+		want      []string
+	}{
+		{
+			name: "expose disabled contributes nothing at all",
+			legacy: func(c *api.PerconaServerMongoDB) {
+				c.Spec.Replsets[0].Size = 3
+				c.Spec.Replsets[0].NonVoting = api.NonVotingSpec{Enabled: true, Size: 2}
+				c.Spec.Replsets[0].Hidden = api.HiddenSpec{Enabled: true, Size: 1}
+			},
+			expose: false,
+			want:   []string{},
+		},
+		{
+			name: "every legacy role contributes its pods",
+			legacy: func(c *api.PerconaServerMongoDB) {
+				c.Spec.Replsets[0].Size = 3
+				c.Spec.Replsets[0].NonVoting = api.NonVotingSpec{Enabled: true, Size: 2}
+				c.Spec.Replsets[0].Hidden = api.HiddenSpec{Enabled: true, Size: 1}
+				c.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
+				c.Spec.Unsafe.ReplsetSize = true
+			},
+			expose: true,
+			want: []string{
+				"svc-cr-rs0-0", "svc-cr-rs0-1", "svc-cr-rs0-2",
+				"svc-cr-rs0-arbiter-0",
+				"svc-cr-rs0-hidden-0",
+				"svc-cr-rs0-nv-0", "svc-cr-rs0-nv-1",
+			},
+		},
+		{
+			name: "every instance group contributes its pods",
+			instances: []api.InstanceSpec{
+				voting("mongod", 2), voting("hot", 2), voting("cold", 1),
+			},
+			expose: true,
+			want: []string{
+				"svc-cr-rs0-0", "svc-cr-rs0-1",
+				"svc-cr-rs0-cold-0",
+				"svc-cr-rs0-hot-0", "svc-cr-rs0-hot-1",
+			},
+		},
+		{
+			name: "a group scaled to zero contributes nothing",
+			instances: []api.InstanceSpec{
+				voting("mongod", 3), voting("empty", 0),
+			},
+			expose: true,
+			want:   []string{"svc-cr-rs0-0", "svc-cr-rs0-1", "svc-cr-rs0-2"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var cr *api.PerconaServerMongoDB
+			if tt.instances != nil {
+				cr = instanceCR(t, "svc-cr", "svc", tt.instances, unsafeSize)
+			} else {
+				cr = legacyCR(t, "svc-cr", "svc", tt.legacy)
+			}
+			rs := cr.Spec.Replsets[0]
+			rs.Expose.Enabled = tt.expose
+
+			set, err := membergroup.Resolve(cr, rs)
+			require.NoError(t, err)
+
+			r := buildFakeClient(cr)
+
+			assert.Equal(t, tt.want, r.expectedExternalServiceNames(cr, rs, set))
+		})
+	}
+}
+
+func TestRemoveOutdatedServicesInstanceMode(t *testing.T) {
+	ctx := t.Context()
+
+	instances := []api.InstanceSpec{voting("mongod", 2), voting("hot", 2)}
+	cr := instanceCR(t, "svc-cr", "svc", instances, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+	rs.Expose.Enabled = true
+
+	seeded := []string{
+		"svc-cr-rs0-0", "svc-cr-rs0-1",
+		"svc-cr-rs0-hot-0", "svc-cr-rs0-hot-1", "svc-cr-rs0-hot-2",
+	}
+
+	objs := []client.Object{cr}
+	for _, name := range seeded {
+		objs = append(objs, psmdb.ExternalService(cr, rs, name))
+	}
+	// the shrunk group's pod is already gone, so its service is a leftover
+	for _, name := range []string{"svc-cr-rs0-0", "svc-cr-rs0-1", "svc-cr-rs0-hot-0", "svc-cr-rs0-hot-1"} {
+		objs = append(objs, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
+		})
+	}
+
+	r := buildFakeClient(objs...)
+	require.NoError(t, r.removeOutdatedServices(ctx, cr, rs))
+
+	svcList := new(corev1.ServiceList)
+	require.NoError(t, r.client.List(ctx, svcList, client.InNamespace(cr.Namespace)))
+
+	got := make([]string, 0, len(svcList.Items))
+	for i := range svcList.Items {
+		got = append(got, svcList.Items[i].Name)
+	}
+	sort.Strings(got)
+
+	assert.Equal(t, []string{
+		"svc-cr-rs0-0", "svc-cr-rs0-1", "svc-cr-rs0-hot-0", "svc-cr-rs0-hot-1",
+	}, got, "the service of the retired ordinal is deleted, the rest are kept")
+}
+
+func TestRemoveOutdatedServicesToleratesAMissingService(t *testing.T) {
+	ctx := t.Context()
+
+	cr := instanceCR(t, "svc-cr", "svc", []api.InstanceSpec{voting("mongod", 2)}, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+	rs.Expose.Enabled = true
+
+	stale := psmdb.ExternalService(cr, rs, "svc-cr-rs0-9")
+	r := buildFakeClient(cr, stale)
+
+	// first pass deletes it
+	require.NoError(t, r.removeOutdatedServices(ctx, cr, rs))
+	// second pass sees nothing and must not error
+	require.NoError(t, r.removeOutdatedServices(ctx, cr, rs))
 }
