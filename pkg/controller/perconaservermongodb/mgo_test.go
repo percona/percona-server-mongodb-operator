@@ -128,15 +128,22 @@ func TestDefaultRWConcern(t *testing.T) {
 	}
 }
 
+// rwInstance builds an instance group for the write-concern table.
+func rwInstance(name string, replicas int32, cfg *api.MemberConfigSpec) api.InstanceSpec {
+	return api.InstanceSpec{Name: name, Replicas: replicas, RSConfig: cfg}
+}
+
 func TestShouldSetDefaultRWConcern(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		shardingEnabled bool
 		arbiterEnabled  bool
-		externalNodes   []*api.ExternalNode
-		rwConcern       *api.DefaultRWConcern
-		want            bool
+		// instances replaces the legacy topology when set
+		instances     []api.InstanceSpec
+		externalNodes []*api.ExternalNode
+		rwConcern     *api.DefaultRWConcern
+		want          bool
 	}{
 		"PSS, no custom concern": {
 			want: false,
@@ -186,6 +193,40 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 			rwConcern:       &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
 			want:            false,
 		},
+		"instances with an arbiter group": {
+			instances: []api.InstanceSpec{
+				rwInstance("mongod", 2, nil),
+				rwInstance("arb", 1, &api.MemberConfigSpec{
+					ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}),
+			},
+			want: true,
+		},
+		"instances without an arbiter group": {
+			instances: []api.InstanceSpec{rwInstance("hot", 3, nil)},
+			want:      false,
+		},
+		"instances with a custom concern": {
+			instances: []api.InstanceSpec{rwInstance("hot", 3, nil)},
+			rwConcern: &api.DefaultRWConcern{WriteConcern: &api.DefaultWriteConcernSpec{W: "1"}},
+			want:      true,
+		},
+		"sharded instances with an arbiter group": {
+			shardingEnabled: true,
+			instances: []api.InstanceSpec{
+				rwInstance("mongod", 2, nil),
+				rwInstance("arb", 1, &api.MemberConfigSpec{
+					ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}),
+			},
+			want: false,
+		},
+		"a nil external node is skipped": {
+			externalNodes: []*api.ExternalNode{nil, {ArbiterOnly: true}},
+			want:          true,
+		},
+		"only a nil external node": {
+			externalNodes: []*api.ExternalNode{nil},
+			want:          false,
+		},
 	}
 
 	for name, tc := range tests {
@@ -203,6 +244,12 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 			rs := &api.ReplsetSpec{
 				Arbiter:       arbiter,
 				ExternalNodes: tc.externalNodes,
+			}
+			if tc.instances != nil {
+				rs = &api.ReplsetSpec{
+					Instances:     tc.instances,
+					ExternalNodes: tc.externalNodes,
+				}
 			}
 
 			set, err := membergroup.Resolve(cr, rs)
