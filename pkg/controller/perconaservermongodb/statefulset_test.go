@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,6 +48,16 @@ func TestReconcileStatefulSet(t *testing.T) {
 	// unsafePSA in mgo.go, never in the StatefulSet build path, so this does not
 	// affect the generated objects.
 	defaultCR.Spec.Replsets[0].Arbiter.Enabled = true
+	// The same for the config server, which supports non-voting and hidden
+	// members. Not an arbiter: CheckNSetDefaults forces
+	// sharding.configsvrReplSet.arbiter.enabled to false, so no such workload
+	// is ever built.
+	// deploy/cr.yaml carries sizes for rs0's roles but not the config
+	// server's, so set them here or the workloads generate with zero replicas.
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.NonVoting.Enabled = true
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.NonVoting.Size = 3
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Hidden.Enabled = true
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Hidden.Size = 2
 	defaultCR.Spec.Unsafe.ReplsetSize = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
@@ -125,6 +137,34 @@ func TestReconcileStatefulSet(t *testing.T) {
 			rsName:      "cfg",
 			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
+		},
+		{
+			name:        "cfg-non-voting",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			group:       naming.GroupNonVoting,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
+		},
+		{
+			name:        "cfg-hidden",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "cfg",
+			group:       naming.GroupHidden,
+			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
+		},
+		{
+			name:        "rs0-instance-hot",
+			cr:          instanceModeCR(t, defaultCR),
+			rsName:      "rs0",
+			group:       "hot",
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-instance-hot.yaml"),
+		},
+		{
+			name:        "rs0-instance-arbiter",
+			cr:          instanceModeCR(t, defaultCR),
+			rsName:      "rs0",
+			group:       "arb",
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-instance-arbiter.yaml"),
 		},
 		{
 			name:        "rs0-logrotate",
@@ -236,6 +276,54 @@ func TestReconcileStatefulSet(t *testing.T) {
 	}
 }
 
+// instanceModeCR rewrites the default fixture's rs0 as instances[], keeping
+// everything else identical so the generated workloads are comparable.
+func instanceModeCR(t *testing.T, base *api.PerconaServerMongoDB) *api.PerconaServerMongoDB {
+	t.Helper()
+
+	cr := base.DeepCopy()
+	rs := cr.Spec.Replsets[0]
+
+	rs.Size = 0
+	rs.VolumeSpec = nil
+	rs.Arbiter = api.Arbiter{}
+	rs.NonVoting = api.NonVotingSpec{}
+	rs.Hidden = api.HiddenSpec{}
+	rs.Instances = []api.InstanceSpec{
+		{
+			Name: "hot", Replicas: 2,
+			RSConfig:   &api.MemberConfigSpec{Priority: new(int32(10)), Votes: new(int32(1))},
+			VolumeSpec: instanceVolumeSpec("fast-nvme", "42Gi"),
+			MultiAZ: api.MultiAZ{Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("2"),
+					corev1.ResourceMemory: resource.MustParse("4G"),
+				},
+			}},
+		},
+		{
+			Name: "arb", Replicas: 1,
+			RSConfig: &api.MemberConfigSpec{
+				ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))},
+		},
+	}
+	cr.Spec.Unsafe.ReplsetSize = true
+
+	require.NoError(t, cr.CheckNSetDefaults(context.Background(), version.PlatformKubernetes))
+
+	return cr
+}
+
+func instanceVolumeSpec(storageClass, size string) *api.VolumeSpec {
+	return &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		}}}
+}
+
 func expectedSts(t *testing.T, filename string) *appsv1.StatefulSet {
 	t.Helper()
 
@@ -294,4 +382,105 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	if !reflect.DeepEqual(got.Status, want.Status) {
 		t.Fatal(cmp.Diff(want.Status, got.Status))
 	}
+}
+
+func TestInstanceModeEquivalence(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "reconcile-statefulset"
+		crName = ns + "-cr"
+	)
+
+	build := func(t *testing.T, mutate func(*api.PerconaServerMongoDB)) *appsv1.StatefulSet {
+		t.Helper()
+
+		cr, err := readDefaultCR(crName, ns)
+		require.NoError(t, err)
+		cr.Spec.Sharding.Enabled = false
+		mutate(cr)
+		require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+		r := buildFakeClient(cr,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: crName + "-ssl", Namespace: ns,
+			}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: crName + "-ssl-internal", Namespace: ns,
+			}},
+		)
+
+		rs := cr.Spec.Replsets[0]
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
+
+		group, ok := set.GetByName(naming.GroupMongod)
+		require.Truef(t, ok, "no mongod group (have %v)", set.GetNames())
+
+		sts, err := r.reconcileStatefulSet(ctx, cr, rs, group)
+		require.NoError(t, err)
+
+		return sts
+	}
+
+	legacy := build(t, func(cr *api.PerconaServerMongoDB) {
+		cr.Spec.Replsets[0].Size = 3
+	})
+
+	rewritten := build(t, func(cr *api.PerconaServerMongoDB) {
+		rs := cr.Spec.Replsets[0]
+		// Everything the legacy replica set declared, moved onto the group.
+		// volumeSpec has to come along: in instance mode the replica set owns
+		// no storage.
+		vol := rs.VolumeSpec
+		rs.Size = 0
+		rs.VolumeSpec = nil
+		rs.Instances = []api.InstanceSpec{
+			{Name: naming.GroupMongod, Replicas: 3, VolumeSpec: vol},
+		}
+	})
+
+	assert.Equal(t, legacy.Name, rewritten.Name, "the workload keeps its name")
+	assert.Equal(t, legacy.Labels, rewritten.Labels)
+
+	// The SSL hash annotations are computed from secrets, not from the
+	// topology, and the config hash covers the same ConfigMap either way.
+	stripVolatile := func(sts *appsv1.StatefulSet) appsv1.StatefulSetSpec {
+		spec := *sts.Spec.DeepCopy()
+		delete(spec.Template.Annotations, naming.AnnotationSSLHash)
+		delete(spec.Template.Annotations, naming.AnnotationSSLInternalHash)
+		return spec
+	}
+
+	if diff := cmp.Diff(stripVolatile(legacy), stripVolatile(rewritten)); diff != "" {
+		t.Fatalf("a legacy replica set and its instances[] rewrite must build the same workload:\n%s", diff)
+	}
+}
+func TestStatefulSetRejectsADataBearingGroupWithoutStorage(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "reconcile-statefulset"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	cr.Spec.Sharding.Enabled = false
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replsets[0]
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName(naming.GroupMongod)
+	require.True(t, ok)
+	require.True(t, group.DataBearing)
+	group.VolumeSpec = nil
+
+	r := buildFakeClient(cr)
+
+	_, err = r.reconcileStatefulSet(ctx, cr, rs, group)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has no resolved volumeSpec")
 }
