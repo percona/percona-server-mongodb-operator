@@ -254,6 +254,48 @@ func TestPVCPodName(t *testing.T) {
 			stsName:  "my-cluster-rs0",
 			expected: "",
 		},
+		{
+			name:     "double digit ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-10",
+			stsName:  "my-cluster-rs0",
+			expected: "my-cluster-rs0-10",
+		},
+		{
+			name:     "a sibling group's claim is not the base group's",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "the same claim against its own statefulset",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0-hot",
+			expected: "my-cluster-rs0-hot-0",
+		},
+		{
+			name:     "a non numeric ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-abc",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "no ordinal at all",
+			pvcName:  "mongod-data-my-cluster-rs0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "a different claim template",
+			pvcName:  "logs-my-cluster-rs0-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "another replica set's claim",
+			pvcName:  "mongod-data-my-cluster-rs1-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -263,6 +305,11 @@ func TestPVCPodName(t *testing.T) {
 			result, ok := pvcPodName(config.MongodDataVolClaimName, tt.pvcName, sts)
 			assert.Equal(t, tt.expected != "", ok)
 			assert.Equal(t, tt.expected, result)
+
+			assert.Equal(t, tt.expected != "",
+				validatePVCName(config.MongodDataVolClaimName,
+					corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: tt.pvcName}}, sts),
+				"validatePVCName must agree with pvcPodName")
 		})
 	}
 }
