@@ -2,7 +2,9 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +15,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -658,4 +662,330 @@ func TestSafeDownscale(t *testing.T) {
 		assert.Equal(t, int32(0), rs.GetMongodSize(),
 			"rs.size is not written in instance mode")
 	})
+}
+
+var _ = Describe("instances[] CRD validation", func() {
+	const ns = "default"
+
+	ctx := context.Background()
+
+	var counter int
+	// applyCR builds a valid default CR, hands it to mutate, and returns the
+	// error from the API server. Each spec gets its own name so a rejected
+	// create cannot collide with an accepted one.
+	applyCR := func(mutate func(*psmdbv1.PerconaServerMongoDB)) error {
+		counter++
+		cr, err := readDefaultCR(fmt.Sprintf("cel-%d", counter), ns)
+		Expect(err).NotTo(HaveOccurred())
+
+		mutate(cr)
+
+		return k8sClient.Create(ctx, cr)
+	}
+
+	// instanceMode rewrites rs0 as instances[], clearing everything the CRD
+	// requires absent in that mode.
+	instanceMode := func(cr *psmdbv1.PerconaServerMongoDB, instances ...psmdbv1.InstanceSpec) {
+		rs := cr.Spec.Replsets[0]
+		rs.Size = new(int32(0))
+		rs.VolumeSpec = nil
+		rs.Arbiter = psmdbv1.Arbiter{}
+		rs.NonVoting = psmdbv1.NonVotingSpec{}
+		rs.Hidden = psmdbv1.HiddenSpec{}
+		rs.Instances = instances
+	}
+
+	vol := func() *psmdbv1.VolumeSpec {
+		return cloneVolumeSpec()
+	}
+	dataInstance := func(name string, replicas int32) psmdbv1.InstanceSpec {
+		return psmdbv1.InstanceSpec{Name: name, Replicas: replicas, VolumeSpec: vol()}
+	}
+	arbiterInstance := func(name string) psmdbv1.InstanceSpec {
+		return psmdbv1.InstanceSpec{Name: name, Replicas: 1,
+			RSConfig: &psmdbv1.MemberConfigSpec{ArbiterOnly: new(true)}}
+	}
+
+	DescribeTable("rejects a malformed topology",
+		func(mutate func(*psmdbv1.PerconaServerMongoDB), wantMessage string) {
+			err := applyCR(mutate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(wantMessage))
+		},
+
+		// --- the two formats are exclusive -------------------------------
+		Entry("both volumeSpec and instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].VolumeSpec = vol()
+			},
+			"exactly one of volumeSpec or instances[] must be set"),
+		Entry("size alongside instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].Size = new(int32(3))
+			},
+			"size must be absent when instances[] is set"),
+		Entry("arbiter alongside instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].Arbiter = psmdbv1.Arbiter{Enabled: true, Size: 1}
+			},
+			"arbiter must be absent when instances[] is set"),
+		Entry("nonvoting alongside instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].NonVoting = psmdbv1.NonVotingSpec{Enabled: true, Size: 1}
+			},
+			"nonvoting must be absent when instances[] is set"),
+		Entry("hidden alongside instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].Hidden = psmdbv1.HiddenSpec{Enabled: true, Size: 1}
+			},
+			"hidden must be absent when instances[] is set"),
+
+		// --- the config server is homogeneous ----------------------------
+		Entry("the config server declares instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Enabled = true
+				cr.Spec.Sharding.ConfigsvrReplSet.Instances = []psmdbv1.InstanceSpec{dataInstance("hot", 3)}
+			},
+			"cannot declare configsvrReplSet using instances[]"),
+		Entry("a shard with clusterRole configsvr declares instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].ClusterRole = psmdbv1.ClusterRoleConfigSvr
+			},
+			"configServer cannot have instances[]"),
+
+		// --- storage ownership -------------------------------------------
+		Entry("a data-bearing instance without volumeSpec",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, psmdbv1.InstanceSpec{Name: "hot", Replicas: 3})
+			},
+			"volumeSpec is required for a data-bearing instance"),
+		Entry("an arbiter instance with a volumeSpec",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.VolumeSpec = vol()
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must not declare volumeSpec"),
+
+		// --- reserved names ----------------------------------------------
+		Entry("a name that collides with a generated object",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("nv", 3))
+			},
+			"instance name is reserved by the operator"),
+		Entry("a name that collides with a component label",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("mongos", 3))
+			},
+			"instance name is reserved by the operator"),
+
+		// --- member configuration coherence -------------------------------
+		Entry("an arbiter that is also hidden",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.RSConfig.Hidden = new(true)
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must not be hidden"),
+		Entry("an arbiter that does not vote",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.RSConfig.Votes = new(int32(0))
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must have votes=1"),
+		Entry("an arbiter with a nonzero priority",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.RSConfig.Priority = new(int32(1))
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must have priority=0"),
+		Entry("an arbiter with tags",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.RSConfig.Tags = map[string]string{"rack": "a"}
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must not have tags"),
+		Entry("a non-voter with a nonzero priority",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("ro", 1)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{
+					Votes: new(int32(0)), Priority: new(int32(1))}
+				instanceMode(cr, dataInstance("hot", 3), inst)
+			},
+			"votes=0 requires priority=0"),
+		Entry("a hidden member with a nonzero priority",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("an", 1)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{
+					Hidden: new(true), Priority: new(int32(1))}
+				instanceMode(cr, dataInstance("hot", 3), inst)
+			},
+			"hidden=true requires priority=0"),
+
+		// --- bounds -------------------------------------------------------
+		Entry("a name longer than the derived-name budget",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance(strings.Repeat("a", 55), 3))
+			},
+			"may not be longer than 54"),
+		Entry("more instances than a replica set can hold",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				insts := make([]psmdbv1.InstanceSpec, 0, 51)
+				for i := range 51 {
+					insts = append(insts, dataInstance(fmt.Sprintf("g%d", i), 1))
+				}
+				instanceMode(cr, insts...)
+			},
+			"Too many: 51: must have at most 50 items"),
+		Entry("a negative replica count",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", -1))
+			},
+			"should be greater than or equal to 0"),
+		Entry("a priority above the MongoDB maximum",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("hot", 3)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{Priority: new(int32(1001))}
+				instanceMode(cr, inst)
+			},
+			"should be less than or equal to 1000"),
+		Entry("more than one vote",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("hot", 3)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{Votes: new(int32(2))}
+				instanceMode(cr, inst)
+			},
+			"should be less than or equal to 1"),
+		Entry("more tags than a member document may carry",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				tags := make(map[string]string, 33)
+				for i := range 33 {
+					tags[fmt.Sprintf("k%d", i)] = "v"
+				}
+				inst := dataInstance("hot", 3)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{Tags: tags}
+				instanceMode(cr, inst)
+			},
+			"Too many: 33: must have at most 32 items"),
+	)
+
+	createRaw := func(mutate func(rs map[string]any)) error {
+		counter++
+		cr, err := readDefaultCR(fmt.Sprintf("cel-%d", counter), ns)
+		Expect(err).NotTo(HaveOccurred())
+		instanceMode(cr, dataInstance("hot", 3))
+
+		raw, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cr)
+		Expect(err).NotTo(HaveOccurred())
+
+		u := &unstructured.Unstructured{Object: raw}
+		replsets, _, err := unstructured.NestedSlice(u.Object, "spec", "replsets")
+		Expect(err).NotTo(HaveOccurred())
+
+		mutate(replsets[0].(map[string]any))
+		Expect(unstructured.SetNestedSlice(u.Object, replsets, "spec", "replsets")).To(Succeed())
+		u.SetGroupVersionKind(psmdbv1.SchemeGroupVersion.WithKind("PerconaServerMongoDB"))
+
+		return k8sClient.Create(ctx, u)
+	}
+
+	It("rejects an empty instances[] list", func() {
+		err := createRaw(func(rs map[string]any) {
+			rs["instances"] = []any{}
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("should have at least 1 items"))
+	})
+
+	It("rejects a replica set that declares neither a size nor instances[]", func() {
+		err := applyCR(func(cr *psmdbv1.PerconaServerMongoDB) {
+			cr.Spec.Replsets[0].Size = nil
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("a replicaset must either declare a size or set named instances"))
+	})
+
+	It("accepts an explicit size of zero, which is not the same as unset", func() {
+		Expect(applyCR(func(cr *psmdbv1.PerconaServerMongoDB) {
+			cr.Spec.Replsets[0].Size = new(int32(0))
+		})).To(Succeed())
+	})
+
+	DescribeTable("accepts a well-formed topology",
+		func(mutate func(*psmdbv1.PerconaServerMongoDB)) {
+			Expect(applyCR(mutate)).To(Succeed())
+		},
+
+		Entry("a single data-bearing group",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+			}),
+		Entry("a data group and an arbiter",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 2), arbiterInstance("arb"))
+			}),
+		Entry("the reserved nonVoting name, which is not the reserved-collision one",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3), dataInstance(psmdbv1.ReservedGroupNonVoting, 1))
+			}),
+		Entry("a name at the derived-name budget",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance(strings.Repeat("a", 54), 3))
+			}),
+		Entry("a group scaled to zero",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3), dataInstance("cold", 0))
+			}),
+		Entry("the maximum number of groups",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				insts := make([]psmdbv1.InstanceSpec, 0, 50)
+				for i := range 50 {
+					insts = append(insts, dataInstance(fmt.Sprintf("g%d", i), 1))
+				}
+				instanceMode(cr, insts...)
+			}),
+		Entry("member settings at their bounds",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				tags := make(map[string]string, 32)
+				for i := range 32 {
+					tags[fmt.Sprintf("k%d", i)] = "v"
+				}
+				inst := dataInstance("hot", 3)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{
+					Priority: new(int32(1000)), Votes: new(int32(1)), Tags: tags}
+				instanceMode(cr, inst)
+			}),
+		Entry("a hidden member at priority zero",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("an", 1)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{
+					Hidden: new(true), Priority: new(int32(0))}
+				instanceMode(cr, dataInstance("hot", 3), inst)
+			}),
+		Entry("a non-voter at priority zero",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				inst := dataInstance("ro", 1)
+				inst.RSConfig = &psmdbv1.MemberConfigSpec{
+					Votes: new(int32(0)), Priority: new(int32(0))}
+				instanceMode(cr, dataInstance("hot", 3), inst)
+			}),
+	)
+})
+
+func cloneVolumeSpec() *psmdbv1.VolumeSpec {
+	return &psmdbv1.VolumeSpec{PersistentVolumeClaim: psmdbv1.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+			},
+		}}}
 }
