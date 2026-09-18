@@ -326,7 +326,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteSecrets(ctx context.Context, cr *a
 
 		logf.FromContext(ctx).Info("deleting secret", "name", secret.Name)
 		err = r.client.Delete(ctx, secret)
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete secret %s", secretName)
 		}
 	}
