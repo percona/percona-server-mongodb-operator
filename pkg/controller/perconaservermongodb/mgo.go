@@ -50,13 +50,13 @@ func defaultRWConcern(cr *api.PerconaServerMongoDB) (string, string, int) {
 	return readConcern, writeConcernW, writeConcernWTimeout
 }
 
+// isUnsafePSA reports whether the topology is a primary-secondary-
+// arbiter: two data-bearing voters and an arbiter, and nothing else.
 func isUnsafePSA(cr *api.PerconaServerMongoDB, set *membergroup.Set) bool {
 	if !cr.Spec.Unsafe.ReplsetSize {
 		return false
 	}
-	mongod, ok := set.GetByName(naming.GroupMongod)
-	return ok &&
-		mongod.Replicas == 2 &&
+	return set.GetDataBearingVoterCount() == 2 &&
 		set.GetArbiterMemberCount() == 1 &&
 		set.GetNonVotingMemberCount() == 0
 }
