@@ -1,10 +1,8 @@
 package perconaservermongodb
 
 import (
-	"context"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -93,15 +91,6 @@ func TestReplsetHasUnavailableVoters(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-// erroringClient fails every Get with a non-NotFound error.
-type erroringClient struct {
-	client.Client
-}
-
-func (c *erroringClient) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
-	return errors.New("boom")
 }
 
 // TestIsArbiterPod covers the check that keeps arbiters out of freeze and
