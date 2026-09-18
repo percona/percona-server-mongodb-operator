@@ -17,7 +17,10 @@ def run_bash_test(test_name: str) -> None:
 
     try:
         os.chdir(script_dir)
-        result = subprocess.run(["bash", "run"], check=False)
+        # Keep the namespace alive so pytest can collect diagnostics on failure;
+        # pytest handles teardown afterward (see bash_test_cleanup fixture).
+        env = {**os.environ, "SKIP_DELETE": "1"}
+        result = subprocess.run(["bash", "run"], check=False, env=env)
 
         if result.returncode != 0:
             pytest.fail(f"Test {test_name} failed with exit code {result.returncode}")

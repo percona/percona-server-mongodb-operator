@@ -190,19 +190,35 @@ def clean_all_namespaces() -> None:
             "-o",
             "jsonpath={range .items[*]}{.metadata.name} {.status.phase}{'\\n'}{end}",
         )
-        excluded = ("kube-", "default", "psmdb-operator", "openshift", "gke-", "gmp-")
+        excluded = [
+            "kube-",
+            "default",
+            "psmdb-operator",
+            "openshift",
+            "gke-",
+            "gmp-",
+            "cattle-",
+            "fleet-",
+            "cluster-fleet-",
+            "local",
+            "longhorn-",
+            "metallb-",
+            "p-",
+        ]
 
+        if os.environ.get("RANCHER") == "1":
+            excluded.append("cert-manager")
         namespaces = [
             parts[0]
             for line in result.strip().splitlines()
             if (parts := line.split())
             and len(parts) == 2
-            and not any(ex in parts[0] for ex in excluded)
+            and not any(parts[0].startswith(ex) for ex in excluded)
             and parts[1] != "Terminating"
         ]
 
         if namespaces:
-            kubectl_bin("delete", "ns", *namespaces)
+            kubectl_bin("delete", "ns", "--wait=false", *namespaces)
     except subprocess.CalledProcessError:
         logger.error("Failed to clean namespaces")
 
@@ -229,6 +245,7 @@ def detect_platform() -> str:
         ("eksctl.io", "eks"),
         ("cloud.google.com/gke", "gke"),
         ("kubernetes.azure.com", "aks"),
+        ("minikube.k8s.io", "minikube"),
     ):
         if needle in labels:
             return name
@@ -236,7 +253,7 @@ def detect_platform() -> str:
     provider_id = kubectl_bin(
         "get", "nodes", "-o", "jsonpath={.items[0].spec.providerID}", check=False
     ).lower()
-    for needle, name in (("kind://", "kind"), ("minikube", "minikube"), ("rke2", "rancher")):
+    for needle, name in (("kind://", "kind"), ("rke2", "rancher")):
         if needle in provider_id:
             return name
 
