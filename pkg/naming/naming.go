@@ -43,8 +43,7 @@ const (
 )
 
 // MongodContainerName returns the name of the mongod container for the given
-// replset component. Hidden, non-voting and arbiter pods run the mongod
-// process in a container whose name is suffixed with the component name.
+// replset component.
 func MongodContainerName(component string) string {
 	switch component {
 	case ComponentNonVoting:
