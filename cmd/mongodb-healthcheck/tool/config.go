@@ -27,6 +27,7 @@ import (
 var (
 	defaultMongoDBHost = "localhost"
 	defaultMongoDBPort = "27017"
+	defaultAuthSource  = "admin"
 )
 
 func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*db.Config, error) {
@@ -94,6 +95,7 @@ func NewConfig(app *kingpin.Application, envUser string, envPassword string) (*d
 
 	conf.SSL = ssl
 	conf.Direct = true
+	conf.AuthSource = defaultAuthSource
 
 	return conf, nil
 }
