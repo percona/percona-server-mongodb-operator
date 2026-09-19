@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,6 +24,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -112,7 +116,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			require.NotEmpty(t, cr.Spec.Replsets)
 
 			rs := cr.Spec.Replsets[0]
-			rs.Size = 1
+			rs.Size = new(int32(1))
 			rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
 				corev1.ResourceStorage: requested,
 			}
@@ -151,7 +155,17 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 				scheme: s,
 			}
 
-			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+			// Only the three fields reconcilePVCs reads. Resolving a real set
+			// would overwrite the hand-built labels this fixture shares with its
+			// StatefulSet and PVCs.
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				Labels:      labels,
+				VolumeSpec:  rs.VolumeSpec,
+				DataBearing: true,
+			}
+
+			err = r.reconcilePVCs(t.Context(), cr, sts, group)
 			if tt.expectErrContains != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectErrContains)
@@ -199,7 +213,7 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 	require.NotEmpty(t, cr.Spec.Replsets)
 
 	rs := cr.Spec.Replsets[0]
-	rs.Size = 1
+	rs.Size = new(int32(1))
 	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
 		corev1.ResourceStorage: resource.MustParse(requestedSize),
 	}
@@ -267,7 +281,14 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 				scheme: scheme,
 			}
 
-			err := r.reconcilePVCs(ctx, cr, sts, labels, cr.Spec.Replsets[0].VolumeSpec)
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				Labels:      labels,
+				VolumeSpec:  cr.Spec.Replsets[0].VolumeSpec,
+				DataBearing: true,
+			}
+
+			err := r.reconcilePVCs(ctx, cr, sts, group)
 			require.NoError(t, err)
 
 			gotSTS := new(appsv1.StatefulSet)
@@ -523,4 +544,329 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 		})
 	}
+}
+
+func sizedVol(size string) *api.VolumeSpec {
+	return &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		}}}
+}
+
+func TestGroupStorageTarget(t *testing.T) {
+	legacy := &api.ReplsetSpec{
+		Name:       "rs0",
+		VolumeSpec: sizedVol("1Gi"),
+		NonVoting:  api.NonVotingSpec{Enabled: true, VolumeSpec: sizedVol("2Gi")},
+		Hidden:     api.HiddenSpec{Enabled: true, VolumeSpec: sizedVol("3Gi")},
+		Arbiter:    api.Arbiter{Enabled: true},
+	}
+	instanceMode := &api.ReplsetSpec{Name: "rs0", Instances: []api.InstanceSpec{
+		{Name: "hot", Replicas: 1, VolumeSpec: sizedVol("4Gi")},
+		{Name: "arb", Replicas: 1, RSConfig: &api.MemberConfigSpec{ArbiterOnly: new(true)}},
+	}}
+
+	for _, tt := range []struct {
+		name    string
+		rs      *api.ReplsetSpec
+		source  membergroup.SourceRef
+		want    *api.VolumeSpec
+		wantErr string
+	}{
+		{
+			name: "the base replica set", rs: legacy,
+			source: membergroup.SourceRef{ReplsetName: "rs0"},
+			want:   legacy.VolumeSpec,
+		},
+		{
+			name: "a non-voting role", rs: legacy,
+			source: membergroup.SourceRef{ReplsetName: "rs0", LegacyRole: "nonvoting"},
+			want:   legacy.NonVoting.VolumeSpec,
+		},
+		{
+			name: "a hidden role", rs: legacy,
+			source: membergroup.SourceRef{ReplsetName: "rs0", LegacyRole: "hidden"},
+			want:   legacy.Hidden.VolumeSpec,
+		},
+		{
+			name: "an arbiter role has nothing to resize", rs: legacy,
+			source:  membergroup.SourceRef{ReplsetName: "rs0", LegacyRole: "arbiter"},
+			wantErr: "arbiter has no data volume",
+		},
+		{
+			name: "a declared instance", rs: instanceMode,
+			source: membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "hot"},
+			want:   instanceMode.Instances[0].VolumeSpec,
+		},
+		{
+			name: "an instance that is no longer declared", rs: instanceMode,
+			source:  membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "gone"},
+			wantErr: "instance gone not found",
+		},
+		{
+			name: "an arbiter instance", rs: instanceMode,
+			source:  membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "arb"},
+			wantErr: "has no data volume to resize",
+		},
+		{
+			name: "the base of an instance-mode replica set", rs: instanceMode,
+			source:  membergroup.SourceRef{ReplsetName: "rs0"},
+			wantErr: "has no volume spec",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := groupStorageTarget(tt.rs, tt.source)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Same(t, tt.want, got,
+				"the caller mutates this, so it has to be the spec's own VolumeSpec")
+		})
+	}
+}
+
+// conflictOnceClient returns a Conflict from the first Update and then behaves
+// normally, which is the case writeStorageRequest's RetryOnConflict exists for.
+type conflictOnceClient struct {
+	client.Client
+	fired bool
+}
+
+func (c *conflictOnceClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if !c.fired {
+		c.fired = true
+		return k8serrors.NewConflict(
+			schema.GroupResource{Group: api.SchemeGroupVersion.Group, Resource: "perconaservermongodbs"},
+			obj.GetName(), errors.New("object was modified"))
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestWriteGroupStorageRequest(t *testing.T) {
+	instances := []api.InstanceSpec{
+		{Name: "hot", Replicas: 1, VolumeSpec: sizedVol("1Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "cold", Replicas: 1, VolumeSpec: sizedVol("1Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+	}
+
+	storageOf := func(v *api.VolumeSpec) string {
+		q := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+		return q.String()
+	}
+
+	newFixture := func(t *testing.T) (*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB) {
+		t.Helper()
+		cr := instanceCR(t, "vol-cr", "vol", instances, unsafeSize)
+		return buildFakeClient(cr), cr
+	}
+
+	t.Run("the live CR and the working copy both change", func(t *testing.T) {
+		ctx := t.Context()
+		r, cr := newFixture(t)
+
+		src := membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "hot"}
+		require.NoError(t, r.writeGroupStorageRequest(ctx, cr, src, resource.MustParse("5Gi")))
+
+		fresh := new(api.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx,
+			client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+
+		assert.Equal(t, "5Gi", storageOf(fresh.Spec.Replsets[0].Instance("hot").VolumeSpec),
+			"the persisted CR carries the new size")
+		assert.Equal(t, "5Gi", storageOf(cr.Spec.Replsets[0].Instance("hot").VolumeSpec),
+			"and so does the working copy everything downstream reads")
+		assert.Equal(t, "1Gi", storageOf(fresh.Spec.Replsets[0].Instance("cold").VolumeSpec),
+			"a sibling group is untouched")
+	})
+
+	t.Run("a conflict is retried", func(t *testing.T) {
+		ctx := t.Context()
+		r, cr := newFixture(t)
+		r.client = &conflictOnceClient{Client: r.client}
+
+		src := membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "hot"}
+		require.NoError(t, r.writeGroupStorageRequest(ctx, cr, src, resource.MustParse("7Gi")))
+
+		fresh := new(api.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx,
+			client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+		assert.Equal(t, "7Gi", storageOf(fresh.Spec.Replsets[0].Instance("hot").VolumeSpec))
+	})
+
+	t.Run("a group backed by an emptyDir is rejected", func(t *testing.T) {
+		ctx := t.Context()
+
+		cr := instanceCR(t, "vol-cr", "vol", instances, unsafeSize)
+		cr.Spec.Replsets[0].Instance("hot").VolumeSpec = &api.VolumeSpec{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+		r := buildFakeClient(cr)
+
+		src := membergroup.SourceRef{ReplsetName: "rs0", InstanceName: "hot"}
+		err := r.writeGroupStorageRequest(ctx, cr, src, resource.MustParse("5Gi"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not use a PVC")
+	})
+
+	t.Run("an unknown replset", func(t *testing.T) {
+		ctx := t.Context()
+		r, cr := newFixture(t)
+
+		err := r.writeGroupStorageRequest(ctx, cr,
+			membergroup.SourceRef{ReplsetName: "gone", InstanceName: "hot"},
+			resource.MustParse("5Gi"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "replset gone not found")
+	})
+}
+
+func TestRevertVolumeTemplate(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		// labels for the StatefulSet being rolled back
+		labels  func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string
+		check   func(t *testing.T, cr *api.PerconaServerMongoDB)
+		wantErr string
+	}{
+		{
+			name: "mongos reverts its log storage",
+			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
+				return naming.MongosLabels(cr)
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB) {
+				q := cr.Spec.Sharding.Mongos.LogStorage().Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, "9Gi", q.String())
+			},
+		},
+		{
+			name: "a member group reverts its own volume",
+			labels: func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+				ls := naming.RSLabels(cr, rs)
+				ls[naming.LabelKubernetesComponent] = naming.ComponentMongod
+				return ls
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB) {
+				q := cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, "9Gi", q.String())
+			},
+		},
+		{
+			name: "a non-voting group reverts its own volume",
+			labels: func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+				ls := naming.RSLabels(cr, rs)
+				ls[naming.LabelKubernetesComponent] = naming.ComponentNonVoting
+				return ls
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB) {
+				q := cr.Spec.Replsets[0].NonVoting.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, "9Gi", q.String())
+				base := cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+				assert.NotEqual(t, "9Gi", base.String(), "the base volume is not touched")
+			},
+		},
+		{
+			name: "an arbiter has nothing to revert",
+			labels: func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+				ls := naming.RSLabels(cr, rs)
+				ls[naming.LabelKubernetesComponent] = naming.ComponentArbiter
+				return ls
+			},
+			wantErr: "group arbiter of replset rs0 has no data volume",
+		},
+		{
+			name: "a component that resolves to no group",
+			labels: func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+				ls := naming.RSLabels(cr, rs)
+				ls[naming.LabelKubernetesComponent] = "gone"
+				return ls
+			},
+			wantErr: "no member group for component gone",
+		},
+		{
+			name: "no component label at all",
+			labels: func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+				return naming.RSLabels(cr, rs)
+			},
+			wantErr: "missing component label",
+		},
+		{
+			name: "a component label but no replset label",
+			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
+				ls := naming.ClusterLabels(cr)
+				ls[naming.LabelKubernetesComponent] = naming.ComponentMongod
+				return ls
+			},
+			wantErr: "missing replset label",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			cr := legacyCR(t, "vol-cr", "vol", func(c *api.PerconaServerMongoDB) {
+				c.Spec.Sharding.Enabled = true
+				c.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{
+					PersistentVolumeClaim: &sizedVol("1Gi").PersistentVolumeClaim,
+				}
+				c.Spec.Replsets[0].VolumeSpec = sizedVol("1Gi")
+				c.Spec.Replsets[0].NonVoting = api.NonVotingSpec{
+					Enabled: true, Size: 1, VolumeSpec: sizedVol("1Gi")}
+				c.Spec.Replsets[0].Arbiter = api.Arbiter{Enabled: true, Size: 1}
+				c.Spec.Unsafe.ReplsetSize = true
+			})
+			rs := cr.Spec.Replsets[0]
+
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{
+				Name: "vol-cr-rs0", Namespace: cr.Namespace, Labels: tt.labels(cr, rs)}}
+
+			r := buildFakeClient(cr, sts)
+
+			err := r.revertVolumeTemplate(ctx, cr, sts, resource.MustParse("9Gi"))
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			tt.check(t, cr)
+		})
+	}
+}
+
+func TestReconcilePVCsSkipsGroupsWithoutStorage(t *testing.T) {
+	instances := []api.InstanceSpec{
+		{Name: "data", Replicas: 3, VolumeSpec: sizedVol("1Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "arb", Replicas: 1, RSConfig: &api.MemberConfigSpec{
+			ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}},
+	}
+
+	cr := instanceCR(t, "vol-cr", "vol", instances, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	t.Run("an arbiter group has no data volume", func(t *testing.T) {
+		ctx := t.Context()
+		g := resolveGroup(t, cr, rs, "arb")
+		require.False(t, g.DataBearing)
+		require.Nil(t, g.VolumeSpec, "the resolver drops the volume spec of an arbiter")
+
+		r := buildFakeClient(cr)
+		// No StatefulSet, no PVCs: reaching any further would error or panic.
+		require.NoError(t, r.reconcilePVCs(ctx, cr, &appsv1.StatefulSet{}, g))
+	})
+
+	t.Run("a data-bearing group with no volume spec", func(t *testing.T) {
+		ctx := t.Context()
+		g := resolveGroup(t, cr, rs, "data")
+		require.True(t, g.DataBearing)
+		g.VolumeSpec = nil
+
+		r := buildFakeClient(cr)
+		require.NoError(t, r.reconcilePVCs(ctx, cr, &appsv1.StatefulSet{}, g))
+	})
 }

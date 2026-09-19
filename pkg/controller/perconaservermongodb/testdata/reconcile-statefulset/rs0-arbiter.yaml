@@ -186,6 +186,7 @@ spec:
       restartPolicy: Always
       securityContext:
         fsGroup: 1001
+      terminationGracePeriodSeconds: 60
       volumes:
       - emptyDir: {}
         name: bin

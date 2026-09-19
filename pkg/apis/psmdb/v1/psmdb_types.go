@@ -72,16 +72,17 @@ const (
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 // +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
 type PerconaServerMongoDBSpec struct {
-	Pause                        bool                                 `json:"pause,omitempty"`
-	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`
-	CRVersion                    string                               `json:"crVersion,omitempty"`
-	Platform                     *version.Platform                    `json:"platform,omitempty"`
-	Image                        string                               `json:"image"`
-	ImagePullSecrets             []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
-	UnsafeConf                   bool                                 `json:"allowUnsafeConfigurations,omitempty"`
-	Unsafe                       UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreLabels                 []string                             `json:"ignoreLabels,omitempty"`
-	IgnoreAnnotations            []string                             `json:"ignoreAnnotations,omitempty"`
+	Pause             bool                          `json:"pause,omitempty"`
+	Unmanaged         bool                          `json:"unmanaged,omitempty"`
+	CRVersion         string                        `json:"crVersion,omitempty"`
+	Platform          *version.Platform             `json:"platform,omitempty"`
+	Image             string                        `json:"image"`
+	ImagePullSecrets  []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	UnsafeConf        bool                          `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe            UnsafeFlags                   `json:"unsafeFlags,omitempty"`
+	IgnoreLabels      []string                      `json:"ignoreLabels,omitempty"`
+	IgnoreAnnotations []string                      `json:"ignoreAnnotations,omitempty"`
+	// +kubebuilder:validation:MaxItems=50
 	Replsets                     []*ReplsetSpec                       `json:"replsets,omitempty"`
 	Secrets                      *SecretsSpec                         `json:"secrets,omitempty"`
 	Backup                       BackupSpec                           `json:"backup,omitempty"`
@@ -283,10 +284,12 @@ const (
 )
 
 type Sharding struct {
-	Enabled          bool         `json:"enabled"`
+	Enabled  bool         `json:"enabled"`
+	Mongos   *MongosSpec  `json:"mongos,omitempty"`
+	Balancer BalancerSpec `json:"balancer,omitempty"`
+
+	// +kubebuilder:validation:XValidation:rule="!has(self.instances)",message="cannot declare configsvrReplSet using instances[]"
 	ConfigsvrReplSet *ReplsetSpec `json:"configsvrReplSet,omitempty"`
-	Mongos           *MongosSpec  `json:"mongos,omitempty"`
-	Balancer         BalancerSpec `json:"balancer,omitempty"`
 }
 
 type BalancerSpec struct {
@@ -549,6 +552,10 @@ type MultiAZ struct {
 	Sidecars       []corev1.Container             `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume                `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
+}
+
+func (hs HookScriptSpec) IsEmpty() bool {
+	return hs.Script == "" && hs.ConfigMapRef.Name == ""
 }
 
 func (m *MultiAZ) WithSidecars(c corev1.Container) (withSidecars []corev1.Container, noSkips bool) {
@@ -905,32 +912,61 @@ type HorizonsSpec map[string]map[string]string
 
 type PrimaryPreferTagSelectorSpec map[string]string
 
+// ReplsetSpec defines the specification for a MongoDB replica set.
+// Any new field added here should also be added to InstanceSpec.
+//
+// +kubebuilder:validation:XValidation:rule="self.?clusterRole.orValue(\"\") != 'configsvr' || !has(self.instances)",message="configServer cannot have instances[]"
+// +kubebuilder:validation:XValidation:rule="has(self.volumeSpec) != has(self.instances)",message="exactly one of volumeSpec or instances[] must be set: volumeSpec is required in legacy mode and must be absent when instances[] is used, where each instance declares its own"
+// +kubebuilder:validation:XValidation:rule="has(self.instances) || has(self.size)",message="a replicaset must either declare a size or set named instances"
+// +kubebuilder:validation:XValidation:rule="!has(self.instances) || self.?size.orValue(0) == 0",message="size must be absent when instances[] is set: declare instances[].replicas instead"
+// +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?arbiter.?enabled.orValue(false) && self.?arbiter.?size.orValue(0) == 0)",message="arbiter must be absent when instances[] is set: declare an instance with rsConfig.arbiterOnly instead"
+// +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?nonvoting.?enabled.orValue(false) && self.?nonvoting.?size.orValue(0) == 0)",message="nonvoting must be absent when instances[] is set: declare an instance named nonVoting instead"
+// +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?hidden.?enabled.orValue(false) && self.?hidden.?size.orValue(0) == 0)",message="hidden must be absent when instances[] is set: declare an instance named hidden instead"
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
-	Name        string          `json:"name,omitempty"`
-	Size        int32           `json:"size"`
-	ClusterRole ClusterRole     `json:"clusterRole,omitempty"`
-	Arbiter     Arbiter         `json:"arbiter,omitempty"`
-	Expose      ExposeTogglable `json:"expose,omitempty"`
-	// +kubebuilder:validation:Required
-	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
-	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
-	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
+	// The following fields are applicable replicaset-wide.
+
+	Name                     string                       `json:"name,omitempty"`
+	ClusterRole              ClusterRole                  `json:"clusterRole,omitempty"`
+	Expose                   ExposeTogglable              `json:"expose,omitempty"`
+	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	Storage                  *MongodSpecStorage           `json:"storage,omitempty"`
 	Configuration            MongoConfiguration           `json:"configuration,omitempty"`
 	ExternalNodes            []*ExternalNode              `json:"externalNodes,omitempty"`
-	NonVoting                NonVotingSpec                `json:"nonvoting,omitempty"`
-	Hidden                   HiddenSpec                   `json:"hidden,omitempty"`
 	HostAliases              []corev1.HostAlias           `json:"hostAliases,omitempty"`
-	Horizons                 HorizonsSpec                 `json:"splitHorizons,omitempty"`
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
-	Env                      []corev1.EnvVar              `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+
+	// The following fields may be overridden per-instance.
+
+	Env                      []corev1.EnvVar            `json:"env,omitempty"`
+	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
+	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
+
+	// The following fields will be deprecated in favour of Instances[].
+
+	// Size of the base mongod instance.
+	// Can be omitted when instances are specified.
+	// +optional
+	Size      *int32        `json:"size,omitempty"`
+	Arbiter   Arbiter       `json:"arbiter,omitempty"`
+	NonVoting NonVotingSpec `json:"nonvoting,omitempty"`
+	Hidden    HiddenSpec    `json:"hidden,omitempty"`
+
+	// Instances declares the replia set's topology as named member groups.
+	// Requires crVersion > 1.24.0.
+	// Mutually exclusive with size, arbiter, nonvoting and hidden.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=50
+	Instances []InstanceSpec `json:"instances,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1011,7 +1047,28 @@ func (ms ReplsetSpec) GetPort() int32 {
 }
 
 func (r ReplsetSpec) GetSize() int32 {
-	return r.Size + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
+	if r.InstanceMode() {
+		var size int32 = 0
+		for _, ins := range r.Instances {
+			size += ins.Replicas
+		}
+		return size
+	}
+	return r.GetMongodSize() + r.Arbiter.GetSize() + r.NonVoting.GetSize() + r.Hidden.GetSize()
+}
+
+// GetMongodSize returns the member count of the base mongod group, which is
+// zero for a replica set that declares no size at all.
+func (r ReplsetSpec) GetMongodSize() int32 {
+	if r.Size == nil {
+		return 0
+	}
+	return *r.Size
+}
+
+// SetMongodSize sets the base mongod group's member count.
+func (r *ReplsetSpec) SetMongodSize(size int32) {
+	r.Size = &size
 }
 
 type LivenessProbeExtended struct {

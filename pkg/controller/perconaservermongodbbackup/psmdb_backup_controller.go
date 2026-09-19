@@ -42,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -853,12 +854,15 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	log := logf.FromContext(ctx).WithName("deleteBackup").WithValues("backup", bcp.Name, "namespace", bcp.Namespace, "pbmName", bcp.Status.PBMname)
 
 	rsName := bcp.Status.ReplsetNames[0]
-	rsPods, err := psmdb.GetRSPods(ctx, r.client, cluster, rsName)
-	if err != nil {
-		return errors.Wrapf(err, "get %s pods", rsName)
+	rs := cluster.Spec.Replset(rsName)
+	if rs == nil {
+		return errors.Errorf("replset %s is not declared in the cluster spec", rsName)
 	}
 
-	pod := rsPods.Items[0]
+	pod, err := backupAgentPod(ctx, r.client, cluster, rs)
+	if err != nil {
+		return err
+	}
 
 	cmd := []string{
 		"pbm",
@@ -871,7 +875,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 
 	outB := bytes.Buffer{}
 	errB := bytes.Buffer{}
-	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
 	if err != nil {
 		return errors.Wrapf(err, "exec delete-backup: stdout=%s, stderr=%s", outB.String(), errB.String())
 	}
@@ -879,6 +883,36 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	log.Info("Backup deleted")
 
 	return nil
+}
+
+// backupAgentPod returns a pod of rs that runs a PBM agent.
+func backupAgentPod(
+	ctx context.Context,
+	cl client.Client,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	rs *psmdbv1.ReplsetSpec,
+) (*corev1.Pod, error) {
+	set, err := membergroup.Resolve(cluster, rs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+	}
+
+	for _, group := range set.GetDataBearing() {
+		if backup.EligibleForBackup(group, cluster) != nil {
+			continue
+		}
+
+		pods, err := psmdb.GetGroupPods(ctx, cl, cluster, rs, group)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get pods of group %s", group.Name)
+		}
+
+		if len(pods.Items) > 0 {
+			return &pods.Items[0], nil
+		}
+	}
+
+	return nil, errors.Errorf("no pod running a backup agent in replset %s", rs.Name)
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {

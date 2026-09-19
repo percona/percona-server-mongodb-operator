@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func TestShouldTriggerResize(t *testing.T) {
@@ -225,7 +229,7 @@ func TestCalculateNewSize(t *testing.T) {
 	}
 }
 
-func TestExtractPodNameFromPVC(t *testing.T) {
+func TestPVCPodName(t *testing.T) {
 	tests := []struct {
 		name     string
 		pvcName  string
@@ -250,12 +254,62 @@ func TestExtractPodNameFromPVC(t *testing.T) {
 			stsName:  "my-cluster-rs0",
 			expected: "",
 		},
+		{
+			name:     "double digit ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-10",
+			stsName:  "my-cluster-rs0",
+			expected: "my-cluster-rs0-10",
+		},
+		{
+			name:     "a sibling group's claim is not the base group's",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "the same claim against its own statefulset",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0-hot",
+			expected: "my-cluster-rs0-hot-0",
+		},
+		{
+			name:     "a non numeric ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-abc",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "no ordinal at all",
+			pvcName:  "mongod-data-my-cluster-rs0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "a different claim template",
+			pvcName:  "logs-my-cluster-rs0-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "another replica set's claim",
+			pvcName:  "mongod-data-my-cluster-rs1-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractPodNameFromPVC(tt.pvcName, tt.stsName)
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: tt.stsName}}
+
+			result, ok := pvcPodName(config.MongodDataVolClaimName, tt.pvcName, sts)
+			assert.Equal(t, tt.expected != "", ok)
 			assert.Equal(t, tt.expected, result)
+
+			assert.Equal(t, tt.expected != "",
+				validatePVCName(config.MongodDataVolClaimName,
+					corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: tt.pvcName}}, sts),
+				"validatePVCName must agree with pvcPodName")
 		})
 	}
 }
@@ -688,7 +742,19 @@ func TestTriggerResize(t *testing.T) {
 
 			originalSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, volumeSpec)
+			rsName := api.ConfigReplSetName
+			if len(tt.cr.Spec.Replsets) > 0 {
+				rsName = tt.cr.Spec.Replsets[0].Name
+			}
+
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				VolumeSpec:  volumeSpec,
+				DataBearing: true,
+				Source:      membergroup.SourceRef{ReplsetName: rsName},
+			}
+
+			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, group)
 			require.NoError(t, err)
 
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
