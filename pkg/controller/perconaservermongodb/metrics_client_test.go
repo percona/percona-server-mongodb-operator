@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 // mockClientCmd is a mock implementation of the ClientCmd interface for testing
@@ -165,7 +167,7 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				},
 			}
 
-			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName)
+			result, err := r.getPVCUsageFromMetrics(ctx, pod, naming.ComponentMongod, tt.pvcName)
 
 			if tt.expectedErr {
 				assert.Error(t, err)

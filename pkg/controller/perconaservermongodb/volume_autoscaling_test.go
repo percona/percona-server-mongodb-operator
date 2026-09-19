@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
@@ -762,4 +763,112 @@ func TestTriggerResize(t *testing.T) {
 			assert.NotEqual(t, originalSize.Value(), updatedSize.Value())
 		})
 	}
+}
+
+func TestTriggerResizeInstanceGroup(t *testing.T) {
+	sized := func(size string) *api.VolumeSpec {
+		return &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+				},
+			}}}
+	}
+	storageOf := func(v *api.VolumeSpec) string {
+		q := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+		return q.String()
+	}
+
+	ctx := t.Context()
+
+	cr := instanceCR(t, "as-cr", "as", []api.InstanceSpec{
+		{Name: "hot", Replicas: 3, VolumeSpec: sized("10Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "cold", Replicas: 1, VolumeSpec: sized("10Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+	}, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName("hot")
+	require.True(t, ok)
+
+	r := buildFakeClient(cr)
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "mongod-data-as-cr-rs0-hot-0", Namespace: cr.Namespace},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+		},
+	}
+
+	require.NoError(t, r.triggerResize(ctx, cr, pvc, resource.MustParse("25Gi"), group))
+
+	fresh := new(api.PerconaServerMongoDB)
+	require.NoError(t, r.client.Get(ctx,
+		client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+
+	assert.Equal(t, "25Gi", storageOf(fresh.Spec.Replsets[0].Instance("hot").VolumeSpec),
+		"the named instance's request is written to the CR")
+	assert.Equal(t, "10Gi", storageOf(fresh.Spec.Replsets[0].Instance("cold").VolumeSpec),
+		"a sibling group is untouched")
+	assert.Equal(t, "25Gi", storageOf(group.VolumeSpec),
+		"the resolved group mirrors the new size")
+}
+
+func TestReconcileStorageAutoscalingSkipsArbiters(t *testing.T) {
+	ctx := t.Context()
+
+	cr := instanceCR(t, "as-cr", "as", []api.InstanceSpec{
+		{Name: "data", Replicas: 3, VolumeSpec: &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+				},
+			}}},
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "arb", Replicas: 1, RSConfig: &api.MemberConfigSpec{
+			ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}},
+	}, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName("arb")
+	require.True(t, ok)
+	require.False(t, group.DataBearing)
+
+	// Autoscaling on, so the feature gates below the guard cannot be what
+	// answers.
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeScaling: true,
+		Autoscaling:         &api.AutoscalingSpec{Enabled: true},
+	}
+
+	sts := groupSTS(cr, rs, group, group.Replicas, group.Replicas)
+	pod := groupPod(cr, rs, group, 0)
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      config.MongodDataVolClaimName + "-" + pod.Name,
+			Namespace: cr.Namespace,
+			Labels:    group.Labels,
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+		},
+	}
+	// The claim has to be one the loop would actually pick up, or the
+	// assertion below passes for the wrong reason.
+	_, matches := pvcPodName(config.MongodDataVolClaimName, pvc.Name, sts)
+	require.True(t, matches, "the PVC must belong to the arbiter's statefulset")
+
+	r := buildFakeClient(cr, sts, pod, pvc)
+
+	require.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts, group))
+
+	assert.NotContains(t, cr.Status.StorageAutoscaling, pvc.Name,
+		"an arbiter's claim must never reach the resize path")
 }

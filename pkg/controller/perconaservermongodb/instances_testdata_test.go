@@ -15,18 +15,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-// instanceCR returns a defaulted single-replset CR whose rs0 declares its
-// topology through instances[]. The legacy fields are cleared because the CRD
-// makes them mutually exclusive with instances[], and CheckNSetDefaults would
-// otherwise validate a shape the API server never accepts.
-//
-// mutate runs after the topology is set and before defaulting, which is the
-// only window where a test can relax checkSafeInstanceDefaults. Topologies that
-// mirror a PSA — an even voter count, or fewer than three data-bearing voters —
-// are rejected outright without spec.unsafeFlags.replsetSize, so a test that
-// needs one must ask for it here.
-//
-//nolint:unused // fixture for the instance-mode controller tests, which land with the controller changes
 func instanceCR(t *testing.T, name, ns string, instances []api.InstanceSpec, mutate ...func(*api.PerconaServerMongoDB)) *api.PerconaServerMongoDB {
 	t.Helper()
 

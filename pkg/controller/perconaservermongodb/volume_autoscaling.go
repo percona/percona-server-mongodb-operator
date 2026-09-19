@@ -14,7 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
@@ -108,12 +107,13 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
-		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
+	if !isContainerAndPodRunning(*pod, group.ContainerName) {
+		log.V(1).Info("skipping PVC metrics check: container and pod not running",
+			"container", group.ContainerName, "phase", pod.Status.Phase)
 		return nil
 	}
 
-	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name)
+	usage, err := r.getPVCUsageFromMetrics(ctx, pod, group.ContainerName, pvc.Name)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
