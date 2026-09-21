@@ -176,7 +176,7 @@ def wait_for_oplog_past(pod: str, target_ts: int, timeout: int = 900) -> None:
     wait_until(f"oplog chunks to cover {format_pitr_date(target_ts)}", caught_up, timeout=timeout)
 
 
-def format_pitr_date(ts: int | float) -> str:
+def format_pitr_date(ts: float) -> str:
     """Format a unix timestamp the way spec.pitr.date is parsed ("2006-01-02 15:04:05" UTC)."""
     return datetime.fromtimestamp(int(ts), tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
 
