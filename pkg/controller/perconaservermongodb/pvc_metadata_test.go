@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"maps"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -97,9 +98,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 
 func existingPVC(namespace, name string, labels map[string]string) *corev1.PersistentVolumeClaim {
 	pvcLabels := make(map[string]string, len(labels))
-	for key, value := range labels {
-		pvcLabels[key] = value
-	}
+	maps.Copy(pvcLabels, labels)
 
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
