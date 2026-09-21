@@ -316,9 +316,22 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 	}
 
 	for _, bcp := range bcps.Items {
-		if bcp.Status.State != api.BackupStateReady &&
-			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.GetClusterName() == cr.Name {
+		if bcp.Spec.GetClusterName() != cr.Name {
+			continue
+		}
+		// A backup in the waiting state is held before it starts, so it holds no
+		// PBM lock and touches no data. It stays that way for as long as whatever
+		// it waits on persists: a ClusterSync holding the cluster lease keeps its
+		// backups waiting for the entire migration. Counting those as running
+		// stalls Smart Update indefinitely, and because scheduled backups keep
+		// being created, the cluster can no longer apply any change to its spec.
+		//
+		// Backups that are actually in flight are still caught: the caller
+		// follows this check with HasActiveJobs, which reads PBM's own locks.
+		switch bcp.Status.State {
+		case api.BackupStateReady, api.BackupStateError, api.BackupStateWaiting:
+			continue
+		default:
 			return true, nil
 		}
 	}
