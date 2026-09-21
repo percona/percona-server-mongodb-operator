@@ -93,6 +93,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
+	_, restoreInProg := sfs.Annotations[api.AnnotationRestoreInProgress]
+
 	// Disruption safety is a replica-set-level property. Separate PDBs and
 	// StatefulSets give no combined MongoDB quorum guarantee, and a group-local
 	// readiness check cannot see an unavailable voter in a sibling group.
@@ -104,7 +106,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	if err != nil {
 		return errors.Wrap(err, "check replset voter availability")
 	}
-	if unavailable {
+	if !restoreInProg && unavailable {
 		log.Info("can't start/continue 'SmartUpdate': a voting member of this replica set is unavailable")
 		return nil
 	}
@@ -166,8 +168,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
-	if !ok && hasActiveJobs {
+	if !restoreInProg && hasActiveJobs {
 		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
 		return nil
 	}
