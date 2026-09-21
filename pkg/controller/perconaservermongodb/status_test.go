@@ -611,7 +611,7 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 }
 
 // builds the group's StatefulSet and its pods with the set
-// rolling out updateRevision and every pod still labelled podRevision.
+// rolling out updateRevision and every pod still labeled podRevision.
 func groupAtRevision(
 	cr *api.PerconaServerMongoDB,
 	rs *api.ReplsetSpec,

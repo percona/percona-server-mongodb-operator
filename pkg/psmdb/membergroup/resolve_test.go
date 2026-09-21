@@ -230,7 +230,7 @@ func TestResolveLegacy(t *testing.T) {
 //
 // resolveLegacy does not sort: it appends mongod, arbiter, nonVoting, hidden in
 // that fixed order. getEligibleMemberPod and downscaleTarget walk GetAll() and
-// act on the first group that qualifies, so the order is behaviour, not
+// act on the first group that qualifies, so the order is behavior, not
 // cosmetics. It is also deliberately *not* the alphabetical order that
 // instances[] topologies get.
 func TestResolveLegacyGroupOrder(t *testing.T) {

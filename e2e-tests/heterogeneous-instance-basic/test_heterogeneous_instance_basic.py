@@ -140,7 +140,7 @@ class TestHeterogeneousInstanceBasic:
                 "jsonpath={.metadata.labels.app\\.kubernetes\\.io/component}",
             ).strip()
             assert component == group.component, (
-                f"{group.statefulset} is labelled component={component}, "
+                f"{group.statefulset} is labeled component={component}, "
                 f"expected {group.component}"
             )
 

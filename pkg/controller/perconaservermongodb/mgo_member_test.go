@@ -199,7 +199,7 @@ func TestGetConfigMemberForPodImplicit(t *testing.T) {
 			},
 		},
 		{
-			// TODO: not sure this is expected behaviour. Why does the tag selector match overwrite an explicit priority?
+			// TODO: not sure this is expected behavior. Why does the tag selector match overwrite an explicit priority?
 			// pinned it here to come back to in the future.
 			name: "a tag selector match overwrites an explicit override",
 			mutate: func(cr *api.PerconaServerMongoDB) {

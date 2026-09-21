@@ -227,7 +227,7 @@ func TestSetLookupsFindLegacyComponents(t *testing.T) {
 
 	_, ok = cfgSet.GetByComponent(naming.ComponentMongod)
 	assert.False(t, ok,
-		"a config server declares no mongod component, so a pod labelled that way is foreign")
+		"a config server declares no mongod component, so a pod labeled that way is foreign")
 }
 
 func TestSetTotalMemberCountWithExternal(t *testing.T) {

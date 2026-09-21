@@ -949,7 +949,7 @@ type ReplsetSpec struct {
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 
-	// The following fields will be deprecated in favour of Instances[].
+	// The following fields will be deprecated in favor of Instances[].
 
 	// Size of the base mongod instance.
 	// Can be omitted when instances are specified.

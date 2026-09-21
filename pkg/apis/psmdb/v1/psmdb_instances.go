@@ -55,14 +55,14 @@ type InstanceSpec struct {
 	Replicas int32 `json:"replicas"`
 
 	// RSConfig carries the member document fields this group controls.
-	// Omitting it entirely selects the group's default member behaviour, which
-	// for a reserved name is the behaviour of the equivalent legacy role.
+	// Omitting it entirely selects the group's default member behavior, which
+	// for a reserved name is the behavior of the equivalent legacy role.
 	RSConfig *MemberConfigSpec `json:"rsConfig,omitempty"`
 
 	// VolumeSpec specifies the replica set's storage for this group.
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
-	// Specifiying the following fields will override the corresponding replicaset-level settings.
+	// Specifying the following fields will override the corresponding replicaset-level settings.
 
 	// Configuration is the mongod configuration file for this group's members.
 	// All replicaset wide settings are read from the rs.Configuration, not the per-instance configuration.
@@ -123,7 +123,7 @@ func (r *ReplsetSpec) Instance(name string) *InstanceSpec {
 
 // HasMemberConfig reports whether the group supplied an rsConfig object at all,
 // including an empty one. This is what selects the replica-set compatibility
-// policy: a reserved group with no rsConfig keeps legacy vote behaviour.
+// policy: a reserved group with no rsConfig keeps legacy vote behavior.
 func (i InstanceSpec) HasMemberConfig() bool {
 	return i.RSConfig != nil
 }
@@ -231,7 +231,7 @@ func (i InstanceSpec) resolveConfiguration(rs *ReplsetSpec) MongoConfiguration {
 		return i.Configuration
 
 	case ReservedGroupArbiter:
-		// preserve compatibility with legacy behaviour
+		// preserve compatibility with legacy behavior
 		if mongod := rs.Instance(ReservedGroupMongod); mongod != nil {
 			if mongod.Configuration != "" {
 				return mongod.Configuration
