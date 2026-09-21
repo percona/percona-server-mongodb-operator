@@ -337,6 +337,15 @@ class TestHeterogeneousInstanceBasic:
             f"retired inst2 members are still in rs.conf(): {sorted(members)}"
         )
 
+        # The claims outlive the group. Retiring an instance drops the workload
+        # but never the data, the same way shrinking a replica set does, and
+        # nothing reclaims them short of deleting the cluster.
+        pvcs = kubectl_bin(
+            "get", "pvc", "-o", "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}"
+        ).split()
+        for pvc in retired.pvcs:
+            assert pvc in pvcs, f"removing inst2 destroyed {pvc}: {pvcs}"
+
     @pytest.mark.dependency(depends=["TestHeterogeneousInstanceBasic::test_remove_inst2"])
     def test_member_configuration(
         self, config: HeterogeneousConfig, psmdb_client: MongoManager
