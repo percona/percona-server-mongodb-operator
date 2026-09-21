@@ -1,0 +1,96 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: heterogeneous
+spec:
+  image:
+  imagePullPolicy: Always
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    # Replica-set wide settings stay here. A group with no configuration of its
+    # own inherits this file, so all five ConfigMaps start out identical.
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+    # No group is called "mongod", so there is no cluster-rs0 StatefulSet: every
+    # workload is suffixed.
+    #
+    # Only inst1, the arbiter and the hidden member vote; inst2 and nonVoting
+    # carry votes 0. The test moves through three states, and the operator
+    # rejects any of them that breaks a rule, so all three have to hold:
+    #
+    #   state                      voters            dataBearingVoters
+    #   as written                 3+1+1 = 5         3+1 = 4
+    #   after inst1 3 -> 5         5+1+1 = 7         5+1 = 6
+    #   after inst2 is removed     5+1+1 = 7         5+1 = 6
+    #
+    # Rules: the voter count must be odd, must not exceed 7, needs at least 3
+    # data-bearing voters, and at least one primary-eligible member (inst1).
+    #
+    # Two consequences if you edit this. The scale-up has to be 3 -> 5 and not
+    # 3 -> 4, because adding one voting member makes the count even. And the
+    # scaled-up states sit exactly on the ceiling of 7, so giving any further
+    # group a vote will be rejected -- take one away first.
+    #
+    # Every group states its rsConfig: a reserved name only keeps its legacy
+    # member defaults while the whole replica set is implicit, and a custom
+    # group name (inst1/inst2) makes it explicit.
+    instances:
+    - name: inst1
+      replicas: 3
+      rsConfig:
+        votes: 1
+        priority: 2
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: inst2
+      replicas: 2
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          workload: analytics
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: arbiter
+      replicas: 1
+      rsConfig:
+        arbiterOnly: true
+        votes: 1
+        priority: 0
+    - name: nonVoting
+      replicas: 1
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          nonVoting: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: hidden
+      replicas: 1
+      rsConfig:
+        hidden: true
+        votes: 1
+        priority: 0
+        tags:
+          hidden: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+  secrets:
+    users: some-users

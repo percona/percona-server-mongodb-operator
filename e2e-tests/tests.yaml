@@ -360,6 +360,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
 
+  heterogeneous-instance-basic:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
   ignore-labels-annotations:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
