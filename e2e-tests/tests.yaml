@@ -150,6 +150,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
 
+  demand-backup-heterogeneous-basic:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, core]
+
   demand-backup-if-unhealthy:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
