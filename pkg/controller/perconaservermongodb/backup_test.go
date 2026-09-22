@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -106,12 +108,8 @@ func TestIsBackupRunning(t *testing.T) {
 			r := buildFakeClient(append([]client.Object{cr}, tt.backups...)...)
 
 			got, err := r.isBackupRunning(ctx, cr)
-			if err != nil {
-				t.Fatalf("isBackupRunning() returned an error: %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("isBackupRunning() = %v, want %v", got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
