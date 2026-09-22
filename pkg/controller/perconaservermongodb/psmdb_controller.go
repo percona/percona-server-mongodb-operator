@@ -2396,10 +2396,10 @@ func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
 		return target, true, nil
 	}
 
-	// Locate the live primary. It can be in any group, including one whose
-	// desired configuration no longer permits an election.
 	primaryGroup := ""
 	readyDataBearing := 0
+	var probePods []corev1.Pod // all pods that can give us the memberConfig
+
 	for i := range observed {
 		og := &observed[i]
 		if !og.group.DataBearing {
@@ -2411,6 +2411,7 @@ func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
 				continue
 			}
 			readyDataBearing++
+			probePods = append(probePods, pod)
 
 			isPrimary, err := r.isPodPrimary(ctx, cr, pod, rs)
 			if err != nil {
@@ -2439,6 +2440,29 @@ func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
 		}
 		target[og.group.Name] = int32(len(og.live))
 		votingLive += len(og.live)
+	}
+
+	// configVoters is how many voters are still configured in mongodb.
+	configVoters, known := r.configuredVoters(ctx, cr, rs, probePods)
+	if !known { // config not known, assume it matches the live members
+		log.V(1).Info("no member could report the replica set config, assuming it matches the live members")
+		configVoters = votingLive
+	}
+
+	if quorum := configVoters/2 + 1; configVoters > votingLive && votingLive-1 < quorum {
+		if votingLive >= quorum {
+			// dead voters, wait for them to be reconciled in mongodb
+			log.Info("holding the shutdown until the replica set config catches up",
+				"liveVoters", votingLive, "configuredVoters", configVoters, "quorum", quorum)
+			return target, false, nil
+		}
+
+		log.Info("quorum cannot be recovered, shutting every member group down",
+			"liveVoters", votingLive, "configuredVoters", configVoters, "quorum", quorum)
+		for name := range target {
+			target[name] = 0
+		}
+		return target, false, nil
 	}
 
 	// Phase 2: drain one voting non-primary member per pass.
@@ -2512,6 +2536,64 @@ func (r *ReconcilePerconaServerMongoDB) shutdownTarget(
 		target[name] = 0
 	}
 	return target, false, nil
+}
+
+// configuredVoters counts the voting members in the live replica set config,
+// reporting whether any member could be asked at all.
+func (r *ReconcilePerconaServerMongoDB) configuredVoters(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	pods []corev1.Pod,
+) (int, bool) {
+	log := logf.FromContext(ctx)
+
+	for i := range pods {
+		voters, err := r.readConfiguredVoters(ctx, cr, rs, pods[i])
+		if err != nil {
+			log.V(1).Info("could not read the replset config",
+				"pod", pods[i].Name, "error", err.Error())
+			continue
+		}
+		return voters, true
+	}
+
+	return 0, false
+}
+
+func (r *ReconcilePerconaServerMongoDB) readConfiguredVoters(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	pod corev1.Pod,
+) (int, error) {
+	cli, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return 0, errors.Wrapf(err, "connect to %s", pod.Name)
+	}
+	defer func() {
+		if err := cli.Disconnect(ctx); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to close connection")
+		}
+	}()
+
+	cnf, err := cli.ReadConfig(ctx)
+	if err != nil {
+		return 0, errors.Wrapf(err, "read replset config from %s", pod.Name)
+	}
+
+	// An empty read is not a zero-voter replica set, it is no information.
+	if len(cnf.Members) == 0 {
+		return 0, errors.Errorf("replset config read from %s has no members", pod.Name)
+	}
+
+	voters := 0
+	for _, member := range cnf.Members {
+		if member.Votes > 0 {
+			voters++
+		}
+	}
+	return voters, nil
 }
 
 // applyShutdownTarget writes the target into the working copy of the spec so

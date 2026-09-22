@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
+
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
@@ -27,6 +29,32 @@ type primaryProvider struct {
 	stepDowns []string
 	// freezes records the hosts replSetFreeze was called against.
 	freezes []string
+	// configUnreadable are pods whose ReadConfig fails, standing in for a
+	// member that is up enough to answer isMaster but not the config read.
+	configUnreadable map[string]bool
+	// configVoters is the number of voting members ReadConfig reports. Zero
+	// leaves the config empty, which the shutdown treats as "no information"
+	// and is what every case that does not care about quorum gets.
+	configVoters int
+}
+
+// withConfigVoters makes ReadConfig report a replica set config holding that
+// many voting members. The shutdown compares it against the live pods to decide
+// whether draining another member would cost the set its majority, so this is
+// how a config that lags behind the pods is expressed.
+func (p *primaryProvider) withConfigVoters(n int) *primaryProvider {
+	p.configVoters = n
+	return p
+}
+
+// withUnreadableConfig makes ReadConfig fail against those pods, so a test can
+// check that the caller asks another member rather than giving up.
+func (p *primaryProvider) withUnreadableConfig(pods ...string) *primaryProvider {
+	p.configUnreadable = make(map[string]bool, len(pods))
+	for _, pod := range pods {
+		p.configUnreadable[pod] = true
+	}
+	return p
 }
 
 func newPrimaryProvider(primaries ...string) *primaryProvider {
@@ -76,6 +104,21 @@ func (c *primaryFakeClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, 
 		IsMaster:   c.provider.primaries[c.pod],
 		OKResponse: mongo.OKResponse{OK: 1},
 	}, nil
+}
+
+func (c *primaryFakeClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error) {
+	c.provider.mu.Lock()
+	defer c.provider.mu.Unlock()
+
+	if c.provider.configUnreadable[c.pod] {
+		return mongo.RSConfig{}, errors.Errorf("replset config unreadable on %s", c.pod)
+	}
+
+	cnf := mongo.RSConfig{}
+	for i := 0; i < c.provider.configVoters; i++ {
+		cnf.Members = append(cnf.Members, mongo.ConfigMember{ID: i, Votes: 1})
+	}
+	return cnf, nil
 }
 
 func (c *primaryFakeClient) StepDown(ctx context.Context, seconds int, force bool) error {

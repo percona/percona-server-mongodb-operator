@@ -43,8 +43,14 @@ func TestShutdownTarget(t *testing.T) {
 		instances []api.InstanceSpec
 		pods      []shutdownPod
 		primary   string // pod name, empty for none
-		want      map[string]int32
-		wantDone  bool
+		// configVoters is how many voting members rs.conf() still lists. Zero
+		// leaves it unreadable, which the shutdown treats as "in step with the
+		// pods" -- the right default for cases about ordering, not quorum.
+		configVoters int
+		// configUnreadable are pods whose config read fails.
+		configUnreadable []string
+		want             map[string]int32
+		wantDone         bool
 		// wantStepDown is the pod the primary is expected to be handed over
 		// from, recorded as a StepDown against it.
 		wantStepDown   string
@@ -89,9 +95,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:    map[string]int32{"mongod": 3, "arb": 0},
 		},
 		{
-			// A terminating pod has already left. Counting it would set the
-			// StatefulSet back to the size it has just been scaled down from,
-			// and the shutdown would never finish.
 			name:      "terminating pods are not counted",
 			instances: []api.InstanceSpec{data("mongod", 3, 2), hidden("hid", 1)},
 			pods: []shutdownPod{
@@ -112,8 +115,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:    map[string]int32{"mongod": 1, "hid": 0},
 		},
 		{
-			// The StatefulSet removes its highest ordinal first, so a primary
-			// anywhere else has to move before the group may shrink.
 			name:      "a primary on a high ordinal is stepped down first",
 			instances: []api.InstanceSpec{data("mongod", 3, 2)},
 			pods: []shutdownPod{
@@ -124,8 +125,6 @@ func TestShutdownTarget(t *testing.T) {
 			wantStepDown: "sd-cr-rs0-2",
 		},
 		{
-			// Moving the primary while a sibling is mid-termination would hand
-			// it to a member that is about to disappear.
 			name:      "the step-down waits for terminating pods",
 			instances: []api.InstanceSpec{data("mongod", 3, 2)},
 			pods: []shutdownPod{
@@ -154,8 +153,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:      map[string]int32{"mongod": 0},
 		},
 		{
-			// With several voters left there is still a majority to elect from,
-			// so phase 2 drains one whether or not a primary is visible yet.
 			name:      "no primary yet still drains one voter",
 			instances: []api.InstanceSpec{data("mongod", 3, 2)},
 			pods: []shutdownPod{
@@ -165,8 +162,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:    map[string]int32{"mongod": 2},
 		},
 		{
-			// Down to the last voter with no primary: taking it down now would
-			// drop the last writer, so the shutdown waits for an election.
 			name:      "the last voter is held until a primary is elected",
 			instances: []api.InstanceSpec{data("mongod", 1, 2)},
 			pods:      []shutdownPod{{group: "mongod", ordinal: 0}},
@@ -174,8 +169,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:      map[string]int32{"mongod": 1},
 		},
 		{
-			// Nothing can be elected, so there is no last writer to protect and
-			// holding would wedge the delete forever.
 			name:      "nothing ready takes it all down",
 			instances: []api.InstanceSpec{data("mongod", 1, 2)},
 			pods:      []shutdownPod{{group: "mongod", ordinal: 0, notReady: true}},
@@ -183,8 +176,6 @@ func TestShutdownTarget(t *testing.T) {
 			want:      map[string]int32{"mongod": 0},
 		},
 		{
-			// The live primary can sit in a group the desired configuration no
-			// longer lets win an election. It still has to be drained last.
 			name:      "a primary in a group that cannot be elected is still drained last",
 			instances: []api.InstanceSpec{data("mongod", 1, 2), hidden("hot", 1)},
 			pods: []shutdownPod{
@@ -192,6 +183,57 @@ func TestShutdownTarget(t *testing.T) {
 			},
 			primary: "sd-cr-rs0-hot-0",
 			want:    map[string]int32{"hot": 1, "mongod": 0},
+		},
+		{
+			name:      "a lagging config holds the drain instead of breaking quorum",
+			instances: []api.InstanceSpec{data("mongod", 3, 2), arbiter("arb", 1), hidden("hid", 1)},
+			pods: []shutdownPod{
+				{group: "mongod", ordinal: 0}, {group: "mongod", ordinal: 1}, {group: "mongod", ordinal: 2},
+			},
+			primary:      "sd-cr-rs0-0",
+			configVoters: 5,
+			want:         map[string]int32{"mongod": 3, "arb": 0, "hid": 0},
+		},
+		{
+			name:      "a lagging config waits for an election while quorum survives",
+			instances: []api.InstanceSpec{data("mongod", 3, 2), arbiter("arb", 1), hidden("hid", 1)},
+			pods: []shutdownPod{
+				{group: "mongod", ordinal: 0}, {group: "mongod", ordinal: 1}, {group: "mongod", ordinal: 2},
+			},
+			primary:      "",
+			configVoters: 5,
+			want:         map[string]int32{"mongod": 3, "arb": 0, "hid": 0},
+		},
+		{
+			name:      "an unreadable member does not disable the quorum check",
+			instances: []api.InstanceSpec{data("mongod", 3, 2), arbiter("arb", 1), hidden("hid", 1)},
+			pods: []shutdownPod{
+				{group: "mongod", ordinal: 0}, {group: "mongod", ordinal: 1}, {group: "mongod", ordinal: 2},
+			},
+			primary:          "",
+			configVoters:     5,
+			configUnreadable: []string{"sd-cr-rs0-0"},
+			want:             map[string]int32{"mongod": 3, "arb": 0, "hid": 0},
+		},
+		{
+			name:      "an unrecoverable quorum shuts every group down",
+			instances: []api.InstanceSpec{data("mongod", 3, 2), arbiter("arb", 1), hidden("hid", 1)},
+			pods: []shutdownPod{
+				{group: "mongod", ordinal: 0},
+			},
+			primary:      "",
+			configVoters: 5,
+			want:         map[string]int32{"mongod": 0, "arb": 0, "hid": 0},
+		},
+		{
+			name:      "a config in step with the pods still drains one per pass",
+			instances: []api.InstanceSpec{data("mongod", 1, 2), arbiter("arb", 1)},
+			pods: []shutdownPod{
+				{group: "mongod", ordinal: 0}, {group: "arb", ordinal: 0},
+			},
+			primary:      "sd-cr-rs0-0",
+			configVoters: 2,
+			want:         map[string]int32{"mongod": 1, "arb": 0},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,6 +268,7 @@ func TestShutdownTarget(t *testing.T) {
 			if tt.primary != "" {
 				provider = newPrimaryProvider(tt.primary)
 			}
+			provider.withConfigVoters(tt.configVoters).withUnreadableConfig(tt.configUnreadable...)
 			r.mongoClientProvider = provider
 
 			got, done, err := r.shutdownTarget(ctx, cr, rs, set)
