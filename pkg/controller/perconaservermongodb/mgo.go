@@ -611,7 +611,12 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		}
 	}
 
-	pending, err := applyMemberConfig(ctx, cli, &cnf, members, set, unsafePSA)
+	primaryHost := ""
+	if primary := rsStatus.Primary(); primary != nil {
+		primaryHost = primary.Name
+	}
+
+	pending, err := applyMemberConfig(ctx, cli, &cnf, members, set, unsafePSA, primaryHost)
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "apply member config: replset %s", rs.Name)
 	}
@@ -630,6 +635,9 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 
 	return rsMembers, liveMembers, nil
 }
+
+// number of seconds for the outgoing primary to stay out of the election after a handover.
+const stepDownSeconds = 60
 
 // applyMemberConfig converges the mutable settings of the live replset config
 // on the desired members and writes the config back if anything changed.
@@ -650,6 +658,7 @@ func applyMemberConfig(
 	members mongo.ConfigMembers,
 	set *membergroup.Set,
 	unsafePSA bool,
+	primaryHost string,
 ) (bool, error) {
 	log := logf.FromContext(ctx)
 	rsName := set.GetReplsetName()
@@ -672,7 +681,7 @@ func applyMemberConfig(
 		return false, nil
 	}
 
-	changed, votePending, err := cnf.Members.ApplyMemberConfig(ctx, members)
+	changed, votePending, stepDownPrimary, err := cnf.Members.ApplyMemberConfig(ctx, members, primaryHost)
 	if err != nil {
 		return false, err
 	}
@@ -685,6 +694,17 @@ func applyMemberConfig(
 
 		if err := cli.WriteConfig(ctx, *cnf, false); err != nil {
 			return false, errors.Wrap(err, "apply member config: write mongo config")
+		}
+	}
+
+	// We cannot reconfigure the primary out of being electable (votes 0 -> 1),
+	// so it needs to step down and the change is re-applied next pass.
+	if stepDownPrimary && !changed {
+		log.Info("handing the primary over so its member configuration can be applied",
+			"replset", rsName, "primary", primaryHost)
+
+		if err := cli.StepDown(ctx, stepDownSeconds, false); err != nil {
+			return false, errors.Wrap(err, "step down primary: apply member config")
 		}
 	}
 

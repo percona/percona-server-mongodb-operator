@@ -1376,25 +1376,62 @@ func ceilingSwap() mongo.ConfigMembers {
 }
 
 func TestApplyMemberConfig(t *testing.T) {
-	// live/desired are the inputs; want is the expected state of live after the
-	// call, so every case also asserts that nothing else was touched.
-	// wantChanged/wantPending are the return values of the LAST call when
-	// calls > 1.
+
 	cases := []struct {
-		name        string
-		live        mongo.ConfigMembers
-		desired     mongo.ConfigMembers
-		calls       int // defaults to 1
-		want        mongo.ConfigMembers
-		wantChanged bool
-		wantPending bool
-		wantErr     string
+		name         string
+		live         mongo.ConfigMembers
+		desired      mongo.ConfigMembers
+		calls        int    // defaults to 1
+		primary      string // current primary in rs.status()
+		want         mongo.ConfigMembers
+		wantChanged  bool
+		wantPending  bool
+		wantStepDown bool
+		wantErr      string
 	}{
 		{
 			name:    "no changes",
 			live:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
 			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
 			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+		},
+		{
+			//  h2 (primary group) votes go from 1 -> 0, so we expect a step down
+			name:         "the primary is not reconfigured out of electability",
+			live:         mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 1), dbm(2, "h2", 1, 2)},
+			desired:      mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 1), dbm(2, "h2", 0, 0)},
+			primary:      "h2",
+			want:         mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 1), dbm(2, "h2", 1, 2)},
+			wantPending:  true,
+			wantStepDown: true,
+		},
+		{
+			name:         "a priority-only change to the primary also waits",
+			live:         mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			desired:      mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 0)},
+			primary:      "h1",
+			want:         mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
+			wantPending:  true,
+			wantStepDown: true,
+		},
+		{
+			name:    "a blocked primary does not stall the other members",
+			live:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
+			desired: mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			primary: "h0",
+			// h2 converges this pass; h0 is untouched and still pending.
+			want:         mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
+			wantChanged:  true,
+			wantPending:  true,
+			wantStepDown: true,
+		},
+		{
+			name:        "with no other electable member the change is attempted anyway",
+			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 0), dbm(1, "h1", 1, 2)},
+			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 0), dbm(1, "h1", 0, 0)},
+			primary:     "h1",
+			want:        mongo.ConfigMembers{dbm(0, "h0", 1, 0), dbm(1, "h1", 0, 0)},
+			wantChanged: true,
 		},
 		{
 			name:        "priority changed",
@@ -1464,10 +1501,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantChanged: true,
 		},
 		{
-			// MongoDB permits only one voting-member change per ordinary
-			// reconfiguration, so the second one waits for the next pass. h2
-			// keeps priority 2 meanwhile: a member that still votes may not be
-			// dropped to priority 0 ahead of its vote.
 			name:        "two vote changes: only one applied, rest pending",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
@@ -1476,7 +1509,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantPending: true,
 		},
 		{
-			// Hidden is coupled to priority, which is coupled to votes
 			name: "hidden waits for a deferred vote change",
 			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired: mongo.ConfigMembers{
@@ -1550,8 +1582,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantPending: true,
 		},
 		{
-			// At the ceiling the addition would make 8 voters, which MongoDB
-			// rejects outright, so the removal has to go first.
 			name:    "swap at the voting ceiling removes before it adds",
 			live:    members8(7),
 			desired: ceilingSwap(),
@@ -1572,8 +1602,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantChanged: true,
 		},
 		{
-			// The mirror case: removing the only vote would leave zero voters,
-			// so the addition goes first.
 			name:        "swap at a single voter adds before it removes",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 0, 0), dbm(2, "h2", 0, 0)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 0, 0), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
@@ -1582,8 +1610,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantPending: true,
 		},
 		{
-			// Both directions are legal here. Growing first is preferred: four
-			// voters tolerate a failure where two do not.
 			name:        "growth is preferred while there is headroom",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2), dbm(3, "h3", 0, 0)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0), dbm(3, "h3", 1, 2)},
@@ -1592,8 +1618,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantPending: true,
 		},
 		{
-			// An eighth voter with nothing to give its vote up: no single step
-			// leaves a legal config, and retrying cannot help.
 			name: "a votes change that cannot leave a legal config is rejected",
 			live: members8(7),
 			desired: func() mongo.ConfigMembers {
@@ -1613,8 +1637,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantChanged: true,
 		},
 		{
-			// No parity or cap rule may re-add or strip a vote once converged:
-			// this is the whole point of not calling SetVotes here.
 			name:        "explicit votes survive repeated reconciliation",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired:     mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 0, 0)},
@@ -1623,8 +1645,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantChanged: false, // converged on the first call, no-op thereafter
 		},
 		{
-			// The mismatch is on the last member while the first has a pending
-			// priority change: nothing may be mutated for a spec that is refused.
 			name: "arbiterOnly change is rejected before anything is mutated",
 			live: mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2), dbm(2, "h2", 1, 2)},
 			desired: mongo.ConfigMembers{
@@ -1653,8 +1673,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			wantErr: "arbiterOnly cannot be changed",
 		},
 		{
-			// ExternalNodesChanged owns these; ApplyMemberConfig must not touch
-			// them even when the desired list disagrees.
 			name: "external member is skipped",
 			live: mongo.ConfigMembers{func() mongo.ConfigMember {
 				m := dbm(0, "ext", 1, 1)
@@ -1669,14 +1687,12 @@ func TestApplyMemberConfig(t *testing.T) {
 			}()},
 		},
 		{
-			// RemoveOld owns members that are gone from the desired list.
 			name:    "host absent from desired is left alone",
 			live:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "gone", 1, 2)},
 			desired: mongo.ConfigMembers{dbm(0, "h0", 1, 2)},
 			want:    mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "gone", 1, 2)},
 		},
 		{
-			// AddNew and RemoveOld own ID assignment; matching is by host.
 			name:        "member IDs are never modified",
 			live:        mongo.ConfigMembers{dbm(0, "h0", 1, 2), dbm(1, "h1", 1, 2)},
 			desired:     mongo.ConfigMembers{dbm(100, "h0", 1, 5), dbm(101, "h1", 1, 2)},
@@ -1702,8 +1718,6 @@ func TestApplyMemberConfig(t *testing.T) {
 			}()},
 		},
 		{
-			// MongoDB arbiters carry no tags, so the tag comparison is skipped
-			// for them entirely.
 			name: "arbiter tags are not compared",
 			live: mongo.ConfigMembers{func() mongo.ConfigMember {
 				m := dbm(0, "arb", 1, 0)
@@ -1736,12 +1750,13 @@ func TestApplyMemberConfig(t *testing.T) {
 			}
 
 			var (
-				changed bool
-				pending bool
-				err     error
+				changed  bool
+				pending  bool
+				stepDown bool
+				err      error
 			)
 			for range calls {
-				changed, pending, err = live.ApplyMemberConfig(ctx, c.desired)
+				changed, pending, stepDown, err = live.ApplyMemberConfig(ctx, c.desired, c.primary)
 				if err != nil {
 					break
 				}
@@ -1754,6 +1769,7 @@ func TestApplyMemberConfig(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, c.wantChanged, changed, "changed")
 				assert.Equal(t, c.wantPending, pending, "votingChangePending")
+				assert.Equal(t, c.wantStepDown, stepDown, "stepDownPrimary")
 			}
 
 			assert.Equal(t, c.want, live, "live config after the call")

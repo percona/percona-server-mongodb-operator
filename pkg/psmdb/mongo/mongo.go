@@ -1116,6 +1116,43 @@ func (m ConfigMember) String() string {
 	return fmt.Sprintf("{votes: %d, priority: %d}", m.Votes, m.Priority)
 }
 
+// electableUnder reports whether a member could win an election with that configuration.
+func electableUnder(m ConfigMember) bool {
+	return m.Votes > 0 && m.Priority > 0 && !m.ArbiterOnly
+}
+
+// hasOtherElectable reports whether any member other than host could take the primary over under the live configuration.
+func (m ConfigMembers) hasOtherElectable(host string) bool {
+	for i := range m {
+		if m[i].Host == host {
+			continue
+		}
+		if electableUnder(m[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// primaryNeedsHandover reports whether the primary's desired configuration
+// cannot be applied while it holds the primary, and another member could take
+// over. MongoDB rejects a reconfiguration that leaves the node running it
+// unelectable, so such a member has to wait until it is no longer the primary.
+func (m ConfigMembers) primaryNeedsHandover(desired map[string]ConfigMember, primaryHost string) bool {
+	if primaryHost == "" {
+		return false
+	}
+
+	want, ok := desired[primaryHost]
+	if !ok || electableUnder(want) {
+		return false
+	}
+
+	// If no one else is electable, attempt the change anyway and let MongoDB reject it,
+	// there is nothing we can do.
+	return m.hasOtherElectable(primaryHost)
+}
+
 func countVoters(m ConfigMembers) int {
 	voters := 0
 	for _, member := range m {
@@ -1171,7 +1208,7 @@ func (m ConfigMembers) checkImmutable(desired map[string]ConfigMember) error {
 //
 // External members are never candidates; ExternalNodesChanged owns those.
 // They are still counted, because MongoDB's limit is over the whole config.
-func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, bool) {
+func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember, skipHost string) (int, bool) {
 	voters := countVoters(m)
 
 	add, remove := -1, -1
@@ -1179,6 +1216,10 @@ func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, boo
 		cur := &m[i]
 
 		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		if skipHost != "" && cur.Host == skipHost {
 			continue
 		}
 
@@ -1219,6 +1260,7 @@ func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, boo
 //   - changed:             the caller must bump the version and write the config
 //   - votingChangePending: at least one more votes change is outstanding, so the
 //     caller must re-read the live config and call again on the next pass
+//   - stepDownPrimary:     if the provided primaryHost needs to step down in a given pass
 //
 // Contract:
 //   - Mutable in place: priority, hidden, tags, horizons. Removing a desired
@@ -1237,12 +1279,18 @@ func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember) (int, boo
 //   - External members (tag external=true) and hosts absent from the desired
 //     list are skipped; ExternalNodesChanged and RemoveOld own those.
 //   - Member IDs are never modified; AddNew and RemoveOld own ID assignment.
+//   - If a vote change requires the existing primary to step down, it will be done when no
+//     more vote changes are pending.
 //
 // This is the PolicyExplicit counterpart of SetVotes. SetVotes must not be
 // called for an explicit topology: it derives votes from role tags, caps voting
 // membership and removes a vote for parity, all of which would overwrite what
 // the user asked for.
-func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith ConfigMembers) (bool, bool, error) {
+func (m *ConfigMembers) ApplyMemberConfig(
+	ctx context.Context,
+	compareWith ConfigMembers,
+	primaryHost string,
+) (bool, bool, bool, error) {
 	log := logf.FromContext(ctx)
 
 	desired := make(map[string]ConfigMember, len(compareWith))
@@ -1252,12 +1300,22 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 
 	// Check if any immutable fields are being changed
 	if err := m.checkImmutable(desired); err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 
-	voteIdx, voteBlocked := m.nextVoteChange(desired)
+	stepDownPrimary := m.primaryNeedsHandover(desired, primaryHost)
+
+	// The host to leave untouched this pass. Empty unless the primary is
+	// blocked, and no real member has an empty host, so the comparisons on it
+	// match nothing in the ordinary case.
+	skipHost := ""
+	if stepDownPrimary {
+		skipHost = primaryHost
+	}
+
+	voteIdx, voteBlocked := m.nextVoteChange(desired, skipHost)
 	if voteBlocked {
-		return false, false, errors.Errorf(
+		return false, false, false, errors.Errorf(
 			"replset config has %d voting members and the requested votes changes "+
 				"cannot be applied one at a time without leaving between 1 and %d. "+
 				"Adjust the declared votes so the total stays in range",
@@ -1276,6 +1334,15 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 
 		want, ok := desired[cur.Host]
 		if !ok {
+			continue
+		}
+
+		// Nothing about the primary may change while its desired configuration
+		// would leave it unelectable: MongoDB validates the whole member
+		// document, so even a priority-only change is refused. The caller hands
+		// the primary over and this member converges on a later pass.
+		if skipHost != "" && cur.Host == skipHost {
+			votePending = true
 			continue
 		}
 
@@ -1326,5 +1393,5 @@ func (m *ConfigMembers) ApplyMemberConfig(ctx context.Context, compareWith Confi
 		}
 	}
 
-	return changed, votePending, nil
+	return changed, votePending, stepDownPrimary, nil
 }
