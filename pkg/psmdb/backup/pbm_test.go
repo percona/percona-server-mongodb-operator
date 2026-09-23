@@ -525,6 +525,39 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"azure-connection-string": {
+			[]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "test-namespace",
+					},
+					Data: map[string][]byte{
+						// AZURE_STORAGE_CONNECTION_STRING takes precedence over individual keys
+						"AZURE_STORAGE_CONNECTION_STRING": []byte("DefaultEndpointsProtocol=https;AccountName=some-storage-account;AccountKey=some-storage-key==;EndpointSuffix=core.windows.net"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageAzure,
+				Azure: api.BackupStorageAzureSpec{
+					Container:         "some-container",
+					Prefix:            "psmdb",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			config.StorageConf{
+				Type: storage.Azure,
+				Azure: &azure.Config{
+					Account:   "some-storage-account",
+					Container: "some-container",
+					Prefix:    "psmdb",
+					Credentials: azure.Credentials{
+						Key: "some-storage-key==",
+					},
+				},
+			},
+		},
 		"oss": {
 			[]client.Object{
 				&corev1.Secret{
