@@ -73,7 +73,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	}
 
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(pvc, sts) {
+		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
 			continue
 		}
 

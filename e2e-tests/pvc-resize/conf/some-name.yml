@@ -13,6 +13,50 @@ spec:
   backup:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:0.4.0-backup
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 500m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    mongos:
+      size: 2
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 500m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      expose:
+        type: ClusterIP
+      logs:
+        persistentVolumeClaim:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
   replsets:
   - name: rs0
     # readinessDelaySec: 40

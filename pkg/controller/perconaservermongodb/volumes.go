@@ -31,25 +31,30 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, volumeSpec); err != nil {
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
 	return nil
 }
 
-func validatePVCName(pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, config.MongodDataVolClaimName+"-"+sts.Name)
+func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
+	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
+func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	ls map[string]string,
+	claimName string,
+	pvcSpec psmdbv1.PVCSpec,
+) error {
 	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		return nil
 	}
 
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
-
-	pvcSpec := volumeSpec.PersistentVolumeClaim
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
@@ -76,7 +81,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 
 	pvcsToUpdate := make([]string, 0, len(pvcList.Items))
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(pvc, sts) {
+		if !validatePVCName(claimName, pvc, sts) {
 			continue
 		}
 
@@ -90,7 +95,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 
 	var actual resource.Quantity
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(pvc, sts) {
+		if !validatePVCName(claimName, pvc, sts) {
 			continue
 		}
 
@@ -119,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(ctx context.Contex
 
 	var volumeTemplate corev1.PersistentVolumeClaim
 	for _, vct := range sts.Spec.VolumeClaimTemplates {
-		if vct.Name == config.MongodDataVolClaimName {
+		if vct.Name == claimName {
 			volumeTemplate = vct
 		}
 	}
@@ -337,21 +342,50 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 
 	orig := cr.DeepCopy()
 
-	replset, ok := sts.Labels[naming.LabelKubernetesReplset]
+	component, ok := sts.Labels[naming.LabelKubernetesComponent]
 	if !ok {
 		return errors.New("missing component label")
 	}
 
-	if replset == psmdbv1.ConfigReplSetName {
+	switch component {
+	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
+		replset, ok := sts.Labels[naming.LabelKubernetesReplset]
+		if !ok {
+			return errors.New("missing replset label")
+		}
+
+		rs := cr.Spec.Replset(replset)
+		if rs == nil {
+			return errors.Errorf("replset %s not found in cr", replset)
+		}
+
+		volumeSpec := rs.VolumeSpec
+		switch component {
+		case naming.ComponentNonVoting:
+			volumeSpec = rs.NonVoting.VolumeSpec
+		case naming.ComponentHidden:
+			volumeSpec = rs.Hidden.VolumeSpec
+		}
+
+		if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.Resources.Requests == nil {
+			return errors.Errorf("missing volume spec for %s/%s", replset, component)
+		}
+
+		log.Info("Reverting volume template for replset", "replset", replset, "component", component, "originalSize", originalSize)
+		volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
+	case naming.ComponentMongos:
+		pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
+		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
+			return errors.New("missing log storage spec for mongos")
+		}
+
+		log.Info("Reverting volume template for mongos", "originalSize", originalSize)
+		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
+	case naming.ComponentConfigSrv:
 		log.Info("Reverting volume template for configsvr", "originalSize", originalSize)
 		cr.Spec.Sharding.ConfigsvrReplSet.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
-	} else {
-		for _, rs := range cr.Spec.Replsets {
-			if rs.Name == replset {
-				log.Info("Reverting volume template for replset", "replset", replset, "originalSize", originalSize)
-				rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
-			}
-		}
+	default:
+		return errors.Errorf("unsupported component %s", component)
 	}
 
 	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
