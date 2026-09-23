@@ -140,8 +140,7 @@ class TestHeterogeneousInstanceBasic:
                 "jsonpath={.metadata.labels.app\\.kubernetes\\.io/component}",
             ).strip()
             assert component == group.component, (
-                f"{group.statefulset} is labeled component={component}, "
-                f"expected {group.component}"
+                f"{group.statefulset} is labeled component={component}, expected {group.component}"
             )
 
         # A group gets a mongod ConfigMap only when its resolved configuration
@@ -316,11 +315,46 @@ class TestHeterogeneousInstanceBasic:
             )
 
     @pytest.mark.dependency(depends=["TestHeterogeneousInstanceBasic::test_scale_up_inst1"])
-    def test_remove_inst2(self, config: HeterogeneousConfig, psmdb_client: MongoManager) -> None:
-        """Drop inst2 from instances[] and check its workload and members go"""
-        retired = groups(config)["inst2"]
+    def test_swap_votes_from_inst1_to_inst2(
+        self, config: HeterogeneousConfig, psmdb_client: MongoManager
+    ) -> None:
+        """Hand every vote from inst1 to inst2 in a single edit
+        """
+        inst1, inst2 = groups(config)["inst1"], groups(config)["inst2"]
 
-        instances.remove_instance(config.psmdb, "inst2")
+        instances.set_rs_configs(
+            config.psmdb,
+            {
+                "inst1": {"votes": 0, "priority": 0},
+                "inst2": {"votes": 1, "priority": 2, "tags": {"workload": "analytics"}},
+            },
+        )
+
+        def swapped() -> bool:
+            members = read_members(config, psmdb_client)
+            missing = [pod for pod in inst1.pods + inst2.pods if pod not in members]
+            if missing:
+                logger.info(f"not in rs.conf() yet: {missing}")
+                return False
+
+            votes = {pod: members[pod].get("votes") for pod in inst1.pods + inst2.pods}
+            logger.info(f"votes: {votes}")
+            return all(votes[pod] == 0 for pod in inst1.pods) and all(
+                votes[pod] == 1 for pod in inst2.pods
+            )
+
+        instances.wait_until("the votes to move from inst1 to inst2", swapped, timeout=900)
+        instances.wait_for_instances_running(config.psmdb)
+
+    @pytest.mark.dependency(
+        depends=["TestHeterogeneousInstanceBasic::test_swap_votes_from_inst1_to_inst2"]
+    )
+    def test_remove_inst1(self, config: HeterogeneousConfig, psmdb_client: MongoManager) -> None:
+        """Drop inst1 from instances[] and check its workload and members go
+        """
+        retired = groups(config)["inst1"]
+
+        instances.remove_instance(config.psmdb, "inst1")
 
         # The operator drops one member per reconciliation, so the workload
         # empties over several passes before it is deleted.
@@ -329,12 +363,12 @@ class TestHeterogeneousInstanceBasic:
 
         instances.wait_for_instances_running(config.psmdb)
 
-        assert "inst2" not in groups(config)
+        assert "inst1" not in groups(config)
         assert retired.statefulset not in instances.statefulset_names(config.psmdb)
 
         members = read_members(config, psmdb_client)
-        assert not [pod for pod in members if pod.startswith(f"{config.cluster}-inst2")], (
-            f"retired inst2 members are still in rs.conf(): {sorted(members)}"
+        assert not [pod for pod in members if pod.startswith(f"{config.cluster}-inst1-")], (
+            f"retired inst1 members are still in rs.conf(): {sorted(members)}"
         )
 
         # The claims outlive the group. Retiring an instance drops the workload
@@ -344,9 +378,9 @@ class TestHeterogeneousInstanceBasic:
             "get", "pvc", "-o", "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}"
         ).split()
         for pvc in retired.pvcs:
-            assert pvc in pvcs, f"removing inst2 destroyed {pvc}: {pvcs}"
+            assert pvc in pvcs, f"removing inst1 destroyed {pvc}: {pvcs}"
 
-    @pytest.mark.dependency(depends=["TestHeterogeneousInstanceBasic::test_remove_inst2"])
+    @pytest.mark.dependency(depends=["TestHeterogeneousInstanceBasic::test_remove_inst1"])
     def test_member_configuration(
         self, config: HeterogeneousConfig, psmdb_client: MongoManager
     ) -> None:
@@ -361,9 +395,9 @@ class TestHeterogeneousInstanceBasic:
         )
 
         # votes, priority, hidden, arbiterOnly per group, as declared in the CR
-        # and adjusted after the scale-up and the removal.
+        # and adjusted by the vote swap and the removal.
         expected = {
-            "inst1": {"votes": 1, "priority": 2, "hidden": False, "arbiterOnly": False},
+            "inst2": {"votes": 1, "priority": 2, "hidden": False, "arbiterOnly": False},
             "arbiter": {"votes": 1, "priority": 0, "hidden": False, "arbiterOnly": True},
             "nonVoting": {"votes": 0, "priority": 0, "hidden": False, "arbiterOnly": False},
             "hidden": {"votes": 1, "priority": 0, "hidden": True, "arbiterOnly": False},
@@ -378,13 +412,17 @@ class TestHeterogeneousInstanceBasic:
                 got = {field: member.get(field) for field in want}
                 assert got == want, f"member {pod} of group {name}: {got} != {want}"
 
-        # Voting members after the scale-up and the removal: 5 from inst1, plus
-        # the arbiter and the hidden member. Odd, and within MongoDB's limit.
+        # Voting members after the swap and the removal: 3 from inst2, which now
+        # holds the votes inst1 used to, plus the arbiter and the hidden member.
         voters = sum(1 for member in members.values() if member.get("votes"))
-        assert voters == 7, f"expected 7 voting members, got {voters}"
+        assert voters == 5, f"expected 5 voting members, got {voters}"
 
         # Group tags survive alongside the identity tags the operator adds, and
-        # an arbiter carries no tags at all.
+        # an arbiter carries no tags at all. inst2 keeps the tag it was declared
+        # with through the vote swap, because the swap restated it.
+        for pod in declared["inst2"].pods:
+            tags = members[pod].get("tags") or {}
+            assert tags.get("workload") == "analytics", tags
         for pod in declared["nonVoting"].pods:
             tags = members[pod].get("tags") or {}
             assert tags.get("nonVoting") == "true", tags

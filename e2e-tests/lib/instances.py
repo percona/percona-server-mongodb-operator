@@ -271,6 +271,41 @@ def set_instance_configuration(
     _patch_instance(cluster, instance, rs, "add", "/configuration", value=configuration)
 
 
+def set_rs_configs(cluster: str, configs: dict[str, dict[str, Any]], rs: str = "rs0") -> None:
+    """Replace several instances' rsConfig in a single patch.
+
+    One patch and not one per instance: the operator validates the whole spec,
+    and a vote moved between groups is only legal once both halves are in
+    place. Either half on its own leaves the replica set with an even voter
+    count or with none at all, and would be rejected.
+    """
+    cr = read_cr(cluster)
+    ops: list[dict[str, Any]] = []
+    found: set[str] = set()
+
+    for rs_index, replset in enumerate(cr["spec"]["replsets"]):
+        if replset["name"] != rs:
+            continue
+        for inst_index, inst in enumerate(replset.get("instances") or []):
+            if inst["name"] not in configs:
+                continue
+            found.add(inst["name"])
+            ops.append(
+                {
+                    "op": "add",
+                    "path": f"/spec/replsets/{rs_index}/instances/{inst_index}/rsConfig",
+                    "value": configs[inst["name"]],
+                }
+            )
+
+    missing = sorted(set(configs) - found)
+    if missing:
+        raise KeyError(f"no instances {missing} in replset {rs} of {cluster}")
+
+    logger.info(f"Setting rsConfig on {sorted(found)} of {cluster}")
+    kubectl_bin("patch", "psmdb", cluster, "--type=json", "-p", json.dumps(ops))
+
+
 def remove_instance(cluster: str, instance: str, rs: str = "rs0") -> None:
     logger.info(f"Removing instance {instance} from {cluster}")
     _patch_instance(cluster, instance, rs, "remove", "")
