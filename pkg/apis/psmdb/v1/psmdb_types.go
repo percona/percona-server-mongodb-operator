@@ -381,24 +381,25 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                            `json:"state,omitempty"`
-	MongoVersion       string                              `json:"mongoVersion,omitempty"`
-	MongoImage         string                              `json:"mongoImage,omitempty"`
-	Message            string                              `json:"message,omitempty"`
-	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
-	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
-	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
-	BackupVersion      string                              `json:"backupVersion,omitempty"`
-	BackupImage        string                              `json:"backupImage,omitempty"`
-	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
-	PMMVersion         string                              `json:"pmmVersion,omitempty"`
-	Host               string                              `json:"host,omitempty"`
-	Size               int32                               `json:"size"`
-	Ready              int32                               `json:"ready"`
-	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
-	Search             map[string]SearchStatus             `json:"search,omitempty"`
+	State                AppState                            `json:"state,omitempty"`
+	MongoVersion         string                              `json:"mongoVersion,omitempty"`
+	MongoImage           string                              `json:"mongoImage,omitempty"`
+	Message              string                              `json:"message,omitempty"`
+	Conditions           []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets             map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos               *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration   int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion        string                              `json:"backupVersion,omitempty"`
+	BackupImage          string                              `json:"backupImage,omitempty"`
+	BackupConfigHash     string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus            AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion           string                              `json:"pmmVersion,omitempty"`
+	Host                 string                              `json:"host,omitempty"`
+	Size                 int32                               `json:"size"`
+	Ready                int32                               `json:"ready"`
+	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	Search               map[string]SearchStatus             `json:"search,omitempty"`
+	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
 
 type ConditionStatus string
@@ -1116,6 +1117,11 @@ type VaultSpec struct {
 	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
 	//+optional
 	ReinitInterval *metav1.Duration `json:"reinitInterval,omitempty"`
+	// RequestInterval controls how often the operator queries Vault for the users secret.
+	// If unset, Vault is queried on every reconciliation. Set this to reduce the request
+	// rate against Vault for clusters that don't need near-instant credential propagation.
+	//+optional
+	RequestInterval *metav1.Duration `json:"requestInterval,omitempty"`
 }
 
 type SyncUsersSpec struct {

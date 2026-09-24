@@ -78,6 +78,10 @@ EOF
 		bound_service_account_namespaces="$sa_namespace" \
 		policies=operator \
 		ttl=1h
+
+	# enable a file audit device so we can observe how often the operator
+	# actually reads the users secret from Vault (used to verify requestInterval)
+	kubectl_bin exec $vault_name-0 -- vault audit enable file file_path=/tmp/audit.log || true
 }
 
 vault_append() {
@@ -187,6 +191,48 @@ check_vault_reinit_interval() {
 	if (((count_after - count_before) < 2)); then
 		echo "vault client was not reinitialized according to the configured reinitInterval (${reinit_interval}s)"
 		echo "token accessor count before: $count_before, after: $count_after"
+		exit 1
+	fi
+}
+
+vault_read_count() {
+	kubectl_bin exec $vault_name-0 -- sh -c "grep -c 'psmdb/operator/$namespace/$psmdb/users' /tmp/audit.log" 2>/dev/null || echo 0
+}
+
+check_vault_request_interval() {
+	local window=30
+	local request_interval=60
+
+	# baseline: without requestInterval configured, vault is queried on every
+	# reconcile (every few seconds), so we should observe multiple reads
+	local count_before
+	count_before=$(vault_read_count)
+	sleep $window
+	local count_after
+	count_after=$(vault_read_count)
+	local baseline_reads=$((count_after - count_before))
+
+	desc "set spec.vault.requestInterval to ${request_interval}s"
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"requestInterval\":\"${request_interval}s\"}}}"
+	sleep 5 # let the patch take effect
+
+	local count_before_throttled
+	count_before_throttled=$(vault_read_count)
+	sleep $window
+	local count_after_throttled
+	count_after_throttled=$(vault_read_count)
+	local throttled_reads=$((count_after_throttled - count_before_throttled))
+
+	if ((throttled_reads >= baseline_reads)); then
+		echo "vault reads were not throttled by the configured requestInterval (${request_interval}s)"
+		echo "baseline reads in ${window}s: $baseline_reads, throttled reads in ${window}s: $throttled_reads"
+		exit 1
+	fi
+
+	if ((throttled_reads > 1)); then
+		echo "expected at most 1 read within ${window}s while requestInterval=${request_interval}s, got $throttled_reads"
 		exit 1
 	fi
 }
@@ -303,6 +349,9 @@ main() {
 
 	desc 'check configurable vault reinitInterval'
 	check_vault_reinit_interval
+
+	desc 'check configurable vault requestInterval'
+	check_vault_request_interval
 
 	destroy_vault $vault_name
 	destroy "$namespace"

@@ -29871,6 +29871,8 @@ spec:
                       rule: isURL(self)
                   reinitInterval:
                     type: string
+                  requestInterval:
+                    type: string
                   syncUsers:
                     properties:
                       keyPath:
@@ -30026,6 +30028,9 @@ spec:
                       type: integer
                   type: object
                 type: object
+              vaultLastRequestedAt:
+                format: date-time
+                type: string
             required:
             - ready
             - size
