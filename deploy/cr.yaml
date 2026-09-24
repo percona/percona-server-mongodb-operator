@@ -65,6 +65,7 @@ spec:
 #  vault:
 #    endpointURL: https://vault-service:8200
 #    tlsSecret: my-tls-vault-secret
+#    reinitInterval: 30m
 #    syncUsers:
 #      role: operator
 #      mountPath: secrets

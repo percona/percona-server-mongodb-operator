@@ -1114,6 +1114,8 @@ type VaultSpec struct {
 	TLSSecret   string `json:"tlsSecret,omitempty"`
 	//+optional
 	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+	//+optional
+	ReinitInterval *metav1.Duration `json:"reinitInterval,omitempty"`
 }
 
 type SyncUsersSpec struct {

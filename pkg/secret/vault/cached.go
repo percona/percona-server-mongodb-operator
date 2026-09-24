@@ -13,11 +13,12 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
+const defaultReinitInterval = 30 * time.Minute
+
 type cachedClient struct {
 	hash []byte
 
-	lastUpdatedAt  time.Time
-	reinitInterval time.Duration
+	lastUpdatedAt time.Time
 
 	*vaultClient
 }
@@ -35,15 +36,16 @@ func (cv *cachedClient) Update(ctx context.Context, cl client.Client, cr *api.Pe
 		return nil
 	}
 
-	if cv.reinitInterval == 0 {
-		cv.reinitInterval = 30 * time.Minute
+	reinitInterval := defaultReinitInterval
+	if cr.Spec.VaultSpec.ReinitInterval != nil {
+		reinitInterval = cr.Spec.VaultSpec.ReinitInterval.Duration
 	}
 
 	changed, err := cv.updateHash(cr)
 	if err != nil {
 		return errors.Wrap(err, "update hash")
 	}
-	if !changed && time.Since(cv.lastUpdatedAt) <= cv.reinitInterval {
+	if !changed && time.Since(cv.lastUpdatedAt) <= reinitInterval {
 		return nil
 	}
 

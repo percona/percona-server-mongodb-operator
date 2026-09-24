@@ -29869,6 +29869,8 @@ spec:
                     x-kubernetes-validations:
                     - message: endpointURL must be a valid URL
                       rule: isURL(self)
+                  reinitInterval:
+                    type: string
                   syncUsers:
                     properties:
                       keyPath:
