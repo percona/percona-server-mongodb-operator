@@ -42,6 +42,21 @@ const (
 	ContainerMongot      = "mongot"
 )
 
+// MongodContainerName returns the name of the mongod container for the given
+// replset component.
+func MongodContainerName(component string) string {
+	switch component {
+	case ComponentNonVoting:
+		return ContainerNonVoting
+	case ComponentHidden:
+		return ContainerHidden
+	case ComponentArbiter:
+		return ContainerArbiter
+	default:
+		return ContainerMongod
+	}
+}
+
 func MongodStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s", cr.Name, rs.Name)
 }
