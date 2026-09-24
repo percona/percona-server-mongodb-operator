@@ -159,6 +159,38 @@ EOF
 	rm -rf "$tmp_dir"
 }
 
+check_vault_reinit_interval() {
+	local reinit_interval=15
+
+	desc "set spec.vault.reinitInterval to ${reinit_interval}s"
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"reinitInterval\":\"${reinit_interval}s\"}}}"
+
+	# wait for the reconcile triggered by the spec change (hash-based reinit) to settle
+	sleep 10
+
+	# reinitializing the vault client (kubernetes auth) performs a fresh Login(),
+	# which creates a brand-new Vault token. Count active token accessors before
+	# and after waiting a few reinit cycles to confirm the client is actually
+	# being reinitialized on the configured cadence, without relying on logs.
+	local count_before
+	count_before=$(kubectl_bin exec $vault_name-0 -- vault list -format=json auth/token/accessors 2>/dev/null | jq 'length')
+
+	# wait long enough for a few reinit cycles to happen with the configured
+	# interval, but well under the default 30m interval
+	sleep $((reinit_interval * 4))
+
+	local count_after
+	count_after=$(kubectl_bin exec $vault_name-0 -- vault list -format=json auth/token/accessors 2>/dev/null | jq 'length')
+
+	if (((count_after - count_before) < 2)); then
+		echo "vault client was not reinitialized according to the configured reinitInterval (${reinit_interval}s)"
+		echo "token accessor count before: $count_before, after: $count_after"
+		exit 1
+	fi
+}
+
 main() {
 	psmdb="some-name"
 	cluster="$psmdb-rs0"
@@ -268,6 +300,9 @@ main() {
 		echo "Wrong password. Operator should get it from vault"
 		exit 1
 	fi
+
+	desc 'check configurable vault reinitInterval'
+	check_vault_reinit_interval
 
 	destroy_vault $vault_name
 	destroy "$namespace"
