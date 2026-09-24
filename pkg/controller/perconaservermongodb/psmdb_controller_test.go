@@ -483,7 +483,6 @@ func TestDownscaleTarget(t *testing.T) {
 			want:     map[string]int32{"ds-cr-rs0": 3},
 		},
 		{
-			// One step needs no rate limiting: it is already one member.
 			name:     "a gap of one is taken in a single pass",
 			declared: []psmdbv1.InstanceSpec{voting("mongod", 2)},
 			observed: map[string]int32{"mongod": 3},
@@ -496,26 +495,30 @@ func TestDownscaleTarget(t *testing.T) {
 			want:     map[string]int32{"ds-cr-rs0": 4},
 		},
 		{
-			// The budget is one per replica set, not one per group: the second
-			// group is held at the size its StatefulSet already has.
 			name:     "the second voting group is held at its observed size",
 			declared: []psmdbv1.InstanceSpec{voting("a", 1), voting("b", 1)},
 			observed: map[string]int32{"a": 3, "b": 3},
 			want:     map[string]int32{"ds-cr-rs0-a": 2, "ds-cr-rs0-b": 3},
 		},
 		{
-			// A non-voting member cannot cost quorum, so it drops straight to
-			// its declared count.
-			name:     "a non-voting group is not rate limited",
+			name:     "a group declared non-voting is also rate limited",
 			declared: []psmdbv1.InstanceSpec{voting("mongod", 3), nonVotingInst("nv", 0)},
 			observed: map[string]int32{"mongod": 3, "nv": 3},
-			want:     map[string]int32{"ds-cr-rs0": 3, "ds-cr-rs0-nv": 0},
+			want:     map[string]int32{"ds-cr-rs0": 3, "ds-cr-rs0-nv": 2},
 		},
 		{
-			name:     "a non-voting group does not spend the budget",
+			name: "votes and replicas dropped together still step down one at a time",
+			declared: []psmdbv1.InstanceSpec{
+				voting("inst1", 3), nonVotingInst("inst2", 0),
+			},
+			observed: map[string]int32{"inst1": 3, "inst2": 4},
+			want:     map[string]int32{"ds-cr-rs0-inst1": 3, "ds-cr-rs0-inst2": 3},
+		},
+		{
+			name:     "a group declared non-voting waits for the budget",
 			declared: []psmdbv1.InstanceSpec{voting("mongod", 2), nonVotingInst("nv", 0)},
 			observed: map[string]int32{"mongod": 5, "nv": 3},
-			want:     map[string]int32{"ds-cr-rs0": 4, "ds-cr-rs0-nv": 0},
+			want:     map[string]int32{"ds-cr-rs0": 4, "ds-cr-rs0-nv": 3},
 		},
 		{
 			name:     "a group with no statefulset yet is left at its declared count",
@@ -531,7 +534,6 @@ func TestDownscaleTarget(t *testing.T) {
 			want:        map[string]int32{"ds-cr-rs0-hot": 3},
 		},
 		{
-			// Growing is not downscaling; the budget is untouched.
 			name:     "an upscale passes through",
 			declared: []psmdbv1.InstanceSpec{voting("mongod", 5)},
 			observed: map[string]int32{"mongod": 3},
@@ -638,8 +640,8 @@ func TestSafeDownscale(t *testing.T) {
 
 		assert.Equal(t, int32(4), rs.GetMongodSize(),
 			"the base group is stepped down by one, into rs.size")
-		assert.Equal(t, int32(1), rs.NonVoting.Size,
-			"a non-voting role is never rate limited, so its declared size stands")
+		assert.Equal(t, int32(4), rs.NonVoting.Size,
+			"a non-voting role is rate limited too, and this pass's budget is spent")
 		assert.Equal(t, int32(4), rs.Hidden.Size,
 			"hidden is pinned at its observed size until the budget frees up")
 	})

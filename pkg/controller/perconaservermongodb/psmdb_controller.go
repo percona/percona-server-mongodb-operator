@@ -2241,17 +2241,12 @@ func (r *ReconcilePerconaServerMongoDB) cleanupStaleGroupConfigs(
 //
 // At most one member is removed per replica set per reconciliation. Removing
 // one voter from every group independently could take a majority offline in a
-// single pass. The returned map is a temporary target only: the
-// user-requested counts in the CR are never overwritten.
+// single pass.
 //
-// Workloads whose group has been deleted from the spec are budgeted here too,
+// Instances that have been removed from the spec are budgeted here too,
 // and they are budgeted first. They are on their way out either way, and
 // holding one at its old size while a declared group shrinks only keeps its
 // members in rs.conf() for longer.
-//
-// The function is a pure read of cluster state, so safeDownscale and
-// cleanupRemovedInstances reach the same conclusion from separate calls in the
-// same reconciliation, and the budget is spent once between them.
 func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
@@ -2288,11 +2283,6 @@ func (r *ReconcilePerconaServerMongoDB) downscaleTarget(
 
 	for _, group := range set.GetAll() {
 		target[group.STSName] = group.Replicas
-
-		// Only voting members are rate-limited
-		if group.Member.Votes == 0 {
-			continue
-		}
 
 		sts := new(appsv1.StatefulSet)
 		err := r.client.Get(ctx,
