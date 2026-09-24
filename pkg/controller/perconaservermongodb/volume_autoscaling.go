@@ -72,6 +72,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return errors.Wrap(err, "list pods for autoscaling")
 	}
 
+	// Hidden and non-voting pods run mongod in a container named after their
+	// component, so the container to probe can't be assumed to be "mongod".
+	containerName := naming.MongodContainerName(ls[naming.LabelKubernetesComponent])
+
 	for _, pvc := range pvcList.Items {
 		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
 			continue
@@ -84,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, volumeSpec); err != nil {
+		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, volumeSpec, containerName); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
@@ -100,15 +104,17 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	pvc *corev1.PersistentVolumeClaim,
 	pod *corev1.Pod,
 	volumeSpec *api.VolumeSpec,
+	containerName string,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	if !isContainerAndPodRunning(*pod, naming.ComponentMongod) {
-		log.V(1).Info("skipping PVC metrics check: container and pod not running", "phase", pod.Status.Phase)
+	if !isContainerAndPodRunning(*pod, containerName) {
+		log.V(1).Info("skipping PVC metrics check: container and pod not running",
+			"phase", pod.Status.Phase, "container", containerName)
 		return nil
 	}
 
-	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name)
+	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, containerName)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
