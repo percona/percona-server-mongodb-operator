@@ -15,20 +15,20 @@ spec:
     enabled: false
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      minio:
+      local-s3:
         type: s3
         s3:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: http://minio-service:9000/
+          endpointUrl: http://s3-storage-all-in-one:8333/
           insecureSkipTLSVerify: false
     tasks:
     - name: weekly
       enabled: true
       schedule: "0 0 * * 0"
       compressionType: gzip
-      storageName: minio
+      storageName: local-s3
   sharding:
     enabled: false
   replsets:

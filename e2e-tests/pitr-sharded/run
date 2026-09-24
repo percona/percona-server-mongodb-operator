@@ -22,7 +22,7 @@ run_backup() {
 
 main() {
 	create_infra $namespace
-	deploy_minio
+	deploy_s3_storage
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
@@ -66,7 +66,7 @@ main() {
 
 	local backup_name
 	if [[ "$EKS" -eq 0 ]]; then
-		backup_name="backup-minio"
+		backup_name="backup-local-s3"
 	else
 		kubectl_bin patch psmdb some-name --type=merge -p '{"spec":{"backup":{"pitr":{"enabled":true}}}}'
 		kubectl_bin exec some-name-rs0-0 -it -c backup-agent -- pbm status

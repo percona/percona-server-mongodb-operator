@@ -15,9 +15,9 @@ function setup_infra() {
 	kubectl_bin apply \
 		-f ${conf_dir}/client.yml \
 		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 
-	deploy_minio
+	deploy_s3_storage
 }
 
 function setup_source_cluster() {
@@ -48,11 +48,11 @@ function setup_source_cluster() {
 	compare_mongos_cmd "find" \
 		"databaseAdmin:databaseAdmin123456@${source_cluster}-mongos.${namespace}"
 
-	run_backup "minio" "backup-minio-logical"
-	wait_backup "backup-minio-logical"
+	run_backup "local-s3" "backup-local-s3-logical"
+	wait_backup "backup-local-s3-logical"
 
-	run_backup "minio" "backup-minio-physical"
-	wait_backup "backup-minio-physical"
+	run_backup "local-s3" "backup-local-s3-physical"
+	wait_backup "backup-local-s3-physical"
 
 	log "deleting PSMDB cluster: ${source_cluster}"
 	kubectl_bin delete psmdb ${source_cluster}
@@ -75,8 +75,8 @@ function setup_target_cluster() {
 
 function test_restores() {
 	desc "CASE 1: Logical restore with replset remapping"
-	run_restore backup-minio-logical
-	wait_restore backup-minio-logical ${target_cluster}
+	run_restore backup-local-s3-logical
+	wait_restore backup-local-s3-logical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongos_cmd "find" \
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}"
@@ -87,8 +87,8 @@ function test_restores() {
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}"
 
 	desc "CASE 2: Physical restore with replset remapping"
-	run_restore backup-minio-physical
-	wait_restore backup-minio-physical ${target_cluster}
+	run_restore backup-local-s3-physical
+	wait_restore backup-local-s3-physical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongos_cmd "find" \
 		"databaseAdmin:databaseAdmin123456@${target_cluster}-mongos.${namespace}"

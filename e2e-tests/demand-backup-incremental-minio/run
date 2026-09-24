@@ -72,7 +72,7 @@ run_recovery_check() {
 
 create_infra "${namespace}"
 
-deploy_minio
+deploy_s3_storage
 apply_s3_storage_secrets
 
 desc 'Testing on not sharded cluster'
@@ -102,10 +102,10 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespa
 
 log 'running backups'
 
-backup_name_minio="backup-minio"
-run_backup minio ${backup_name_minio}
-wait_backup "${backup_name_minio}"
-check_backup_in_storage ${backup_name_minio} minio rs0
+backup_name_local_s3="backup-local-s3"
+run_backup local-s3 ${backup_name_local_s3}
+wait_backup "${backup_name_local_s3}"
+check_backup_in_storage ${backup_name_local_s3} local-s3 rs0
 
 run_mongo \
 	'use myApp\n db.test.insert({ x: 100501 })' \
@@ -116,18 +116,18 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespa
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "-not-base"
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "-not-base"
 
-backup_name_minio_not_base="backup-minio-not-base"
-run_backup minio "${backup_name_minio_not_base}" false
-wait_backup "${backup_name_minio_not_base}"
-check_backup_in_storage ${backup_name_minio_not_base} minio rs0
+backup_name_local_s3_not_base="backup-local-s3-not-base"
+run_backup local-s3 "${backup_name_local_s3_not_base}" false
+wait_backup "${backup_name_local_s3_not_base}"
+check_backup_in_storage ${backup_name_local_s3_not_base} local-s3 rs0
 
 log 'running restores'
 
-run_restore "${backup_name_minio_not_base}"
-run_recovery_check "${backup_name_minio_not_base}" "" false
+run_restore "${backup_name_local_s3_not_base}"
+run_recovery_check "${backup_name_local_s3_not_base}" "" false
 
-run_restore "${backup_name_minio}"
-run_recovery_check "${backup_name_minio}"
+run_restore "${backup_name_local_s3}"
+run_recovery_check "${backup_name_local_s3}"
 
 desc 'Testing with arbiter and non-voting nodes'
 
@@ -137,13 +137,13 @@ wait_for_running ${cluster}-rs0 3
 wait_cluster_consistency ${cluster}
 
 log 'running backups'
-backup_name_minio="backup-minio-arbiter-nv"
-run_backup minio ${backup_name_minio}
-wait_backup "${backup_name_minio}"
-check_backup_in_storage ${backup_name_minio} minio rs0
+backup_name_local_s3="backup-local-s3-arbiter-nv"
+run_backup local-s3 ${backup_name_local_s3}
+wait_backup "${backup_name_local_s3}"
+check_backup_in_storage ${backup_name_local_s3} local-s3 rs0
 
-run_restore ${backup_name_minio}
-run_recovery_check ${backup_name_minio} "_restore-arbiter-nv"
+run_restore ${backup_name_local_s3}
+run_recovery_check ${backup_name_local_s3} "_restore-arbiter-nv"
 
 desc 'test passed'
 

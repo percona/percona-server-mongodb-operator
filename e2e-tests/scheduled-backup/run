@@ -32,7 +32,7 @@ check_backup_count() {
 }
 
 create_infra "$namespace"
-deploy_minio
+deploy_s3_storage
 
 label_node
 
@@ -98,13 +98,13 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_azure"
 fi
 
-backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print$1}' | head -1)
-wait_backup "$backup_name_minio"
+backup_name_local_s3=$(kubectl_bin get psmdb-backup | grep local-s3 | awk '{print$1}' | head -1)
+wait_backup "$backup_name_local_s3"
 
 sleep 5
 
-echo -n "checking backup count for every-min-minio..."
-check_backup_count every-min-minio 1
+echo -n "checking backup count for every-min-local-s3..."
+check_backup_count every-min-local-s3 1
 echo "OK"
 
 echo -n "checking backup count for every-min-aws-s3..."
@@ -119,14 +119,14 @@ echo -n "checking backup count for every-min-azure-blob..."
 check_backup_count every-min-azure-blob 1
 echo "OK"
 
-desc 'check backup and restore -- minio'
-check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
+desc 'check backup and restore -- local-s3'
+check_backup_in_storage ${backup_name_local_s3} local-s3 rs0 'myApp.test.gz'
 run_mongo 'use myApp\n db.test.insert({ x: 100501 })' "myApp:myPass@$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace" "-2nd"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace" "-2nd"
-run_restore "$backup_name_minio"
-wait_restore "$backup_name_minio" "${cluster/-rs0/}"
+run_restore "$backup_name_local_s3"
+wait_restore "$backup_name_local_s3" "${cluster/-rs0/}"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"
@@ -183,14 +183,14 @@ sleep 55
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 
-backup_name_minio=$(kubectl_bin get psmdb-backup | grep minio | awk '{print $1}' | tail -1)
-wait_backup "$backup_name_minio"
+backup_name_local_s3=$(kubectl_bin get psmdb-backup | grep local-s3 | awk '{print $1}' | tail -1)
+wait_backup "$backup_name_local_s3"
 
 sleep 5
 
-desc 'check backup and restore -- minio'
-run_restore "$backup_name_minio"
-wait_restore "$backup_name_minio" "${cluster/-rs0/}"
+desc 'check backup and restore -- local-s3'
+run_restore "$backup_name_local_s3"
+wait_restore "$backup_name_local_s3" "${cluster/-rs0/}"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-0.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-1.$cluster.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-2.$cluster.$namespace"

@@ -13,13 +13,13 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      minio:
+      local-s3:
         type: minio
         minio:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: minio-service:9000
+          endpointUrl: s3-storage-all-in-one:8333
           insecureSkipTLSVerify: false
           secure: false
   sharding:

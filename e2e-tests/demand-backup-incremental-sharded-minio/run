@@ -77,7 +77,7 @@ check_exported_mongos_service_endpoint() {
 
 create_infra "${namespace}"
 
-deploy_minio
+deploy_s3_storage
 apply_s3_storage_secrets
 
 ### Case 1: Backup and restore on sharded cluster
@@ -117,10 +117,10 @@ log 'waiting 60 seconds for stable timestamp in wiredtiger'
 sleep 80
 
 log 'running backups'
-backup_name_minio="backup-minio-sharded"
-run_backup minio ${backup_name_minio}
-wait_backup "${backup_name_minio}"
-check_backup_in_storage ${backup_name_minio} minio rs0
+backup_name_local_s3="backup-local-s3-sharded"
+run_backup local-s3 ${backup_name_local_s3}
+wait_backup "${backup_name_local_s3}"
+check_backup_in_storage ${backup_name_local_s3} local-s3 rs0
 
 run_mongos \
 	'use myApp\n db.test.insert({ x: 100502 })' \
@@ -128,16 +128,16 @@ run_mongos \
 sleep 5
 compare_mongos_cmd "find" "myApp:myPass@${cluster}-mongos.${namespace}" "-not-base-sharded"
 
-backup_name_minio_not_base="backup-minio-not-base-sharded"
-run_backup minio ${backup_name_minio_not_base} false
-wait_backup "${backup_name_minio_not_base}"
-check_backup_in_storage ${backup_name_minio_not_base} minio rs0
+backup_name_local_s3_not_base="backup-local-s3-not-base-sharded"
+run_backup local-s3 ${backup_name_local_s3_not_base} false
+wait_backup "${backup_name_local_s3_not_base}"
+check_backup_in_storage ${backup_name_local_s3_not_base} local-s3 rs0
 
 log 'running restores'
-run_restore ${backup_name_minio_not_base}
-run_recovery_check ${backup_name_minio_not_base} "_restore_sharded" false
-run_restore ${backup_name_minio}
-run_recovery_check ${backup_name_minio} "_restore_sharded"
+run_restore ${backup_name_local_s3_not_base}
+run_recovery_check ${backup_name_local_s3_not_base} "_restore_sharded" false
+run_restore ${backup_name_local_s3}
+run_recovery_check ${backup_name_local_s3} "_restore_sharded"
 
 desc 'test passed'
 
