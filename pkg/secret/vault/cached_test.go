@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -91,4 +92,38 @@ func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
 		cr := new(api.PerconaServerMongoDB)
 		require.NoError(t, cv.Update(t.Context(), cl, cr))
 	})
+}
+
+func TestCachedClientUpdate_TokenSecretRotation(t *testing.T) {
+	tlsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "vault-tls", Namespace: "new"},
+		Data:       map[string][]byte{"ca.crt": []byte(fakeCACert)},
+	}
+	tokenSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "vault-token", Namespace: "new"},
+		Data:       map[string][]byte{"token": []byte("initial-token")},
+	}
+	cl := newFakeClient(t, tlsSecret, tokenSecret)
+
+	cv := &cachedClient{}
+	cr := newVaultReadyCluster("cr", "new")
+	cr.Spec.VaultSpec.ReinitInterval = &metav1.Duration{Duration: time.Hour}
+
+	require.NoError(t, cv.Update(t.Context(), cl, cr))
+	firstUpdatedAt := cv.lastUpdatedAt
+	require.False(t, firstUpdatedAt.IsZero())
+
+	// spec unchanged, interval not elapsed: no reinit
+	require.NoError(t, cv.Update(t.Context(), cl, cr))
+	assert.Equal(t, firstUpdatedAt, cv.lastUpdatedAt, "should not reinit before the interval elapses")
+
+	// rotate the token secret's content without touching the CR spec at all
+	updated := new(corev1.Secret)
+	require.NoError(t, cl.Get(t.Context(), ctrlclient.ObjectKeyFromObject(tokenSecret), updated))
+	updated.Data = map[string][]byte{"token": []byte("rotated-token")}
+	require.NoError(t, cl.Update(t.Context(), updated))
+
+	require.NoError(t, cv.Update(t.Context(), cl, cr))
+	assert.True(t, cv.lastUpdatedAt.After(firstUpdatedAt),
+		"vault client should be reinitialized immediately when the token secret content changes, without waiting for reinitInterval")
 }

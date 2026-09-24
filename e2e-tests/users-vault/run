@@ -237,6 +237,50 @@ check_vault_request_interval() {
 	fi
 }
 
+check_vault_token_secret_rotation() {
+	local long_interval="1h"
+
+	desc "set a long spec.vault.reinitInterval (${long_interval}) to prove token secret rotation doesn't wait for it"
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"reinitInterval\":\"${long_interval}\"}}}"
+	# let the reinit triggered by this spec change itself settle
+	sleep 10
+
+	desc 'revoke the currently used vault-sync-secret token and rotate it to a freshly created one'
+	local old_token
+	old_token=$(kubectl_bin get secret vault-sync-secret -o jsonpath='{.data.token}' | base64 -d)
+
+	local new_token
+	new_token=$(kubectl_bin exec $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
+
+	kubectl_bin exec $vault_name-0 -- vault token revoke "$old_token"
+	kubectl_bin delete secret vault-sync-secret
+	kubectl_bin create secret generic vault-sync-secret --from-literal=token="${new_token}"
+
+	# update the (global) expected password used by the rest of the script
+	newpass="rotated-token-password"
+	vault_append "MONGODB_USER_ADMIN_PASSWORD" "$newpass"
+
+	# with the old token revoked, the operator can only pick up this change if it
+	# reinitializes the vault client using the new token from the secret without
+	# waiting for reinitInterval (set to 1h above)
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+
+	local user
+	user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'restore default spec.vault.reinitInterval'
+	kubectl_bin patch psmdb $psmdb \
+		--type='json' \
+		-p='[{"op":"remove","path":"/spec/vault/reinitInterval"}]'
+}
+
 main() {
 	psmdb="some-name"
 	cluster="$psmdb-rs0"
@@ -269,6 +313,9 @@ main() {
 	check_mongo_auth "$newname:$newpass@$cluster-0.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-1.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'check that rotating the vault-sync-secret token content triggers an immediate reinit'
+	check_vault_token_secret_rotation
 
 	desc 'removing tokenSecret to check kubernetes auth'
 	kubectl_bin patch psmdb $psmdb \
