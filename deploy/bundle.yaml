@@ -32468,7 +32468,7 @@ spec:
       serviceAccountName: percona-server-mongodb-operator
       containers:
         - name: percona-server-mongodb-operator
-          image: perconalab/percona-server-mongodb-operator:main
+          image: perconalab/percona-server-mongodb-operator:k8spsmdb-1778-vault-integration-improvements
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
