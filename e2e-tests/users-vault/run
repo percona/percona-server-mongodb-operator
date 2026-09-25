@@ -164,7 +164,9 @@ EOF
 }
 
 vault_accessor_count() {
-	kubectl_bin exec $vault_name-0 -- vault list -format=json auth/token/accessors 2>/dev/null | jq 'length'
+	local count
+	count=$(kubectl_bin exec $vault_name-0 -- vault list -format=json auth/token/accessors 2>/dev/null | jq 'length' 2>/dev/null) || true
+	echo "${count:-0}"
 }
 
 # waits (without hard-failing the script) until the accessor count grows past
@@ -265,6 +267,11 @@ check_vault_reinit_interval() {
 		echo "(reinitInterval may be getting ignored, causing a reinit on every reconcile)"
 		exit 1
 	fi
+
+	desc 'restore default spec.vault.reinitInterval'
+	kubectl_bin patch psmdb $psmdb \
+		--type='json' \
+		-p='[{"op":"remove","path":"/spec/vault/reinitInterval"}]'
 }
 
 vault_audit_read_count() {
@@ -273,10 +280,12 @@ vault_audit_read_count() {
 	# each logical read, which could make a correctly-throttled single read
 	# look like 2 and fail the "at most 1" assertion below. Count only
 	# "request" type entries so one logical vault read is counted once.
-	kubectl_bin exec $vault_name-0 -- sh -c \
+	local count
+	count=$(kubectl_bin exec $vault_name-0 -- sh -c \
 		"grep 'psmdb/operator/$namespace/$psmdb/users' /tmp/audit.log 2>/dev/null" \
 		| jq -r 'select(.type == "request") | .type' 2>/dev/null \
-		| wc -l | tr -d ' ' || echo 0
+		| wc -l | tr -d ' ') || true
+	echo "${count:-0}"
 }
 
 check_vault_request_interval() {
