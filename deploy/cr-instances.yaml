@@ -150,6 +150,7 @@ spec:
           memory: "1Gi"
       volumeSpec:
         persistentVolumeClaim:
+#          storageClassName: SOME-STORAGE-CLASS
           resources:
             requests:
               storage: 3Gi
@@ -176,6 +177,7 @@ spec:
           memory: "1Gi"
       volumeSpec:
         persistentVolumeClaim:
+#          storageClassName: SOME-STORAGE-CLASS
           resources:
             requests:
               storage: 3Gi
