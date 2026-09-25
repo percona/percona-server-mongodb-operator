@@ -1118,7 +1118,8 @@ type VaultSpec struct {
 	//+optional
 	ReinitInterval *metav1.Duration `json:"reinitInterval,omitempty"`
 	// RequestInterval controls how often the operator queries Vault for the users secret.
-	// If unset, Vault is queried on every reconciliation.
+	// If unset, Vault is queried on every reconciliation. Set this to reduce the request
+	// rate against Vault for clusters that don't need near-instant credential propagation.
 	//+optional
 	RequestInterval *metav1.Duration `json:"requestInterval,omitempty"`
 }
