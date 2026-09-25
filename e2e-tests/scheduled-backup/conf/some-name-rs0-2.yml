@@ -32,14 +32,11 @@ spec:
           endpointUrl: http://minio-service:9000/
           insecureSkipTLSVerify: false
       gcp-cs:
-        type: s3
-        s3:
-          credentialsSecret: gcp-cs-secret
-          region: us-east-1
+        type: gcs
+        gcs:
+          credentialsSecret: gcp-cs-sa-key-secret
           bucket: operator-testing
-          endpointUrl: https://storage.googleapis.com
           prefix: psmdb-scheduled-backup
-          insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:

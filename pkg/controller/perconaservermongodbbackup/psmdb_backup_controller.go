@@ -473,28 +473,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		if strings.Contains(s3Conf.EndpointURL, naming.GCSEndpointURL) {
-			gcsConf := &gcs.Config{
-				Bucket:    cr.Status.S3.Bucket,
-				Prefix:    cr.Status.S3.Prefix,
-				ChunkSize: cr.Status.S3.UploadPartSize,
-			}
-
-			if cr.Status.S3.CredentialsSecret != "" {
-				gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
-				if err != nil {
-					return nil, errors.Wrap(err, "get s3 credentials secret")
-				}
-
-				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: storage.MaskedString(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
-					HMACSecret:    storage.MaskedString(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
-				}
-			}
-
-			return gcs.New(gcsConf, "", nil)
-		}
-
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
 			switch {
 			case len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0:

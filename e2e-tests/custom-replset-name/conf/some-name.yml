@@ -26,13 +26,11 @@ spec:
           bucket: operator-testing
           endpointUrl: http://minio-service:9000/
       gcp-cs:
-        type: s3
-        s3:
-          credentialsSecret: gcp-cs-secret
-          region: us-east-1
+        type: gcs
+        gcs:
+          credentialsSecret: gcp-cs-sa-key-secret
           bucket: operator-testing
           prefix: psmdb
-          endpointUrl: https://storage.googleapis.com
   image:
   imagePullPolicy: Always
   pmm:

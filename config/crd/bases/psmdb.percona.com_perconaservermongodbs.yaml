@@ -691,6 +691,7 @@ spec:
                             debugLogLevels:
                               type: string
                             endpointUrl:
+                              maxLength: 2048
                               type: string
                             forcePathStyle:
                               type: boolean
@@ -735,6 +736,12 @@ spec:
                       required:
                       - type
                       type: object
+                      x-kubernetes-validations:
+                      - message: S3 compatibility for Google Cloud Storage is not
+                          supported, use type 'gcs' instead
+                        rule: self.type != 's3' || !has(self.s3) || !has(self.s3.endpointUrl)
+                          || !self.s3.endpointUrl.contains('storage.googleapis.com')
+                    maxProperties: 64
                     type: object
                   tasks:
                     items:

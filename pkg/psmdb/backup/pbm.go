@@ -496,18 +496,6 @@ func GetPBMStorageS3Config(
 	return storageConf, nil
 }
 
-func getGCSFromS3CompatibleConfig(cfg *s3.Config) *gcs.Config {
-	return &gcs.Config{
-		Bucket:    cfg.Bucket,
-		Prefix:    cfg.Prefix,
-		ChunkSize: cfg.UploadPartSize,
-		Credentials: gcs.Credentials{
-			HMACAccessKey: cfg.Credentials.AccessKeyID,
-			HMACSecret:    cfg.Credentials.SecretAccessKey,
-		},
-	}
-}
-
 func GetPBMStorageGCSConfig(
 	ctx context.Context,
 	k8sclient client.Client,
@@ -535,14 +523,6 @@ func GetPBMStorageGCSConfig(
 				PrivateKey:  storage.MaskedString(gcsSecret.Data[GCSPrivateKeySecretKey]),
 			}
 		}
-
-		// s3 compatibility
-		if _, ok := gcsSecret.Data[AWSAccessKeySecretKey]; ok {
-			storageConf.GCS.Credentials = gcs.Credentials{
-				HMACAccessKey: storage.MaskedString(gcsSecret.Data[AWSAccessKeySecretKey]),
-				HMACSecret:    storage.MaskedString(gcsSecret.Data[AWSSecretAccessKeySecretKey]),
-			}
-		}
 	} else {
 		// No credentials secret provided — enable WorkloadIdentity so PBM
 		// uses Application Default Credentials (GKE Workload Identity / ADC).
@@ -560,30 +540,6 @@ func GetPBMStorageGCSConfig(
 	}
 
 	return storageConf, nil
-}
-
-func GetPBMStorageS3CompatibleGCSConfig(
-	ctx context.Context,
-	k8sclient client.Client,
-	cluster *psmdbv1.PerconaServerMongoDB,
-	stg psmdbv1.BackupStorageSpec,
-) (config.StorageConf, error) {
-	gcs := psmdbv1.BackupStorageSpec{
-		Type: psmdbv1.BackupStorageGCS,
-		GCS: psmdbv1.BackupStorageGCSSpec{
-			Bucket:            stg.S3.Bucket,
-			Prefix:            stg.S3.Prefix,
-			ChunkSize:         stg.S3.UploadPartSize,
-			CredentialsSecret: stg.S3.CredentialsSecret,
-		},
-	}
-
-	conf, err := GetPBMStorageGCSConfig(ctx, k8sclient, cluster, gcs)
-	if err != nil {
-		return config.StorageConf{}, errors.Wrap(err, "get gcs config")
-	}
-
-	return conf, nil
 }
 
 func GetPBMStorageS3CompatibleOSSConfig(
@@ -817,10 +773,6 @@ func GetPBMStorageConfig(
 	cluster *psmdbv1.PerconaServerMongoDB,
 	stg psmdbv1.BackupStorageSpec,
 ) (config.StorageConf, error) {
-	pbm2100Plus, err := cluster.ComparePBMAgentVersion("2.10.0")
-	if err != nil {
-		return config.StorageConf{}, errors.Wrap(err, "compare pbm-agent version")
-	}
 	pbm2120Plus, err := cluster.ComparePBMAgentVersion(MinPBMVersionOSS)
 	if err != nil {
 		return config.StorageConf{}, errors.Wrap(err, "compare pbm-agent version")
@@ -828,10 +780,6 @@ func GetPBMStorageConfig(
 
 	switch stg.Type {
 	case psmdbv1.BackupStorageS3:
-		if pbm2100Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.GCSEndpointURL) {
-			conf, err := GetPBMStorageS3CompatibleGCSConfig(ctx, k8sclient, cluster, stg)
-			return conf, errors.Wrap(err, "get s3-compatible gcs config")
-		}
 		if pbm2120Plus >= 0 && strings.Contains(stg.S3.EndpointURL, naming.OSSCloudEndpointURL) {
 			conf, err := GetPBMStorageS3CompatibleOSSConfig(ctx, k8sclient, cluster, stg)
 			return conf, errors.Wrap(err, "get s3-compatible oss config")
@@ -1347,12 +1295,7 @@ func deleteBackupImpl(
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
-		conf = config.StorageConf{
-			Type: storage.GCS,
-			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
-		}
-	}
+
 	// The operator pod does not have custom CA bundles mounted, so it cannot verify
 	// TLS when connecting to MinIO directly. Use InsecureSkipTLSVerify for this
 	// operation only. The actual TLS verification is handled by pbm-agent,
@@ -1396,12 +1339,7 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 	}
 
 	conf := bcp.Store.StorageConf
-	if conf.Type == storage.S3 && strings.Contains(conf.S3.EndpointURL, naming.GCSEndpointURL) {
-		conf = config.StorageConf{
-			Type: storage.GCS,
-			GCS:  getGCSFromS3CompatibleConfig(conf.S3),
-		}
-	}
+
 	stg, err := util.StorageFromConfig(&conf, node, event)
 	if err != nil {
 		return errors.Wrap(err, "get storage")
@@ -1544,12 +1482,6 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 	}
 
 	stgConf := cfg.Storage
-	if stgConf.Type == storage.S3 && strings.Contains(stgConf.S3.EndpointURL, naming.GCSEndpointURL) {
-		stgConf = config.StorageConf{
-			Type: storage.GCS,
-			GCS:  getGCSFromS3CompatibleConfig(stgConf.S3),
-		}
-	}
 
 	stg, err := util.StorageFromConfig(&stgConf, "", e)
 	if err != nil {

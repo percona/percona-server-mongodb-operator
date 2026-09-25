@@ -378,6 +378,62 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 		})
 	})
 
+	Context("Backup storage validation", func() {
+		It("should reject s3 storage with GCS endpoint", func() {
+			cr, err := readDefaultCR("psmdb-s3-gcs-endpoint", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"gcp-cs": {
+					Type: psmdbv1.BackupStorageS3,
+					S3: psmdbv1.BackupStorageS3Spec{
+						Bucket:      "some-bucket",
+						EndpointURL: "https://storage.googleapis.com",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("S3 compatibility for Google Cloud Storage is not supported, use type 'gcs' instead"))
+		})
+
+		It("should allow s3 storage with non-GCS endpoint", func() {
+			cr, err := readDefaultCR("psmdb-s3-minio-endpoint", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"minio": {
+					Type: psmdbv1.BackupStorageS3,
+					S3: psmdbv1.BackupStorageS3Spec{
+						Bucket:      "some-bucket",
+						EndpointURL: "http://minio-service:9000",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow gcs storage", func() {
+			cr, err := readDefaultCR("psmdb-gcs-native", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"gcp-cs": {
+					Type: psmdbv1.BackupStorageGCS,
+					GCS: psmdbv1.BackupStorageGCSSpec{
+						Bucket: "some-bucket",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("OCI storage credentials validation", func() {
 		crWithOCIStorage := func(name string, creds psmdbv1.OCICredentialsSpec) *psmdbv1.PerconaServerMongoDB {
 			cr, err := readDefaultCR(name, ns)

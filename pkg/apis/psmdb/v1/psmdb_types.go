@@ -1315,9 +1315,10 @@ type S3Retryer struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket                string                  `json:"bucket"`
-	Prefix                string                  `json:"prefix,omitempty"`
-	Region                string                  `json:"region,omitempty"`
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix,omitempty"`
+	Region string `json:"region,omitempty"`
+	// +kubebuilder:validation:MaxLength=2048
 	EndpointURL           string                  `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
@@ -1473,6 +1474,7 @@ const (
 	BackupStorageOCI        BackupStorageType = "oci"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || !has(self.s3) || !has(self.s3.endpointUrl) || !self.s3.endpointUrl.contains('storage.googleapis.com')",message="S3 compatibility for Google Cloud Storage is not supported, use type 'gcs' instead"
 type BackupStorageSpec struct {
 	Type BackupStorageType   `json:"type"`
 	Main bool                `json:"main,omitempty"`
@@ -1524,9 +1526,10 @@ type BackupConfig struct {
 }
 
 type BackupSpec struct {
-	Enabled                  bool                         `json:"enabled"`
-	Annotations              map[string]string            `json:"annotations,omitempty"`
-	Labels                   map[string]string            `json:"labels,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
