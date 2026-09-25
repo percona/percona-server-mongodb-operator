@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
@@ -26,11 +27,15 @@ type PVCUsage struct {
 func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	ctx context.Context,
 	pod *corev1.Pod,
-	containerName string,
 	pvcName string,
+	containerName string,
 ) (*PVCUsage, error) {
 	if pod == nil {
 		return nil, errors.New("pod is nil")
+	}
+
+	if containerName == "" {
+		containerName = naming.ContainerMongod
 	}
 
 	backoff := wait.Backoff{
@@ -39,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		Factor:   2.0,
 	}
 
-	// Execute df command in the group's mongod container to get disk usage
+	// Execute df command in the pod's mongod container to get disk usage
 	// df -B1 /data/db outputs in bytes
 	// Example output:
 	// Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -53,7 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 
 		err := r.clientcmd.Exec(ctx, pod, containerName, command, nil, &stdout, &stderr, false)
 		if err != nil {
-			return errors.Wrapf(err, "failed to execute df in pod %s: %s", pod.Name, stderr.String())
+			return errors.Wrapf(err, "failed to execute df in pod %s container %s: %s", pod.Name, containerName, stderr.String())
 		}
 		return nil
 	})

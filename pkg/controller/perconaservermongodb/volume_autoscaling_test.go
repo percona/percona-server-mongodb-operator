@@ -1,7 +1,9 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -871,4 +873,138 @@ func TestReconcileStorageAutoscalingSkipsArbiters(t *testing.T) {
 
 	assert.NotContains(t, cr.Status.StorageAutoscaling, pvc.Name,
 		"an arbiter's claim must never reach the resize path")
+}
+
+// TestReconcileStorageAutoscalingComponents checks that autoscaling is applied
+// to every legacy replset component that owns a mongod-data PVC. Hidden and
+// non-voting pods run mongod in a container named after their component, and
+// probing a hardcoded "mongod" container silently skipped their PVCs.
+func TestReconcileStorageAutoscalingComponents(t *testing.T) {
+	ctx := t.Context()
+
+	const (
+		crName    = "test-cluster"
+		namespace = "default"
+		rsName    = "rs0"
+	)
+
+	newCR := func() *api.PerconaServerMongoDB {
+		volumeSpec := func() *api.VolumeSpec {
+			return &api.VolumeSpec{
+				PersistentVolumeClaim: api.PVCSpec{
+					PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			}
+		}
+
+		return &api.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+			Spec: api.PerconaServerMongoDBSpec{
+				StorageScaling: &api.StorageScalingSpec{
+					EnableVolumeScaling: true,
+					Autoscaling: &api.AutoscalingSpec{
+						Enabled:                 true,
+						TriggerThresholdPercent: 80,
+						GrowthStep:              resource.MustParse("2Gi"),
+					},
+				},
+				Replsets: []*api.ReplsetSpec{
+					{
+						Name:       rsName,
+						Size:       new(int32(3)),
+						VolumeSpec: volumeSpec(),
+						NonVoting: api.NonVotingSpec{
+							Enabled:    true,
+							Size:       1,
+							VolumeSpec: volumeSpec(),
+						},
+						Hidden: api.HiddenSpec{
+							Enabled:    true,
+							Size:       1,
+							VolumeSpec: volumeSpec(),
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		group         string
+		containerName string
+		volumeSpec    func(rs *api.ReplsetSpec) *api.VolumeSpec
+	}{
+		"mongod": {
+			group:         naming.GroupMongod,
+			containerName: naming.ContainerMongod,
+			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.VolumeSpec },
+		},
+		"hidden": {
+			group:         naming.GroupHidden,
+			containerName: naming.ContainerHidden,
+			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.Hidden.VolumeSpec },
+		},
+		"non-voting": {
+			group:         naming.GroupNonVoting,
+			containerName: naming.ContainerNonVoting,
+			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.NonVoting.VolumeSpec },
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newCR()
+			rs := cr.Spec.Replsets[0]
+
+			group := resolveGroup(t, cr, rs, tt.group)
+			require.Equal(t, tt.containerName, group.ContainerName)
+
+			sts := groupSTS(cr, rs, group, group.Replicas, group.Replicas)
+			pod := groupPod(cr, rs, group, 0)
+			pvcName := config.MongodDataVolClaimName + "-" + pod.Name
+
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: group.Labels},
+				Status: corev1.PersistentVolumeClaimStatus{
+					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+				},
+			}
+
+			r := buildFakeClient(cr, sts, pvc, pod)
+
+			var execContainer string
+			r.clientcmd = &mockClientCmd{
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+					execContainer = containerName
+					_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
+/dev/sdb       10737418240 9663676416  1073741824  90% /data/db`))
+					return nil
+				},
+			}
+
+			require.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts, group))
+
+			assert.Equal(t, tt.containerName, execContainer, "df must run in the pod's mongod container")
+
+			status, ok := cr.Status.StorageAutoscaling[pvcName]
+			require.True(t, ok, "PVC usage must be reported in status.storageAutoscaling")
+			assert.Empty(t, status.LastError)
+			assert.Equal(t, "10Gi", status.CurrentSize)
+
+			// triggerResize patches the CR rather than the working copy, so the
+			// new request is only visible on a fresh read.
+			fresh := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(ctx,
+				client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+
+			newSize := tt.volumeSpec(fresh.Spec.Replsets[0]).PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+			assert.Equal(t, "12Gi", newSize.String(), "usage above threshold must grow the volume")
+		})
+	}
 }

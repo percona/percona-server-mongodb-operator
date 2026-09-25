@@ -107,13 +107,16 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
+	// Hidden, non-voting and arbiter pods run mongod in a container named after
+	// their component, so the container to probe can't be assumed to be
+	// "mongod". The group carries the resolved name for every topology.
 	if !isContainerAndPodRunning(*pod, group.ContainerName) {
 		log.V(1).Info("skipping PVC metrics check: container and pod not running",
 			"container", group.ContainerName, "phase", pod.Status.Phase)
 		return nil
 	}
 
-	usage, err := r.getPVCUsageFromMetrics(ctx, pod, group.ContainerName, pvc.Name)
+	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, group.ContainerName)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
