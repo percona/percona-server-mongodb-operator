@@ -316,9 +316,13 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 	}
 
 	for _, bcp := range bcps.Items {
-		if bcp.Status.State != api.BackupStateReady &&
-			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.GetClusterName() == cr.Name {
+		if bcp.Spec.GetClusterName() != cr.Name {
+			continue
+		}
+		switch bcp.Status.State {
+		case api.BackupStateReady, api.BackupStateError, api.BackupStateWaiting:
+			continue
+		default:
 			return true, nil
 		}
 	}
