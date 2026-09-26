@@ -32104,6 +32104,10 @@ spec:
                     x-kubernetes-validations:
                     - message: endpointURL must be a valid URL
                       rule: isURL(self)
+                  reinitInterval:
+                    type: string
+                  requestInterval:
+                    type: string
                   syncUsers:
                     properties:
                       keyPath:
@@ -32259,6 +32263,9 @@ spec:
                       type: integer
                   type: object
                 type: object
+              vaultLastRequestedAt:
+                format: date-time
+                type: string
             required:
             - ready
             - size

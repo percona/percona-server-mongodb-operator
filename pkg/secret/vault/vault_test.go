@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	vault "github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/assert"
@@ -219,7 +220,7 @@ func TestFillSecretData(t *testing.T) {
 				v = nil
 			}
 
-			updated, err := v.FillSecretData(t.Context(), tt.initialData)
+			updated, err := v.FillSecretData(t.Context(), newCluster("cr", "new"), tt.initialData)
 			if tt.expectedErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedErr)
@@ -231,6 +232,65 @@ func TestFillSecretData(t *testing.T) {
 			assert.Equal(t, tt.expectedData, tt.initialData)
 		})
 	}
+}
+
+func TestFillSecretData_RequestInterval(t *testing.T) {
+	newFakeVault := func(getCalled *int) *vaultClient {
+		fkv := &fakeKV{
+			getFn: func(ctx context.Context, p string) (*vault.KVSecret, error) {
+				*getCalled++
+				return &vault.KVSecret{Data: map[string]any{"user": "password"}}, nil
+			},
+		}
+		return &vaultClient{c: &fakeClient{kv: fkv}}
+	}
+
+	t.Run("no interval configured: always requests vault", func(t *testing.T) {
+		getCalled := 0
+		v := newFakeVault(&getCalled)
+		cr := newCluster("cr", "new")
+
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		require.NoError(t, err)
+		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, getCalled)
+		assert.Nil(t, cr.Status.VaultLastRequestedAt, "status timestamp should not be tracked unless requestInterval is set")
+	})
+
+	t.Run("interval configured: skips vault request until interval elapses", func(t *testing.T) {
+		getCalled := 0
+		v := newFakeVault(&getCalled)
+		cr := newCluster("cr", "new")
+		cr.Spec.VaultSpec.RequestInterval = &metav1.Duration{Duration: time.Hour}
+
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		require.NoError(t, err)
+		require.NotNil(t, cr.Status.VaultLastRequestedAt)
+		firstRequestedAt := cr.Status.VaultLastRequestedAt.DeepCopy()
+
+		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, getCalled, "second call should be throttled")
+		assert.Equal(t, firstRequestedAt, cr.Status.VaultLastRequestedAt)
+	})
+
+	t.Run("interval configured but already elapsed: requests vault again", func(t *testing.T) {
+		getCalled := 0
+		v := newFakeVault(&getCalled)
+		cr := newCluster("cr", "new")
+		cr.Spec.VaultSpec.RequestInterval = &metav1.Duration{Duration: time.Millisecond}
+		past := metav1.NewTime(time.Now().Add(-time.Hour))
+		cr.Status.VaultLastRequestedAt = &past
+
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, getCalled)
+		assert.True(t, cr.Status.VaultLastRequestedAt.After(past.Time))
+	})
 }
 
 func newFakeClient(t *testing.T, objs ...ctrlclient.Object) ctrlclient.Client {

@@ -5,12 +5,14 @@ import (
 	"context"
 	"path"
 	"strings"
+	"time"
 
 	vault "github.com/hashicorp/vault/api"
 	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -109,14 +111,25 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	}, nil
 }
 
-func (v *vaultClient) FillSecretData(ctx context.Context, data map[string][]byte) (bool, error) {
+func (v *vaultClient) FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
 	if v == nil {
 		return false, nil
+	}
+
+	if requestInterval, ok := vaultRequestInterval(cr); ok {
+		if cr.Status.VaultLastRequestedAt != nil && time.Since(cr.Status.VaultLastRequestedAt.Time) < requestInterval {
+			return false, nil
+		}
 	}
 
 	vaultData, err := v.getUsersSecret(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "get users secret")
+	}
+
+	if _, ok := vaultRequestInterval(cr); ok {
+		now := metav1.NewTime(time.Now())
+		cr.Status.VaultLastRequestedAt = &now
 	}
 
 	if len(vaultData) == 0 {
@@ -139,6 +152,13 @@ func (v *vaultClient) FillSecretData(ctx context.Context, data map[string][]byte
 		}
 	}
 	return shouldUpdate, nil
+}
+
+func vaultRequestInterval(cr *api.PerconaServerMongoDB) (time.Duration, bool) {
+	if cr == nil || cr.Spec.VaultSpec == nil || cr.Spec.VaultSpec.RequestInterval == nil {
+		return 0, false
+	}
+	return cr.Spec.VaultSpec.RequestInterval.Duration, true
 }
 
 func (v *vaultClient) getUsersSecret(ctx context.Context) (map[string]any, error) {
