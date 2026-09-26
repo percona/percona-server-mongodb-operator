@@ -32,10 +32,10 @@ check_backup_and_restore() {
 	local cluster=$1
 	local backup_suffix=$2
 	local balancer_end_state=$3
-	local backup_name="backup-minio-${backup_suffix}"
+	local backup_name="backup-local-s3-${backup_suffix}"
 
 	log "running backup: ${backup_name}"
-	run_backup "minio" "${backup_name}"
+	run_backup "local-s3" "${backup_name}"
 	wait_backup "${backup_name}" "requested"
 
 	log "checking if balancer is disabled"
@@ -91,7 +91,7 @@ write_data() {
 main() {
 	create_infra "$namespace"
 
-	deploy_minio
+	deploy_s3_storage
 	apply_s3_storage_secrets
 
 	log 'create PSMDB cluster'

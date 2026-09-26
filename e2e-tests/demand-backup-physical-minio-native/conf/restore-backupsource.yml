@@ -9,9 +9,9 @@ spec:
     type: physical
     destination: s3://BACKUP-NAME
     minio:
-      credentialsSecret: minio-secret
+      credentialsSecret: s3-secret
       region: us-east-1
       bucket: operator-testing
-      endpointUrl: minio-service:9000
+      endpointUrl: s3-storage-all-in-one:8333
       insecureSkipTLSVerify: false
       secure: false

@@ -22,13 +22,13 @@ run_backup() {
 
 main() {
 	create_infra $namespace
-	deploy_minio
+	deploy_s3_storage
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml" \
-		-f $conf_dir/minio-secret.yml
+		-f $conf_dir/s3-secret.yml
 
 	cluster="some-name"
 	desc "create first PSMDB cluster $cluster"
@@ -56,16 +56,16 @@ main() {
 	echo "Sleeping for 360 seconds"
 	sleep 360
 
-	backup_name_minio="backup-minio"
+	backup_name_local_s3="backup-local-s3"
 
 	desc 'restore pitr type date using backupSource'
-	run_backup $backup_name_minio 1 physical
-	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-1"
+	run_backup $backup_name_local_s3 1 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_local_s3}-1"
 	reset_collection
 
 	time_now=$(run_mongos 'new Date().getTime() / 1000' "myApp:myPass@$cluster-mongos.$namespace" "mongodb" "" "--quiet" | grep -E -v 'I NETWORK|W NETWORK|Error saving history file|Percona Server for MongoDB|connecting to:|Unable to reach primary for set|Implicit session:|versions do not match' | cut -d'.' -f1)
 
-	check_recovery "${backup_name_minio}-1" date "$time_now" "" "$cluster" backupSource
+	check_recovery "${backup_name_local_s3}-1" date "$time_now" "" "$cluster" backupSource
 
 	desc "delete PSMDB cluster $cluster"
 	kubectl_bin delete psmdb $cluster
@@ -88,9 +88,9 @@ main() {
 
 	desc 'restore pitr type latest using backupSource'
 	write_document "-2nd"
-	run_backup $backup_name_minio 2 physical
-	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-2"
-	check_recovery "${backup_name_minio}-2" latest "" "-3rd" "$cluster" backupSource
+	run_backup $backup_name_local_s3 2 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_local_s3}-2"
+	check_recovery "${backup_name_local_s3}-2" latest "" "-3rd" "$cluster" backupSource
 
 	desc 'disable pitr'
 	kubectl patch psmdb "$cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
