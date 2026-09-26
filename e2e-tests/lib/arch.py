@@ -112,6 +112,28 @@ def helm_arch_set_args(prefixes: tuple[str, ...] = ("",)) -> list[str]:
     ]
 
 
+def helm_arch_set_string_args(prefix: str = "") -> list[str]:
+    """`--set-string` args pinning a chart whose nodeSelector/tolerations are
+    plain multi-line-string values (not maps, e.g. SeaweedFS's `allInOne.*`)
+    to the target architecture.
+    """
+    value = arch()
+    if not value:
+        return []
+
+    node_selector = f"kubernetes.io/arch: {value}"
+    tolerations = (
+        f"- key: {ARCH_NODE_SELECTOR_KEY}\n"
+        "  operator: Equal\n"
+        f"  value: {value}\n"
+        "  effect: NoSchedule"
+    )
+    return [
+        "--set-string", f"{prefix}nodeSelector={node_selector}",
+        "--set-string", f"{prefix}tolerations={tolerations}",
+    ]
+
+
 def arch_run_overrides() -> str:
     """`--overrides` JSON that adds arch scheduling to a `kubectl run` pod."""
     value = arch()

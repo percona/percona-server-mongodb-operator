@@ -259,12 +259,12 @@ spec:
                   items:
                     - key: ca.crt
                       path: ca-0.crt
-                  name: minio-ca-bundle
+                  name: s3-ca-bundle
               - secret:
                   items:
                     - key: ca.crt
                       path: ca-1.crt
-                  name: secondary-minio-ca-bundle
+                  name: secondary-s3-ca-bundle
         - emptyDir: {}
           name: ca-bundle
         - name: pbm-config

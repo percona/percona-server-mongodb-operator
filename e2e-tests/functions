@@ -278,11 +278,11 @@ apply_s3_storage_secrets() {
 	desc 'create secrets for cloud storages'
 	if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 		kubectl_bin apply \
-			-f $conf_dir/minio-secret.yml \
+			-f $conf_dir/s3-secret.yml \
 			-f $conf_dir/cloud-secret.yml
 	else
 		kubectl_bin apply \
-			-f $conf_dir/minio-secret.yml
+			-f $conf_dir/s3-secret.yml
 	fi
 }
 
@@ -744,82 +744,69 @@ deploy_operator_gh_release() {
 	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod) | grep 'Manager starting up'
 }
 
-deploy_minio() {
+deploy_s3_storage() {
   local cert_secret="$1"
-  local service_name="${2:-minio-service}"
+  local fullname="${2:-s3-storage}"
 
-  desc "install MinIO: ${service_name}"
+  desc "install SeaweedFS: ${fullname}"
 
   # Cleanup old installation
-  helm uninstall "${service_name}" 2>/dev/null || :
-  helm repo remove minio 2>/dev/null || :
-  helm repo add minio https://charts.min.io/
+  helm uninstall "${fullname}" 2>/dev/null || :
+  helm repo remove seaweedfs 2>/dev/null || :
+  helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
 
-  local endpoint="http://${service_name}:9000"
-  local minio_args=(
-    --version $MINIO_VER
-    --set replicas=1
-    --set mode=standalone
-    --set resources.requests.memory=256Mi
-    --set rootUser=rootuser
-    --set rootPassword=rootpass123
-    --set "users[0].accessKey=some-access-key"
-    --set "users[0].secretKey=some-secret-key"
-    --set "users[0].policy=consoleAdmin"
-    --set service.type=ClusterIP
-    --set configPathmc=/tmp/
-    --set securityContext.enabled=false
-    --set persistence.size=2G
-    --set fullnameOverride="${service_name}"
-    --set serviceAccount.create=true
-    --set serviceAccount.name="${service_name}-sa"
+  local endpoint="http://${fullname}-all-in-one:8333"
+  local seaweedfs_args=(
+    --version "$SEAWEEDFS_VER"
+    -f "${conf_dir}/seaweedfs-values.yaml"
+    --set allInOne.data.type=persistentVolumeClaim
+    --set allInOne.data.size=2G
+    --set fullnameOverride="${fullname}"
+    --set-string s3.credentials.admin.accessKey=some-access-key
+    --set-string s3.credentials.admin.secretKey=some-secret-key
+    --set-string global.seaweedfs.serviceAccountName="${fullname}-sa"
   )
 
   if arch_scheduling_enabled; then
-    minio_args+=(
-      --set "nodeSelector.kubernetes\.io/arch=${ARCH}"
-      --set "tolerations[0].key=kubernetes.io/arch"
-      --set "tolerations[0].operator=Equal"
-      --set "tolerations[0].value=${ARCH}"
-      --set "tolerations[0].effect=NoSchedule"
-      --set "postJob.nodeSelector.kubernetes\.io/arch=${ARCH}"
-      --set "postJob.tolerations[0].key=kubernetes.io/arch"
-      --set "postJob.tolerations[0].operator=Equal"
-      --set "postJob.tolerations[0].value=${ARCH}"
-      --set "postJob.tolerations[0].effect=NoSchedule"
+    seaweedfs_args+=(
+      --set-string "allInOne.nodeSelector=kubernetes.io/arch: ${ARCH}"
+      --set-string "allInOne.tolerations=- key: kubernetes.io/arch
+  operator: Equal
+  value: ${ARCH}
+  effect: NoSchedule"
     )
   fi
 
   if [[ -n $cert_secret ]]; then
-    endpoint="https://${service_name}:9000"
-    minio_args+=(
-      --set tls.enabled=true
-      --set tls.certSecret="$cert_secret"
+    endpoint="https://${fullname}-all-in-one:8443"
+    seaweedfs_args+=(
+      -f "${conf_dir}/seaweedfs-tls-values.yaml"
+      --set-string "allInOne.extraVolumes=- name: s3-tls
+  secret:
+    secretName: ${cert_secret}"
     )
   fi
 
-  retry 10 60 helm install "${service_name}" "${minio_args[@]}" minio/minio
-
-  local MINIO_POD=$(kubectl_bin get pods --selector=release="${service_name}" -o 'jsonpath={.items[].metadata.name}')
-  wait_pod $MINIO_POD
+  retry 10 60 helm install "${fullname}" "${seaweedfs_args[@]}" seaweedfs/seaweedfs
+  kubectl_bin rollout status "deployment/${fullname}-all-in-one" --timeout=300s
 
   if [ -n "$OPERATOR_NS" ]; then
-    kubectl_bin create svc -n ${OPERATOR_NS} externalname "${service_name}" \
-      --external-name="${service_name}.${namespace}.svc.cluster.local" \
-      --tcp="9000" 2>/dev/null || :
+    kubectl_bin create svc -n ${OPERATOR_NS} externalname "${fullname}-all-in-one" \
+      --external-name="${fullname}-all-in-one.${namespace}.svc.cluster.local" \
+      --tcp="8333" --tcp="8443" 2>/dev/null || :
   fi
 
-  create_minio_bucket operator-testing $endpoint
+  create_s3_bucket operator-testing $endpoint
 }
 
-create_minio_bucket() {
+create_s3_bucket() {
 	local bucket=$1
 	local endpoint=$2
 
-	aws_cli_minio "${endpoint}" s3 mb "s3://${bucket}"
+	aws_cli_s3 "${endpoint}" s3 mb "s3://${bucket}"
 }
 
-aws_cli_minio() {
+aws_cli_s3() {
 	local endpoint=$1
 	shift
 
@@ -3193,9 +3180,11 @@ check_backup_in_storage() {
 			setup_azure_credentials
 			check_backup_existence_azure "$backup_dest" "/${replset}/${file}"
 			;;
-		minio)
-			endpoint="minio-service"
-			until aws_cli_minio "${protocol}://${endpoint}:9000" s3 ls "s3://${backup_dest}/${replset}/${file}" \
+		local-s3)
+			endpoint="s3-storage-all-in-one"
+			local port=8333
+			[ "$protocol" = "https" ] && port=8443
+			until aws_cli_s3 "${protocol}://${endpoint}:${port}" s3 ls "s3://${backup_dest}/${replset}/${file}" \
 				| grep "${file}"; do
 				sleep 1
 				let retry+=1
@@ -3251,12 +3240,12 @@ wait_pvc_resize() {
 }
 
 setup_rancher_backup_storage() {
-	local minio_service_name="${1:-minio-service}"
+	local s3_fullname="${1:-s3-storage}"
 
 	yq '
-			.metadata.name = "minio-secret-longhorn" |
-			.stringData.AWS_ENDPOINTS = "http://'"${minio_service_name}.${namespace}"'.svc.cluster.local:9000"
-		' "${conf_dir}/minio-secret.yml" \
+			.metadata.name = "s3-secret-longhorn" |
+			.stringData.AWS_ENDPOINTS = "http://'"${s3_fullname}-all-in-one.${namespace}"'.svc.cluster.local:8333"
+		' "${conf_dir}/s3-secret.yml" \
 		| kubectl_bin apply -n longhorn-system -f -
 
 	kubectl_bin -n longhorn-system patch backuptargets.longhorn.io default \
@@ -3264,7 +3253,7 @@ setup_rancher_backup_storage() {
 		-p '{
 			"spec": {
 				"backupTargetURL": "s3://operator-testing@us-east-1/",
-				"credentialSecret": "minio-secret-longhorn"
+				"credentialSecret": "s3-secret-longhorn"
 			}
 		}'
 }

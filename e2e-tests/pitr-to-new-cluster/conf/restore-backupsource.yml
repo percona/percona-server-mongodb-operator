@@ -10,10 +10,10 @@ spec:
     type:
     destination: s3://DESTINATION
     s3:
-      credentialsSecret: minio-secret
+      credentialsSecret: s3-secret
       bucket: operator-testing
       prefix: some-name-source
-      endpointUrl: http://minio-service:9000/
+      endpointUrl: http://s3-storage-all-in-one:8333/
       region: us-east-1
       insecureSkipTLSVerify: false
 

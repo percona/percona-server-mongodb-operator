@@ -1,9 +1,9 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
-  name:
   finalizers:
     - percona.com/delete-backup
+  name: backup-local-s3
 spec:
   clusterName: some-name
-  storageName: minio
+  storageName: local-s3
