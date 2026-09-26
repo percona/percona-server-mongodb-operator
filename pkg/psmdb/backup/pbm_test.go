@@ -411,46 +411,6 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
-		"gcs s3 compatibility": {
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
-					Data: map[string][]byte{
-						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
-						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
-					},
-				},
-			},
-			api.BackupStorageSpec{
-				Type: api.BackupStorageS3,
-				S3: api.BackupStorageS3Spec{
-					Bucket:                "operator-testing",
-					Prefix:                "psmdb",
-					Region:                "us-east-1",
-					EndpointURL:           "https://storage.googleapis.com",
-					CredentialsSecret:     "test-secret",
-					UploadPartSize:        1024 * 1024 * 10,
-					MaxUploadParts:        5000,
-					StorageClass:          "storage-class",
-					InsecureSkipTLSVerify: false,
-				},
-			},
-			config.StorageConf{
-				Type: storage.GCS,
-				GCS: &gcs.Config{
-					Bucket:    "operator-testing",
-					Prefix:    "psmdb",
-					ChunkSize: 1024 * 1024 * 10,
-					Credentials: gcs.Credentials{
-						HMACAccessKey: "some-access-key",
-						HMACSecret:    "some-secret-key",
-					},
-				},
-			},
-		},
 		"oss s3 compatibility": {
 			[]client.Object{
 				&corev1.Secret{

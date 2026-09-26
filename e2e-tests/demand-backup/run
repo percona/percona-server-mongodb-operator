@@ -264,14 +264,12 @@ wait_backup_agent $cluster-2
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	desc 'Check GCS profiles'
-	compare_pbm_profile_setup "some-name" "gcp-cs-s3"
 	compare_pbm_profile_setup "some-name" "gcp-cs-sa"
 fi
 
 backup_name_local_s3="backup-local-s3"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	backup_name_aws="backup-aws-s3"
-	backup_name_gcp_s3="backup-gcp-cs-s3"
 	backup_name_gcp_sa="backup-gcp-cs-sa"
 	backup_name_azure="backup-azure-blob"
 	backup_name_oss_native="backup-oss-native"
@@ -280,7 +278,6 @@ fi
 desc 'run backups'
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
-	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
 	run_backup oss-native
@@ -289,7 +286,6 @@ run_backup "local-s3"
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_aws"
-	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
 	wait_backup "$backup_name_oss_native"
@@ -307,13 +303,8 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	_aws_env_restore
 	run_recovery_check "$backup_name_aws" "$cluster"
 
-	desc 'check backup and restore -- gcp-cs-s3'
-	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
-	setup_gcs_credentials
-	check_backup_existence_gcs ${backup_dest_gcp_s3} '/rs0/myApp.test.gz'
-	run_recovery_check "$backup_name_gcp_s3" "$cluster"
-
 	desc 'check backup and restore -- gcp-cs-sa'
+	setup_gcs_credentials
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
 	check_backup_existence_gcs ${backup_dest_gcp_sa} '/rs0/myApp.test.gz'
 	run_recovery_check "$backup_name_gcp_sa" "$cluster"
@@ -377,7 +368,6 @@ fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
-	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
@@ -387,7 +377,6 @@ desc 'checking backup deletion without cr'
 run_backup local-s3
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
-	run_backup gcp-cs-s3
 	run_backup gcp-cs-sa
 	run_backup azure-blob
 	run_backup oss-native
@@ -396,12 +385,10 @@ fi
 wait_backup "$backup_name_local_s3"
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_aws"
-	wait_backup "$backup_name_gcp_s3"
 	wait_backup "$backup_name_gcp_sa"
 	wait_backup "$backup_name_azure"
 	wait_backup "$backup_name_oss_native"
 	backup_dest_aws=$(get_backup_dest "$backup_name_aws")
-	backup_dest_gcp_s3=$(get_backup_dest "$backup_name_gcp_s3")
 	backup_dest_gcp_sa=$(get_backup_dest "$backup_name_gcp_sa")
 	backup_dest_azure=$(get_backup_dest "$backup_name_azure")
 	backup_dest_oss_native=$(get_backup_dest "$backup_name_oss_native")
@@ -423,7 +410,6 @@ fi
 
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_backup_deletion_aws "$backup_dest_aws" "/rs0/myApp.test.gz"
-	check_backup_deletion_gcs "$backup_dest_gcp_s3" "/rs0/myApp.test.gz"
 	check_backup_deletion_gcs "$backup_dest_gcp_sa" "/rs0/myApp.test.gz"
 	check_backup_deletion_azure "$backup_dest_azure" "/rs0/myApp.test.gz"
 	check_backup_deletion_oss "$backup_dest_oss_native" "/rs0/myApp.test.gz" "$backup_endpoint_oss_native" "$backup_region_oss_native"
