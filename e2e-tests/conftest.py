@@ -601,7 +601,7 @@ def deploy_s3_storage() -> Generator[None]:
 
     endpoint = f"http://{fullname}-all-in-one:8333"
     seaweedfs_ver = os.environ.get("SEAWEEDFS_VER", "")
-    conf_dir = os.environ.get("CONF_DIR", "conf")
+    conf_dir = Path(__file__).parent / "conf"
     set_args = [
         "--set", "allInOne.data.type=persistentVolumeClaim",
         "--set", "allInOne.data.size=2G",
