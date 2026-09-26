@@ -19,13 +19,13 @@ spec:
           bucket: operator-testing
           prefix: psmdb-demand-backup
           insecureSkipTLSVerify: false
-      minio:
+      local-s3:
         type: minio
         minio:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: minio-service:9000
+          endpointUrl: s3-storage-all-in-one:8333
           insecureSkipTLSVerify: false
           secure: false
       gcp-cs-s3:

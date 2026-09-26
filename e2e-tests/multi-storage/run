@@ -12,8 +12,8 @@ check_backup_deletion() {
 	local initial_chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
 		| jq '.backups.pitrChunks.pitrChunks[0].range.start')
 
-	log "deleting psmdb-backup/backup-minio-3"
-	kubectl_bin delete psmdb-backup backup-minio-3
+	log "deleting psmdb-backup/backup-local-s3-3"
+	kubectl_bin delete psmdb-backup backup-local-s3-3
 
 	log "checking if chunks are deleted"
 	local chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
@@ -25,8 +25,8 @@ check_backup_deletion() {
 	fi
 	log "chunks are not deleted, OK."
 
-	log "deleting psmdb-backup/backup-minio-2-1"
-	kubectl_bin delete psmdb-backup backup-minio-2-1
+	log "deleting psmdb-backup/backup-local-s3-2-1"
+	kubectl_bin delete psmdb-backup backup-local-s3-2-1
 
 	log "checking if chunks are deleted"
 	chunk_start=$(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json \
@@ -46,7 +46,7 @@ drop_metadata_and_resync() {
 	drop_collection admin pbmBackups backup backup123456
 	kubectl_bin annotate psmdb ${cluster} percona.com/resync-pbm=true
 
-	sleep_with_log 10 "wait resync to start" # minio buckets are basically empty, resync should finish very quickly
+	sleep_with_log 10 "wait resync to start" # local-s3 buckets are basically empty, resync should finish very quickly
 
 	local retries=0
 
@@ -236,17 +236,17 @@ create_user() {
 }
 
 create_infra ${namespace}
-deploy_minio
+deploy_s3_storage
 
-endpoint='http://minio-service:9000'
-create_minio_bucket operator-testing-2 $endpoint
-create_minio_bucket operator-testing-3 $endpoint
+endpoint='http://s3-storage-all-in-one:8333'
+create_s3_bucket operator-testing-2 $endpoint
+create_s3_bucket operator-testing-3 $endpoint
 
 log 'create secrets and start client'
 kubectl_bin apply \
 	-f ${conf_dir}/secrets.yml \
 	-f ${conf_dir}/client.yml \
-	-f ${conf_dir}/minio-secret.yml
+	-f ${conf_dir}/s3-secret.yml
 
 log "create PSMDB cluster: ${cluster}"
 apply_cluster ${test_dir}/conf/${cluster}.yml
@@ -262,14 +262,14 @@ create_user
 
 write_document 100500
 
-run_backup minio-1 backup-minio-1 logical
-wait_backup backup-minio-1
+run_backup local-s3-1 backup-local-s3-1 logical
+wait_backup backup-local-s3-1
 
-run_backup minio-2 backup-minio-2 logical
-wait_backup backup-minio-2
+run_backup local-s3-2 backup-local-s3-2 logical
+wait_backup backup-local-s3-2
 
-run_backup minio-3 backup-minio-3 physical
-wait_backup backup-minio-3
+run_backup local-s3-3 backup-local-s3-3 physical
+wait_backup backup-local-s3-3
 
 write_document 100501
 write_document 100502
@@ -281,23 +281,23 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}"
 
 sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-wait_for_restorable_time backup-minio-3
-wait_for_advanced_restorable_time backup-minio-3
-restore_time=$(get_latest_restorable_time backup-minio-3)
-check_recovery backup-minio-3 "$(format_pitr_target ${restore_time})"
+wait_for_restorable_time backup-local-s3-3
+wait_for_advanced_restorable_time backup-local-s3-3
+restore_time=$(get_latest_restorable_time backup-local-s3-3)
+check_recovery backup-local-s3-3 "$(format_pitr_target ${restore_time})"
 
-sleep_with_log 60 "wait resync to finish" # minio buckets are basically empty, resync should finish very quickly
+sleep_with_log 60 "wait resync to finish" # local-s3 buckets are basically empty, resync should finish very quickly
 
-log "changing main storage from minio-1 to minio-2"
+log "changing main storage from local-s3-1 to local-s3-2"
 kubectl_bin patch psmdb ${cluster} --type=json -p='[
-  {"op": "remove", "path": "/spec/backup/storages/minio-1/main"},
-  {"op": "add", "path": "/spec/backup/storages/minio-2/main", "value": true}
+  {"op": "remove", "path": "/spec/backup/storages/local-s3-1/main"},
+  {"op": "add", "path": "/spec/backup/storages/local-s3-2/main", "value": true}
 ]'
 
-sleep_with_log 60 "wait resync to finish" # minio buckets are basically empty, resync should finish very quickly
+sleep_with_log 60 "wait resync to finish" # local-s3 buckets are basically empty, resync should finish very quickly
 
-run_backup minio-2 backup-minio-2-1 logical
-wait_backup backup-minio-2-1
+run_backup local-s3-2 backup-local-s3-2-1 logical
+wait_backup backup-local-s3-2-1
 
 write_document 100506
 write_document 100507
@@ -313,10 +313,10 @@ compare_mongo_cmd "find" \
 	test \
 	'sort( { x: 1 } )'
 
-wait_for_restorable_time backup-minio-2-1
-wait_for_advanced_restorable_time backup-minio-2-1
-restore_time=$(get_latest_restorable_time backup-minio-2-1)
-check_recovery backup-minio-2-1 "$(format_pitr_target ${restore_time})" "-2nd"
+wait_for_restorable_time backup-local-s3-2-1
+wait_for_advanced_restorable_time backup-local-s3-2-1
+restore_time=$(get_latest_restorable_time backup-local-s3-2-1)
+check_recovery backup-local-s3-2-1 "$(format_pitr_target ${restore_time})" "-2nd"
 
 log "dropping pbmBackups collection and starting resync"
 drop_metadata_and_resync

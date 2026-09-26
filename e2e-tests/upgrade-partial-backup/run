@@ -16,7 +16,7 @@ if [ -n "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 CLUSTER="some-name"
-BACKUP_NAME_MINIO="backup-minio"
+BACKUP_NAME_LOCAL_S3="backup-local-s3"
 
 TARGET_OPERATOR_VER="${OPERATOR_VERSION}"
 
@@ -151,11 +151,11 @@ test_backups() {
 
 	desc "prepare backups"
 
-	run_backup ${cluster} ${BACKUP_NAME_MINIO} logical
+	run_backup ${cluster} ${BACKUP_NAME_LOCAL_S3} logical
 
 	sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-	run_backup ${cluster} ${BACKUP_NAME_MINIO} incremental-base
+	run_backup ${cluster} ${BACKUP_NAME_LOCAL_S3} incremental-base
 
 	log "write data for PiTR"
 	write_document ${cluster} 100501
@@ -168,7 +168,7 @@ test_backups() {
 		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
 	log "PiTR data is ready: OK"
 
-	run_backup ${cluster} ${BACKUP_NAME_MINIO} incremental
+	run_backup ${cluster} ${BACKUP_NAME_LOCAL_S3} incremental
 }
 
 test_logical_restore() {
@@ -182,7 +182,7 @@ test_logical_restore() {
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
 
 	log "PiTR target is ${pitr_target}"
-	run_restore ${cluster} "${BACKUP_NAME_MINIO}-logical" "${pitr_target}"
+	run_restore ${cluster} "${BACKUP_NAME_LOCAL_S3}-logical" "${pitr_target}"
 
 	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "-2nd" \
 		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
@@ -197,7 +197,7 @@ test_incremental_restore() {
 	log 'dropping collection: myApp.test'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
 
-	run_restore ${cluster} "${BACKUP_NAME_MINIO}-incremental"
+	run_restore ${cluster} "${BACKUP_NAME_LOCAL_S3}-incremental"
 
 	compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "-2nd" \
 		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
@@ -206,10 +206,10 @@ test_incremental_restore() {
 
 test_backup_deletion() {
 	local cluster=$1
-	local incremental_base_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-incremental-base")
-	local logical_dest=$(get_backup_dest "${BACKUP_NAME_MINIO}-logical")
+	local incremental_base_dest=$(get_backup_dest "${BACKUP_NAME_LOCAL_S3}-incremental-base")
+	local logical_dest=$(get_backup_dest "${BACKUP_NAME_LOCAL_S3}-logical")
 
-	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-incremental-base
+	kubectl_bin delete psmdb-backup ${BACKUP_NAME_LOCAL_S3}-incremental-base
 	check_backup_deletion_gcs "$incremental_base_dest"
 
 	# base backup can only be deleted if PiTR is disabled
@@ -217,7 +217,7 @@ test_backup_deletion() {
 	kubectl_bin patch psmdb "${cluster}" --type='merge' \
 		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 
-	kubectl_bin delete psmdb-backup ${BACKUP_NAME_MINIO}-logical
+	kubectl_bin delete psmdb-backup ${BACKUP_NAME_LOCAL_S3}-logical
 	check_backup_deletion_gcs "$logical_dest"
 }
 

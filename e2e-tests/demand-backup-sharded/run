@@ -19,7 +19,7 @@ check_data() {
 
 create_infra "$namespace"
 
-deploy_minio
+deploy_s3_storage
 
 desc "create first PSMDB cluster with custom port $custom_port"
 cluster="some-name"
@@ -133,13 +133,13 @@ wait_backup_agent $cluster-rs2-0
 wait_backup_agent $cluster-rs2-1
 wait_backup_agent $cluster-rs2-2
 backup_name_aws="backup-aws-s3"
-backup_name_minio="backup-minio"
+backup_name_local_s3="backup-local-s3"
 backup_name_gcp="backup-gcp-cs"
 backup_name_azure="backup-azure-blob"
 backup_name_oss_native="backup-oss-native"
 
 desc 'run backups'
-run_backup minio
+run_backup local-s3
 if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	run_backup aws-s3
 	run_backup gcp-cs
@@ -151,7 +151,7 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_backup "$backup_name_azure"
 	wait_backup "$backup_name_oss_native"
 fi
-wait_backup "$backup_name_minio"
+wait_backup "$backup_name_local_s3"
 
 sleep 5
 
@@ -216,23 +216,23 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	check_data
 fi
 
-desc 'check backup and restore -- minio'
-check_backup_in_storage ${backup_name_minio} minio rs0 'myApp.test.gz'
+desc 'check backup and restore -- local-s3'
+check_backup_in_storage ${backup_name_local_s3} local-s3 rs0 'myApp.test.gz'
 insert_data_mongos "100501" "myApp" "" "$custom_port"
 insert_data_mongos "100501" "myApp1" "" "$custom_port"
 insert_data_mongos "100501" "myApp2" "" "$custom_port"
 check_data "-2nd"
-run_restore "$backup_name_minio"
-wait_restore "$backup_name_minio" "$cluster"
+run_restore "$backup_name_local_s3"
+wait_restore "$backup_name_local_s3" "$cluster"
 check_data
 
-desc 'delete backup and check if it is removed from bucket -- minio'
+desc 'delete backup and check if it is removed from bucket -- local-s3'
 kubectl_bin delete psmdb-backup --all
 
-backup_exists=$(aws_cli_minio http://minio-service:9000 s3 ls s3://operator-testing/ \
-	| grep -c ${backup_dest_minio}_ | cat)
+backup_exists=$(aws_cli_s3 http://s3-storage-all-in-one:8333 s3 ls s3://operator-testing/ \
+	| grep -c ${backup_dest_local_s3}_ | cat)
 if [[ $backup_exists -eq 1 ]]; then
-	echo "Backup was not removed from bucket -- minio"
+	echo "Backup was not removed from bucket -- local-s3"
 	exit 1
 fi
 

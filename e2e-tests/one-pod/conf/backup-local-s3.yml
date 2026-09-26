@@ -1,7 +1,7 @@
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
-  name: backup-minio
+  name: backup-local-s3
 spec:
-  clusterName: unsafe-psa
-  storageName: minio
+  clusterName: one-pod
+  storageName: local-s3
