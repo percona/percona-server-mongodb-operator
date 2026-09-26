@@ -248,6 +248,10 @@ type ReconcilePerconaServerMongoDB struct {
 	initImage string
 
 	lockers lockStore
+
+	// dnsResolver resolves hostnames when checking imported multi-cluster
+	// services. Defaults to net.DefaultResolver; overridable in tests.
+	dnsResolver dnsResolver
 }
 
 type lockStore struct {

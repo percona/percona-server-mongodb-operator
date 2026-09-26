@@ -529,3 +529,35 @@ func TestBuildDNSHostnameWithoutIndex(t *testing.T) {
 		})
 	}
 }
+
+func TestGetMCSHost(t *testing.T) {
+	tests := map[string]struct {
+		namespace string
+		dnsSuffix string
+		pod       string
+		expected  string
+	}{
+		"typical clusterset host": {
+			namespace: "psmdb",
+			dnsSuffix: "svc.clusterset.local",
+			pod:       "my-cluster-rs0-0",
+			expected:  "my-cluster-rs0-0.psmdb.svc.clusterset.local",
+		},
+		"empty dns suffix": {
+			namespace: "psmdb",
+			dnsSuffix: "",
+			pod:       "my-cluster-rs0-0",
+			expected:  "my-cluster-rs0-0.psmdb.",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{}
+			cr.Namespace = tt.namespace
+			cr.Spec.MultiCluster.DNSSuffix = tt.dnsSuffix
+
+			assert.Equal(t, tt.expected, GetMCSHost(cr, tt.pod))
+			assert.Equal(t, tt.expected+":27017", GetMCSAddr(cr, tt.pod, 27017))
+		})
+	}
+}
