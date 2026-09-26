@@ -33,7 +33,7 @@ func newTestCR() *api.PerconaServerMongoDB {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name: "rs0",
-					Size: 3,
+					Size: new(int32(3)),
 				},
 			},
 		},
