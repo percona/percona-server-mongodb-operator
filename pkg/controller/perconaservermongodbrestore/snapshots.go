@@ -455,7 +455,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 			labels = naming.PVCLabels(psmdbv1.ConfigReplSetName, psmdbv1.ConfigReplSetName, cluster.Name)
 		}
 
-		for podIdx := int32(0); podIdx < rs.Size; podIdx++ {
+		for podIdx := int32(0); podIdx < rs.GetMongodSize(); podIdx++ {
 			pvcs = append(pvcs, pvcInfo{
 				pvcName:             config.MongodDataVolClaimName + "-" + rs.PodName(cluster, int(podIdx)),
 				volumeClaimTemplate: vct,
@@ -594,7 +594,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 	// Collect all statefulsets that need to be scaled up.
 	sfsInfos := make(map[types.NamespacedName]int32)
 	for _, rs := range replsets {
-		sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}] = rs.Size
+		sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}] = rs.GetMongodSize()
 		if rs.NonVoting.Enabled {
 			sfsInfos[types.NamespacedName{Namespace: cluster.Namespace, Name: naming.NonVotingStatefulSetName(cluster, rs)}] = rs.NonVoting.Size
 		}

@@ -31,6 +31,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -594,4 +595,49 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 	}
 
 	return nil
+}
+
+// restoreGroups returns the member groups that participate in physical restore.
+func (r *ReconcilePerconaServerMongoDBRestore) restoreGroups(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	rs *psmdbv1.ReplsetSpec,
+) ([]membergroup.Group, error) {
+	set, err := membergroup.Resolve(cluster, rs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+	}
+
+	return set.GetDataBearing(), nil
+}
+
+// restorePod returns a pod to exec PBM commands in, along with the group it belongs to.
+func (r *ReconcilePerconaServerMongoDBRestore) restorePod(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	rs *psmdbv1.ReplsetSpec,
+) (*corev1.Pod, *membergroup.Group, error) {
+	set, err := membergroup.Resolve(cluster, rs)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+	}
+
+	groups := set.GetDataBearing()
+	for groupIdx := range groups {
+		group := groups[groupIdx]
+		pods, err := psmdb.GetGroupPods(ctx, r.client, cluster, rs, group)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "get pods of group %s", group.Name)
+		}
+
+		for podIdx := range pods.Items {
+			// k8s.IsPodReady, not the unexported isPodReady in mgo.go:1414 --
+			// that one lives in the psmdb controller package.
+			if k8s.IsPodReady(pods.Items[podIdx]) {
+				return &pods.Items[podIdx], &groups[groupIdx], nil
+			}
+		}
+	}
+
+	return nil, nil, errors.Errorf("no ready data-bearing pod in replset %s", rs.Name)
 }

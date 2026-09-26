@@ -21,6 +21,7 @@ import (
 	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
 )
 
@@ -110,52 +111,24 @@ func (p *StatefulConfigParams) HashHex(cr *api.PerconaServerMongoDB) string {
 // StatefulSpec returns spec for stateful set
 // TODO: Unify Arbiter and Node. Shoudn't be 100500 parameters
 func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec,
-	ls map[string]string, initImage string, configs StatefulConfigParams, secrets StatefulSpecSecretParams,
+	group membergroup.Group, initImage string, configs StatefulConfigParams, secrets StatefulSpecSecretParams,
 ) (appsv1.StatefulSetSpec, error) {
 	log := logf.FromContext(ctx)
-	size := replset.Size
-	containerName := naming.ContainerMongod
-	multiAZ := replset.MultiAZ
-	resources := replset.Resources
-	volumeSpec := replset.VolumeSpec
-	podSecurityContext := replset.PodSecurityContext
-	containerSecurityContext := replset.ContainerSecurityContext
-	containerEnv := replset.Env
-	containerEnvFrom := replset.EnvFrom
-	livenessProbe := replset.LivenessProbe
-	readinessProbe := replset.ReadinessProbe
-	configName := naming.MongodCustomConfigName(cr, replset)
-	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
-	switch ls[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
-		containerName = naming.ContainerArbiter
-		size = replset.Arbiter.Size
-		multiAZ = replset.Arbiter.MultiAZ
-		resources = replset.Arbiter.Resources
-	case naming.ComponentNonVoting:
-		containerName = naming.ContainerNonVoting
-		size = replset.NonVoting.Size
-		multiAZ = replset.NonVoting.MultiAZ
-		resources = replset.NonVoting.Resources
-		podSecurityContext = replset.NonVoting.PodSecurityContext
-		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
-		configName = naming.NonVotingConfigMapName(cr, replset)
-		livenessProbe = replset.NonVoting.LivenessProbe
-		readinessProbe = replset.NonVoting.ReadinessProbe
-		volumeSpec = replset.NonVoting.VolumeSpec
-	case naming.ComponentHidden:
-		containerName = naming.ContainerHidden
-		size = replset.Hidden.Size
-		multiAZ = replset.Hidden.MultiAZ
-		resources = replset.Hidden.Resources
-		podSecurityContext = replset.Hidden.PodSecurityContext
-		containerSecurityContext = replset.Hidden.ContainerSecurityContext
-		configName = naming.HiddenConfigMapName(cr, replset)
-		livenessProbe = replset.Hidden.LivenessProbe
-		readinessProbe = replset.Hidden.ReadinessProbe
-		volumeSpec = replset.Hidden.VolumeSpec
-	}
+	ls := group.Labels
+	size := group.Replicas
+	containerName := group.ContainerName
+	multiAZ := group.MultiAZ
+	resources := group.MultiAZ.Resources
+	volumeSpec := group.VolumeSpec
+	podSecurityContext := group.PodSecurityContext
+	containerSecurityContext := group.ContainerSecurityContext
+	containerEnv := group.Env
+	containerEnvFrom := group.EnvFrom
+	livenessProbe := group.LivenessProbe
+	readinessProbe := group.ReadinessProbe
+	configName := group.ConfigName
+	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
 	customLabels := make(map[string]string, len(ls))
 	maps.Copy(customLabels, ls)
@@ -270,6 +243,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 	params := containerFnParams{
 		replset:                  replset,
+		group:                    group,
 		name:                     containerName,
 		resources:                resources,
 		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
@@ -364,7 +338,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		)
 	}
 
-	if ls[naming.LabelKubernetesComponent] == "arbiter" {
+	if !group.DataBearing {
 		volumes = append(
 			volumes,
 			[]corev1.Volume{
@@ -377,6 +351,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			}...,
 		)
 	} else {
+
+		if volumeSpec == nil {
+			return appsv1.StatefulSetSpec{}, errors.Errorf(
+				"data-bearing group %s of replset %s has no resolved volumeSpec",
+				group.Name, replset.Name)
+		}
+
 		if volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 			volumeClaimTemplates = []corev1.PersistentVolumeClaim{
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
@@ -437,7 +418,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	if cr.CompareVersion("1.22.0") >= 0 && multiAZ.HookScript.Specified() {
 		name := multiAZ.HookScript.ConfigMapRef.Name
 		if name == "" {
-			name = naming.HookScriptConfigMapName(cr, replset, ls[naming.LabelKubernetesComponent])
+			name = naming.GroupHookScriptConfigMapName(cr, replset, group.Component)
 		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
