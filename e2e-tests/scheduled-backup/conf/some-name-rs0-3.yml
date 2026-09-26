@@ -23,13 +23,13 @@ spec:
           bucket: operator-testing
           prefix: psmdb-scheduled-backup
           insecureSkipTLSVerify: false
-      minio:
+      local-s3:
         type: s3
         s3:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: http://minio-service:9000/
+          endpointUrl: http://s3-storage-all-in-one:8333/
           insecureSkipTLSVerify: false
       gcp-cs:
         type: s3
@@ -47,7 +47,7 @@ spec:
           prefix: psmdb-scheduled-backup
           credentialsSecret: azure-secret
     tasks:
-    - name: every-min-minio
+    - name: every-min-local-s3
       enabled: true
       retention:
         type: count
@@ -56,7 +56,7 @@ spec:
       type: physical
       schedule: "* * * * *"
       compressionType: gzip
-      storageName: minio
+      storageName: local-s3
     - name: weekly
       enabled: true
       retention:

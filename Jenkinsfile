@@ -406,6 +406,7 @@ void runTest(Integer TEST_ID) {
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
                 export PATH="\$HOME/.local/bin:\$PATH"
+                export IMAGE_BACKUP=percona/percona-backup-mongodb:2.15.0
                 mkdir -p e2e-tests/logs
                 bash -o pipefail <<BASH
                 {

@@ -22,49 +22,49 @@ spec:
   selfSigned: {}
 EOF
 
-desc 'Generate certificate for MinIO via cert-manager'
+desc 'Generate certificate for SeaweedFS via cert-manager'
 
 kubectl_bin apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: minio-cert
+  name: s3-cert
   namespace: ${namespace}
 spec:
-  secretName: minio-tls-temp
+  secretName: s3-tls-temp
   issuerRef:
     name: selfsigned-issuer
     kind: Issuer
-  commonName: minio-service
+  commonName: s3-storage-all-in-one
   dnsNames:
-  - minio-service
-  - minio-service.${namespace}
-  - minio-service.${namespace}.svc
-  - minio-service.${namespace}.svc.cluster.local
+  - s3-storage-all-in-one
+  - s3-storage-all-in-one.${namespace}
+  - s3-storage-all-in-one.${namespace}.svc
+  - s3-storage-all-in-one.${namespace}.svc.cluster.local
   usages:
   - digital signature
   - key encipherment
   - server auth
 EOF
 
-kubectl_bin wait --for=condition=Ready certificate/minio-cert \
+kubectl_bin wait --for=condition=Ready certificate/s3-cert \
   -n ${namespace} --timeout=120s
 
-kubectl_bin get secret minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/minio-cert.pem
+kubectl_bin get secret s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/s3-cert.pem
 
-kubectl_bin get secret minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/minio-key.pem
+kubectl_bin get secret s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/s3-key.pem
 
-kubectl_bin create secret generic minio-tls -n ${namespace} \
-  --from-file=public.crt=/tmp/minio-cert.pem \
-  --from-file=private.key=/tmp/minio-key.pem
+kubectl_bin create secret tls s3-tls -n ${namespace} \
+  --cert=/tmp/s3-cert.pem \
+  --key=/tmp/s3-key.pem
 
-kubectl_bin create secret generic minio-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/minio-cert.pem
+kubectl_bin create secret generic s3-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/s3-cert.pem
 
-desc 'Deploy MinIO with TLS'
-deploy_minio minio-tls
+desc 'Deploy SeaweedFS with TLS'
+deploy_s3_storage s3-tls
 apply_s3_storage_secrets
 
 ###############################################################################
@@ -114,11 +114,11 @@ run_mongo_tls \
   'db.getSiblingDB("myApp").test.insert({ x: 100500 })' \
   "myApp:myPass@${cluster}-rs0.${namespace}"
 
-backup_name_single="backup-minio"
-run_backup minio ${backup_name_single} 'logical'
+backup_name_single="backup-local-s3"
+run_backup local-s3 ${backup_name_single} 'logical'
 wait_backup "${backup_name_single}"
 
-check_backup_in_storage ${backup_name_single} minio rs0 myApp.test.gz https
+check_backup_in_storage ${backup_name_single} local-s3 rs0 myApp.test.gz https
 
 run_mongo_tls \
   'db.getSiblingDB("myApp").test.drop()' \
@@ -129,7 +129,7 @@ wait_restore "${backup_name_single}" "${cluster}"
 
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "" "" "myApp" "test" "" "true"
 
-rm -f /tmp/minio-cert.pem /tmp/minio-key.pem
+rm -f /tmp/s3-cert.pem /tmp/s3-key.pem
 
 destroy "${namespace}"
 
