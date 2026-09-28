@@ -148,8 +148,14 @@ uv: ## Download uv locally if necessary.
 update-version:
 	echo $(NEXT_VER) > pkg/version/version.txt
 
+
+_e2e_image_vars := IMAGE_OPERATOR IMAGE_BACKUP IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
+	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER IMAGE_LOGCOLLECTOR IMAGE_SEARCH IMAGE_CLUSTERSYNC
+$(foreach v,$(_e2e_image_vars),$(eval _saved_$(v) := $$($(v))))
+
 # Prepare release
 include e2e-tests/release_versions
+$(foreach v,$(_e2e_image_vars),$(eval e2e-test: $(v) := $$(_saved_$(v))))
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
