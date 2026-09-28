@@ -111,12 +111,12 @@ func newClient(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	}, nil
 }
 
-func (v *vaultClient) FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
+func (v *vaultClient) FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, secretExists bool) (bool, error) {
 	if v == nil {
 		return false, nil
 	}
 
-	if requestInterval, ok := vaultRequestInterval(cr); ok {
+	if requestInterval, ok := vaultRequestInterval(cr); ok && secretExists {
 		if cr.Status.VaultLastRequestedAt != nil && time.Since(cr.Status.VaultLastRequestedAt.Time) < requestInterval {
 			return false, nil
 		}
