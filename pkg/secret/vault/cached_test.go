@@ -84,7 +84,7 @@ func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
 
 		cr.Spec.VaultSpec.SyncUsersSpec.MountPath = "changed-path"
 		require.NoError(t, cv.Update(t.Context(), cl, cr))
-		assert.True(t, cv.lastUpdatedAt.After(firstUpdatedAt) || cv.lastUpdatedAt.Equal(firstUpdatedAt))
+		assert.True(t, cv.lastUpdatedAt.After(firstUpdatedAt))
 	})
 
 	t.Run("nil spec is a no-op", func(t *testing.T) {
