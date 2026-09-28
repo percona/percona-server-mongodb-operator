@@ -15,18 +15,18 @@ spec:
     enabled: true
     image: -backup
     storages:
-      minio:
+      local-s3:
         main: true
         type: minio
         minio:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: minio-service:9000
+          endpointUrl: s3-storage-all-in-one:8443
           insecureSkipTLSVerify: false
           secure: true
           caBundle:
-            name: minio-ca-bundle
+            name: s3-ca-bundle
             key: ca.crt
   replsets:
   - name: rs0
