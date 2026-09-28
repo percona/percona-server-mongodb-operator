@@ -11,7 +11,7 @@ custom_port='27019'
 
 create_infra "$namespace"
 
-deploy_minio
+deploy_s3_storage
 
 desc "create PSMDB sharded cluster without auth"
 cluster="some-name"
@@ -50,7 +50,7 @@ wait_backup_agent $cluster-rs2-0
 backup_name_no_auth="backup-no-auth"
 
 desc 'run backup without auth'
-run_backup minio ${backup_name_no_auth}
+run_backup local-s3 ${backup_name_no_auth}
 wait_backup "$backup_name_no_auth"
 
 desc 'insert new data without auth'
@@ -98,7 +98,7 @@ wait_backup_agent $cluster-rs2-0
 backup_name_with_auth="backup-with-auth"
 
 desc 'run backup with auth enabled'
-run_backup minio ${backup_name_with_auth}
+run_backup local-s3 ${backup_name_with_auth}
 wait_backup "$backup_name_with_auth"
 
 desc 'insert more data with auth'
