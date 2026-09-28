@@ -46,10 +46,11 @@ func (cv *cachedClient) Update(ctx context.Context, cl client.Client, cr *api.Pe
 		reinitInterval = cr.Spec.VaultSpec.ReinitInterval.Duration
 	}
 
-	changed, err := cv.updateHash(ctx, cl, cr)
+	newHash, err := vaultSpecHash(ctx, cl, cr)
 	if err != nil {
 		return errors.Wrap(err, "update hash")
 	}
+	changed := !bytes.Equal(newHash, cv.hash)
 	if !changed && time.Since(cv.lastUpdatedAt) <= reinitInterval {
 		return nil
 	}
@@ -59,19 +60,10 @@ func (cv *cachedClient) Update(ctx context.Context, cl client.Client, cr *api.Pe
 		return errors.Wrap(err, "new vault")
 	}
 
+	cv.hash = newHash
 	cv.lastUpdatedAt = time.Now()
 
 	return nil
-}
-
-func (cv *cachedClient) updateHash(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (bool, error) {
-	newHash, err := vaultSpecHash(ctx, cl, cr)
-	if err != nil {
-		return false, err
-	}
-	changed := !bytes.Equal(newHash, cv.hash)
-	cv.hash = newHash
-	return changed, nil
 }
 
 func vaultSpecHash(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) ([]byte, error) {
