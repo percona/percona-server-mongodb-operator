@@ -220,7 +220,7 @@ func TestFillSecretData(t *testing.T) {
 				v = nil
 			}
 
-			updated, err := v.FillSecretData(t.Context(), newCluster("cr", "new"), tt.initialData)
+			updated, err := v.FillSecretData(t.Context(), newCluster("cr", "new"), tt.initialData, true)
 			if tt.expectedErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedErr)
@@ -250,9 +250,9 @@ func TestFillSecretData_RequestInterval(t *testing.T) {
 		v := newFakeVault(&getCalled)
 		cr := newCluster("cr", "new")
 
-		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{}, true)
 		require.NoError(t, err)
-		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{}, true)
 		require.NoError(t, err)
 
 		assert.Equal(t, 2, getCalled)
@@ -265,12 +265,12 @@ func TestFillSecretData_RequestInterval(t *testing.T) {
 		cr := newCluster("cr", "new")
 		cr.Spec.VaultSpec.RequestInterval = &metav1.Duration{Duration: time.Hour}
 
-		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{}, true)
 		require.NoError(t, err)
 		require.NotNil(t, cr.Status.VaultLastRequestedAt)
 		firstRequestedAt := cr.Status.VaultLastRequestedAt.DeepCopy()
 
-		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		_, err = v.FillSecretData(t.Context(), cr, map[string][]byte{}, true)
 		require.NoError(t, err)
 
 		assert.Equal(t, 1, getCalled, "second call should be throttled")
@@ -285,11 +285,25 @@ func TestFillSecretData_RequestInterval(t *testing.T) {
 		past := metav1.NewTime(time.Now().Add(-time.Hour))
 		cr.Status.VaultLastRequestedAt = &past
 
-		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{})
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{}, true)
 		require.NoError(t, err)
 
 		assert.Equal(t, 1, getCalled)
 		assert.True(t, cr.Status.VaultLastRequestedAt.After(past.Time))
+	})
+
+	t.Run("secret does not exist: interval configured but not throttled", func(t *testing.T) {
+		getCalled := 0
+		v := newFakeVault(&getCalled)
+		cr := newCluster("cr", "new")
+		cr.Spec.VaultSpec.RequestInterval = &metav1.Duration{Duration: time.Hour}
+		now := metav1.NewTime(time.Now())
+		cr.Status.VaultLastRequestedAt = &now
+
+		_, err := v.FillSecretData(t.Context(), cr, map[string][]byte{}, false)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, getCalled, "vault should be read when secret does not exist, regardless of throttle")
 	})
 }
 
