@@ -128,6 +128,11 @@ func (v *vaultClient) FillSecretData(ctx context.Context, cr *api.PerconaServerM
 	}
 
 	if _, ok := vaultRequestInterval(cr); ok {
+		for _, value := range vaultData {
+			if _, ok := value.(string); !ok {
+				return false, errors.Errorf("value type assertion failed: %T %#v", value, value)
+			}
+		}
 		now := metav1.NewTime(time.Now())
 		cr.Status.VaultLastRequestedAt = &now
 	}
