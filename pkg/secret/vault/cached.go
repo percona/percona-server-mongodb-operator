@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"hash"
-	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -75,39 +74,38 @@ func vaultSpecHash(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 	h := md5.New()
 	h.Write(data)
 
-	if err := writeTokenSecretHash(ctx, cl, cr, h); err != nil {
-		return nil, err
+	if err := writeSecretHash(ctx, cl, cr.Namespace, cr.Spec.VaultSpec.SyncUsersSpec.TokenSecret, h); err != nil {
+		return nil, errors.Wrap(err, "write token secret hash")
+	}
+	if err := writeSecretHash(ctx, cl, cr.Namespace, cr.Spec.VaultSpec.TLSSecret, h); err != nil {
+		return nil, errors.Wrap(err, "write tls secret hash")
 	}
 
 	return h.Sum(nil), nil
 }
 
-func writeTokenSecretHash(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, h hash.Hash) error {
-	tokenSecretName := cr.Spec.VaultSpec.SyncUsersSpec.TokenSecret
-	if tokenSecretName == "" {
+func writeSecretHash(ctx context.Context, cl client.Client, namespace, secretName string, h hash.Hash) error {
+	if secretName == "" {
 		return nil
 	}
 
 	sec := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
-		Name:      tokenSecretName,
-		Namespace: cr.Namespace,
+		Name:      secretName,
+		Namespace: namespace,
 	}, sec)
 	if k8serrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return errors.Wrap(err, "get vault token secret")
+		return errors.Wrap(err, "get secret")
 	}
 
-	keys := make([]string, 0, len(sec.Data))
-	for k := range sec.Data {
-		keys = append(keys, k)
+	data, err := json.Marshal(sec.Data)
+	if err != nil {
+		return errors.Wrap(err, "marshal secret data")
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write(sec.Data[k])
-	}
+	h.Write([]byte(secretName))
+	h.Write(data)
 	return nil
 }
