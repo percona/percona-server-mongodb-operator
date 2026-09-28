@@ -3,7 +3,7 @@ package vault
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"hash"
 	"time"
@@ -71,7 +71,7 @@ func vaultSpecHash(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 		return nil, errors.Wrap(err, "marshal")
 	}
 
-	h := md5.New()
+	h := sha256.New()
 	h.Write(data)
 
 	if err := writeSecretHash(ctx, cl, cr.Namespace, cr.Spec.VaultSpec.SyncUsersSpec.TokenSecret, h); err != nil {
