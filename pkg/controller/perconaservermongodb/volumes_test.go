@@ -500,7 +500,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			ls := map[string]string{"app": "test"}
 
-			resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, volumeSpec)
+			resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim)
 
 			stsKey := types.NamespacedName{Name: stsName, Namespace: ns}
 

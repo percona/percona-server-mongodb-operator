@@ -111,7 +111,7 @@ check_vector_search() {
 
 main() {
 	create_infra "${namespace}"
-	deploy_minio
+	deploy_s3_storage
 	apply_s3_storage_secrets
 
 	desc 'create secrets and start client'
@@ -155,10 +155,10 @@ main() {
 	wait_for_pbm_operations "${cluster}"
 
 	desc 'run logical backup'
-	backup_name="backup-minio"
-	run_backup minio "${backup_name}" 'logical'
+	backup_name="backup-local-s3"
+	run_backup local-s3 "${backup_name}" 'logical'
 	wait_backup "${backup_name}"
-	check_backup_in_storage "${backup_name}" minio rs0 'myApp.test.gz'
+	check_backup_in_storage "${backup_name}" local-s3 rs0 'myApp.test.gz'
 
 	desc 'drop collections'
 	run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
