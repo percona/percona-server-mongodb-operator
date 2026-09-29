@@ -266,7 +266,7 @@ func fillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[
 	var err error
 
 	if ph != nil {
-		changes, err = ph.FillSecretData(ctx, cr, data)
+		changes, err = ph.FillSecretData(ctx, cr, data, secretExists)
 		if err != nil {
 			if pkgSecret.IsCriticalErr(err) || !secretExists {
 				return false, errors.Wrap(err, "failed to fill secret from secret provider")
