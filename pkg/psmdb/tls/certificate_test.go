@@ -146,23 +146,48 @@ func TestCertificate(t *testing.T) {
 						cert := CertificateTLS(cr, true)
 						obj := cert.Object()
 						assert.Equal(t, "psmdb-mock-psmdb-issuer", obj.Spec.IssuerRef.Name)
+						assert.Equal(t, cm.IssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Empty(t, obj.Spec.IssuerRef.Group)
+					})
+					t.Run("non-internal", func(t *testing.T) {
+						cert := CertificateTLS(cr, false)
+						obj := cert.Object()
+						assert.Equal(t, "psmdb-mock-psmdb-issuer", obj.Spec.IssuerRef.Name)
+						assert.Equal(t, cm.IssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Empty(t, obj.Spec.IssuerRef.Group)
+					})
+				})
+				t.Run("old version with user issuer", func(t *testing.T) {
+					cr := cr.DeepCopy()
+					cr.Spec.CRVersion = "1.21.0"
+					cr.Spec.TLS.IssuerConf.Name = "user-cluster-issuer"
+					t.Run("internal", func(t *testing.T) {
+						cert := CertificateTLS(cr, true)
+						obj := cert.Object()
+						assert.Equal(t, "user-cluster-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
 						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 					t.Run("non-internal", func(t *testing.T) {
 						cert := CertificateTLS(cr, false)
 						obj := cert.Object()
-						assert.Equal(t, "psmdb-mock-psmdb-issuer", obj.Spec.IssuerRef.Name)
+						assert.Equal(t, "user-cluster-issuer", obj.Spec.IssuerRef.Name)
 						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
 						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
 					})
 				})
-				t.Run("unset issuer kind", func(t *testing.T) {
+				t.Run("old version with external issuer", func(t *testing.T) {
 					cr := cr.DeepCopy()
-					cr.Spec.TLS.IssuerConf = cmmeta.IssuerReference{}
+					cr.Spec.CRVersion = "1.21.0"
+					cr.Spec.TLS.IssuerConf = cmmeta.IssuerReference{
+						Name:  "aws-pca-issuer",
+						Kind:  "AWSPCAClusterIssuer",
+						Group: "awspca.cert-manager.io",
+					}
 					obj := CertificateTLS(cr, false).Object()
-					assert.Equal(t, cm.IssuerKind, obj.Spec.IssuerRef.Kind)
-					assert.Empty(t, obj.Spec.IssuerRef.Group)
+					assert.Equal(t, "aws-pca-issuer", obj.Spec.IssuerRef.Name)
+					assert.Equal(t, "AWSPCAClusterIssuer", obj.Spec.IssuerRef.Kind)
+					assert.Equal(t, "awspca.cert-manager.io", obj.Spec.IssuerRef.Group)
 				})
 			})
 		})

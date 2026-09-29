@@ -129,11 +129,11 @@ func (c *tlsCert) SecretName() string {
 func (c *tlsCert) Object() *cm.Certificate {
 	cr := c.cr
 
-	issuerKind := cm.IssuerKind
-	issuerGroup := ""
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf.Kind != "" {
-		issuerKind = cr.Spec.TLS.IssuerConf.Kind
-		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+	issuerKind := cr.Spec.TLS.IssuerConf.Kind
+	issuerGroup := cr.Spec.TLS.IssuerConf.Group
+	if cr.CompareVersion("1.23.0") < 0 && cr.Spec.TLS.IssuerConf.Name == "" {
+		// Before 1.23.0 the operator always created a namespaced Issuer, the configured kind applies to user-provided issuers only.
+		issuerKind, issuerGroup = cm.IssuerKind, ""
 	}
 
 	return &cm.Certificate{
