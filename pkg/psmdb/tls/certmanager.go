@@ -125,10 +125,6 @@ func IsUserIssuer(ctx context.Context, cl client.Client, cr *api.PerconaServerMo
 		}
 		issuer = new(cm.ClusterIssuer)
 	case cm.IssuerKind, "":
-		// Before 1.17.0 the operator created issuers without labels, so ownership can't be told from them.
-		if cr.CompareVersion("1.17.0") < 0 {
-			return false, nil
-		}
 		issuer = new(cm.Issuer)
 		nn.Namespace = cr.Namespace
 	default:
@@ -148,13 +144,6 @@ func IsUserIssuer(ctx context.Context, cl client.Client, cr *api.PerconaServerMo
 	}
 
 	return false, errors.Wrap(err, "get issuer")
-}
-
-// isUserNamedIssuer reports whether the issuer name comes from the CR, meaning the object may be the user's.
-func isUserNamedIssuer(cr *api.PerconaServerMongoDB) bool {
-	tls := cr.Spec.TLS
-	// Before 1.17.0 the operator created issuers without labels, so ownership can't be told from them.
-	return cr.CompareVersion("1.17.0") >= 0 && tls != nil && tls.IssuerConf.Name != ""
 }
 
 // ownedByOperator reports whether an object already in the cluster can be written by the operator.
@@ -202,7 +191,8 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 	}
 	switch kind {
 	case cm.IssuerKind:
-		if isUserNamedIssuer(cr) {
+		// A named issuer may be the user's, an operator-created one is always ours.
+		if cr.Spec.TLS.IssuerConf.Name != "" {
 			canWrite = ownedByOperator
 		}
 		issuer = &cm.Issuer{

@@ -431,9 +431,10 @@ func TestIsExternalIssuer(t *testing.T) {
 		},
 		{
 			name:      "user created namespaced issuer on old cr version",
-			crVersion: "1.16.0",
+			crVersion: "1.22.0",
 			tls:       &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-issuer", Kind: cm.IssuerKind}},
 			objects:   []client.Object{issuer(nil)},
+			want:      true,
 		},
 		{
 			name:    "user created cluster issuer",
