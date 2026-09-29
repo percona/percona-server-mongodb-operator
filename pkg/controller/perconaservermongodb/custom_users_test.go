@@ -122,14 +122,14 @@ func TestRolesChanged(t *testing.T) {
 	r2 := &mongo.Role{
 		Privileges: []mongo.RolePrivilege{
 			{
-				Resource: map[string]interface{}{
+				Resource: map[string]any{
 					"db":         "test",
 					"collection": "test",
 				},
 				Actions: []string{"find"},
 			},
 			{
-				Resource: map[string]interface{}{
+				Resource: map[string]any{
 					"db":         "test-two",
 					"collection": "test-two",
 				},
@@ -169,14 +169,14 @@ func TestRolesChanged(t *testing.T) {
 			r1: &mongo.Role{
 				Privileges: []mongo.RolePrivilege{
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"collection": "test",
 							"db":         "test",
 						},
 						Actions: []string{"find"},
 					},
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"db":         "test-two",
 							"collection": "test-two",
 						},
@@ -211,14 +211,14 @@ func TestRolesChanged(t *testing.T) {
 			r1: &mongo.Role{
 				Privileges: []mongo.RolePrivilege{
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"collection": "test",
 							"db":         "test",
 						},
 						Actions: []string{"find", "update"},
 					},
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"db":         "test-two",
 							"collection": "test-two-different",
 						},
@@ -257,14 +257,14 @@ func TestRolesChanged(t *testing.T) {
 			r1: &mongo.Role{
 				Privileges: []mongo.RolePrivilege{
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"collection": "test",
 							"db":         "test",
 						},
 						Actions: []string{"find", "update"},
 					},
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"db":         "test-two",
 							"collection": "test-two-different",
 						},
@@ -299,14 +299,14 @@ func TestRolesChanged(t *testing.T) {
 			r1: &mongo.Role{
 				Privileges: []mongo.RolePrivilege{
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"db":         "test",
 							"collection": "test",
 						},
 						Actions: []string{"find"},
 					},
 					{
-						Resource: map[string]interface{}{
+						Resource: map[string]any{
 							"collection": "test-two",
 							"db":         "test-two",
 						},

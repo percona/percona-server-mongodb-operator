@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"slices"
 	"time"
 
 	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
@@ -212,13 +213,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 func (r *ReconcilePerconaServerMongoDBClusterSync) handleDeletion(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (reconcile.Result, error) {
 	log := logf.FromContext(ctx)
 
-	hasFinalizer := false
-	for _, f := range cr.GetFinalizers() {
-		if f == naming.FinalizerReleaseLock {
-			hasFinalizer = true
-			break
-		}
-	}
+	hasFinalizer := slices.Contains(cr.GetFinalizers(), naming.FinalizerReleaseLock)
 	if !hasFinalizer {
 		return reconcile.Result{}, nil
 	}
@@ -244,10 +239,8 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) handleDeletion(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) ensureReleaseLockFinalizer(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
-	for _, f := range cr.GetFinalizers() {
-		if f == naming.FinalizerReleaseLock {
-			return nil
-		}
+	if slices.Contains(cr.GetFinalizers(), naming.FinalizerReleaseLock) {
+		return nil
 	}
 	orig := cr.DeepCopy()
 	cr.SetFinalizers(append(cr.GetFinalizers(), naming.FinalizerReleaseLock))

@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -44,7 +43,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongo"),
+						AppProtocol: new("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -75,7 +74,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongo"),
+						AppProtocol: new("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -98,7 +97,7 @@ func TestMongosService(t *testing.T) {
 					"percona.com/test": "annotation",
 				},
 				ExposeType:               corev1.ServiceTypeLoadBalancer,
-				LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+				LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 				LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
 			},
 			podName: "test-cr-mongos-0",
@@ -109,7 +108,7 @@ func TestMongosService(t *testing.T) {
 						Name:        "mongos",
 						Port:        27017,
 						TargetPort:  intstr.FromInt(27017),
-						AppProtocol: ptr.To("mongo"),
+						AppProtocol: new("mongo"),
 					},
 				},
 				Selector: map[string]string{
@@ -121,7 +120,7 @@ func TestMongosService(t *testing.T) {
 				},
 				Type:                     corev1.ServiceTypeLoadBalancer,
 				ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyLocal,
-				LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+				LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 				LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
 			},
 		},
@@ -174,7 +173,7 @@ func TestMongosContainer(t *testing.T) {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "test-configmap",
 				},
-				Optional: ptr.To(false),
+				Optional: new(false),
 			},
 		},
 		{
@@ -182,7 +181,7 @@ func TestMongosContainer(t *testing.T) {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "test-secret",
 				},
-				Optional: ptr.To(true),
+				Optional: new(true),
 			},
 		},
 	}

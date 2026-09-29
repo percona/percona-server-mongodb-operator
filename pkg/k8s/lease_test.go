@@ -11,7 +11,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
@@ -52,7 +51,7 @@ func TestAcquireLease(t *testing.T) {
 
 		freshLease := new(coordv1.Lease)
 		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, freshLease))
-		assert.Equal(t, ptr.To(holder), freshLease.Spec.HolderIdentity)
+		assert.Equal(t, new(holder), freshLease.Spec.HolderIdentity)
 	})
 
 	t.Run("replaces stale holder", func(t *testing.T) {
@@ -72,7 +71,7 @@ func TestAcquireLease(t *testing.T) {
 
 		freshLease := new(coordv1.Lease)
 		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, freshLease))
-		assert.Equal(t, ptr.To(otherHolder), freshLease.Spec.HolderIdentity)
+		assert.Equal(t, new(otherHolder), freshLease.Spec.HolderIdentity)
 	})
 }
 
@@ -101,7 +100,7 @@ func lease(name, namespace, holder string) *coordv1.Lease {
 		},
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
-			HolderIdentity: ptr.To(holder),
+			HolderIdentity: new(holder),
 		},
 	}
 }

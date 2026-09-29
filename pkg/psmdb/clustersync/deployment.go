@@ -1,10 +1,11 @@
 package clustersync
 
 import (
+	"maps"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -58,7 +59,7 @@ func Deployment(cr *api.PerconaServerMongoDBClusterSync) *appsv1.Deployment {
 
 func DeploymentSpec(cr *api.PerconaServerMongoDBClusterSync, template corev1.PodTemplateSpec) appsv1.DeploymentSpec {
 	return appsv1.DeploymentSpec{
-		Replicas: ptr.To(int32(1)),
+		Replicas: new(int32(1)),
 		Strategy: appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType},
 		Selector: &metav1.LabelSelector{MatchLabels: Labels(cr)},
 		Template: template,
@@ -103,9 +104,7 @@ func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 			return nil
 		}
 		labelsCopy := make(map[string]string, len(labels))
-		for k, v := range labels {
-			labelsCopy[k] = v
-		}
+		maps.Copy(labelsCopy, labels)
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{

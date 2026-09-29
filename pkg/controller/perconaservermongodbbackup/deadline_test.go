@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 	_ "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -40,7 +39,7 @@ var _ = Describe("Starting deadline", func() {
 		bcp, err := readDefaultBackup("backup1", "test")
 		Expect(err).ToNot(HaveOccurred())
 
-		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(60))
+		cluster.Spec.Backup.StartingDeadlineSeconds = new(int64(60))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
 		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
@@ -56,11 +55,11 @@ var _ = Describe("Starting deadline", func() {
 		bcp, err := readDefaultBackup("backup1", "test")
 		Expect(err).ToNot(HaveOccurred())
 
-		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(600))
+		cluster.Spec.Backup.StartingDeadlineSeconds = new(int64(600))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
 		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
-		bcp.Spec.StartingDeadlineSeconds = ptr.To(int64(60))
+		bcp.Spec.StartingDeadlineSeconds = new(int64(60))
 
 		err = checkStartingDeadline(context.Background(), cluster, bcp)
 		Expect(err).To(HaveOccurred())
@@ -73,11 +72,11 @@ var _ = Describe("Starting deadline", func() {
 		bcp, err := readDefaultBackup("backup1", "test")
 		Expect(err).ToNot(HaveOccurred())
 
-		cluster.Spec.Backup.StartingDeadlineSeconds = ptr.To(int64(600))
+		cluster.Spec.Backup.StartingDeadlineSeconds = new(int64(600))
 
 		bcp.Status.State = psmdbv1.BackupStateNew
 		bcp.CreationTimestamp = metav1.NewTime(time.Now().Add(-2 * time.Minute))
-		bcp.Spec.StartingDeadlineSeconds = ptr.To(int64(300))
+		bcp.Spec.StartingDeadlineSeconds = new(int64(300))
 
 		err = checkStartingDeadline(context.Background(), cluster, bcp)
 		Expect(err).ToNot(HaveOccurred())

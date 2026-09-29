@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -264,7 +263,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 	log.Info("Snapshot restore finished", "status", status.State)
 
 	status.State = psmdbv1.RestoreStateReady
-	status.CompletedAt = ptr.To(metav1.Now())
+	status.CompletedAt = new(metav1.Now())
 
 	return status, nil
 }
@@ -325,7 +324,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				orig := sfs.DeepCopy()
 
 				// Scale down the statefulset.
-				sfs.Spec.Replicas = ptr.To(int32(0))
+				sfs.Spec.Replicas = new(int32(0))
 
 				// When the pods come up, they should start pbm with the following command:
 				sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
@@ -525,7 +524,7 @@ func generatePVCFromSnapshot(
 	pvc.SetLabels(labels)
 	pvc.Spec = spec
 	pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
-		APIGroup: ptr.To(volumesnapshotv1.SchemeGroupVersion.Group),
+		APIGroup: new(volumesnapshotv1.SchemeGroupVersion.Group),
 		Kind:     "VolumeSnapshot",
 		Name:     snapshotName,
 	}
@@ -623,7 +622,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 			orig := sfs.DeepCopy()
 
 			// Scale up the statefulset.
-			sfs.Spec.Replicas = ptr.To(replicas)
+			sfs.Spec.Replicas = new(replicas)
 			return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
 		}); err != nil {
 			return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
@@ -866,7 +865,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 	log := logf.FromContext(ctx)
 
 	for _, rs := range cluster.GetAllReplsets() {
-		var securityConf interface{}
+		var securityConf any
 
 		if rs.Configuration.VaultEnabled() {
 			sec, err := rs.Configuration.GetOptions("security")
@@ -880,7 +879,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 				// Secret volumes mount files with 0444). Update tokenFile in the security
 				// config to point to the fixed path so the local mongod started by
 				// pbm-agent restore-finish can read it.
-				if vaultConf, ok := sec["vault"].(map[interface{}]interface{}); ok {
+				if vaultConf, ok := sec["vault"].(map[any]any); ok {
 					vaultConf["tokenFile"] = "/tmp/vault-token"
 				}
 				securityConf = sec

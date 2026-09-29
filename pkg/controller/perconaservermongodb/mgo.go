@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -269,7 +268,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 				log.Info("added to shard", "rs", rsName)
 			}
 
-			rsStatus.AddedAsShard = ptr.To(true)
+			rsStatus.AddedAsShard = new(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
 		} else {
 			return api.AppStateInit, nil, nil
@@ -976,7 +975,7 @@ func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Rol
 }
 
 // compareResources compares two map[string]interface{} values and returns true if they are equal
-func compareResources(x, y map[string]interface{}) bool {
+func compareResources(x, y map[string]any) bool {
 	if len(x) != len(y) {
 		return false
 	}
@@ -1097,7 +1096,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	if cr.CompareVersion("1.12.0") >= 0 {
 		privileges := []mongo.RolePrivilege{
 			{
-				Resource: map[string]interface{}{
+				Resource: map[string]any{
 					"db":         "",
 					"collection": "system.profile",
 				},
@@ -1114,7 +1113,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		if cr.CompareVersion("1.15.0") >= 0 {
 			privileges = []mongo.RolePrivilege{
 				{
-					Resource: map[string]interface{}{
+					Resource: map[string]any{
 						"db":         "",
 						"collection": "",
 					},
@@ -1128,7 +1127,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 					},
 				},
 				{
-					Resource: map[string]interface{}{
+					Resource: map[string]any{
 						"db":         "",
 						"collection": "system.profile",
 					},
@@ -1142,7 +1141,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 		}
 		if cr.CompareVersion("1.16.0") >= 0 {
 			privileges = append(privileges, mongo.RolePrivilege{
-				Resource: map[string]interface{}{
+				Resource: map[string]any{
 					"db":         "admin",
 					"collection": "system.version",
 				},
@@ -1160,7 +1159,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 
 	err = r.createOrUpdateSystemRoles(ctx, cli, "pbmAnyAction",
 		[]mongo.RolePrivilege{{
-			Resource: map[string]interface{}{"anyResource": true},
+			Resource: map[string]any{"anyResource": true},
 			Actions:  []string{"anyAction"},
 		}})
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 
@@ -369,7 +368,7 @@ func TestWaitForCerts(t *testing.T) {
 							Kind:       cm.CertificateKind,
 							Name:       certName,
 							UID:        "cert-uid-456",
-							Controller: ptr.To(true),
+							Controller: new(true),
 						},
 					},
 				},

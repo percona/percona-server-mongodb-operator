@@ -2,6 +2,7 @@ package perconaservermongodbclustersync
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -111,10 +112,10 @@ func TestReleaseClusterSyncLease(t *testing.T) {
 
 func TestAcquireClusterSyncLease(t *testing.T) {
 	tests := map[string]struct {
-		seedLease    bool
-		seedHolder   string
-		wantForeign  string
-		wantCreated  bool
+		seedLease   bool
+		seedHolder  string
+		wantForeign string
+		wantCreated bool
 	}{
 		"no lease: acquires, no foreign holder": {
 			seedLease:   false,
@@ -176,9 +177,9 @@ func TestEnsureReleaseLockFinalizer(t *testing.T) {
 		existing []string
 		wantAdd  bool
 	}{
-		"no finalizers: adds release-lock":            {existing: nil, wantAdd: true},
-		"unrelated finalizer present: appends":        {existing: []string{"other.example/x"}, wantAdd: true},
-		"already present: no patch needed, no error":  {existing: []string{naming.FinalizerReleaseLock}, wantAdd: false},
+		"no finalizers: adds release-lock":           {existing: nil, wantAdd: true},
+		"unrelated finalizer present: appends":       {existing: []string{"other.example/x"}, wantAdd: true},
+		"already present: no patch needed, no error": {existing: []string{naming.FinalizerReleaseLock}, wantAdd: false},
 	}
 
 	for name, tc := range tests {
@@ -192,13 +193,7 @@ func TestEnsureReleaseLockFinalizer(t *testing.T) {
 			got := &psmdbv1.PerconaServerMongoDBClusterSync{}
 			require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, got))
 
-			has := false
-			for _, f := range got.Finalizers {
-				if f == naming.FinalizerReleaseLock {
-					has = true
-					break
-				}
-			}
+			has := slices.Contains(got.Finalizers, naming.FinalizerReleaseLock)
 			assert.True(t, has, "release-lock finalizer must be present")
 			if tc.wantAdd {
 				assert.Greater(t, len(got.Finalizers), len(tc.existing))
