@@ -48,8 +48,11 @@ delete_clusterissuer_rbac() {
 
 check_issuer_not_created() {
 	local issuer_name=$1
+	local found
 
-	if kubectl get issuer "$issuer_name" 2>/dev/null; then
+	found=$(kubectl_bin get issuer "$issuer_name" --ignore-not-found -o 'jsonpath={.metadata.name}')
+
+	if [ -n "$found" ]; then
 		echo "Issuer $issuer_name should not be created when ClusterIssuer is configured"
 		exit 1
 	fi
