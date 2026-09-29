@@ -516,6 +516,35 @@ def _delete_cert_manager() -> None:
     logger.info("Deleting cert-manager")
     kubectl_bin("delete", "-f", _cert_manager_url(), "--ignore-not-found", check=False)
 
+    # Ensure webhook configurations and CRDs are removed even if the manifest
+    # download or bulk delete failed. Leftover CRDs with a registered webhook
+    # cause the operator to detect cert-manager as "installed but not ready"
+    # and skip the manual TLS fallback.
+    kubectl_bin(
+        "delete",
+        "mutatingwebhookconfiguration",
+        "cert-manager-webhook",
+        "--ignore-not-found",
+        check=False,
+    )
+    kubectl_bin(
+        "delete",
+        "validatingwebhookconfiguration",
+        "cert-manager-webhook",
+        "--ignore-not-found",
+        check=False,
+    )
+    for crd in (
+        "certificates.cert-manager.io",
+        "certificaterequests.cert-manager.io",
+        "issuers.cert-manager.io",
+        "clusterissuers.cert-manager.io",
+        "orders.acme.cert-manager.io",
+        "challenges.acme.cert-manager.io",
+    ):
+        kubectl_bin("delete", "crd", crd, "--ignore-not-found", check=False)
+    kubectl_bin("delete", "namespace", "cert-manager", "--ignore-not-found", check=False)
+
 
 @pytest.fixture(scope="class")
 def destroy_cert_manager() -> Callable[[], None]:
@@ -603,12 +632,18 @@ def deploy_s3_storage() -> Generator[None]:
     seaweedfs_ver = os.environ.get("SEAWEEDFS_VER", "")
     conf_dir = Path(__file__).parent / "conf"
     set_args = [
-        "--set", "allInOne.data.type=persistentVolumeClaim",
-        "--set", "allInOne.data.size=2G",
-        "--set", f"fullnameOverride={fullname}",
-        "--set-string", "s3.credentials.admin.accessKey=some-access-key",
-        "--set-string", "s3.credentials.admin.secretKey=some-secret-key",
-        "--set-string", f"global.seaweedfs.serviceAccountName={fullname}-sa",
+        "--set",
+        "allInOne.data.type=persistentVolumeClaim",
+        "--set",
+        "allInOne.data.size=2G",
+        "--set",
+        f"fullnameOverride={fullname}",
+        "--set-string",
+        "s3.credentials.admin.accessKey=some-access-key",
+        "--set-string",
+        "s3.credentials.admin.secretKey=some-secret-key",
+        "--set-string",
+        f"global.seaweedfs.serviceAccountName={fullname}-sa",
     ]
     set_args += helm_arch_set_string_args("allInOne.")
     install_args = [
