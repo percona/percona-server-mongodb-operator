@@ -278,7 +278,7 @@ func toMongoRoleModel(role api.Role) (*mongo.Role, error) {
 
 		rp := mongo.RolePrivilege{
 			Actions:  p.Actions,
-			Resource: make(map[string]interface{}, 3),
+			Resource: make(map[string]any, 3),
 		}
 
 		if p.Resource.Cluster != nil {

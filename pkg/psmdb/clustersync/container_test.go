@@ -8,7 +8,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -185,17 +184,17 @@ func TestContainerArgs(t *testing.T) {
 			want: []string{"--log-level=debug"},
 		},
 		"LogJSON true only": {
-			pcsm: api.ClusterSyncPCSMConfig{LogJSON: ptr.To(true)},
+			pcsm: api.ClusterSyncPCSMConfig{LogJSON: new(true)},
 			want: []string{"--log-json"},
 		},
 		"LogJSON explicitly false: no arg emitted": {
-			pcsm: api.ClusterSyncPCSMConfig{LogJSON: ptr.To(false)},
+			pcsm: api.ClusterSyncPCSMConfig{LogJSON: new(false)},
 			want: nil,
 		},
 		"both set: LogLevel precedes LogJSON for stable arg order": {
 			pcsm: api.ClusterSyncPCSMConfig{
 				LogLevel: "warn",
-				LogJSON:  ptr.To(true),
+				LogJSON:  new(true),
 			},
 			want: []string{"--log-level=warn", "--log-json"},
 		},

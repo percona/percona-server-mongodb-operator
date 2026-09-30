@@ -32,6 +32,10 @@ func Labels() map[string]string {
 	}
 }
 
+func IsManagedByOperator(labels map[string]string) bool {
+	return labels[LabelKubernetesManagedBy] == Labels()[LabelKubernetesManagedBy]
+}
+
 func PVCLabels(
 	component string,
 	replsetName string,

@@ -2,6 +2,7 @@ package vectorsearch
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,9 +28,7 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 	spec := getSearchSpec(cr, rs)
 
 	podLabels := make(map[string]string, len(objectLabels)+len(spec.Labels))
-	for k, v := range objectLabels {
-		podLabels[k] = v
-	}
+	maps.Copy(podLabels, objectLabels)
 	for k, v := range spec.Labels {
 		if _, ok := podLabels[k]; !ok {
 			podLabels[k] = v
@@ -380,9 +379,7 @@ func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity
 			return nil
 		}
 		labelsCopy := make(map[string]string, len(labels))
-		for k, v := range labels {
-			labelsCopy[k] = v
-		}
+		maps.Copy(labelsCopy, labels)
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{

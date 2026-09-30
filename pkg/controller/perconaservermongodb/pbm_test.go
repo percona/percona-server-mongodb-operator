@@ -720,7 +720,7 @@ func TestHashPBMConfiguration(t *testing.T) {
 		}
 		hash1, err := hashPBMConfiguration(cfg, cr)
 		require.NoError(t, err)
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			h, err := hashPBMConfiguration(cfg, cr)
 			require.NoError(t, err)
 			require.Equal(t, hash1, h, "hash flapped on iteration %d", i)

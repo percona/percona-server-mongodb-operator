@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"maps"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,9 +23,7 @@ func AnnotateObject(ctx context.Context, c client.Client, obj client.Object, ann
 		a = make(map[string]string)
 	}
 
-	for k, v := range annotations {
-		a[k] = v
-	}
+	maps.Copy(a, annotations)
 	o.SetAnnotations(a)
 
 	return c.Patch(ctx, o, client.MergeFrom(orig))

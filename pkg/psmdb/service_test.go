@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -229,7 +228,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector: map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -282,7 +281,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -304,7 +303,7 @@ func TestExternalService(t *testing.T) {
 							"percona.com/test": "annotation",
 						},
 						ExposeType:               corev1.ServiceTypeLoadBalancer,
-						LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+						LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 						LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
 					},
 				},
@@ -338,13 +337,13 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
 					Type:                     corev1.ServiceTypeLoadBalancer,
 					ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyLocal,
-					LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+					LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 					LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
 				},
 			},
@@ -398,7 +397,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -450,7 +449,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-2"},

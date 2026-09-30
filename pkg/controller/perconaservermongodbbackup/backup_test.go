@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -286,7 +285,7 @@ func TestBackup_Status(t *testing.T) {
 			cluster: &api.PerconaServerMongoDB{
 				Spec: api.PerconaServerMongoDBSpec{
 					Backup: api.BackupSpec{
-						StartingDeadlineSeconds: ptr.To(int64(10)),
+						StartingDeadlineSeconds: new(int64(10)),
 					},
 				},
 			},

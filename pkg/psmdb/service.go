@@ -63,9 +63,7 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 // ExternalService returns a Service object needs to serve external connections
 func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, podName string) *corev1.Service {
 	annotations := make(map[string]string)
-	for k, v := range replset.Expose.ServiceAnnotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, replset.Expose.ServiceAnnotations)
 
 	if dns := replset.Expose.ExternalDNS; dns != nil {
 		hostname := BuildDNSHostname(dns, replset.Name, podName)

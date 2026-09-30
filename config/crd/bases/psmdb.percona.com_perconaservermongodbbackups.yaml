@@ -202,6 +202,8 @@ spec:
                   credentials:
                     properties:
                       secretName:
+                        maxLength: 253
+                        minLength: 1
                         type: string
                       type:
                         type: string
@@ -209,7 +211,7 @@ spec:
                     x-kubernetes-validations:
                     - message: secretName must be set when credentials type is userPrincipal
                       rule: '!has(self.type) || self.type != ''userPrincipal'' ||
-                        (has(self.secretName) && self.secretName != '''')'
+                        has(self.secretName)'
                   maxObjSizeGB:
                     type: number
                   namespace:
