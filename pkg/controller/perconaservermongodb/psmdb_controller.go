@@ -1551,7 +1551,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
-	if err == nil && cr.CompareVersion("1.24.0") >= 0 {
+	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbconfig.MongosLogVolClaimName
@@ -1606,7 +1606,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 {
+	if cr.CompareVersion("1.23.1") >= 0 {
 		if cr.IsLogCollectorEnabled() {
 			configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
 			if err != nil {
