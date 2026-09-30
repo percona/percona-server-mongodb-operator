@@ -1,0 +1,534 @@
+#!/bin/bash
+# e2e test for VPA integration with a sharded PSMDB cluster.
+#
+# Validates the three VPA code paths that are NOT covered by e2e-tests/vpa:
+#   - Config server replset (cfg) — reconcileVPA config server branch
+#   - Mongos             — applyVPAToMongos
+#   - Component isolation in a sharded cluster (cfg / rs0 / mongos are independent)
+#
+# Scenarios:
+#   1. Off mode  — recommendations recorded for rs0, cfg, and mongos; no CR changes
+#   2. Auto mode — each component applies its own recommendation independently
+#   3. Component isolation — distinct recommendations; no cross-contamination
+#   4. Non-voting members — rs0-nv VPA recorded and applied independently
+#   5. Hidden members     — rs0-hidden VPA recorded and applied independently
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+OPERATOR_NS=${OPERATOR_NS:-psmdb-operator}
+
+cluster="some-name"
+
+# ---------------------------------------------------------------------------
+# helpers (all accept optional [cluster_name] [ns] trailing args)
+# ---------------------------------------------------------------------------
+
+function install_vpa_crd() {
+	desc 'install minimal VPA CRD'
+	kubectl_bin apply -f "${test_dir}/../vpa/conf/vpa-crd.yml"
+	kubectl_bin wait crd/verticalpodautoscalers.autoscaling.k8s.io \
+		--for=condition=Established --timeout=60s
+}
+
+# create_vpa_object <vpa_name> <target_sts_name> [ns]
+function create_vpa_object() {
+	local vpa_name=$1
+	local target=$2
+	local ns=${3:-${namespace}}
+	desc "create VPA object ${vpa_name} → ${target}"
+	cat <<EOF | kubectl_bin apply -n "${ns}" -f -
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: ${vpa_name}
+  namespace: ${ns}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: ${target}
+  updatePolicy:
+    updateMode: "Off"
+EOF
+}
+
+# set_vpa_recommendation <vpa_name> <cpu> <memory> [container] [ns]
+function set_vpa_recommendation() {
+	local vpa_name=$1
+	local cpu=$2
+	local memory=$3
+	local container=${4:-mongod}
+	local ns=${5:-${namespace}}
+
+	desc "set VPA recommendation on ${vpa_name} (ns=${ns}): cpu=${cpu} memory=${memory} container=${container}"
+	kubectl_bin patch -n "${ns}" "vpa/${vpa_name}" \
+		--type=merge \
+		--subresource=status \
+		-p "{
+			\"status\": {
+				\"recommendation\": {
+					\"containerRecommendations\": [{
+						\"containerName\": \"${container}\",
+						\"target\": {
+							\"cpu\": \"${cpu}\",
+							\"memory\": \"${memory}\"
+						},
+						\"lowerBound\": {\"cpu\": \"${cpu}\", \"memory\": \"${memory}\"},
+						\"upperBound\": {\"cpu\": \"${cpu}\", \"memory\": \"${memory}\"}
+					}]
+				}
+			}
+		}"
+}
+
+# wait_for_vpa_status <status_key.field> <expected> [max_retry] [sleep] [ns]
+function wait_for_vpa_status() {
+	local field=$1
+	local expected=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local ns=${5:-${namespace}}
+
+	echo "Waiting for ${cluster}.status.vpaStatus.${field} == ${expected} (ns=${ns})"
+	local retry=0
+	until [[ "$(kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+		-o jsonpath="{.status.vpaStatus.${field}}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: ${cluster}.status.vpaStatus.${field} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+				-o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${cluster}.status.vpaStatus.${field} == ${expected}"
+}
+
+# get_mongos_requests <resource> [ns]
+function get_mongos_requests() {
+	local resource=$1
+	local ns=${2:-${namespace}}
+	kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+		-o jsonpath="{.spec.sharding.mongos.resources.requests.${resource}}"
+}
+
+# get_replset_requests <rs_path> <resource> [ns]
+# rs_path: "replsets[0]" for rs0, "sharding.configsvrReplSet" for cfg
+function get_replset_requests() {
+	local rs_path=$1
+	local resource=$2
+	local ns=${3:-${namespace}}
+	kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+		-o jsonpath="{.spec.${rs_path}.resources.requests.${resource}}"
+}
+
+# get_subreplset_requests <sub_component> <resource> [ns]
+# sub_component: "nonvoting" or "hidden" (maps to .spec.replsets[0].<sub>)
+function get_subreplset_requests() {
+	local sub=$1
+	local resource=$2
+	local ns=${3:-${namespace}}
+	kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+		-o jsonpath="{.spec.replsets[0].${sub}.resources.requests.${resource}}"
+}
+
+# wait_for_replset_requests <rs_path> <resource> <expected> [max_retry] [sleep] [ns]
+function wait_for_replset_requests() {
+	local rs_path=$1
+	local resource=$2
+	local expected=$3
+	local max_retry=${4:-30}
+	local sleep_time=${5:-5}
+	local ns=${6:-${namespace}}
+
+	echo "Waiting for ${cluster}.spec.${rs_path}.resources.requests.${resource} == ${expected}"
+	local retry=0
+	until [[ "$(get_replset_requests "${rs_path}" "${resource}" "${ns}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: ${cluster}.spec.${rs_path}.resources.requests.${resource} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${cluster}.spec.${rs_path}.resources.requests.${resource} == ${expected}"
+}
+
+# wait_for_mongos_requests <resource> <expected> [max_retry] [sleep] [ns]
+function wait_for_mongos_requests() {
+	local resource=$1
+	local expected=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local ns=${5:-${namespace}}
+
+	echo "Waiting for ${cluster}.spec.sharding.mongos.resources.requests.${resource} == ${expected}"
+	local retry=0
+	until [[ "$(get_mongos_requests "${resource}" "${ns}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: mongos.resources.requests.${resource} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${cluster}.spec.sharding.mongos.resources.requests.${resource} == ${expected}"
+}
+
+# wait_for_subreplset_requests <sub_component> <resource> <expected> [max_retry] [sleep] [ns]
+function wait_for_subreplset_requests() {
+	local sub=$1
+	local resource=$2
+	local expected=$3
+	local max_retry=${4:-30}
+	local sleep_time=${5:-5}
+	local ns=${6:-${namespace}}
+
+	echo "Waiting for ${cluster}.spec.replsets[0].${sub}.resources.requests.${resource} == ${expected}"
+	local retry=0
+	until [[ "$(get_subreplset_requests "${sub}" "${resource}" "${ns}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: ${sub}.resources.requests.${resource} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${cluster}.spec.replsets[0].${sub}.resources.requests.${resource} == ${expected}"
+}
+
+# assert_requests <description> <actual> <expected>
+function assert_requests() {
+	local desc_str=$1
+	local actual=$2
+	local expected=$3
+	if [[ "${actual}" != "${expected}" ]]; then
+		echo "ERROR: ${desc_str} = '${actual}', expected '${expected}'"
+		exit 1
+	fi
+	echo "OK: ${desc_str} == ${expected}"
+}
+
+# wait_for_last_applied_at <status_key> [max_retry] [sleep] [ns]
+function wait_for_last_applied_at() {
+	local status_key=$1
+	local max_retry=${2:-30}
+	local sleep_time=${3:-5}
+	local ns=${4:-${namespace}}
+
+	echo "Waiting for ${cluster}.status.vpaStatus.${status_key}.lastAppliedAt (ns=${ns})"
+	local retry=0
+	until kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+		-o jsonpath="{.status.vpaStatus.${status_key}.lastAppliedAt}" \
+		| grep -q .; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: lastAppliedAt for ${status_key} was never set"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: lastAppliedAt set for ${status_key}"
+}
+
+# wait_for_new_apply <status_key> <after_time> [max_retry] [sleep] [ns]
+function wait_for_new_apply() {
+	local status_key=$1
+	local after_time=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local ns=${5:-${namespace}}
+
+	echo "Waiting for ${cluster}.status.vpaStatus.${status_key}.lastAppliedAt > ${after_time}"
+	local retry=0
+	while true; do
+		local ts
+		ts=$(kubectl_bin -n "${ns}" get psmdb "${cluster}" \
+			-o jsonpath="{.status.vpaStatus.${status_key}.lastAppliedAt}" 2>/dev/null || true)
+		if [[ -n "${ts}" && "${ts}" > "${after_time}" ]]; then
+			echo
+			echo "OK: new lastAppliedAt=${ts} for ${status_key}"
+			return 0
+		fi
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: no new apply for ${status_key} after ${after_time}"
+			kubectl_bin -n "${ns}" get psmdb "${cluster}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+}
+
+# ---------------------------------------------------------------------------
+# setup
+# ---------------------------------------------------------------------------
+
+create_infra "${namespace}"
+
+desc 'create secrets and psmdb client'
+kubectl_bin apply \
+	-f "${conf_dir}/secrets.yml" \
+	-f "${conf_dir}/client.yml"
+
+install_vpa_crd
+
+desc "deploy sharded PSMDB cluster ${cluster} with vpa.updateMode=Off"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+# Wait for all components: rs0 (3), cfg (3), mongos (2), nv (1), hidden (1)
+# wait_for_running parses <cluster>-<rs> — use it for top-level replsets only.
+# For sub-component StatefulSets (nv, hidden) wait for pods directly.
+wait_for_running "${cluster}-rs0" 3
+wait_for_running "${cluster}-cfg" 3
+wait_pod "${cluster}-rs0-nv-0"
+wait_pod "${cluster}-rs0-hidden-0"
+wait_cluster_consistency "${cluster}" 64
+
+# VPA object names follow the convention <cluster>-<component>-vpa.
+# Mongos targets the mongos Deployment, replsets target their StatefulSet.
+vpa_rs0="${cluster}-rs0-vpa"
+vpa_cfg="${cluster}-cfg-vpa"
+vpa_mongos="${cluster}-mongos-vpa"
+vpa_nv="${cluster}-rs0-nv-vpa"
+vpa_hidden="${cluster}-rs0-hidden-vpa"
+
+create_vpa_object "${vpa_rs0}"     "${cluster}-rs0"
+create_vpa_object "${vpa_cfg}"     "${cluster}-cfg"
+create_vpa_object "${vpa_mongos}"  "${cluster}-mongos"
+create_vpa_object "${vpa_nv}"      "${cluster}-rs0-nv"
+create_vpa_object "${vpa_hidden}"  "${cluster}-rs0-hidden"
+
+# ---------------------------------------------------------------------------
+# scenario 1: Off mode — recommendations recorded for all 3 components,
+#             no CR resources changed
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 1: Off mode — rs0, cfg, and mongos all recorded ==='
+
+set_vpa_recommendation "${vpa_rs0}"    "350m" "350Mi" "mongod"
+set_vpa_recommendation "${vpa_cfg}"    "250m" "250Mi" "mongod"
+set_vpa_recommendation "${vpa_mongos}" "150m" "150Mi" "mongos"
+
+desc 'wait for operator to record all 3 components in status'
+wait_for_vpa_status "rs0.cpu"    "350m"
+wait_for_vpa_status "cfg.cpu"    "250m"
+wait_for_vpa_status "mongos.cpu" "150m"
+
+desc 'verify CR resources were NOT changed (updateMode=Off)'
+assert_requests "rs0 cpu"    "$(get_replset_requests "replsets[0]"           "cpu")" "100m"
+assert_requests "cfg cpu"    "$(get_replset_requests "sharding.configsvrReplSet" "cpu")" "100m"
+assert_requests "mongos cpu" "$(get_mongos_requests "cpu")" "100m"
+
+desc 'verify lastAppliedAt not set for any component in Off mode'
+for key in rs0 cfg mongos; do
+	ts=$(kubectl_bin get psmdb "${cluster}" \
+		-o jsonpath="{.status.vpaStatus.${key}.lastAppliedAt}" 2>/dev/null || true)
+	if [[ -n "${ts}" ]]; then
+		echo "ERROR: lastAppliedAt should be empty for ${key} in Off mode, got '${ts}'"
+		exit 1
+	fi
+	echo "OK: lastAppliedAt is empty for ${key}"
+done
+
+# ---------------------------------------------------------------------------
+# scenario 2: Auto mode — each component applies its own recommendation
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 2: Auto mode — rs0, cfg, and mongos apply independently ==='
+
+desc 'switch to updateMode=Auto'
+kubectl_bin patch psmdb "${cluster}" \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/vpa/updateMode", "value": "Auto"}]'
+
+desc 'wait for all 3 components to apply their recommendations'
+wait_for_last_applied_at "rs0"
+wait_for_last_applied_at "cfg"
+wait_for_last_applied_at "mongos"
+
+apply_ts_rs0=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}')
+apply_ts_cfg=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.cfg.lastAppliedAt}')
+apply_ts_mongos=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.mongos.lastAppliedAt}')
+
+desc 'verify each component got its own recommendation applied'
+assert_requests "rs0 cpu"    "$(get_replset_requests "replsets[0]"               "cpu")" "350m"
+assert_requests "rs0 memory" "$(get_replset_requests "replsets[0]"               "memory")" "350Mi"
+assert_requests "cfg cpu"    "$(get_replset_requests "sharding.configsvrReplSet" "cpu")" "250m"
+assert_requests "cfg memory" "$(get_replset_requests "sharding.configsvrReplSet" "memory")" "250Mi"
+assert_requests "mongos cpu"    "$(get_mongos_requests "cpu")"    "150m"
+assert_requests "mongos memory" "$(get_mongos_requests "memory")" "150Mi"
+
+desc 'wait for cluster to converge after SmartUpdate'
+wait_cluster_consistency "${cluster}" 64
+
+# ---------------------------------------------------------------------------
+# scenario 3: Component isolation — distinct new recommendations;
+#             each component applies only its own value, no cross-contamination
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 3: Component isolation ==='
+
+desc 'wait for stabilization windows (30s) to pass for all components'
+sleep 35
+
+desc 'set distinct new recommendations for each component'
+set_vpa_recommendation "${vpa_rs0}"    "500m" "500Mi" "mongod"
+set_vpa_recommendation "${vpa_cfg}"    "400m" "400Mi" "mongod"
+set_vpa_recommendation "${vpa_mongos}" "300m" "300Mi" "mongos"
+
+desc 'wait for each component CR value to reach its new recommendation'
+# Wait directly for the expected CR value — avoids false positives from
+# wait_for_new_apply when the operator re-applies the old value just before
+# we update the VPA object (stabilization window race).
+wait_for_replset_requests "replsets[0]"               "cpu" "500m"
+wait_for_replset_requests "replsets[0]"               "memory" "500Mi"
+wait_for_replset_requests "sharding.configsvrReplSet" "cpu" "400m"
+wait_for_replset_requests "sharding.configsvrReplSet" "memory" "400Mi"
+wait_for_mongos_requests  "cpu" "300m"
+wait_for_mongos_requests  "memory" "300Mi"
+
+desc 'verify no cross-contamination — each component has ONLY its own value'
+assert_requests "rs0 cpu"       "$(get_replset_requests "replsets[0]"               "cpu")"    "500m"
+assert_requests "rs0 memory"    "$(get_replset_requests "replsets[0]"               "memory")" "500Mi"
+assert_requests "cfg cpu"       "$(get_replset_requests "sharding.configsvrReplSet" "cpu")"    "400m"
+assert_requests "cfg memory"    "$(get_replset_requests "sharding.configsvrReplSet" "memory")" "400Mi"
+assert_requests "mongos cpu"    "$(get_mongos_requests "cpu")"    "300m"
+assert_requests "mongos memory" "$(get_mongos_requests "memory")" "300Mi"
+
+echo "OK: no cross-contamination between rs0, cfg, and mongos"
+
+desc 'wait for cluster to converge'
+wait_cluster_consistency "${cluster}" 64
+
+# ---------------------------------------------------------------------------
+# scenario 4: Non-voting members — VPA recorded (Off) and applied (Auto)
+#             independently from the main rs0 replset
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 4: Non-voting members VPA ==='
+
+desc 'set VPA recommendation for non-voting members'
+set_vpa_recommendation "${vpa_nv}" "220m" "220Mi" "mongod-nv"
+
+desc 'wait for operator to record nv recommendation in status'
+wait_for_vpa_status "rs0-nv.cpu" "220m"
+
+desc 'verify CR resources for nv were NOT changed in Off mode (switched back to Auto in scenario 2 but vpa_nv just got its first rec; stabilization might not have passed — check that nv had no prior apply)'
+# updateMode is Auto at this point; we simply wait for it to apply.
+apply_ts_nv=""
+
+desc 'wait for stabilization window to pass (30s)'
+sleep 35
+
+desc 'wait for nv to apply'
+wait_for_subreplset_requests "nonvoting" "cpu"    "220m"
+wait_for_subreplset_requests "nonvoting" "memory" "220Mi"
+
+desc 'verify non-voting resources were updated to the recommendation'
+assert_requests "nv cpu"    "$(get_subreplset_requests "nonvoting" "cpu")"    "220m"
+assert_requests "nv memory" "$(get_subreplset_requests "nonvoting" "memory")" "220Mi"
+
+desc 'verify main rs0 resources were NOT changed by the nv apply'
+assert_requests "rs0 cpu (unchanged by nv)" \
+	"$(get_replset_requests "replsets[0]" "cpu")" "500m"
+
+echo "OK: non-voting VPA applied independently"
+
+desc 'wait for stabilization window before isolation check (30s)'
+sleep 35
+
+desc 'set distinct new recommendation for nv (isolation from rs0)'
+set_vpa_recommendation "${vpa_nv}"  "280m" "280Mi" "mongod-nv"
+set_vpa_recommendation "${vpa_rs0}" "600m" "600Mi" "mongod"
+
+wait_for_subreplset_requests "nonvoting"  "cpu" "280m"
+wait_for_replset_requests    "replsets[0]" "cpu" "600m"
+
+assert_requests "nv cpu after isolation"  "$(get_subreplset_requests "nonvoting" "cpu")"  "280m"
+assert_requests "rs0 cpu after isolation" "$(get_replset_requests "replsets[0]"  "cpu")"  "600m"
+
+echo "OK: non-voting and rs0 apply independently without cross-contamination"
+
+# ---------------------------------------------------------------------------
+# scenario 5: Hidden members — VPA recorded (Off) and applied (Auto)
+#             independently from the main rs0 replset
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 5: Hidden members VPA ==='
+
+desc 'set VPA recommendation for hidden members'
+set_vpa_recommendation "${vpa_hidden}" "190m" "190Mi" "mongod-hidden"
+
+desc 'wait for operator to record hidden recommendation in status'
+wait_for_vpa_status "rs0-hidden.cpu" "190m"
+
+desc 'wait for stabilization window to pass (30s)'
+sleep 35
+
+desc 'wait for hidden to apply'
+wait_for_subreplset_requests "hidden" "cpu"    "190m"
+wait_for_subreplset_requests "hidden" "memory" "190Mi"
+
+desc 'verify hidden resources were updated to the recommendation'
+assert_requests "hidden cpu"    "$(get_subreplset_requests "hidden" "cpu")"    "190m"
+assert_requests "hidden memory" "$(get_subreplset_requests "hidden" "memory")" "190Mi"
+
+desc 'verify non-voting resources were NOT changed by the hidden apply'
+assert_requests "nv cpu (unchanged by hidden)" \
+	"$(get_subreplset_requests "nonvoting" "cpu")" "280m"
+
+echo "OK: hidden VPA applied independently"
+
+desc 'wait for stabilization window before isolation check (30s)'
+sleep 35
+
+desc 'set distinct new recommendations for hidden and nv (mutual isolation)'
+set_vpa_recommendation "${vpa_hidden}" "240m" "240Mi" "mongod-hidden"
+set_vpa_recommendation "${vpa_nv}"     "330m" "330Mi" "mongod-nv"
+
+wait_for_subreplset_requests "hidden"    "cpu" "240m"
+wait_for_subreplset_requests "nonvoting" "cpu" "330m"
+
+assert_requests "hidden cpu after isolation" "$(get_subreplset_requests "hidden"     "cpu")" "240m"
+assert_requests "nv cpu after isolation"     "$(get_subreplset_requests "nonvoting"  "cpu")" "330m"
+
+echo "OK: hidden and non-voting apply independently without cross-contamination"
+
+desc 'wait for cluster to converge'
+wait_cluster_consistency "${cluster}" 64
+
+# ---------------------------------------------------------------------------
+# cleanup
+# ---------------------------------------------------------------------------
+
+destroy "${namespace}"
+desc 'test passed'

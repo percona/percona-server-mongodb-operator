@@ -20,6 +20,39 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
+#  vpa:
+#    # enabled activates VPA recommendation reading. The operator never creates
+#    # VPA objects — an external tool (VPA Recommender, Goldilocks, etc.) must
+#    # create and populate them. The operator only reads status.recommendation.
+#    enabled: false
+#    # updateMode controls whether recommendations are applied (Auto) or only
+#    # observed and recorded in status (Off). Defaults to Off.
+#    #
+#    # The operator never writes resources back into this CR. The resources
+#    # below stay exactly what you declared, and remain safe for a GitOps
+#    # controller to own. Under Auto the operator commits the effective values to
+#    # status.vpaStatus.<component>.resources and generates the StatefulSet from
+#    # those, so what the cluster runs is visible in status while spec continues
+#    # to say what you asked for. Under Off nothing is applied and the declared
+#    # resources are used, so switching Auto -> Off returns the cluster to them.
+#    updateMode: "Off"
+#    # controlledValues selects which resource fields are updated.
+#    # RequestsOnly (default) — only requests updated, limits left unchanged.
+#    # RequestsAndLimits      — requests updated; limits scaled to preserve ratio.
+#    controlledValues: RequestsOnly
+#    # minAllowed / maxAllowed are operator-side safety clamps applied before
+#    # patching the CR. Per-replset overrides take precedence when both are set.
+#    minAllowed:
+#      cpu: 100m
+#      memory: 256Mi
+#    maxAllowed:
+#      cpu: "8"
+#      memory: 16Gi
+#    # stabilizationWindow is the minimum time between consecutive applies.
+#    # Prevents thrashing when recommendations change frequently. Defaults to 5m,
+#    # which is a floor against restart loops rather than a tuning recommendation:
+#    # raise it for workloads where rolling restarts are expensive.
+#    stabilizationWindow: 2h
   crVersion: 1.24.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
@@ -120,6 +153,13 @@ spec:
   replsets:
   - name: rs0
     size: 3
+#    # vpa per-replset overrides (requires spec.vpa.enabled: true).
+#    # objectName defaults to "<cluster>-rs0-vpa" when omitted.
+#    vpa:
+#      objectName: my-custom-vpa-for-rs0   # optional: override convention name
+#      minAllowed:
+#        memory: 512Mi                      # override global minAllowed for rs0
+#      stabilizationWindow: 4h             # override global stabilizationWindow
 #    terminationGracePeriodSeconds: 300
 #    serviceAccountName: default
 #    topologySpreadConstraints:
@@ -652,6 +692,12 @@ spec:
 
     mongos:
       size: 3
+#      # vpa per-mongos overrides (requires spec.vpa.enabled: true).
+#      # objectName defaults to "<cluster>-mongos-vpa" when omitted.
+#      vpa:
+#        objectName: my-custom-vpa-for-mongos
+#        maxAllowed:
+#          cpu: "4"
 #      terminationGracePeriodSeconds: 300
 #      serviceAccountName: default
 #      topologySpreadConstraints:

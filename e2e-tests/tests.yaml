@@ -619,3 +619,23 @@ tests:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+
+  vpa:
+    suites: [pr, release]
+    operatorModes: [cluster-wide]
+    groups: [core]
+
+  vpa-goldilocks:
+    suites: [release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  vpa-sharded:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, sharding]
+
+  vpa-validation:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
