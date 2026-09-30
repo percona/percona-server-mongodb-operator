@@ -1037,7 +1037,7 @@ spec:
 #        volumeSnapshotClass: YOUR-VOLUME-SNAPSHOT-CLASS
   logcollector:
     enabled: true
-    image: percona/fluentbit:5.1.1-1
+    image: percona/fluentbit:5.1.2-1
 #    configuration: |
 #      [SERVICE]
 #          Flush        1
