@@ -94,7 +94,7 @@ spec:
         - configMapRef:
             name: test-configmap-cfg
             optional: true
-        image: percona/percona-server-mongodb:8.0.26-11
+        image: percona/percona-server-mongodb:8.0.32-14
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -218,7 +218,7 @@ spec:
         - mountPath: /data/db
           name: mongod-data
       - name: logs
-        image: percona/fluentbit:5.0.9-1
+        image: percona/fluentbit:5.1.1-1
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "fluent-bit" ]
         env:
@@ -244,7 +244,7 @@ spec:
           - mountPath: /opt/percona/logcollector/fluentbit/custom
             name: log-collector-volume
       - name: logrotate
-        image: percona/fluentbit:5.0.9-1
+        image: percona/fluentbit:5.1.1-1
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "logrotate" ]
         env:
@@ -276,7 +276,7 @@ spec:
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: percona/percona-server-mongodb-operator:1.23.0
+        image: percona/percona-server-mongodb-operator:1.23.1
         imagePullPolicy: Always
         name: mongo-init
         resources:

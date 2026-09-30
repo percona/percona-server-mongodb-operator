@@ -1747,7 +1747,18 @@ destroy_cert_manager() {
 		return
 	fi
 
-	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" 2>/dev/null || :
+
+	# Ensure webhook configurations and CRDs are removed even if the manifest
+	# download or bulk delete failed. Leftover CRDs with a registered webhook
+	# cause the operator to detect cert-manager as "installed but not ready"
+	# and skip the manual TLS fallback.
+	kubectl_bin delete mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found 2>/dev/null || :
+	kubectl_bin delete validatingwebhookconfiguration cert-manager-webhook --ignore-not-found 2>/dev/null || :
+	for crd in certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io; do
+		kubectl_bin delete crd "$crd" --ignore-not-found 2>/dev/null || :
+	done
+	kubectl_bin delete namespace cert-manager --ignore-not-found 2>/dev/null || :
 }
 
 get_backup_dest() {
