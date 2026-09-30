@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -1407,8 +1408,7 @@ func deleteIncremetalChainImpl(ctx context.Context, conn connect.Client, bcp *Ba
 		return errors.Wrap(err, "get storage")
 	}
 
-	for i := len(all) - 1; i >= 0; i-- {
-		bcp := all[i]
+	for _, bcp := range slices.Backward(all) {
 
 		err = backup.DeleteBackupFiles(stg, bcp.Name)
 		if err != nil {
