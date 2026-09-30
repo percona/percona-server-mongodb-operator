@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -38,6 +39,10 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		new(mcs.ServiceImport),
 		new(mcs.ServiceImportList),
 	)
+
+	if err := cmscheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
