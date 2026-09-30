@@ -386,6 +386,76 @@ void clusterRunner(String cluster) {
     }
 }
 
+void collectDebugLogs(String testName, String clusterSuffix) {
+    try {
+        sh """
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+            export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
+            DEBUG_LOG=e2e-tests/logs/${testName}-debug.log
+
+            {
+                echo "=== DEBUG LOGS FOR ${testName} (collected at \$(date -u)) ==="
+
+                NAMESPACE=""
+                if [ -f "\$PYTEST_NAMESPACE_FILE" ]; then
+                    NAMESPACE=\$(cat "\$PYTEST_NAMESPACE_FILE" | tail -1)
+                fi
+                if [ -z "\$NAMESPACE" ]; then
+                    NAMESPACE=\$(kubectl get namespaces --no-headers 2>/dev/null | awk '{print \$1}' | grep -vE '^kube-|^default\$|^gke-|^gmp-' | head -1)
+                fi
+                echo "Namespace: \$NAMESPACE"
+
+                echo ""
+                echo "=== PSMDB Objects ==="
+                kubectl get psmdb --all-namespaces -o wide 2>&1 || true
+
+                if [ -n "\$NAMESPACE" ]; then
+                    echo ""
+                    echo "=== PSMDB Describe ==="
+                    for obj in \$(kubectl get psmdb -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== StatefulSets ==="
+                    kubectl get sts -n "\$NAMESPACE" -o wide 2>&1 || true
+                    for obj in \$(kubectl get sts -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== Pods ==="
+                    kubectl get pods -n "\$NAMESPACE" -o wide 2>&1 || true
+
+                    echo ""
+                    echo "=== Pod Events ==="
+                    kubectl get events -n "\$NAMESPACE" --sort-by='.lastTimestamp' 2>&1 || true
+
+                    echo ""
+                    echo "=== Operator Logs (last 100 lines) ==="
+                    OPERATOR_NS=\$(kubectl get deployments --all-namespaces 2>/dev/null | grep percona-server-mongodb-operator | awk '{print \$1}' | head -1)
+                    if [ -n "\$OPERATOR_NS" ]; then
+                        OPERATOR_POD=\$(kubectl get pods -n "\$OPERATOR_NS" -l name=percona-server-mongodb-operator -o name 2>/dev/null | head -1)
+                        if [ -n "\$OPERATOR_POD" ]; then
+                            kubectl logs -n "\$OPERATOR_NS" "\$OPERATOR_POD" --tail=100 2>&1 || true
+                        fi
+                    fi
+                fi
+
+                echo ""
+                echo "=== Cert-Manager Resources ==="
+                kubectl get crd 2>/dev/null | grep cert-manager || echo "No cert-manager CRDs"
+                kubectl get validatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager validating webhooks"
+                kubectl get mutatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager mutating webhooks"
+            } > "\$DEBUG_LOG" 2>&1
+        """
+    } catch (debugExc) {
+        echo "Failed to collect debug logs for $testName: ${debugExc.message}"
+    }
+}
+
 void runTest(Integer TEST_ID) {
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
@@ -425,6 +495,7 @@ BASH
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
             echo "Test $testName timed out!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
             currentBuild.result = 'FAILURE'
         } else {
@@ -439,9 +510,11 @@ BASH
         // (error), not a test assertion failure, so the report shows the right icon.
         if (exc.message?.contains('exit code 143')) {
             echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
         } else {
             echo "Test $testName has failed!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "failure"
         }
         currentBuild.result = 'FAILURE'
@@ -451,6 +524,7 @@ BASH
         def durationSec = (timeStop - timeStart) / 1000
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
+        pushLogFile("${testName}-debug")
         echo "The $testName test was finished!"
     }
 }
@@ -747,7 +821,7 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 5, unit: 'HOURS')
+                timeout(time: 7, unit: 'HOURS')
             }
             steps {
                 script {
