@@ -191,7 +191,7 @@ func TestMongosContainer(t *testing.T) {
 
 	// Basic container fields
 	assert.Equal(t, "mongos", container.Name)
-	assert.Equal(t, "percona/percona-server-mongodb:8.0.26-11", container.Image)
+	assert.Equal(t, "percona/percona-server-mongodb:8.0.32-14", container.Image)
 	assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	assert.Equal(t, "/data/db", container.WorkingDir)
 
