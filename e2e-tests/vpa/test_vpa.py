@@ -197,12 +197,19 @@ class TestVPA:
         """
         applied = get_last_applied_at("rs0", CLUSTER)
         assert applied, "nothing has been applied yet, so there is nothing to hold steady"
+        observed = get_vpa_status("rs0.lastObservedAt", CLUSTER)
+        assert observed, "no observation recorded yet"
 
         # Three windows: a per-window re-commit would be unmistakable.
         time.sleep(STABILIZATION_WINDOW * 3 + 10)
 
         assert get_last_applied_at("rs0", CLUSTER) == applied, (
             "lastAppliedAt advanced although the recommendation never changed"
+        )
+        # lastObservedAt is written on every reconcile unless it too is
+        # change-driven, so this is the assertion that catches status churn.
+        assert get_vpa_status("rs0.lastObservedAt", CLUSTER) == observed, (
+            "lastObservedAt advanced although the recommendation never changed"
         )
         # Steady state is quiet, not "waiting for the window to pass".
         assert get_vpa_status("rs0.message", CLUSTER) == "", (
