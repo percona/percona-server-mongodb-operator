@@ -113,6 +113,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 mgr.GetClient(),
+		apiReader:              mgr.GetAPIReader(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
 		reconcileIn:            getReconcileInterval(),
@@ -231,6 +232,7 @@ type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client     client.Client
+	apiReader  client.Reader
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 

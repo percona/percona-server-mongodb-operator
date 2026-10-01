@@ -53,6 +53,11 @@ spec:
 #    # which is a floor against restart loops rather than a tuning recommendation:
 #    # raise it for workloads where rolling restarts are expensive.
 #    stabilizationWindow: 2h
+#    # inPlaceResize resizes running pods in place (Kubernetes 1.33+) instead of
+#    # recreating them, so applies cause no restarts or elections. Pods are still
+#    # recreated when a resize is not possible. Toggling it causes one rolling
+#    # restart. Keep updatePolicy.updateMode Off on the VPA objects.
+#    inPlaceResize: false
   crVersion: 1.24.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always

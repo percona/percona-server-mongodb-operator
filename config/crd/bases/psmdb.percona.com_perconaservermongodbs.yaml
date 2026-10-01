@@ -30060,6 +30060,8 @@ spec:
                     type: string
                   enabled:
                     type: boolean
+                  inPlaceResize:
+                    type: boolean
                   maxAllowed:
                     additionalProperties:
                       anyOf:

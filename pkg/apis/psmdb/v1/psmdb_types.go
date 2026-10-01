@@ -2211,6 +2211,19 @@ type VPASpec struct {
 	// operator reconciles. Raise it for workloads where restarts are expensive.
 	// +kubebuilder:default="5m"
 	StabilizationWindow metav1.Duration `json:"stabilizationWindow,omitempty"`
+
+	// InPlaceResize applies committed resources by resizing running pods in place
+	// instead of recreating them, and falls back to recreating a pod when the
+	// resize is not possible. It requires Kubernetes 1.33+ and updateStrategy
+	// SmartUpdate, and only takes effect with updateMode Auto.
+	//
+	// Enabling or disabling it changes how the WiredTiger cache size is passed
+	// to mongod, which causes one rolling restart. While it is enabled, applies
+	// no longer restart pods, so stabilizationWindow can be lowered.
+	//
+	// The VerticalPodAutoscaler objects must keep updatePolicy.updateMode Off,
+	// otherwise the VPA updater evicts or resizes pods as well.
+	InPlaceResize bool `json:"inPlaceResize,omitempty"`
 }
 
 // ComponentVPASpec provides per-component VPA configuration that overrides the cluster-wide VPASpec.
@@ -2284,4 +2297,15 @@ func (cr *PerconaServerMongoDB) VPAResources(
 		return declared
 	}
 	return *s.Resources
+}
+
+// VPAInPlaceResizeEnabled reports whether VPA-committed resources are applied to
+// running pods with in-place resize rather than by recreating them.
+func (cr *PerconaServerMongoDB) VPAInPlaceResizeEnabled() bool {
+	return cr.CompareVersion("1.24.0") >= 0 &&
+		cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType &&
+		cr.Spec.VPA != nil &&
+		cr.Spec.VPA.Enabled &&
+		cr.Spec.VPA.UpdateMode == VPAUpdateModeAuto &&
+		cr.Spec.VPA.InPlaceResize
 }
