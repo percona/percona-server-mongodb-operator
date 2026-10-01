@@ -58,17 +58,17 @@ def get_cloud_secret_default(conf_dir: Path | None = None) -> str:
 def apply_s3_storage_secrets(conf_dir: str) -> None:
     """Apply secrets for cloud storages."""
     if not env_bool("SKIP_BACKUPS_TO_AWS_GCP_AZURE"):
-        logger.info("Creating secrets for cloud storages (minio + cloud)")
+        logger.info("Creating secrets for cloud storages (s3-storage + cloud)")
         kubectl_bin(
             "apply",
             "-f",
-            f"{conf_dir}/minio-secret.yml",
+            f"{conf_dir}/s3-secret.yml",
             "-f",
             f"{conf_dir}/cloud-secret.yml",
         )
     else:
-        logger.info("Creating secrets for cloud storages (minio only)")
-        kubectl_bin("apply", "-f", f"{conf_dir}/minio-secret.yml")
+        logger.info("Creating secrets for cloud storages (s3-storage only)")
+        kubectl_bin("apply", "-f", f"{conf_dir}/s3-secret.yml")
 
 
 def setup_gcs_credentials(secret_name: str = "gcp-cs-secret") -> bool:
