@@ -238,7 +238,7 @@ images. It defaults to `docker.io`.
 * `SKIP_BACKUPS_TO_AWS_GCP_AZURE` - skips cloud backup tests, `1` by default when cloud credentials are unavailable
 * `UPDATE_COMPARE_FILES=1` - replaces expected resource files with the current Kubernetes output
 * `OPERATOR_NS` - deploys the operator in a separate namespace
-* `CERT_MANAGER_VER`, `MINIO_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
+* `CERT_MANAGER_VER`, `SEAWEEDFS_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
 
 ### Using automatic clean-up after testing
 
@@ -260,5 +260,5 @@ Making backups [on S3-compatible storage](https://www.percona.com/doc/kubernetes
 SKIP_BACKUPS_TO_AWS_GCP_AZURE=1
 ```
 
-The backups tests will use only [MinIO](https://min.io/) if this variable is declared,
-which is enough for local testing.
+The backups tests will use only the in-cluster [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
+S3-compatible storage if this variable is declared, which is enough for local testing.

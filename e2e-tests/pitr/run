@@ -192,13 +192,13 @@ function get_time_now() {
 
 main() {
 	create_infra $namespace
-	deploy_minio
+	deploy_s3_storage
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml" \
-		-f $conf_dir/minio-secret.yml
+		-f $conf_dir/s3-secret.yml
 
 	cluster="some-name-rs0"
 	desc "create first PSMDB cluster $cluster"
@@ -216,41 +216,41 @@ main() {
 	wait_backup_agent $cluster-1
 	wait_backup_agent $cluster-2
 
-	backup_name_minio="backup-minio"
+	backup_name_local_s3="backup-local-s3"
 
 	run_mongo \
 		'use myApp\n db.test2.insert({ x: 100501 })' \
 		"myApp:myPass@$cluster.$namespace"
 
 	desc 'restore pitr date'
-	run_backup $backup_name_minio 0
+	run_backup $backup_name_local_s3 0
 	write_document "-2nd"
 	sleep 2
 	time_now=$(get_time_now)
-	check_recovery $backup_name_minio-0 date "$time_now" "-2nd" "" "${cluster/-rs0/}" "test2"
+	check_recovery $backup_name_local_s3-0 date "$time_now" "-2nd" "" "${cluster/-rs0/}" "test2"
 
 	desc 'restore pitr latest'
-	run_backup $backup_name_minio 1
-	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-1"
-	check_recovery $backup_name_minio-1 latest "" "-3rd" "" "${cluster/-rs0/}"
+	run_backup $backup_name_local_s3 1
+	compare_latest_restorable_time "${cluster}" "${backup_name_local_s3}-1"
+	check_recovery $backup_name_local_s3-1 latest "" "-3rd" "" "${cluster/-rs0/}"
 
 	desc 'pitr restore with namespace remap'
-	run_backup $backup_name_minio 2
-	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-2"
+	run_backup $backup_name_local_s3 2
+	compare_latest_restorable_time "${cluster}" "${backup_name_local_s3}-2"
 	time_now=$(get_time_now)
-	run_recovery_check_namespace_remap "$backup_name_minio-2" "${time_now}" "${cluster/-rs0/}" "myApp" "test" "testRemapped"
+	run_recovery_check_namespace_remap "$backup_name_local_s3-2" "${time_now}" "${cluster/-rs0/}" "myApp" "test" "testRemapped"
 
 	desc 'restore pitr date using backupSource'
 	reset_collection
-	run_backup $backup_name_minio 3
-	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-3"
+	run_backup $backup_name_local_s3 3
+	compare_latest_restorable_time "${cluster}" "${backup_name_local_s3}-3"
 	time_now=$(get_time_now)
-	check_recovery "${backup_name_minio}-3" date "$time_now" "" backupSource "${cluster/-rs0/}"
+	check_recovery "${backup_name_local_s3}-3" date "$time_now" "" backupSource "${cluster/-rs0/}"
 
 	desc 'restore pitr latest using backupSource'
-	run_backup $backup_name_minio 4
-	compare_latest_restorable_time "${cluster}" "${backup_name_minio}-4"
-	check_recovery "${backup_name_minio}-4" latest "" "-4th" backupSource "${cluster/-rs0/}"
+	run_backup $backup_name_local_s3 4
+	compare_latest_restorable_time "${cluster}" "${backup_name_local_s3}-4"
+	check_recovery "${backup_name_local_s3}-4" latest "" "-4th" backupSource "${cluster/-rs0/}"
 
 	desc 'restore pitr using backupSource on second cluster with another prefix in storage'
 
@@ -264,14 +264,14 @@ main() {
 		'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
 		"userAdmin:userAdmin123456@$second_cluster.$namespace"
 	sleep 2
-	check_recovery "${backup_name_minio}-4" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_minio}-4-second-cluster" "restore2.yml"
+	check_recovery "${backup_name_local_s3}-4" latest "" "-4th" backupSource "${second_cluster/-rs0/}" "" "${backup_name_local_s3}-4-second-cluster" "restore2.yml"
 
-	backup_name_minio_2="backup-minio2"
-	run_backup $backup_name_minio_2 0
+	backup_name_local_s3_2="backup-local-s3-2"
+	run_backup $backup_name_local_s3_2 0
 	time_now=$(get_time_now)
 	write_document "-5th" "$second_cluster"
 	sleep 2
-	check_recovery $backup_name_minio_2-0 date "$time_now" "-4th" "" "${second_cluster/-rs0/}"
+	check_recovery $backup_name_local_s3_2-0 date "$time_now" "-4th" "" "${second_cluster/-rs0/}"
 
 	kubectl patch psmdb "some-name" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 	kubectl patch psmdb "${second_cluster/-rs0/}" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'

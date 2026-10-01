@@ -15,9 +15,9 @@ function setup_infra() {
 	kubectl_bin apply \
 		-f ${conf_dir}/client.yml \
 		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 
-	deploy_minio
+	deploy_s3_storage
 }
 
 function setup_source_cluster() {
@@ -42,11 +42,11 @@ function setup_source_cluster() {
 		'' \
 		false \
 		rs0
-	run_backup "minio" "backup-minio-physical" "physical"
-	wait_backup "backup-minio-physical"
+	run_backup "local-s3" "backup-local-s3-physical" "physical"
+	wait_backup "backup-local-s3-physical"
 
-	run_backup "minio" "backup-minio-logical"
-	wait_backup "backup-minio-logical"
+	run_backup "local-s3" "backup-local-s3-logical"
+	wait_backup "backup-local-s3-logical"
 
 	log "writing more data for PiTR"
 	run_mongo \
@@ -76,8 +76,8 @@ function setup_target_cluster() {
 
 function test_restores() {
 	desc "CASE 1: Physical restore with replset remapping"
-	run_restore backup-minio-physical
-	wait_restore backup-minio-physical ${target_cluster}
+	run_restore backup-local-s3-physical
+	wait_restore backup-local-s3-physical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongo_cmd \
 		"find" \
@@ -97,8 +97,8 @@ function test_restores() {
 		"mongodb" ".svc.cluster.local" "" "replset0"
 
 	desc "CASE 2: Logical restore + PiTR with replset remapping"
-	run_restore backup-minio-logical ${test_dir}/conf/restore-pitr.yml
-	wait_restore backup-minio-logical ${target_cluster}
+	run_restore backup-local-s3-logical ${test_dir}/conf/restore-pitr.yml
+	wait_restore backup-local-s3-logical ${target_cluster}
 	wait_cluster_consistency "${target_cluster}"
 	compare_mongo_cmd \
 		"find" \
