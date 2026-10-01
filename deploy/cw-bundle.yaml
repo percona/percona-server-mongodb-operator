@@ -32295,6 +32295,8 @@ spec:
                     type: string
                   enabled:
                     type: boolean
+                  inPlaceResize:
+                    type: boolean
                   maxAllowed:
                     additionalProperties:
                       anyOf:
@@ -32710,6 +32712,20 @@ rules:
   - autoscaling.k8s.io
   resources:
   - verticalpodautoscalers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/resize
+  verbs:
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
   verbs:
   - get
   - list
