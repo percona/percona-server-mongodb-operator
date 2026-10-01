@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/pkg/errors"
@@ -344,7 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 	}
 
 	for _, item := range recs {
-		rec, ok := item.(map[string]interface{})
+		rec, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -368,7 +369,7 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 }
 
 // parseResourceList converts an unstructured map (from VPA status) to corev1.ResourceList.
-func parseResourceList(m map[string]interface{}) corev1.ResourceList {
+func parseResourceList(m map[string]any) corev1.ResourceList {
 	rl := make(corev1.ResourceList, len(m))
 	for k, v := range m {
 		str, ok := v.(string)
@@ -496,9 +497,7 @@ func (r *ReconcilePerconaServerMongoDB) commitVPAResources(
 	if requests == nil {
 		requests = make(corev1.ResourceList)
 	}
-	for res, val := range clamped {
-		requests[res] = val
-	}
+	maps.Copy(requests, clamped)
 
 	effective := corev1.ResourceRequirements{Requests: requests}
 	if limits != nil {

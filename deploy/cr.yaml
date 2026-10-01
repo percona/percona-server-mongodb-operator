@@ -39,6 +39,19 @@ spec:
 #    # controlledValues selects which resource fields are updated.
 #    # RequestsOnly (default) — only requests updated, limits left unchanged.
 #    # RequestsAndLimits      — requests updated; limits scaled to preserve ratio.
+#    #
+#    # RequestsOnly caps requests at the declared limits, so a resource only
+#    # grows while there is headroom between its request and its limit. The
+#    # replset below ships with memory requests and limits both at 1Gi, which
+#    # leaves no headroom: under RequestsOnly its memory can never grow, however
+#    # large a recommendation arrives. CPU can, because 300m sits below 600m.
+#    # Raise the memory limit, or use RequestsAndLimits, to let memory scale.
+#    #
+#    # The same applies to any Guaranteed QoS pod (requests equal to limits for
+#    # every resource): RequestsOnly cannot grow it, and a downward
+#    # recommendation drops requests below limits and demotes it to Burstable.
+#    # Use RequestsAndLimits for those — the 1:1 ratio is preserved, so the pod
+#    # stays Guaranteed.
 #    controlledValues: RequestsOnly
 #    # minAllowed / maxAllowed are operator-side safety clamps applied before
 #    # patching the CR. Per-replset overrides take precedence when both are set.

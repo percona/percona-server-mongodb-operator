@@ -429,13 +429,13 @@ func vpaObject(name string, recs map[string]corev1.ResourceList) *unstructured.U
 	if recs == nil {
 		return obj
 	}
-	items := make([]interface{}, 0, len(recs))
+	items := make([]any, 0, len(recs))
 	for container, rl := range recs {
-		target := map[string]interface{}{}
+		target := map[string]any{}
 		for res, q := range rl {
 			target[string(res)] = q.String()
 		}
-		items = append(items, map[string]interface{}{
+		items = append(items, map[string]any{
 			"containerName": container,
 			"target":        target,
 		})
