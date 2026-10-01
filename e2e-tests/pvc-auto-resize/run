@@ -28,19 +28,35 @@ function fill_disk_to_threshold() {
 	local pod=$1
 	local threshold=$2
 	local size_mb=$3
+	# hidden and non-voting pods run mongod in a container named after their component
+	local container=${4:-mongod}
 
 	echo "Filling disk on ${pod} to approximately ${threshold}% (creating ${size_mb}MB file)"
 
-	kubectl_bin exec "${pod}" -c mongod -- bash -c "dd if=/dev/zero of=/data/db/fillfile bs=1M count=${size_mb} 2>/dev/null || true"
+	kubectl_bin exec "${pod}" -c "${container}" -- bash -c "dd if=/dev/zero of=/data/db/fillfile bs=1M count=${size_mb} 2>/dev/null || true"
 
 	local usage
-	usage=$(kubectl_bin exec "${pod}" -c mongod -- bash -c "df /data/db | tail -1 | awk '{print \$5}' | sed 's/%//'")
+	usage=$(kubectl_bin exec "${pod}" -c "${container}" -- bash -c "df /data/db | tail -1 | awk '{print \$5}' | sed 's/%//'")
 	echo "Current disk usage on ${pod}: ${usage}%"
 }
 
 function get_pvc_size() {
 	local pvc=$1
 	kubectl_bin get pvc "${pvc}" -o jsonpath='{.status.capacity.storage}'
+}
+
+function check_pvc_size() {
+	local pvc=$1
+	local expected=$2
+
+	local size
+	size=$(get_pvc_size "${pvc}")
+	if [[ ${size} != "${expected}" ]]; then
+		echo "ERROR: PVC ${pvc} size is ${size}, expected ${expected}"
+		exit 1
+	fi
+
+	echo "PVC ${pvc} size is ${size}"
 }
 
 function wait_for_auto_resize() {
@@ -132,14 +148,20 @@ else
 	spinup_psmdb "${cluster}-rs0" "$test_dir/conf/$cluster.yml"
 fi
 
-desc 'verify initial PVC size is 1Gi'
-initial_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
-echo "Initial PVC size: ${initial_size}"
+# every replset component that owns a mongod-data PVC has to be autoscaled.
+# arbiters are not in the list on purpose: they mount mongod-data as an emptyDir
+rs_pvcs=(
+	"mongod-data-${cluster}-rs0-0"
+	"mongod-data-${cluster}-rs0-1"
+	"mongod-data-${cluster}-rs0-2"
+)
+hidden_pvc="mongod-data-${cluster}-rs0-hidden-0"
+nv_pvc="mongod-data-${cluster}-rs0-nv-0"
 
-if [[ ${initial_size} != "1Gi" ]]; then
-	echo "ERROR: Initial PVC size should be 1Gi, got ${initial_size}"
-	exit 1
-fi
+desc 'verify initial PVC size is 1Gi for every component'
+for pvc in "${rs_pvcs[@]}" "${hidden_pvc}" "${nv_pvc}"; do
+	check_pvc_size "${pvc}" "1Gi"
+done
 
 desc 'fill disk to trigger autoscaling threshold 50 percent'
 # 1Gi = 1024MB, we want to fill to ~60% to trigger the 50% threshold
@@ -147,14 +169,34 @@ desc 'fill disk to trigger autoscaling threshold 50 percent'
 fill_disk_to_threshold "${cluster}-rs0-0" 50 600
 
 desc 'wait for auto-resize to trigger'
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "3Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "3Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "3Gi" 60 10
+for pvc in "${rs_pvcs[@]}"; do
+	wait_for_auto_resize "${pvc}" "3Gi" 60 10
+done
 
 desc 'verify autoscaling status is updated'
-check_autoscaling_status "${cluster}" 1 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+check_autoscaling_status "${cluster}" 1 "${rs_pvcs[@]}"
 
 desc 'wait for cluster consistency after resize'
+wait_cluster_consistency "$cluster" 64
+
+desc 'verify the replset resize left hidden and non-voting PVCs untouched'
+# each component carries its own volumeSpec, so filling a replset disk must not
+# grow the volumes of the other components
+check_pvc_size "${hidden_pvc}" "1Gi"
+check_pvc_size "${nv_pvc}" "1Gi"
+
+desc 'fill hidden and non-voting disks to trigger autoscaling threshold 50 percent'
+fill_disk_to_threshold "${cluster}-rs0-hidden-0" 50 600 "mongod-hidden"
+fill_disk_to_threshold "${cluster}-rs0-nv-0" 50 600 "mongod-nv"
+
+desc 'wait for hidden and non-voting auto-resize to trigger'
+wait_for_auto_resize "${hidden_pvc}" "3Gi" 60 10
+wait_for_auto_resize "${nv_pvc}" "3Gi" 60 10
+
+desc 'verify hidden and non-voting autoscaling status is updated'
+check_autoscaling_status "${cluster}" 1 "${hidden_pvc}" "${nv_pvc}"
+
+desc 'wait for cluster consistency after hidden and non-voting resize'
 wait_cluster_consistency "$cluster" 64
 
 desc 'verify cluster is ready'
@@ -170,9 +212,15 @@ if [[ -n "$OPENSHIFT" || "$EKS" -eq 1 ]]; then
 	exit 0
 fi
 
+# the hidden and non-voting volumes stay at 3Gi from here on: 600MB is only 20%
+# of 3Gi, well under the 50% threshold, so they hold 6Gi of the quota while the
+# replset volumes keep growing
+components_quota_gi=6
+
 desc 'test namespace resource quota enforcement'
-# The cluster has 3 replicas with 3Gi PVCs = 9Gi total
-apply_resourcequota 9Gi
+# The cluster has 3 replicas with 3Gi PVCs = 9Gi, plus 6Gi held by the hidden
+# and non-voting volumes
+apply_resourcequota $((9 + components_quota_gi))Gi
 
 echo "Filling disk again to trigger autoscaling with quota limit"
 fill_disk_to_threshold "${cluster}-rs0-0" 50 1700
@@ -186,32 +234,26 @@ fi
 
 desc 'increase quota to allow further autoscaling'
 # Now increase quota to allow next resize step (3 replicas * 5Gi = 15Gi)
-apply_resourcequota 15Gi
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "5Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "5Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "5Gi" 60 10
+apply_resourcequota $((15 + components_quota_gi))Gi
+for pvc in "${rs_pvcs[@]}"; do
+	wait_for_auto_resize "${pvc}" "5Gi" 60 10
+done
 
 desc 'verify cluster consistency after quota test'
 wait_cluster_consistency "$cluster" 64
 
 desc 'test maxSize limit'
 # Increase quota to allow maxSize testing (3 replicas * 10Gi maxSize = 30Gi)
-apply_resourcequota 30Gi
+apply_resourcequota $((30 + components_quota_gi))Gi
 echo "Continuing to fill disk to test maxSize enforcement"
-fill_disk_to_threshold "${cluster}-rs0-0" 50 2900
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "7Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "7Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "7Gi" 60 10
+for step in "2900 7Gi" "4000 9Gi" "5200 10Gi"; do
+	read -r fill_mb expected_size <<<"${step}"
 
-fill_disk_to_threshold "${cluster}-rs0-0" 50 4000
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "9Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "9Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "9Gi" 60 10
-
-fill_disk_to_threshold "${cluster}-rs0-0" 50 5200
-wait_for_auto_resize "mongod-data-${cluster}-rs0-0" "10Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-1" "10Gi" 60 10
-wait_for_auto_resize "mongod-data-${cluster}-rs0-2" "10Gi" 60 10
+	fill_disk_to_threshold "${cluster}-rs0-0" 50 "${fill_mb}"
+	for pvc in "${rs_pvcs[@]}"; do
+		wait_for_auto_resize "${pvc}" "${expected_size}" 60 10
+	done
+done
 
 final_size=$(get_pvc_size "mongod-data-${cluster}-rs0-0")
 if [[ ${final_size} != "10Gi" ]]; then
@@ -220,7 +262,14 @@ if [[ ${final_size} != "10Gi" ]]; then
 fi
 
 desc 'verify final autoscaling status'
-check_autoscaling_status "${cluster}" 5 "mongod-data-${cluster}-rs0-0" "mongod-data-${cluster}-rs0-1" "mongod-data-${cluster}-rs0-2"
+check_autoscaling_status "${cluster}" 5 "${rs_pvcs[@]}"
+
+desc 'verify hidden and non-voting volumes stayed at their own size'
+# they were resized once and never refilled, so the replset growth must not have
+# dragged them along
+check_pvc_size "${hidden_pvc}" "3Gi"
+check_pvc_size "${nv_pvc}" "3Gi"
+check_autoscaling_status "${cluster}" 1 "${hidden_pvc}" "${nv_pvc}"
 
 wait_cluster_consistency "$cluster" 64
 

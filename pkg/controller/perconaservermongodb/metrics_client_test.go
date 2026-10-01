@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 // mockClientCmd is a mock implementation of the ClientCmd interface for testing
@@ -165,7 +167,7 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				},
 			}
 
-			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName)
+			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName, naming.ContainerMongod)
 
 			if tt.expectedErr {
 				assert.Error(t, err)
@@ -178,6 +180,49 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				assert.Equal(t, tt.expected.TotalBytes, result.TotalBytes)
 				assert.Equal(t, tt.expected.UsagePercent, result.UsagePercent)
 			}
+		})
+	}
+}
+
+// TestGetPVCUsageFromMetricsContainer ensures df is executed in the container
+// that actually runs mongod. Hidden, non-voting and arbiter pods name it after
+// their component, so a hardcoded "mongod" makes exec fail there.
+func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		container string
+		expected  string
+	}{
+		"mongod":                     {container: naming.ContainerMongod, expected: "mongod"},
+		"hidden":                     {container: naming.ContainerHidden, expected: "mongod-hidden"},
+		"non-voting":                 {container: naming.ContainerNonVoting, expected: "mongod-nv"},
+		"arbiter":                    {container: naming.ContainerArbiter, expected: "mongod-arbiter"},
+		"empty falls back to mongod": {container: "", expected: "mongod"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var gotContainer string
+
+			r := &ReconcilePerconaServerMongoDB{
+				clientcmd: &mockClientCmd{
+					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+						gotContainer = containerName
+						_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
+/dev/sdb        3094126592  221798400  2855550976   8% /data/db`))
+						return nil
+					},
+				},
+			}
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod-0", Namespace: "test-namespace"},
+			}
+
+			_, err := r.getPVCUsageFromMetrics(ctx, pod, "mongod-data-test-pod-0", tt.container)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, gotContainer)
 		})
 	}
 }
