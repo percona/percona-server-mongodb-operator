@@ -621,9 +621,26 @@ tests:
     groups: [core]
 
   vpa:
+    # Cluster-wide only: test_two_namespaces_do_not_interfere needs the operator
+    # to watch a second namespace.
     suites: [pr, release]
     operatorModes: [cluster-wide]
     groups: [core]
+
+  vpa-inplace:
+    # The one VPA suite kept in both operator modes. No VPA logic branches on
+    # mode, but the namespaced and cluster-wide RBAC live in separate files
+    # (deploy/rbac.yaml, deploy/cw-rbac.yaml) and either could lose the
+    # autoscaling.k8s.io read grant on its own. This proves a namespaced
+    # operator can still read VerticalPodAutoscaler objects.
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  vpa-inplace-sharded:
+    suites: [pr, release]
+    operatorModes: [cluster-wide]
+    groups: [core, sharding]
 
   vpa-goldilocks:
     suites: [release]
@@ -631,11 +648,14 @@ tests:
     groups: [core]
 
   vpa-sharded:
-    suites: [pr, release]
+    # Release only: ~18m per run, and the component matrix it covers is also
+    # covered by vpa-inplace-sharded in a quarter of the time. What is unique
+    # here is the recreate path across sharded components.
+    suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core, sharding]
 
   vpa-validation:
     suites: [pr, release]
-    operatorModes: [cluster-wide, namespaced]
+    operatorModes: [cluster-wide]
     groups: [core]

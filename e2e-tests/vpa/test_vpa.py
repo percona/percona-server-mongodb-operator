@@ -28,7 +28,9 @@ from lib.vpa import (
     assert_requests,
     assert_spec_untouched,
     create_vpa_object,
+    get_committed_requests,
     get_last_applied_at,
+    get_vpa_status,
     install_vpa_crd,
     set_vpa_recommendation,
     wait_for_last_applied_at,
@@ -149,23 +151,67 @@ class TestVPA:
 
     @pytest.mark.dependency(depends=["TestVPA::test_recommendation_clamped_to_max_allowed"])
     def test_stabilization_window_delays_next_apply(self, config: VPAConfig) -> None:
-        """A recommendation arriving inside the window waits; it is applied once the window passes."""
+        """A recommendation arriving inside the window waits; it is applied once the window passes.
+
+        The window runs from the last *change*, so this test opens its own window
+        and follows it immediately with a second recommendation. It must not wait
+        for the cluster to converge in between: a rolling restart takes longer
+        than the window, so the second recommendation would arrive after it had
+        already expired and there would be nothing left to suppress.
+        """
         previous_apply = get_last_applied_at("rs0", CLUSTER)
+        set_vpa_recommendation(f"{CLUSTER}-rs0-vpa", "450m", "450Mi")
+        wait_for_new_apply("rs0", previous_apply, CLUSTER)
+        first_apply = get_last_applied_at("rs0", CLUSTER)
+
+        # Straight into a second recommendation, which lands inside the window
+        # the apply above just opened.
         set_vpa_recommendation(f"{CLUSTER}-rs0-vpa", "500m", "500Mi")
 
-        # Still inside the window: the clamped values from the previous scenario must hold.
         time.sleep(5)
-        assert_requests("rs0", "cpu", MAX_ALLOWED_CPU, CLUSTER)
-        assert_requests("rs0", "memory", MAX_ALLOWED_MEMORY, CLUSTER)
+        assert get_last_applied_at("rs0", CLUSTER) == first_apply, (
+            "a recommendation arriving inside the stabilization window was applied anyway"
+        )
+        assert get_committed_requests("rs0", "cpu", CLUSTER) == "450m", (
+            "the committed value moved while the stabilization window was still open"
+        )
 
+        # Once the window passes it goes through.
         time.sleep(STABILIZATION_WINDOW)
-        wait_for_new_apply("rs0", previous_apply, CLUSTER)
+        wait_for_new_apply("rs0", first_apply, CLUSTER)
         wait_for_requests("rs0", "cpu", "500m", CLUSTER)
         wait_for_requests("rs0", "memory", "500Mi", CLUSTER)
 
         _assert_cluster_ready(CLUSTER)
 
     @pytest.mark.dependency(depends=["TestVPA::test_stabilization_window_delays_next_apply"])
+    def test_unchanged_recommendation_is_not_reapplied(self, config: VPAConfig) -> None:
+        """A steady recommendation is committed once, not once per window.
+
+        A recommender holds a value steady for long stretches. If the operator
+        re-committed it every stabilization window, lastAppliedAt would read as
+        "last reconciled" rather than "last changed", status would churn on every
+        write, and the operator log would fill with apply/suppress transitions
+        forever. The previous test left the recommendation at 500m/500Mi and
+        nothing here touches it.
+        """
+        applied = get_last_applied_at("rs0", CLUSTER)
+        assert applied, "nothing has been applied yet, so there is nothing to hold steady"
+
+        # Three windows: a per-window re-commit would be unmistakable.
+        time.sleep(STABILIZATION_WINDOW * 3 + 10)
+
+        assert get_last_applied_at("rs0", CLUSTER) == applied, (
+            "lastAppliedAt advanced although the recommendation never changed"
+        )
+        # Steady state is quiet, not "waiting for the window to pass".
+        assert get_vpa_status("rs0.message", CLUSTER) == "", (
+            "a component with nothing to apply should carry no status message"
+        )
+        assert_requests("rs0", "cpu", "500m", CLUSTER)
+        assert_requests("rs0", "memory", "500Mi", CLUSTER)
+
+    @pytest.mark.dependency(depends=["TestVPA::test_unchanged_recommendation_is_not_reapplied"])
     def test_two_clusters_one_namespace_do_not_interfere(
         self, config: VPAConfig, test_paths: Paths
     ) -> None:

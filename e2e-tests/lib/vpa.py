@@ -21,6 +21,7 @@ Components map to the StatefulSet that carries them:
 """
 
 import logging
+import math
 
 from lib.kubectl import kubectl_bin
 from lib.utils import retry
@@ -333,3 +334,164 @@ def wait_for_new_apply(
         condition=lambda value: bool(value) and value > after,
     )
     return applied
+
+
+# ---------------------------------------------------------------------------
+# in-place resize helpers
+#
+# An in-place resize changes a running pod instead of replacing it, so the proof
+# it happened is that the pod's identity is unchanged: same uid, same container
+# restart count. A recreate changes both.
+# ---------------------------------------------------------------------------
+
+# floor(ratio * (limit - 1GiB)) / 1GiB, floored at MinWiredTigerCacheSizeGB.
+# Mirrors getWiredTigerCacheSizeGB in pkg/psmdb/container.go.
+GIB = 1024**3
+MIN_WT_CACHE_GB = 0.25
+
+
+def expected_wiredtiger_cache_bytes(limit_bytes: int, ratio: float) -> int:
+    """The cache size mongod should end up with for a given memory limit."""
+    size_gb = math.floor(ratio * (limit_bytes - GIB)) / GIB
+    size_gb = max(size_gb, MIN_WT_CACHE_GB)
+    # The operator passes whole megabytes to setParameter.
+    return int(size_gb * 1024) * 1024 * 1024
+
+
+def pod_identity(
+    pod: str, namespace: str | None = None, container: str = "mongod"
+) -> tuple[str, str]:
+    """Return (uid, restartCount) — both change when a pod is recreated.
+
+    container must name the component's own container: mongos pods have no
+    container called "mongod", and a wrong name silently yields an empty restart
+    count, which would compare equal and stop detecting restarts.
+    """
+    out = kubectl_bin(
+        "get",
+        *_ns_args(namespace),
+        "pod",
+        pod,
+        "-o",
+        "jsonpath={.metadata.uid}|"
+        f"{{.status.containerStatuses[?(@.name=='{container}')].restartCount}}",
+    ).strip()
+    uid, _, restarts = out.partition("|")
+    return uid, restarts
+
+
+def pod_resources(
+    pod: str,
+    resource: str,
+    kind: str = "requests",
+    namespace: str | None = None,
+    container: str = "mongod",
+) -> str:
+    """Read a resource the kubelet currently has applied to a pod's container.
+
+    container must match the component: mongod, mongos, mongod-nv or
+    mongod-hidden. A name that does not match any container returns "" rather
+    than erroring, so a wrong one looks like "the value never arrived".
+    """
+    return kubectl_bin(
+        "get",
+        *_ns_args(namespace),
+        "pod",
+        pod,
+        "-o",
+        f'jsonpath={{.spec.containers[?(@.name=="{container}")].resources.{kind}.{resource}}}',
+    ).strip()
+
+
+def wiredtiger_cache_bytes(client_pod: str, host: str, namespace: str | None = None) -> int:
+    """Ask a specific mongod what cache size it is actually running with.
+
+    Connects directly to one member rather than through the replica set, so the
+    answer is about that pod and not whichever node happens to be primary.
+    """
+    uri = (
+        f"mongodb://clusterAdmin:clusterAdmin123456@{host}:27017"
+        "/admin?ssl=false&directConnection=true"
+    )
+    out = kubectl_bin(
+        "exec",
+        *_ns_args(namespace),
+        client_pod,
+        "--",
+        "timeout",
+        "30",
+        "env",
+        "HOME=/tmp",
+        "mongosh",
+        uri,
+        "--quiet",
+        "--eval",
+        'db.serverStatus().wiredTiger.cache["maximum bytes configured"]',
+    )
+    for line in reversed(out.strip().splitlines()):
+        line = line.strip()
+        if line.isdigit():
+            return int(line)
+    raise AssertionError(f"could not read WiredTiger cache size from mongosh output: {out!r}")
+
+
+def wait_for_wiredtiger_cache(
+    client_pod: str,
+    host: str,
+    expected: int,
+    namespace: str | None = None,
+    max_attempts: int = 60,
+    delay: int = 5,
+) -> None:
+    """Wait until mongod reports the expected cache size.
+
+    The operator adjusts a running mongod with setParameter after resizing it, so
+    this lags the pod resize slightly.
+    """
+    logger.info(f"Waiting for {host} WiredTiger cache to reach {expected} bytes")
+
+    def read() -> int:
+        return wiredtiger_cache_bytes(client_pod, host, namespace)
+
+    def matches(value: int) -> bool:
+        return value == expected
+
+    retry(read, max_attempts=max_attempts, delay=delay, condition=matches)
+
+
+def wait_for_pod_resources(
+    pod: str,
+    resource: str,
+    expected: str,
+    kind: str = "requests",
+    namespace: str | None = None,
+    container: str = "mongod",
+    max_attempts: int = CONVERGE_ATTEMPTS,
+    delay: int = CONVERGE_DELAY,
+) -> None:
+    """Wait until the kubelet has applied a resource value to the running pod.
+
+    The StatefulSet is updated as soon as the operator commits, but individual
+    pods are moved to the new revision later, by the SmartUpdate loop. So a value
+    present on the StatefulSet is not yet present on the pod.
+    """
+    logger.info(f"Waiting for pod {pod} {kind}.{resource} == {expected}")
+
+    def read() -> str:
+        return pod_resources(pod, resource, kind, namespace, container)
+
+    def matches(value: str) -> bool:
+        return value == expected
+
+    retry(read, max_attempts=max_attempts, delay=delay, condition=matches)
+
+
+def pod_ip(pod: str, namespace: str | None = None) -> str:
+    """Pod IP, used to reach one mongod directly.
+
+    Non-voting and hidden members sit in their own StatefulSets, so their pod DNS
+    names differ from the replset's. Connecting by IP sidesteps that entirely.
+    """
+    return kubectl_bin(
+        "get", *_ns_args(namespace), "pod", pod, "-o", "jsonpath={.status.podIP}"
+    ).strip()

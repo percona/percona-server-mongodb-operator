@@ -138,33 +138,38 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	res, err := r.readVPARecommendation(ctx, cr.Namespace, vpaName, container)
 	if err != nil {
 		log.Error(err, "failed to read VPA recommendation", "vpa", vpaName, "component", statusKey)
-		r.recordVPAMessage(cr, statusKey, err.Error())
+		r.setVPAMessage(cr, statusKey, err.Error())
 		return nil
 	}
 
 	if res.state != vpaStateOK {
-		r.recordVPAMessage(cr, statusKey, res.message(container))
+		r.setVPAMessage(cr, statusKey, res.message(container))
 		return nil
 	}
 
 	r.recordVPAStatus(cr, statusKey, res.rec)
 
 	if cr.Spec.VPA.UpdateMode != api.VPAUpdateModeAuto {
-		log.V(1).Info("VPA recommendation recorded (Off mode)", "vpa", vpaName, "component", statusKey)
+		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
 		return nil
 	}
 	if !stabilizationWindowPassed(cr, statusKey, window) {
-		log.V(1).Info("stabilization window not yet passed, skipping apply",
-			"vpa", vpaName, "component", statusKey, "window", window)
+		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, window))
 		return nil
 	}
+
+	r.setVPAMessage(cr, statusKey, "")
 	return res.rec
 }
 
-// recordVPAMessage records why a component currently has no recommendation. The
-// last observed values are left in place so the history stays visible. The message
-// is logged only when it changes, so a persistent problem does not fill the log.
-func (r *ReconcilePerconaServerMongoDB) recordVPAMessage(
+// setVPAMessage records why a component is or is not applying recommendations,
+// and is the single owner of that field: every path through vpaRecommendationFor
+// sets it exactly once, passing "" when there is nothing to explain. Were it set
+// in one place and cleared in another, the two would alternate and log on every
+// reconcile. The message is logged only when it changes, so a steady state stays
+// quiet.
+func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	cr *api.PerconaServerMongoDB,
 	statusKey string,
 	message string,
@@ -174,11 +179,35 @@ func (r *ReconcilePerconaServerMongoDB) recordVPAMessage(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 	if s.Message != message {
-		logf.Log.WithName("VPA").Info("VPA recommendation unavailable",
-			"component", statusKey, "reason", message)
+		log := logf.Log.WithName("VPA")
+		if message == "" {
+			log.Info("VPA is applying recommendations for this component again",
+				"component", statusKey)
+		} else {
+			log.Info("VPA is not applying recommendations for this component",
+				"component", statusKey, "reason", message)
+		}
 	}
 	s.Message = message
 	cr.Status.VPAStatus[statusKey] = s
+}
+
+// stabilizationMessage says when the next apply becomes possible, so that a
+// component sitting still inside its window explains itself rather than looking
+// stalled.
+func stabilizationMessage(
+	cr *api.PerconaServerMongoDB,
+	statusKey string,
+	window time.Duration,
+) string {
+	s, ok := cr.Status.VPAStatus[statusKey]
+	if !ok || s.LastAppliedAt == nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		"recommendation recorded, next apply allowed after %s (stabilizationWindow %s)",
+		s.LastAppliedAt.Add(window).UTC().Format(time.RFC3339), window,
+	)
 }
 
 // vpaObjectName returns the VPA object name for a component.
@@ -378,20 +407,44 @@ func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	if cr.Status.VPAStatus == nil {
 		cr.Status.VPAStatus = make(map[string]api.VPAComponentStatus)
 	}
-	now := metav1.Now()
 	s := cr.Status.VPAStatus[statusKey]
-	if s.Message != "" {
-		logf.Log.WithName("VPA").Info("VPA recommendation available again", "component", statusKey)
-		s.Message = ""
-	}
-	s.LastObservedAt = &now
-	if cpu, ok := rec[corev1.ResourceCPU]; ok {
+
+	// Only record an observation that says something new. Writing the timestamp
+	// on every reconcile would make the status differ every time, so the API
+	// server could never collapse the update and every VPA-enabled cluster
+	// would bump its resourceVersion forever. lastObservedAt therefore means
+	// "the observed recommendation last changed", matching lastAppliedAt.
+	changed := s.LastObservedAt == nil
+	if cpu, ok := rec[corev1.ResourceCPU]; ok && !sameQuantityString(s.CPU, cpu) {
 		s.CPU = cpu.String()
+		changed = true
 	}
-	if mem, ok := rec[corev1.ResourceMemory]; ok {
+	if mem, ok := rec[corev1.ResourceMemory]; ok && !sameQuantityString(s.Memory, mem) {
 		s.Memory = mem.String()
+		changed = true
 	}
+	if !changed {
+		return
+	}
+
+	now := metav1.Now()
+	s.LastObservedAt = &now
 	cr.Status.VPAStatus[statusKey] = s
+}
+
+// sameQuantityString reports whether a quantity already recorded in status as a
+// string describes the same amount as q. Comparing by value rather than by text
+// keeps a recommender that switches units from registering as a change. An
+// empty or unparseable stored value counts as different, so it gets rewritten.
+func sameQuantityString(stored string, q resource.Quantity) bool {
+	if stored == "" {
+		return false
+	}
+	parsed, err := resource.ParseQuantity(stored)
+	if err != nil {
+		return false
+	}
+	return parsed.Cmp(q) == 0
 }
 
 // stabilizationWindowPassed returns true if enough time has elapsed since the last apply,
@@ -455,11 +508,19 @@ func (r *ReconcilePerconaServerMongoDB) commitVPAResources(
 	if cr.Status.VPAStatus == nil {
 		cr.Status.VPAStatus = make(map[string]api.VPAComponentStatus)
 	}
-	now := metav1.Now()
 	s := cr.Status.VPAStatus[statusKey]
+
+	// Only a change is a commit. The recommender holds a value steady for long
+	// stretches, so without this the component would be re-committed once per
+	// stabilization window forever: status churns, the log fills, and
+	// lastAppliedAt comes to mean "last reconciled" instead of "last changed".
+	if s.Resources != nil && sameResourceRequirements(*s.Resources, effective) {
+		return
+	}
+
+	now := metav1.Now()
 	s.Resources = &effective
 	s.LastAppliedAt = &now
-	s.Message = ""
 	cr.Status.VPAStatus[statusKey] = s
 
 	log.Info("committed VPA resources",
@@ -467,6 +528,13 @@ func (r *ReconcilePerconaServerMongoDB) commitVPAResources(
 		"cpu", requests.Cpu().String(),
 		"memory", requests.Memory().String(),
 	)
+}
+
+// sameResourceRequirements reports whether two requirements describe the same
+// resources. Quantities are compared by value, not by string form, so a commit
+// of 1Gi is not treated as a change when 1024Mi is already recorded.
+func sameResourceRequirements(a, b corev1.ResourceRequirements) bool {
+	return quantitiesEqual(a.Requests, b.Requests) && quantitiesEqual(a.Limits, b.Limits)
 }
 
 // capRequestsAtLimits ensures that no request exceeds the corresponding limit.
