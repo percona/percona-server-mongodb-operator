@@ -1,0 +1,123 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+    - percona.com/delete-psmdb-pvc
+spec:
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  updateStrategy: SmartUpdate
+  vpa:
+    enabled: true
+    updateMode: "Auto"
+    # RequestsAndLimits so memory limits move: the WiredTiger cache is derived
+    # from the limit, and with RequestsOnly it would never change.
+    controlledValues: RequestsAndLimits
+    inPlaceResize: true
+    minAllowed:
+      cpu: 100m
+      memory: 256Mi
+    maxAllowed:
+      cpu: "2"
+      memory: 8Gi
+    stabilizationWindow: 30s
+  backup:
+    enabled: false
+  sharding:
+    enabled: true
+    mongos:
+      size: 2
+      affinity:
+        antiAffinityTopologyKey: none
+      # Mongos routes and has no storage engine, so no WiredTiger cache is
+      # involved. Smaller numbers keep the cluster's footprint down.
+      resources:
+        limits:
+          cpu: 600m
+          memory: 512Mi
+        requests:
+          cpu: 300m
+          memory: 256Mi
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      # 2:1 limit/request ratio; a 2Gi limit gives a 0.5 GB starting cache.
+      resources:
+        limits:
+          cpu: 600m
+          memory: 2Gi
+        requests:
+          cpu: 300m
+          memory: 1Gi
+      storage:
+        engine: wiredTiger
+        wiredTiger:
+          engineConfig:
+            cacheSizeRatio: 0.5
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 600m
+        memory: 2Gi
+      requests:
+        cpu: 300m
+        memory: 1Gi
+    storage:
+      engine: wiredTiger
+      wiredTiger:
+        engineConfig:
+          cacheSizeRatio: 0.5
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    nonvoting:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 600m
+          memory: 2Gi
+        requests:
+          cpu: 300m
+          memory: 1Gi
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    hidden:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 600m
+          memory: 2Gi
+        requests:
+          cpu: 300m
+          memory: 1Gi
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+  secrets:
+    users: some-users

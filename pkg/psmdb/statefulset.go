@@ -127,17 +127,23 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
+	// vpaKey is the status.vpaStatus key for this component, empty when VPA does
+	// not manage it (the arbiter has no VPA configuration).
+	vpaKey := replset.Name
+
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentArbiter:
 		containerName = naming.ContainerArbiter
 		size = replset.Arbiter.Size
 		multiAZ = replset.Arbiter.MultiAZ
 		resources = replset.Arbiter.Resources
+		vpaKey = ""
 	case naming.ComponentNonVoting:
 		containerName = naming.ContainerNonVoting
 		size = replset.NonVoting.Size
 		multiAZ = replset.NonVoting.MultiAZ
 		resources = replset.NonVoting.Resources
+		vpaKey = replset.Name + "-nv"
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
 		configName = naming.NonVotingConfigMapName(cr, replset)
@@ -149,12 +155,20 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		size = replset.Hidden.Size
 		multiAZ = replset.Hidden.MultiAZ
 		resources = replset.Hidden.Resources
+		vpaKey = replset.Name + "-hidden"
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
 		volumeSpec = replset.Hidden.VolumeSpec
+	}
+
+	// Resources come from what the operator committed for this component when VPA
+	// is managing it, and from the declared spec otherwise. The operator never
+	// writes resources back into spec.
+	if vpaKey != "" {
+		resources = cr.VPAResources(vpaKey, resources)
 	}
 
 	customLabels := make(map[string]string, len(ls))
