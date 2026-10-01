@@ -145,6 +145,88 @@ func TestCreateCAIssuer(t *testing.T) {
 	assert.Empty(t, issuer.Namespace)
 }
 
+func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
+	const issuerName = "user-cluster-issuer"
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{},
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Name: issuerName,
+					Kind: cm.ClusterIssuerKind,
+				},
+			},
+		},
+	}
+
+	userIssuer := &cm.ClusterIssuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        issuerName,
+			Annotations: map[string]string{"some-random-annotation": "true"},
+		},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
+		},
+	}
+
+	r := buildFakeClient(cr, userIssuer.DeepCopy())
+
+	status, err := r.ApplyIssuer(t.Context(), cr)
+	require.NoError(t, err)
+	assert.Equal(t, util.ApplyStatusUnchanged, status)
+
+	stored := new(cm.ClusterIssuer)
+	require.NoError(t, r.GetClient().Get(t.Context(), types.NamespacedName{Name: issuerName}, stored))
+	assert.Equal(t, userIssuer.Spec, stored.Spec)
+	assert.Equal(t, userIssuer.Annotations, stored.Annotations)
+	assert.Empty(t, stored.Labels)
+}
+
+func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
+	const issuerName = "user-issuer"
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{},
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Name: issuerName,
+					Kind: cm.IssuerKind,
+				},
+			},
+		},
+	}
+
+	userIssuer := &cm.Issuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        issuerName,
+			Namespace:   cr.Namespace,
+			Annotations: map[string]string{"some-random-annotation": "true"},
+		},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
+		},
+	}
+
+	r := buildFakeClient(cr, userIssuer.DeepCopy())
+
+	status, err := r.ApplyIssuer(t.Context(), cr)
+	require.NoError(t, err)
+	assert.Equal(t, util.ApplyStatusUnchanged, status)
+
+	stored := new(cm.Issuer)
+	require.NoError(t, r.GetClient().Get(t.Context(), types.NamespacedName{Name: issuerName, Namespace: cr.Namespace}, stored))
+	assert.Equal(t, userIssuer.Spec, stored.Spec)
+	assert.Equal(t, userIssuer.Annotations, stored.Annotations)
+	assert.Empty(t, stored.Labels)
+	assert.Empty(t, stored.OwnerReferences)
+}
+
 func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
 	const issuerName = "shared-cluster-issuer"
 
