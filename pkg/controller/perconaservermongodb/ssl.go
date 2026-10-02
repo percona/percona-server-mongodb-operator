@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sort"
 
-	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -220,6 +219,15 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				return nil
 			}
 
+			externalIssuer, err := r.isExternalIssuer(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check external issuer")
+			}
+			if externalIssuer {
+				// The CA is owned by the external issuer, the operator must not recreate the secrets.
+				return nil
+			}
+
 			caCert := tls.CertificateCA(cr)
 			caSecret, err := r.getSecretInNamespace(ctx, caCert.Namespace(), caCert.SecretName())
 			if err != nil {
@@ -405,6 +413,23 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	return nil
 }
 
+// isExternalIssuer reports whether the certificates are issued by an issuer the operator doesn't manage.
+func (r *ReconcilePerconaServerMongoDB) isExternalIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if tls.IsExternalIssuer(cr) {
+		if cr.Spec.TLS.IssuerConf.Name == "" {
+			return false, errors.New("external issuer requires tls.issuerConf.name")
+		}
+		return true, nil
+	}
+
+	userIssuer, err := tls.IsUserIssuer(ctx, r.client, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "check user issuer")
+	}
+
+	return userIssuer, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context.Context, cr *api.PerconaServerMongoDB, c tls.CertManagerController) (util.ApplyStatus, error) {
 	applyStatus := util.ApplyStatusUnchanged
 	applyFunc := func(f func() (util.ApplyStatus, error)) error {
@@ -418,23 +443,9 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		return nil
 	}
 
-	externalIssuer := tls.IsExternalIssuer(cr)
-	if externalIssuer && cr.Spec.TLS.IssuerConf.Name == "" {
-		return "", errors.New("external issuer requires tls.issuerConf.name")
-	}
-	if kind := cr.Spec.TLS.IssuerConf.Kind; kind == cm.ClusterIssuerKind {
-		ci := new(cm.ClusterIssuer)
-		if err := r.client.Get(ctx, types.NamespacedName{
-			Name: cr.Spec.TLS.IssuerConf.Name,
-		}, ci); client.IgnoreNotFound(err) != nil {
-			if k8serrors.IsForbidden(err) {
-				// In namespaced installs we may not have cluster-scoped read permissions.
-				// Ignore only RBAC-denied errors and let cert-manager handle issuer resolution.
-				externalIssuer = true
-			} else {
-				return "", errors.Wrap(err, "failed to get cluster issuer")
-			}
-		}
+	externalIssuer, err := r.isExternalIssuer(ctx, cr)
+	if err != nil {
+		return "", err
 	}
 
 	if !externalIssuer {
