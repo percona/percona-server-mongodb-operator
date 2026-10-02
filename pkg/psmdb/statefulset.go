@@ -55,6 +55,39 @@ func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
 	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
 }
 
+// hasVolume reports whether a volume with the given name is already present in
+// the slice, so the shared /tmp emptyDir is not added more than once.
+func hasVolume(volumes []corev1.Volume, name string) bool {
+	for i := range volumes {
+		if volumes[i].Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// AddPMMTmpVolume mounts the shared writable /tmp emptyDir into the pmm
+// container and adds the volume to the pod when the PMM sidecar runs with a
+// read-only root filesystem. It returns the (possibly updated) volumes slice.
+func AddPMMTmpVolume(cr *api.PerconaServerMongoDB, pmmC *corev1.Container, volumes []corev1.Volume) []corev1.Volume {
+	if pmmC == nil || !pmm.TmpVolumeRequired(cr) {
+		return volumes
+	}
+	pmmC.VolumeMounts = append(pmmC.VolumeMounts, corev1.VolumeMount{
+		Name:      tmpVolumeName,
+		MountPath: tmpMountPath,
+	})
+	if !hasVolume(volumes, tmpVolumeName) {
+		volumes = append(volumes, corev1.Volume{
+			Name: tmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+	return volumes
+}
+
 // needsTmpVolume reports whether a shared writable /tmp emptyDir must be added
 // to the pod because the mongod or backup agent container runs with a read-only
 // root filesystem.
@@ -422,6 +455,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
+			volumes = AddPMMTmpVolume(cr, pmmC, volumes)
 			containers = append(containers, *pmmC)
 		}
 
