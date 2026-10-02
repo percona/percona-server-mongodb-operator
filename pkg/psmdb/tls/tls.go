@@ -20,6 +20,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -234,6 +235,39 @@ func GetDNSNamesFromCert(tlsCertPEM []byte) ([]string, error) {
 	return cert.DNSNames, nil
 }
 
+// InsecureSkipVerify reports whether TLS certificate verification must be skipped
+// when connecting to the cluster. It's skipped either when the cluster is reachable
+// under addresses the operator doesn't put into the SANs, or when the certificate in
+// use doesn't cover the SANs the operator expects, which is possible with certificates
+// provided by the user.
+func InsecureSkipVerify(cr *api.PerconaServerMongoDB, tlsCertPEM []byte) bool {
+	if cr.TLSInsecureSkipVerify() {
+		return true
+	}
+
+	certSans, err := GetDNSNamesFromCert(tlsCertPEM)
+	if err != nil {
+		return true
+	}
+
+	for _, san := range GetCertificateSans(cr) {
+		if !slices.Contains(certSans, san) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// PBMInsecureSkipVerify reports whether PBM connections must skip TLS certificate
+// verification. On top of InsecureSkipVerify, it honors spec.tls.allowInvalidCertificates.
+func PBMInsecureSkipVerify(cr *api.PerconaServerMongoDB, tlsCertPEM []byte) bool {
+	if cr.Spec.TLS != nil && ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, false) {
+		return true
+	}
+	return InsecureSkipVerify(cr, tlsCertPEM)
+}
+
 // ManualCASecretName returns the name of the CA secret for manual TLS management.
 func ManualCASecretName(cr *api.PerconaServerMongoDB) string {
 	return cr.Name + "-ca-cert"
@@ -259,7 +293,7 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}
 
 	return tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: InsecureSkipVerify(cr, certSecret.Data["tls.crt"]),
 		RootCAs:            pool,
 		Certificates:       []tls.Certificate{cert},
 	}, nil

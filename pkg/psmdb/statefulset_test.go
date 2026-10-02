@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -757,6 +759,99 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 			} else {
 				assert.NotContains(t, c.VolumeMounts, tmpMount)
 			}
+		})
+	}
+}
+
+func TestBuildMongoDBURI(t *testing.T) {
+	const baseURI = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+
+	tests := map[string]struct {
+		crVersion    string
+		tlsEnabled   bool
+		dnsMode      api.DNSMode
+		partialCert  bool
+		emptySecret  bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			dnsMode:     api.DNSModeInternal,
+			expectedURI: baseURI,
+		},
+		"internal": {
+			tlsEnabled:  true,
+			dnsMode:     api.DNSModeInternal,
+			expectedURI: baseURI + tlsOpts,
+		},
+		"external": {
+			tlsEnabled:  true,
+			dnsMode:     api.DNSModeExternal,
+			expectedURI: baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+		"certificate missing sans": {
+			tlsEnabled:  true,
+			dnsMode:     api.DNSModeInternal,
+			partialCert: true,
+			expectedURI: baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+		"old cr version": {
+			crVersion:   "1.23.0",
+			tlsEnabled:  true,
+			dnsMode:     api.DNSModeInternal,
+			expectedURI: baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			dnsMode:      api.DNSModeInternal,
+			allowInvalid: true,
+			expectedURI:  baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+		"incomplete ssl secret": {
+			tlsEnabled:  true,
+			dnsMode:     api.DNSModeInternal,
+			emptySecret: true,
+			expectedURI: baseURI,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			crVersion := tt.crVersion
+			if crVersion == "" {
+				crVersion = version.Version()
+			}
+			cr := &api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster",
+					Namespace: "ns",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion:             crVersion,
+					ClusterServiceDNSMode: tt.dnsMode,
+					Replsets:              []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:                   &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+
+			sslSecret := new(corev1.Secret)
+			if !tt.emptySecret {
+				sans := tls.GetCertificateSans(cr)
+				if tt.partialCert {
+					sans = []string{"localhost"}
+				}
+				caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+				require.NoError(t, err)
+				sslSecret.Data = map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				}
+			}
+
+			assert.Equal(t, tt.expectedURI, BuildMongoDBURI(t.Context(), cr, tt.tlsEnabled, sslSecret))
 		})
 	}
 }

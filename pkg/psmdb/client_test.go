@@ -20,6 +20,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
@@ -440,4 +441,68 @@ func (c serviceImportErrorClient) Get(
 		return errors.New("service import lookup failed")
 	}
 	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+func TestMongosConfigTLSInsecureSkipVerify(t *testing.T) {
+	tests := map[string]struct {
+		servicePerPod      bool
+		insecureSkipVerify bool
+	}{
+		"shared service": {
+			servicePerPod:      false,
+			insecureSkipVerify: false,
+		},
+		"service per pod": {
+			servicePerPod:      true,
+			insecureSkipVerify: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := clientTestCluster()
+			cr.Spec.CRVersion = "1.24.0"
+			cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModePrefer}
+			cr.Spec.Secrets = &api.SecretsSpec{SSL: "cluster-ssl"}
+			cr.Spec.Sharding = api.Sharding{
+				Enabled: true,
+				Mongos: &api.MongosSpec{
+					Expose: api.MongosExpose{ServicePerPod: tt.servicePerPod},
+				},
+			}
+
+			caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(cr))
+			require.NoError(t, err)
+
+			objects := []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster-ssl", Namespace: cr.Namespace},
+					Data: map[string][]byte{
+						"ca.crt":  caCert,
+						"tls.crt": tlsCert,
+						"tls.key": tlsKey,
+					},
+				},
+			}
+			if tt.servicePerPod {
+				labels := map[string]string{
+					naming.LabelKubernetesInstance:  cr.Name,
+					naming.LabelKubernetesComponent: naming.ComponentMongos,
+				}
+				objects = append(objects,
+					clientTestPod(cr, "cluster-mongos-0", labels),
+					clientTestMongosService(cr, "cluster-mongos-0"),
+				)
+			} else {
+				objects = append(objects, clientTestMongosService(cr, naming.MongosServiceName(cr)))
+			}
+
+			cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objects...).Build()
+
+			cfg, err := MongosConfig(t.Context(), cl, cr, clientTestCredentials(), true, tt.servicePerPod)
+			require.NoError(t, err)
+			require.NotNil(t, cfg.TLSConf)
+			assert.Equal(t, tt.insecureSkipVerify, cfg.TLSConf.InsecureSkipVerify)
+		})
+	}
 }
