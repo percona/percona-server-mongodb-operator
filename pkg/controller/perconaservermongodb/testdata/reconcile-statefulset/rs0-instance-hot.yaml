@@ -2,13 +2,13 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    app.kubernetes.io/component: cfg
+    app.kubernetes.io/component: hot
     app.kubernetes.io/instance: reconcile-statefulset-cr
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
     app.kubernetes.io/name: percona-server-mongodb
     app.kubernetes.io/part-of: percona-server-mongodb
-    app.kubernetes.io/replset: cfg
-  name: reconcile-statefulset-cr-cfg
+    app.kubernetes.io/replset: rs0
+  name: reconcile-statefulset-cr-rs0-hot
   namespace: reconcile-statefulset
   ownerReferences:
   - apiVersion: psmdb.percona.com/v1
@@ -18,39 +18,39 @@ metadata:
     uid: ""
   resourceVersion: "1"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
-      app.kubernetes.io/component: cfg
+      app.kubernetes.io/component: hot
       app.kubernetes.io/instance: reconcile-statefulset-cr
       app.kubernetes.io/managed-by: percona-server-mongodb-operator
       app.kubernetes.io/name: percona-server-mongodb
       app.kubernetes.io/part-of: percona-server-mongodb
-      app.kubernetes.io/replset: cfg
-  serviceName: reconcile-statefulset-cr-cfg
+      app.kubernetes.io/replset: rs0
+  serviceName: reconcile-statefulset-cr-rs0
   template:
     metadata:
       annotations:
         percona.com/configuration-hash: e0844d27afffb9c39679f2f44ffe3d7e
       labels:
-        app.kubernetes.io/component: cfg
+        app.kubernetes.io/component: hot
         app.kubernetes.io/instance: reconcile-statefulset-cr
         app.kubernetes.io/managed-by: percona-server-mongodb-operator
         app.kubernetes.io/name: percona-server-mongodb
         app.kubernetes.io/part-of: percona-server-mongodb
-        app.kubernetes.io/replset: cfg
+        app.kubernetes.io/replset: rs0
     spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
-                app.kubernetes.io/component: cfg
+                app.kubernetes.io/component: hot
                 app.kubernetes.io/instance: reconcile-statefulset-cr
                 app.kubernetes.io/managed-by: percona-server-mongodb-operator
                 app.kubernetes.io/name: percona-server-mongodb
                 app.kubernetes.io/part-of: percona-server-mongodb
-                app.kubernetes.io/replset: cfg
+                app.kubernetes.io/replset: rs0
             topologyKey: kubernetes.io/hostname
       containers:
       - args:
@@ -58,16 +58,16 @@ spec:
         - --auth
         - --dbpath=/data/db
         - --port=27017
-        - --replSet=cfg
+        - --replSet=rs0
         - --storageEngine=wiredTiger
         - --relaxPermChecks
         - --sslAllowInvalidCertificates
         - --clusterAuthMode=x509
         - --tlsMode=preferTLS
-        - --configsvr
+        - --shardsvr
         - --enableEncryption
         - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerCacheSizeGB=1.36
         - --wiredTigerIndexPrefixCompression=true
         - --quiet
         command:
@@ -80,19 +80,19 @@ spec:
         - name: MONGODB_PORT
           value: "27017"
         - name: MONGODB_REPLSET
-          value: cfg
+          value: rs0
         - name: LOGCOLLECTOR_ENABLED
           value: "true"
-        - name: CFG_TEST_ENV1
-          value: cfg-test-value1
-        - name: CFG_TEST_ENV2
-          value: cfg-test-value2
+        - name: TEST_ENV1
+          value: test-value1
+        - name: TEST_ENV2
+          value: test-value2
         envFrom:
         - secretRef:
             name: internal-reconcile-statefulset-cr-users
             optional: false
         - configMapRef:
-            name: test-configmap-cfg
+            name: test-configmap
             optional: true
         image: perconalab/percona-server-mongodb-operator:main-mongod8.0
         imagePullPolicy: Always
@@ -132,18 +132,15 @@ spec:
             - /etc/mongodb-ssl/ca.crt
             - --sslPEMKeyFile
             - /tmp/tls.pem
-          failureThreshold: 3
+          failureThreshold: 8
           initialDelaySeconds: 10
           periodSeconds: 3
           successThreshold: 1
           timeoutSeconds: 2
         resources:
           limits:
-            cpu: 600m
-            memory: 1Gi
-          requests:
-            cpu: 300m
-            memory: 1Gi
+            cpu: "2"
+            memory: 4G
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -184,7 +181,7 @@ spec:
               name: internal-reconcile-statefulset-cr-users
               optional: false
         - name: PBM_MONGODB_REPLSET
-          value: cfg
+          value: rs0
         - name: PBM_MONGODB_PORT
           value: "27017"
         - name: PBM_AGENT_SIDECAR
@@ -217,62 +214,66 @@ spec:
           readOnly: true
         - mountPath: /data/db
           name: mongod-data
-      - name: logs
-        image: perconalab/fluentbit:main-logcollector
-        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
-        args: [ "fluent-bit" ]
+      - args:
+        - fluent-bit
+        command:
+        - /opt/percona/logcollector/entrypoint.sh
         env:
-          - name: LOG_DATA_DIR
-            value: /data/db/logs
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
+        - name: LOG_DATA_DIR
+          value: /data/db/logs
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: perconalab/fluentbit:main-logcollector
+        name: logs
         resources:
           requests:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/db
-            name: mongod-data
-          - mountPath: /opt/percona
-            name: bin
-          - mountPath: /opt/percona/logcollector/fluentbit/custom
-            name: log-collector-volume
-      - name: logrotate
-        image: perconalab/fluentbit:main-logcollector
-        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
-        args: [ "logrotate" ]
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /opt/percona/logcollector/fluentbit/custom
+          name: log-collector-volume
+      - args:
+        - logrotate
+        command:
+        - /opt/percona/logcollector/entrypoint.sh
         env:
-          - name: MONGODB_HOST
-            value: localhost
-          - name: MONGODB_PORT
-            value: "27017"
-          - name: MONGODB_USER
-            valueFrom:
-              secretKeyRef:
-                key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
-                name: internal-reconcile-statefulset-cr-users
-                optional: false
-          - name: MONGODB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
-                name: internal-reconcile-statefulset-cr-users
-                optional: false
+        - name: MONGODB_HOST
+          value: localhost
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_USER
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        image: perconalab/fluentbit:main-logcollector
+        name: logrotate
         resources:
           requests:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/db
-            name: mongod-data
-          - mountPath: /opt/percona
-            name: bin
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /opt/percona
+          name: bin
       initContainers:
       - command:
         - /init-entrypoint.sh
@@ -281,11 +282,8 @@ spec:
         name: mongo-init
         resources:
           limits:
-            cpu: 600m
-            memory: 1Gi
-          requests:
-            cpu: 300m
-            memory: 1Gi
+            cpu: "2"
+            memory: 4G
         volumeMounts:
         - mountPath: /opt/percona
           name: bin
@@ -334,5 +332,9 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 3Gi
+          storage: 42Gi
+      storageClassName: fast-nvme
     status: {}
+status:
+  availableReplicas: 0
+  replicas: 0

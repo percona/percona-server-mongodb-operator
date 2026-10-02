@@ -8,6 +8,7 @@ import (
 	log "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 type JobType int
@@ -83,4 +84,13 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 	}
 
 	return hasLocks, nil
+}
+
+// EligibleForBackup reports whether a group's members can serve as a PBM backup
+// source.
+func EligibleForBackup(group membergroup.Group, cr *api.PerconaServerMongoDB) error {
+	if !group.DataBearing {
+		return errors.Errorf("group %s is cannot be used for backups", group.Name)
+	}
+	return nil
 }

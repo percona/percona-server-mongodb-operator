@@ -2,6 +2,7 @@ package vectorsearch
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -11,6 +12,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch/mongot"
 )
 
@@ -66,7 +68,10 @@ func renderConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (string, er
 // appear in spec.Configuration are overridden — every other default
 // is preserved.
 func userMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (mongot.Config, error) {
-	cfg := defaultMongotConfig(cr, rs)
+	cfg, err := defaultMongotConfig(cr, rs)
+	if err != nil {
+		return cfg, err
+	}
 
 	spec := cr.Spec.Search
 	if spec == nil || spec.Configuration == "" {
@@ -81,7 +86,7 @@ func userMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (mongot
 }
 
 // defaultMongotConfig returns the default mongot.conf.
-func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mongot.Config {
+func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (mongot.Config, error) {
 	cfg := mongot.Config{
 		SyncSource: mongot.ConfigSyncSource{
 			ReplicaSet: mongot.ConfigReplicaSet{
@@ -113,9 +118,19 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 		},
 	}
 
-	hosts := make([]string, rs.Size)
-	for i := range rs.Size {
-		hosts[i] = mongodHostAndPort(cr, rs, i)
+	set, err := membergroup.Resolve(cr, rs)
+	if err != nil {
+		return cfg, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+	}
+
+	groups := set.GetDataBearing()
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+
+	hosts := make([]string, 0, set.GetTotalMemberCount())
+	for _, group := range groups {
+		for i := range group.Replicas {
+			hosts = append(hosts, memberHostAndPort(cr, rs, naming.GroupPodName(cr, rs, group.Name, int(i))))
+		}
 	}
 	cfg.SyncSource.ReplicaSet.HostAndPort = hosts
 
@@ -151,14 +166,17 @@ func defaultMongotConfig(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) mong
 		}
 	}
 
-	return cfg
+	return cfg, nil
 }
 
-// mongodHostAndPort returns the FQDN mongot uses to open its change-stream connection
-// for the given pod idx
-func mongodHostAndPort(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, idx int32) string {
-	return fmt.Sprintf("%s-%s-%d.%s-%s.%s.%s:%d",
-		cr.Name, rs.Name, idx, cr.Name, rs.Name, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, rs.GetPort())
+// memberHostAndPort returns the FQDN mongot uses to open its change-stream
+// connection to the given member pod.
+//
+// Every group of a replica set shares one governing service, cr-rs, so the
+// pod name is the only part that varies between groups.
+func memberHostAndPort(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, podName string) string {
+	return fmt.Sprintf("%s.%s-%s.%s.%s:%d",
+		podName, cr.Name, rs.Name, cr.Namespace, cr.Spec.ClusterServiceDNSSuffix, rs.GetPort())
 }
 
 // mongosHostAndPort returns all the FQDNs mongot uses to open its change-stream connection
