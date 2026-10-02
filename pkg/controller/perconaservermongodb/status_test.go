@@ -730,3 +730,173 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 
 	}
 }
+
+func TestImageUpgradeCondition(t *testing.T) {
+	const (
+		namespace   = "psmdb"
+		clusterName = "psmdb-mock"
+		newImage    = "example/new:1"
+		oldImage    = "example/old:1"
+	)
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: namespace,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 1}},
+		},
+	}
+
+	labelsFor := func(component string) map[string]string {
+		return map[string]string{
+			naming.LabelKubernetesInstance:  clusterName,
+			naming.LabelKubernetesComponent: component,
+		}
+	}
+	containers := func(images map[string]string) []corev1.Container {
+		cs := make([]corev1.Container, 0, len(images))
+		for name, image := range images {
+			cs = append(cs, corev1.Container{Name: name, Image: image})
+		}
+		return cs
+	}
+	sts := func(name, component string, images map[string]string, init map[string]string) *appsv1.StatefulSet {
+		ls := labelsFor(component)
+		initContainers := containers(init)
+		return &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    ls,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: ls},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: ls},
+					Spec: corev1.PodSpec{
+						InitContainers: initContainers,
+						Containers:     containers(images),
+					},
+				},
+			},
+		}
+	}
+	pod := func(name, component string, images map[string]string, init map[string]string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    labelsFor(component),
+			},
+			Spec: corev1.PodSpec{
+				InitContainers: containers(init),
+				Containers:     containers(images),
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		objs    []client.Object
+		message string
+	}{
+		{
+			name: "images match",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+			},
+		},
+		{
+			name: "single container image change",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      oldImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+			},
+			message: "Image upgrade is in progress for container mongod",
+		},
+		{
+			name: "multiple container image changes",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+					"pmm-client":                newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      oldImage,
+					naming.ContainerBackupAgent: oldImage,
+					"pmm-client":                newImage,
+				}, nil),
+			},
+			message: "Image upgrade is in progress for containers backup-agent, mongod",
+		},
+		{
+			name: "init container image change",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, map[string]string{"init": newImage}),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, map[string]string{"init": oldImage}),
+			},
+			message: "Image upgrade is in progress for container init",
+		},
+		{
+			name: "container added by template",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, nil),
+			},
+			message: "Image upgrade is in progress for container backup-agent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Status.AddCondition(api.ClusterCondition{
+				Type:    api.ConditionTypeImageUpgradeInProgress,
+				Status:  api.ConditionTrue,
+				Reason:  "stale",
+				Message: "stale",
+			})
+
+			objs := append([]client.Object{cluster}, tt.objs...)
+			r := buildFakeClient(objs...)
+
+			err := r.updateImageUpgradeCondition(t.Context(), cluster)
+			require.NoError(t, err)
+
+			cond := cluster.Status.FindCondition(api.ConditionTypeImageUpgradeInProgress)
+			if tt.message == "" {
+				assert.Nil(t, cond)
+				return
+			}
+			require.NotNil(t, cond)
+			assert.Equal(t, api.ConditionTrue, cond.Status)
+			assert.Equal(t, "ImageUpgrade", cond.Reason)
+			assert.Equal(t, tt.message, cond.Message)
+		})
+	}
+}
