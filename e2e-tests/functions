@@ -3328,7 +3328,7 @@ image_upgrade_message_has_container() {
 	local container="$2"
 	local names
 
-	names=$(printf '%s' "${message}" | sed -E 's/^Image upgrade is in progress for containers? //')
+	names=$(printf '%s' "${message}" | sed -E 's/^Image upgrade is in progress for container(\(s\)|s)? //')
 	printf ', %s,' "${names}" | grep -q ", ${container},"
 }
 

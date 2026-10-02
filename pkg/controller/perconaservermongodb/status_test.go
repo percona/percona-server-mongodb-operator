@@ -827,7 +827,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerBackupAgent: newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container mongod",
+			message: "Image upgrade is in progress for container(s) mongod",
 		},
 		{
 			name: "multiple container image changes",
@@ -843,7 +843,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 					"pmm-client":                newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for containers backup-agent, mongod",
+			message: "Image upgrade is in progress for container(s) backup-agent, mongod",
 		},
 		{
 			name: "init container image change",
@@ -855,7 +855,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: newImage,
 				}, map[string]string{"init": oldImage}),
 			},
-			message: "Image upgrade is in progress for container init",
+			message: "Image upgrade is in progress for container(s) init",
 		},
 		{
 			name: "container added by template",
@@ -868,7 +868,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container backup-agent",
+			message: "Image upgrade is in progress for container(s) backup-agent",
 		},
 	}
 
