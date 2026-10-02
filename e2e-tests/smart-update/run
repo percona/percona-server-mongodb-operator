@@ -61,6 +61,9 @@ pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=nam
 desc "change the image for rs ${IMAGE_MONGOD_TO_UPDATE}"
 kubectl_bin patch psmdb "${cluster}" --type=merge --patch '{ "spec": { "image": "'"${IMAGE_MONGOD_TO_UPDATE}"'" }}'
 
+desc 'check image upgrade condition while the rollout is in progress'
+wait_for_image_upgrade_condition "${cluster}" mongod mongod-arbiter
+
 for pod in "${pods[@]}"; do
 	check_pod_update "${pod}"
 done
@@ -71,12 +74,14 @@ if [ "${img}" != "${IMAGE_MONGOD}" ]; then
 	echo "image should be old on primary pod at that moment"
 	exit 1
 fi
+wait_for_image_upgrade_condition "${cluster}" mongod mongod-arbiter
 
 desc "wait for primary ${initial_primary} update"
 check_pod_update "${initial_primary}"
 
 desc "wait for arbiter pod update"
 check_pod_update "smart-update-rs0-arbiter-0"
+wait_for_no_image_upgrade_condition "${cluster}"
 
 restarted_pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name --sort-by=.status.startTime | sed 's/pod\///g'))
 pods+=("${initial_primary}")

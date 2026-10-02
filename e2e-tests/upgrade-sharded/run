@@ -245,12 +245,15 @@ function main() {
             "pmm": { "image": "'"${TARGET_IMAGE_PMM_CLIENT}"'" },
             "backup": { "image": "'"${TARGET_IMAGE_BACKUP}"'" }
         }}'
-	sleep 10
+
+	desc 'check image upgrade condition while the rollout is in progress'
+	wait_for_image_upgrade_condition "${cluster}" mongod backup-agent mongos
 
 	desc 'check cluster after full upgrade'
 	wait_for_running "${cluster}-rs0" "${CLUSTER_SIZE}" "false"
 	wait_for_running "${cluster}-cfg" "${CLUSTER_SIZE}" "false"
 	wait_cluster_consistency "${cluster}"
+	wait_for_no_image_upgrade_condition "${cluster}"
 	simple_data_check "${cluster}" "${CLUSTER_SIZE}" 1 "-mongos"
 	check_applied_images "all"
 	compare_generation "2" "statefulset" "${cluster}-rs0"

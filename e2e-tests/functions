@@ -3321,3 +3321,87 @@ create_runtime_class() {
 	yq eval ".handler = \"$handler\"" "$conf_dir/container-rc.yaml" \
 		| kubectl_bin apply -f -
 }
+
+# image_upgrade_message_has_container reports whether the condition message lists container.
+image_upgrade_message_has_container() {
+	local message="$1"
+	local container="$2"
+	local names
+
+	names=$(printf '%s' "${message}" | sed -E 's/^Image upgrade is in progress for containers? //')
+	printf ', %s,' "${names}" | grep -q ", ${container},"
+}
+
+wait_for_image_upgrade_condition() {
+	local cluster="$1"
+	shift
+	local timeout=0
+	local status=""
+
+	set +o xtrace
+	echo -n "Waiting for imageUpgradeInProgress on ${cluster}"
+	until [[ ${status} == "True" ]]; do
+		status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].status}')
+		if [[ ${status} == "True" ]]; then
+			break
+		fi
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 180 ]]; then
+			echo
+			echo "imageUpgradeInProgress was not set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+
+	local reason message container
+	reason=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].reason}')
+	message=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].message}')
+	if [[ ${reason} != "ImageUpgrade" ]]; then
+		echo "unexpected imageUpgradeInProgress reason: ${reason}"
+		exit 1
+	fi
+	if [[ ${message} != "Image upgrade is in progress for container"* ]]; then
+		echo "unexpected imageUpgradeInProgress message: ${message}"
+		exit 1
+	fi
+	for container in "$@"; do
+		if ! image_upgrade_message_has_container "${message}" "${container}"; then
+			echo "imageUpgradeInProgress message '${message}' does not mention container ${container}"
+			exit 1
+		fi
+	done
+	echo "imageUpgradeInProgress: ${message}"
+	set_debug
+}
+
+wait_for_no_image_upgrade_condition() {
+	local cluster="$1"
+	local timeout=0
+	local condition_type="placeholder"
+
+	set +o xtrace
+	echo -n "Waiting for imageUpgradeInProgress to clear on ${cluster}"
+	until [[ -z ${condition_type} ]]; do
+		condition_type=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].type}')
+		if [[ -z ${condition_type} ]]; then
+			break
+		fi
+		sleep 2
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 300 ]]; then
+			echo
+			echo "imageUpgradeInProgress is still set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+	set_debug
+}
