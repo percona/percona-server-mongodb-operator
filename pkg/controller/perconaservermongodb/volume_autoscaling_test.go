@@ -13,12 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func TestShouldTriggerResize(t *testing.T) {
@@ -230,7 +232,7 @@ func TestCalculateNewSize(t *testing.T) {
 	}
 }
 
-func TestExtractPodNameFromPVC(t *testing.T) {
+func TestPVCPodName(t *testing.T) {
 	tests := []struct {
 		name     string
 		pvcName  string
@@ -255,12 +257,62 @@ func TestExtractPodNameFromPVC(t *testing.T) {
 			stsName:  "my-cluster-rs0",
 			expected: "",
 		},
+		{
+			name:     "double digit ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-10",
+			stsName:  "my-cluster-rs0",
+			expected: "my-cluster-rs0-10",
+		},
+		{
+			name:     "a sibling group's claim is not the base group's",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "the same claim against its own statefulset",
+			pvcName:  "mongod-data-my-cluster-rs0-hot-0",
+			stsName:  "my-cluster-rs0-hot",
+			expected: "my-cluster-rs0-hot-0",
+		},
+		{
+			name:     "a non numeric ordinal",
+			pvcName:  "mongod-data-my-cluster-rs0-abc",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "no ordinal at all",
+			pvcName:  "mongod-data-my-cluster-rs0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "a different claim template",
+			pvcName:  "logs-my-cluster-rs0-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
+		{
+			name:     "another replica set's claim",
+			pvcName:  "mongod-data-my-cluster-rs1-0",
+			stsName:  "my-cluster-rs0",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractPodNameFromPVC(tt.pvcName, tt.stsName)
+			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: tt.stsName}}
+
+			result, ok := pvcPodName(config.MongodDataVolClaimName, tt.pvcName, sts)
+			assert.Equal(t, tt.expected != "", ok)
 			assert.Equal(t, tt.expected, result)
+
+			assert.Equal(t, tt.expected != "",
+				validatePVCName(config.MongodDataVolClaimName,
+					corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: tt.pvcName}}, sts),
+				"validatePVCName must agree with pvcPodName")
 		})
 	}
 }
@@ -693,7 +745,19 @@ func TestTriggerResize(t *testing.T) {
 
 			originalSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, volumeSpec)
+			rsName := api.ConfigReplSetName
+			if len(tt.cr.Spec.Replsets) > 0 {
+				rsName = tt.cr.Spec.Replsets[0].Name
+			}
+
+			group := membergroup.Group{
+				Name:        naming.GroupMongod,
+				VolumeSpec:  volumeSpec,
+				DataBearing: true,
+				Source:      membergroup.SourceRef{ReplsetName: rsName},
+			}
+
+			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, group)
 			require.NoError(t, err)
 
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
@@ -703,12 +767,120 @@ func TestTriggerResize(t *testing.T) {
 	}
 }
 
+func TestTriggerResizeInstanceGroup(t *testing.T) {
+	sized := func(size string) *api.VolumeSpec {
+		return &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+				},
+			}}}
+	}
+	storageOf := func(v *api.VolumeSpec) string {
+		q := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+		return q.String()
+	}
+
+	ctx := t.Context()
+
+	cr := instanceCR(t, "as-cr", "as", []api.InstanceSpec{
+		{Name: "hot", Replicas: 3, VolumeSpec: sized("10Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "cold", Replicas: 1, VolumeSpec: sized("10Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+	}, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName("hot")
+	require.True(t, ok)
+
+	r := buildFakeClient(cr)
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "mongod-data-as-cr-rs0-hot-0", Namespace: cr.Namespace},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+		},
+	}
+
+	require.NoError(t, r.triggerResize(ctx, cr, pvc, resource.MustParse("25Gi"), group))
+
+	fresh := new(api.PerconaServerMongoDB)
+	require.NoError(t, r.client.Get(ctx,
+		client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+
+	assert.Equal(t, "25Gi", storageOf(fresh.Spec.Replsets[0].Instance("hot").VolumeSpec),
+		"the named instance's request is written to the CR")
+	assert.Equal(t, "10Gi", storageOf(fresh.Spec.Replsets[0].Instance("cold").VolumeSpec),
+		"a sibling group is untouched")
+	assert.Equal(t, "25Gi", storageOf(group.VolumeSpec),
+		"the resolved group mirrors the new size")
+}
+
+func TestReconcileStorageAutoscalingSkipsArbiters(t *testing.T) {
+	ctx := t.Context()
+
+	cr := instanceCR(t, "as-cr", "as", []api.InstanceSpec{
+		{Name: "data", Replicas: 3, VolumeSpec: &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+				},
+			}}},
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(2))}},
+		{Name: "arb", Replicas: 1, RSConfig: &api.MemberConfigSpec{
+			ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}},
+	}, unsafeSize)
+	rs := cr.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName("arb")
+	require.True(t, ok)
+	require.False(t, group.DataBearing)
+
+	// Autoscaling on, so the feature gates below the guard cannot be what
+	// answers.
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeScaling: true,
+		Autoscaling:         &api.AutoscalingSpec{Enabled: true},
+	}
+
+	sts := groupSTS(cr, rs, group, group.Replicas, group.Replicas)
+	pod := groupPod(cr, rs, group, 0)
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      config.MongodDataVolClaimName + "-" + pod.Name,
+			Namespace: cr.Namespace,
+			Labels:    group.Labels,
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+		},
+	}
+	// The claim has to be one the loop would actually pick up, or the
+	// assertion below passes for the wrong reason.
+	_, matches := pvcPodName(config.MongodDataVolClaimName, pvc.Name, sts)
+	require.True(t, matches, "the PVC must belong to the arbiter's statefulset")
+
+	r := buildFakeClient(cr, sts, pod, pvc)
+
+	require.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts, group))
+
+	assert.NotContains(t, cr.Status.StorageAutoscaling, pvc.Name,
+		"an arbiter's claim must never reach the resize path")
+}
+
 // TestReconcileStorageAutoscalingComponents checks that autoscaling is applied
-// to every replset component that owns a mongod-data PVC. Hidden, non-voting
-// and arbiter pods run mongod in a container named after their component, and
+// to every legacy replset component that owns a mongod-data PVC. Hidden and
+// non-voting pods run mongod in a container named after their component, and
 // probing a hardcoded "mongod" container silently skipped their PVCs.
 func TestReconcileStorageAutoscalingComponents(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const (
 		crName    = "test-cluster"
@@ -745,13 +917,16 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				Replsets: []*api.ReplsetSpec{
 					{
 						Name:       rsName,
+						Size:       new(int32(3)),
 						VolumeSpec: volumeSpec(),
 						NonVoting: api.NonVotingSpec{
 							Enabled:    true,
+							Size:       1,
 							VolumeSpec: volumeSpec(),
 						},
 						Hidden: api.HiddenSpec{
 							Enabled:    true,
+							Size:       1,
 							VolumeSpec: volumeSpec(),
 						},
 					},
@@ -761,26 +936,22 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		labels        func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string
-		stsName       string
+		group         string
 		containerName string
 		volumeSpec    func(rs *api.ReplsetSpec) *api.VolumeSpec
 	}{
 		"mongod": {
-			labels:        naming.MongodLabels,
-			stsName:       crName + "-" + rsName,
+			group:         naming.GroupMongod,
 			containerName: naming.ContainerMongod,
 			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.VolumeSpec },
 		},
 		"hidden": {
-			labels:        naming.HiddenLabels,
-			stsName:       crName + "-" + rsName + "-hidden",
+			group:         naming.GroupHidden,
 			containerName: naming.ContainerHidden,
 			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.Hidden.VolumeSpec },
 		},
 		"non-voting": {
-			labels:        naming.NonVotingLabels,
-			stsName:       crName + "-" + rsName + "-nv",
+			group:         naming.GroupNonVoting,
 			containerName: naming.ContainerNonVoting,
 			volumeSpec:    func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.NonVoting.VolumeSpec },
 		},
@@ -790,35 +961,18 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := newCR()
 			rs := cr.Spec.Replsets[0]
-			ls := tt.labels(cr, rs)
 
-			podName := tt.stsName + "-0"
-			pvcName := psmdbconfig.MongodDataVolClaimName + "-" + podName
+			group := resolveGroup(t, cr, rs, tt.group)
+			require.Equal(t, tt.containerName, group.ContainerName)
 
-			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: tt.stsName, Namespace: namespace, Labels: ls},
-			}
+			sts := groupSTS(cr, rs, group, group.Replicas, group.Replicas)
+			pod := groupPod(cr, rs, group, 0)
+			pvcName := config.MongodDataVolClaimName + "-" + pod.Name
 
 			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: ls},
+				ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: group.Labels},
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
-				},
-			}
-
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace, Labels: ls},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: tt.containerName}},
-				},
-				Status: corev1.PodStatus{
-					Phase: corev1.PodRunning,
-					ContainerStatuses: []corev1.ContainerStatus{
-						{
-							Name:  tt.containerName,
-							State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
-						},
-					},
 				},
 			}
 
@@ -834,8 +988,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				},
 			}
 
-			err := r.reconcileStorageAutoscaling(ctx, cr, sts, tt.volumeSpec(rs), ls)
-			require.NoError(t, err)
+			require.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts, group))
 
 			assert.Equal(t, tt.containerName, execContainer, "df must run in the pod's mongod container")
 
@@ -844,7 +997,13 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			assert.Empty(t, status.LastError)
 			assert.Equal(t, "10Gi", status.CurrentSize)
 
-			newSize := tt.volumeSpec(rs).PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+			// triggerResize patches the CR rather than the working copy, so the
+			// new request is only visible on a fresh read.
+			fresh := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(ctx,
+				client.ObjectKey{Name: cr.Name, Namespace: cr.Namespace}, fresh))
+
+			newSize := tt.volumeSpec(fresh.Spec.Replsets[0]).PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, "12Gi", newSize.String(), "usage above threshold must grow the volume")
 		})
 	}

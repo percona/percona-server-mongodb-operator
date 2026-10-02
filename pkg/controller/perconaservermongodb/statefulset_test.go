@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,6 +22,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -38,6 +41,24 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
+	// The arbiter StatefulSet is only built for a group the resolver produces,
+	// and resolveLegacy only produces one when the role is enabled. Enabling it
+	// needs the size check relaxed: deploy/cr.yaml has size 3, and an arbiter
+	// requires an even size >= 4. unsafeFlags.replsetSize is read only by
+	// unsafePSA in mgo.go, never in the StatefulSet build path, so this does not
+	// affect the generated objects.
+	defaultCR.Spec.Replsets[0].Arbiter.Enabled = true
+	// The same for the config server, which supports non-voting and hidden
+	// members. Not an arbiter: CheckNSetDefaults forces
+	// sharding.configsvrReplSet.arbiter.enabled to false, so no such workload
+	// is ever built.
+	// deploy/cr.yaml carries sizes for rs0's roles but not the config
+	// server's, so set them here or the workloads generate with zero replicas.
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.NonVoting.Enabled = true
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.NonVoting.Size = 3
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Hidden.Enabled = true
+	defaultCR.Spec.Sharding.ConfigsvrReplSet.Hidden.Size = 2
+	defaultCR.Spec.Unsafe.ReplsetSize = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
@@ -76,8 +97,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 		name           string
 		cr             *api.PerconaServerMongoDB
 		rsName         string
-		component      string
-		ls             map[string]string
+		group          string
 		crUpdate       func(cr *api.PerconaServerMongoDB)
 		additionalObjs []client.Object
 
@@ -87,63 +107,70 @@ func TestReconcileStatefulSet(t *testing.T) {
 			name:        "rs0-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-mongod.yaml"),
 		},
 		{
 			name:        "rs0-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentArbiter,
+			group:       naming.GroupArbiter,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-arbiter.yaml"),
 		},
 		{
 			name:        "rs0-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentNonVoting,
+			group:       naming.GroupNonVoting,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-nv.yaml"),
 		},
 		{
 			name:        "rs0-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentHidden,
+			group:       naming.GroupHidden,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-hidden.yaml"),
 		},
 		{
 			name:        "cfg-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
-		},
-		{
-			name:        "cfg-arbiter",
-			cr:          defaultCR.DeepCopy(),
-			rsName:      "cfg",
-			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
 		},
 		{
 			name:        "cfg-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   naming.ComponentNonVoting,
+			group:       naming.GroupNonVoting,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
 		},
 		{
 			name:        "cfg-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
-			component:   naming.ComponentHidden,
+			group:       naming.GroupHidden,
 			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
+		},
+		{
+			name:        "rs0-instance-hot",
+			cr:          instanceModeCR(t, defaultCR),
+			rsName:      "rs0",
+			group:       "hot",
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-instance-hot.yaml"),
+		},
+		{
+			name:        "rs0-instance-arbiter",
+			cr:          instanceModeCR(t, defaultCR),
+			rsName:      "rs0",
+			group:       "arb",
+			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-instance-arbiter.yaml"),
 		},
 		{
 			name:        "rs0-logrotate",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
-			component:   naming.ComponentMongod,
+			group:       naming.GroupMongod,
 			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-logrotate.yaml"),
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.LogCollector.LogRotate = &api.LogRotateSpec{
@@ -220,21 +247,17 @@ func TestReconcileStatefulSet(t *testing.T) {
 
 			rs := tt.cr.Spec.Replset(tt.rsName)
 
-			var ls map[string]string
-			switch tt.component {
-			case naming.ComponentMongod:
-				ls = naming.MongodLabels(tt.cr, rs)
-			case naming.ComponentArbiter:
-				ls = naming.ArbiterLabels(tt.cr, rs)
-			case naming.ComponentNonVoting:
-				ls = naming.NonVotingLabels(tt.cr, rs)
-			case naming.ComponentHidden:
-				ls = naming.HiddenLabels(tt.cr, rs)
-			default:
-				t.Fatalf("unexpected component: %s", tt.component)
+			set, err := membergroup.Resolve(tt.cr, rs)
+			if err != nil {
+				t.Fatalf("resolve member groups: %v", err)
 			}
 
-			sts, err := r.reconcileStatefulSet(ctx, tt.cr, rs, ls)
+			group, ok := set.GetByName(tt.group)
+			if !ok {
+				t.Fatalf("no member group %q in replset %s (have %v)", tt.group, rs.Name, set.GetNames())
+			}
+
+			sts, err := r.reconcileStatefulSet(ctx, tt.cr, rs, group)
 			if err != nil {
 				t.Fatalf("reconcileStatefulSet() error = %v", err)
 			}
@@ -251,6 +274,54 @@ func TestReconcileStatefulSet(t *testing.T) {
 			compareSts(t, sts, tt.expectedSts)
 		})
 	}
+}
+
+// instanceModeCR rewrites the default fixture's rs0 as instances[], keeping
+// everything else identical so the generated workloads are comparable.
+func instanceModeCR(t *testing.T, base *api.PerconaServerMongoDB) *api.PerconaServerMongoDB {
+	t.Helper()
+
+	cr := base.DeepCopy()
+	rs := cr.Spec.Replsets[0]
+
+	rs.Size = new(int32(0))
+	rs.VolumeSpec = nil
+	rs.Arbiter = api.Arbiter{}
+	rs.NonVoting = api.NonVotingSpec{}
+	rs.Hidden = api.HiddenSpec{}
+	rs.Instances = []api.InstanceSpec{
+		{
+			Name: "hot", Replicas: 2,
+			RSConfig:   &api.MemberConfigSpec{Priority: new(int32(10)), Votes: new(int32(1))},
+			VolumeSpec: instanceVolumeSpec("fast-nvme", "42Gi"),
+			MultiAZ: api.MultiAZ{Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("2"),
+					corev1.ResourceMemory: resource.MustParse("4G"),
+				},
+			}},
+		},
+		{
+			Name: "arb", Replicas: 1,
+			RSConfig: &api.MemberConfigSpec{
+				ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))},
+		},
+	}
+	cr.Spec.Unsafe.ReplsetSize = true
+
+	require.NoError(t, cr.CheckNSetDefaults(context.Background(), version.PlatformKubernetes))
+
+	return cr
+}
+
+func instanceVolumeSpec(storageClass, size string) *api.VolumeSpec {
+	return &api.VolumeSpec{PersistentVolumeClaim: api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		}}}
 }
 
 func expectedSts(t *testing.T, filename string) *appsv1.StatefulSet {
@@ -311,4 +382,105 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	if !reflect.DeepEqual(got.Status, want.Status) {
 		t.Fatal(cmp.Diff(want.Status, got.Status))
 	}
+}
+
+func TestInstanceModeEquivalence(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "reconcile-statefulset"
+		crName = ns + "-cr"
+	)
+
+	build := func(t *testing.T, mutate func(*api.PerconaServerMongoDB)) *appsv1.StatefulSet {
+		t.Helper()
+
+		cr, err := readDefaultCR(crName, ns)
+		require.NoError(t, err)
+		cr.Spec.Sharding.Enabled = false
+		mutate(cr)
+		require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+		r := buildFakeClient(cr,
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: crName + "-ssl", Namespace: ns,
+			}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: crName + "-ssl-internal", Namespace: ns,
+			}},
+		)
+
+		rs := cr.Spec.Replsets[0]
+		set, err := membergroup.Resolve(cr, rs)
+		require.NoError(t, err)
+
+		group, ok := set.GetByName(naming.GroupMongod)
+		require.Truef(t, ok, "no mongod group (have %v)", set.GetNames())
+
+		sts, err := r.reconcileStatefulSet(ctx, cr, rs, group)
+		require.NoError(t, err)
+
+		return sts
+	}
+
+	legacy := build(t, func(cr *api.PerconaServerMongoDB) {
+		cr.Spec.Replsets[0].Size = new(int32(3))
+	})
+
+	rewritten := build(t, func(cr *api.PerconaServerMongoDB) {
+		rs := cr.Spec.Replsets[0]
+		// Everything the legacy replica set declared, moved onto the group.
+		// volumeSpec has to come along: in instance mode the replica set owns
+		// no storage.
+		vol := rs.VolumeSpec
+		rs.Size = new(int32(0))
+		rs.VolumeSpec = nil
+		rs.Instances = []api.InstanceSpec{
+			{Name: naming.GroupMongod, Replicas: 3, VolumeSpec: vol},
+		}
+	})
+
+	assert.Equal(t, legacy.Name, rewritten.Name, "the workload keeps its name")
+	assert.Equal(t, legacy.Labels, rewritten.Labels)
+
+	// The SSL hash annotations are computed from secrets, not from the
+	// topology, and the config hash covers the same ConfigMap either way.
+	stripVolatile := func(sts *appsv1.StatefulSet) appsv1.StatefulSetSpec {
+		spec := *sts.Spec.DeepCopy()
+		delete(spec.Template.Annotations, naming.AnnotationSSLHash)
+		delete(spec.Template.Annotations, naming.AnnotationSSLInternalHash)
+		return spec
+	}
+
+	if diff := cmp.Diff(stripVolatile(legacy), stripVolatile(rewritten)); diff != "" {
+		t.Fatalf("a legacy replica set and its instances[] rewrite must build the same workload:\n%s", diff)
+	}
+}
+func TestStatefulSetRejectsADataBearingGroupWithoutStorage(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "reconcile-statefulset"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	cr.Spec.Sharding.Enabled = false
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replsets[0]
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName(naming.GroupMongod)
+	require.True(t, ok)
+	require.True(t, group.DataBearing)
+	group.VolumeSpec = nil
+
+	r := buildFakeClient(cr)
+
+	_, err = r.reconcileStatefulSet(ctx, cr, rs, group)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has no resolved volumeSpec")
 }

@@ -17,9 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -28,8 +26,8 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
@@ -690,56 +688,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 		return errors.New("no replsets found")
 	}
 
-	var rs *psmdbv1.ReplsetSpec
-	for _, r := range cr.Spec.Replsets {
-		rs = r
-		break
-	}
-
-	stsName := naming.MongodStatefulSetName(cr, rs)
-	sts := psmdb.NewStatefulSet(stsName, cr.Namespace)
-	err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), sts)
+	pod, group, err := r.pbmDiscoveryPod(ctx, cr)
 	if err != nil {
-		return errors.Wrapf(err, "get statefulset/%s", stsName)
+		log.V(1).Info("no pod available to read the pbm-agent version", "error", err.Error())
+		return nil
 	}
 
-	matchLabels := naming.RSLabels(cr, rs)
-	label, ok := sts.Labels[naming.LabelKubernetesComponent]
-	if ok {
-		matchLabels[naming.LabelKubernetesComponent] = label
+	sts, err := r.getGroupStatefulset(ctx, cr, *group)
+	if err != nil {
+		return errors.Wrapf(err, "get statefulset %s", group.STSName)
 	}
 
-	podList := corev1.PodList{}
-	if err := r.client.List(
-		ctx,
-		&podList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(matchLabels),
-		},
-	); err != nil {
-		return errors.Wrap(err, "get pod list")
-	}
-
-	var pod *corev1.Pod
-	for _, p := range podList.Items {
-		if !k8s.IsPodReady(p) {
-			continue
-		}
-
-		if !isContainerAndPodRunning(p, naming.ContainerBackupAgent) {
-			continue
-		}
-
-		if !isPodUpToDate(&p, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
-			continue
-		}
-
-		pod = &p
-		break
-	}
-	if pod == nil {
-		log.V(1).Error(nil, "no ready pods to get pbm-agent version")
+	if !isPodUpToDate(pod, sts.Status.UpdateRevision, cr.Spec.Backup.Image) {
+		log.V(1).Info("pbm-agent pod is not up to date yet", "pod", pod.Name)
 		return nil
 	}
 
@@ -788,4 +749,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 	}
 
 	return nil
+}
+
+// pbmDiscoveryPod returns a pod suitable for reading the PBM agent version and
+// for opening a PBM connection, together with the group that owns it.
+func (r *ReconcilePerconaServerMongoDB) pbmDiscoveryPod(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) (*corev1.Pod, *membergroup.Group, error) {
+	repls := cr.Spec.Replsets
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		repls = append([]*psmdbv1.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+	}
+
+	for _, rs := range repls {
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
+		}
+
+		pod, group, err := r.getEligibleMemberPod(ctx, cr, rs, set,
+			func(group membergroup.Group, pod *corev1.Pod) bool {
+				if !IsReadyDataBearingPod(group, pod) {
+					return false
+				}
+				if backup.EligibleForBackup(group, cr) != nil {
+					return false
+				}
+				return isContainerAndPodRunning(*pod, naming.ContainerBackupAgent)
+			})
+		if err == nil {
+			return pod, group, nil
+		}
+	}
+
+	return nil, nil, errors.New("no pod with a running backup agent found")
 }
