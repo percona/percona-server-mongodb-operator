@@ -28,15 +28,6 @@ spec:
           endpointUrl: s3-storage-all-in-one:8333
           insecureSkipTLSVerify: false
           secure: false
-      gcp-cs-s3:
-        type: s3
-        s3:
-          credentialsSecret: gcp-cs-secret
-          region: us-east-1
-          bucket: operator-testing
-          prefix: psmdb-demand-backup
-          endpointUrl: https://storage.googleapis.com
-          insecureSkipTLSVerify: false
       azure-blob:
         type: azure
         azure:
