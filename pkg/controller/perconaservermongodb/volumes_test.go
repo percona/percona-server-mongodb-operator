@@ -294,6 +294,22 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "mongod",
+							Image: "percona/percona-server-mongodb",
+						},
+					},
+				},
+			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{

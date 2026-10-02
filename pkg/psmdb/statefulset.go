@@ -810,8 +810,10 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:        name,
+			Namespace:   namespace,
+			Labels:      spec.PersistentVolumeClaim.Labels,
+			Annotations: spec.PersistentVolumeClaim.Annotations,
 		},
 	}
 
