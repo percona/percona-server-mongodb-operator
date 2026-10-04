@@ -264,7 +264,19 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 }
 
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
-	return c.createOrUpdate(ctx, cr, cert.Object())
+	obj := cert.Object()
+
+	if len(obj.Spec.DNSNames) > 0 {
+		current := new(cm.Certificate)
+		err := c.cl.Get(ctx, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, current)
+		if client.IgnoreNotFound(err) != nil {
+			return "", errors.Wrap(err, "get certificate")
+		}
+
+		obj.Spec.DNSNames, _ = SansToIssue(current.Spec.DNSNames, obj.Spec.DNSNames)
+	}
+
+	return c.createOrUpdate(ctx, cr, obj)
 }
 
 var (

@@ -760,7 +760,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
-		if err == errWaitingTermination {
+		if errors.Is(err, errWaitingTermination) {
 			return nil
 		}
 		return errors.Wrap(err, "delete psmdb pods")
@@ -946,8 +946,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 
 	list, err := mc.ListDBs(ctx)
 	if err != nil {
-		log.Error(err, "failed to list databases", "rs", rsName)
-		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
+		return errors.Wrapf(err, "list databases for rs %s", rsName)
 	}
 
 	for _, db := range list.DBs {

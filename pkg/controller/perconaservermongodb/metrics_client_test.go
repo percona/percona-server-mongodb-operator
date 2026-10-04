@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -29,11 +30,11 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 	ctx := context.Background()
 
 	tests := map[string]struct {
-		pvcName     string
-		dfOutput    string
-		dfError     error
-		expectedErr bool
-		expected    *PVCUsage
+		pvcName        string
+		dfOutput       string
+		dfError        error
+		expectedErrMsg string
+		expected       *PVCUsage
 	}{
 		"successful df output parsing": {
 			pvcName: "mongod-data-test-rs0-0",
@@ -80,33 +81,33 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 			},
 		},
 		"exec command fails": {
-			pvcName:     "mongod-data-test-rs0-4",
-			dfOutput:    "",
-			dfError:     errors.New("connection refused"),
-			expectedErr: true,
+			pvcName:        "mongod-data-test-rs0-4",
+			dfOutput:       "",
+			dfError:        errors.New("connection refused"),
+			expectedErrMsg: "wait for df execution: failed to execute df in pod test-pod-0 container mongod: error executing df command: connection refused",
 		},
 		"invalid df output - less than 2 lines": {
-			pvcName:     "mongod-data-test-rs0-5",
-			dfOutput:    `Filesystem       1B-blocks       Used   Available Use% Mounted on`,
-			expectedErr: true,
+			pvcName:        "mongod-data-test-rs0-5",
+			dfOutput:       `Filesystem       1B-blocks       Used   Available Use% Mounted on`,
+			expectedErrMsg: "unexpected df output format: Filesystem       1B-blocks       Used   Available Use% Mounted on",
 		},
 		"invalid df output - less than 6 fields": {
 			pvcName: "mongod-data-test-rs0-6",
 			dfOutput: `Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb        3094126592  221798400`,
-			expectedErr: true,
+			expectedErrMsg: "unexpected df output fields: /dev/sdb        3094126592  221798400",
 		},
 		"invalid total bytes format": {
 			pvcName: "mongod-data-test-rs0-7",
 			dfOutput: `Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb        invalid  221798400  2855550976   8% /data/db`,
-			expectedErr: true,
+			expectedErrMsg: `failed to parse total bytes: invalid: strconv.ParseInt: parsing "invalid": invalid syntax`,
 		},
 		"invalid used bytes format": {
 			pvcName: "mongod-data-test-rs0-8",
 			dfOutput: `Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb        3094126592  invalid  2855550976   8% /data/db`,
-			expectedErr: true,
+			expectedErrMsg: `failed to parse used bytes: invalid: strconv.ParseInt: parsing "invalid": invalid syntax`,
 		},
 		"large volume with fractional percentage": {
 			pvcName: "mongod-data-test-rs0-9",
@@ -169,8 +170,8 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 
 			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName, naming.ContainerMongod)
 
-			if tt.expectedErr {
-				assert.Error(t, err)
+			if tt.expectedErrMsg != "" {
+				require.EqualError(t, err, tt.expectedErrMsg)
 				assert.Nil(t, result)
 			} else {
 				assert.NoError(t, err)

@@ -1498,7 +1498,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 
 	for _, chnk := range chunks {
 		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
+		if err != nil && !errors.Is(err, storage.ErrNotExist) {
 			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
 		}
 

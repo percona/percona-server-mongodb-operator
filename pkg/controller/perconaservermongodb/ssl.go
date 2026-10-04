@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"slices"
-	"sort"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -574,7 +572,7 @@ func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context,
 	return caCertPEM, caKeyPEM, nil
 }
 
-// needsManualSSLUpdate checks if the TLS certificate SANs differ from the expected SANs.
+// needsManualSSLUpdate checks if the TLS certificate is missing any of the expected SANs.
 func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sslSecret *corev1.Secret) bool {
 	if sslSecret == nil || len(sslSecret.Data["tls.crt"]) == 0 {
 		return false
@@ -586,12 +584,9 @@ func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context
 		return false
 	}
 
-	expectedSANs := tls.GetCertificateSans(cr)
+	_, reissue := tls.SansToIssue(currentSANs, tls.GetCertificateSans(cr))
 
-	sort.Strings(currentSANs)
-	sort.Strings(expectedSANs)
-
-	return !slices.Equal(currentSANs, expectedSANs)
+	return reissue
 }
 
 // updateSSLManually re-signs TLS certificates with the existing CA when SANs change.
