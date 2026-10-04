@@ -550,6 +550,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
 
+  tls-service-per-pod:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, tls]
+
   unsafe-psa:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
