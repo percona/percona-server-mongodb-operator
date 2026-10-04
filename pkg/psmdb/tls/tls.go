@@ -326,6 +326,10 @@ func mongosPerPodSans(cr *api.PerconaServerMongoDB) []string {
 		return nil
 	}
 
+	if mongos.Size <= 0 {
+		return nil
+	}
+
 	sans := make([]string, 0, int(mongos.Size)*4)
 	for i := 0; i < int(mongos.Size); i++ {
 		name := naming.MongosPerPodServiceName(cr, i)
