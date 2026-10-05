@@ -27,8 +27,6 @@ func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName
 }
 
 func TestGetPVCUsageFromMetrics(t *testing.T) {
-	ctx := context.Background()
-
 	tests := map[string]struct {
 		pvcName     string
 		dfOutput    string
@@ -124,6 +122,8 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+
 			mockCmd := &mockClientCmd{
 				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 					if tt.dfError != nil {
@@ -191,8 +191,6 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 // component, and mongos keeps its log volume under /data/db/logs, so neither
 // the container nor the path can be hardcoded.
 func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
-	ctx := context.Background()
-
 	tests := map[string]struct {
 		container     string
 		mountPath     string
@@ -209,6 +207,8 @@ func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+
 			var gotContainer string
 			var gotCommand []string
 

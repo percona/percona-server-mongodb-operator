@@ -15,48 +15,41 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-// autoscaledVolume describes the volume of a single component that storage
-// autoscaling probes and grows. Components don't agree on any of it: replsets
-// hold data in mongod-data under /data/db, mongos holds its logs in mongos-logs
-// under /data/db/logs, and hidden and non-voting pods name their mongod
-// container after their component.
+// autoscaledVolume identifies the volume of one component that storage
+// autoscaling probes and grows. Components share none of it: replsets hold data
+// in mongod-data, mongos holds its logs in mongos-logs, and hidden and
+// non-voting pods name their mongod container after their component.
 type autoscaledVolume struct {
 	// claimName is the volume claim template name, which prefixes every PVC name
 	claimName string
-	// mountPath is the path to probe with df inside the container
-	mountPath string
-	// container is the container that mounts the volume
+	// container is the container to probe the volume in. It is named rather than
+	// looked up by whoever mounts the volume, because that is not unique: with
+	// the log collector enabled the fluentbit sidecars mount the very same
+	// volume, and the backup agent mounts mongod-data as well.
 	container string
 	// pvcSpec is the part of the CR spec holding the requested size, which is
 	// what a resize is triggered through
 	pvcSpec *api.PVCSpec
 }
 
-// mongodVolume returns the data volume autoscaled for a replset component.
-func mongodVolume(volumeSpec *api.VolumeSpec, component string) autoscaledVolume {
-	vol := autoscaledVolume{
-		claimName: config.MongodDataVolClaimName,
-		mountPath: config.MongodContainerDataDir,
-		container: naming.MongodContainerName(component),
-	}
-	if volumeSpec != nil {
-		vol.pvcSpec = &volumeSpec.PersistentVolumeClaim
-	}
-	return vol
-}
+// mountPath returns where the container mounts the volume in the statefulset's
+// pod template, or an empty string when that container doesn't mount it.
+func (v autoscaledVolume) mountPath(sts *appsv1.StatefulSet) string {
+	for _, container := range sts.Spec.Template.Spec.Containers {
+		if container.Name != v.container {
+			continue
+		}
 
-// mongosVolume returns the log volume autoscaled for mongos.
-func mongosVolume(pvcSpec *api.PVCSpec) autoscaledVolume {
-	return autoscaledVolume{
-		claimName: config.MongosLogVolClaimName,
-		mountPath: config.MongodContainerDataLogsDir,
-		container: naming.ContainerMongos,
-		pvcSpec:   pvcSpec,
+		for _, mount := range container.VolumeMounts {
+			if mount.Name == v.claimName {
+				return mount.MountPath
+			}
+		}
 	}
+
+	return ""
 }
 
 // reconcileStorageAutoscaling checks PVC disk usage and triggers resize if needed
@@ -94,6 +87,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
+	// df has to run against the path the volume is actually mounted at, which
+	// only the pod template knows
+	mountPath := vol.mountPath(sts)
+	if mountPath == "" {
+		log.V(1).Info("skipping storage autoscaling: volume is not mounted",
+			"claim", vol.claimName, "container", vol.container)
+		return nil
+	}
+
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
 		Namespace:     cr.Namespace,
@@ -124,7 +126,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, vol); err != nil {
+		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, vol, mountPath); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
@@ -140,6 +142,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	pvc *corev1.PersistentVolumeClaim,
 	pod *corev1.Pod,
 	vol autoscaledVolume,
+	mountPath string,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
@@ -149,7 +152,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		return nil
 	}
 
-	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, vol.container, vol.mountPath)
+	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, vol.container, mountPath)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
@@ -161,6 +164,16 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	}
 
 	newSize := r.calculateNewSize(cr, pvc)
+
+	// The new size is derived from the capacity the PVC actually has, so a
+	// bigger expansion already requested in the spec would be downgraded to one
+	// autoscaling step. The PVC resize path runs right after this and applies
+	// that request, which covers the usage anyway.
+	if requested, ok := vol.pvcSpec.Resources.Requests[corev1.ResourceStorage]; ok && requested.Cmp(newSize) >= 0 {
+		log.V(1).Info("skipping resize: a larger size is already requested",
+			"requested", requested.String(), "autoscaledTo", newSize.String())
+		return nil
+	}
 
 	log.Info("triggering storage autoscaling",
 		"currentSize", pvc.Status.Capacity.Storage().String(),
@@ -237,9 +250,19 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 
 	orig := cr.DeepCopy()
 
-	pvcSpec.Resources.Requests[corev1.ResourceStorage] = newSize
+	requests := pvcSpec.Resources.Requests
+	previous, hadPrevious := requests[corev1.ResourceStorage]
+	requests[corev1.ResourceStorage] = newSize
 
 	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		// The spec is part of the CR our callers keep reconciling with: leaving
+		// a size the API server never accepted in it would resize the PVC past
+		// what the CR requests, and the next reconcile would read that as a shrink.
+		if hadPrevious {
+			requests[corev1.ResourceStorage] = previous
+		} else {
+			delete(requests, corev1.ResourceStorage)
+		}
 		return errors.Wrap(err, "patch CR with new storage size")
 	}
 
