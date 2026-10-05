@@ -50,6 +50,10 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		cr.Status.Message = "Error: " + reconcileErr.Error()
 		cr.Status.State = api.AppStateError
 
+		if err := r.updateImageUpgradeCondition(ctx, cr); err != nil {
+			log.Error(err, "update image upgrade condition")
+		}
+
 		return r.writeStatus(ctx, cr)
 	}
 
