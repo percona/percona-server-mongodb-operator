@@ -1726,7 +1726,8 @@ destroy() {
 
 	delete_crd
 
-	destroy_cert_manager || true
+	local cert_manager_status=0
+	destroy_cert_manager || cert_manager_status=$?
 	if [[ -n "$OPENSHIFT" ]]; then
 		oc delete --grace-period=0 --force=true project "$namespace" &
 		if [ -n "$OPERATOR_NS" ]; then
@@ -1739,6 +1740,7 @@ destroy() {
 		fi
 	fi
 	rm -rf ${tmp_dir}
+	return "$cert_manager_status"
 }
 
 destroy_cert_manager() {
@@ -1747,7 +1749,27 @@ destroy_cert_manager() {
 		return
 	fi
 
-	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml"
+	kubectl_bin delete mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found || return
+	kubectl_bin delete validatingwebhookconfiguration cert-manager-webhook --ignore-not-found || return
+	kubectl_bin delete -f "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" --ignore-not-found --wait=false 2>/dev/null || :
+	local crds=(certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io)
+	kubectl_bin delete crd "${crds[@]}" --ignore-not-found --wait=false || return
+	kubectl_bin delete namespace cert-manager --ignore-not-found --wait=false || return
+
+	local remaining
+	local attempt
+	for attempt in $(seq 1 60); do
+		remaining="$(kubectl_bin get mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name)" || return
+		remaining+="$(kubectl_bin get validatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name)" || return
+		remaining+="$(kubectl_bin get crd "${crds[@]}" --ignore-not-found -o name)" || return
+		remaining+="$(kubectl_bin get namespace cert-manager --ignore-not-found -o name)" || return
+		if [[ -z "$remaining" ]]; then
+			return 0
+		fi
+		sleep 2
+	done
+	echo "cert-manager resources still present: $remaining" >&2
+	return 1
 }
 
 get_backup_dest() {
@@ -2411,6 +2433,7 @@ create_infra() {
 
 	# PYTEST_NAMESPACE_FILE isolates parallel Jenkins/local jobs sharing /tmp.
 	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
+	destroy_cert_manager
 
 	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
 		delete_crd
@@ -2431,6 +2454,7 @@ create_infra_gh_release() {
 	local git_tag="$2"
 
 	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
+	destroy_cert_manager
 
 	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then
@@ -2448,6 +2472,7 @@ create_infra_gh() {
 	local git_tag="$2"
 
 	echo "$ns" >"${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
+	destroy_cert_manager
 
 	check_crd_for_deletion "${git_tag}"
 	if [ -n "${OPERATOR_NS}" ]; then

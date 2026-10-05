@@ -63,7 +63,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil {
+	if cr.CompareVersion("1.23.1") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil {
 		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{mongosLogPVC(cr)}
 	}
 
@@ -117,7 +117,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 && cr.IsLogCollectorEnabled() {
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
 		logCollectorCs, err := logcollector.Containers(cr, cr.Spec.Sharding.Mongos.GetPort(), config.MongosLogVolume())
 		if err != nil {
 			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
@@ -133,7 +133,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	if configs.MongoDConf.Type.IsUsable() {
 		annotations[naming.AnnotationConfigHash] = configs.MongoDConf.HashHex
 	}
-	if hash := configs.HashHex(cr); hash != "" && cr.CompareVersion("1.24.0") >= 0 {
+	if hash := configs.HashHex(cr); hash != "" && cr.CompareVersion("1.23.1") >= 0 {
 		annotations[naming.AnnotationConfigHash] = hash
 	}
 
@@ -231,7 +231,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		})
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 && (cr.IsLogCollectorEnabled() || cr.Spec.Sharding.Mongos.LogStorage() != nil) {
+	if cr.CompareVersion("1.23.1") >= 0 && (cr.IsLogCollectorEnabled() || cr.Spec.Sharding.Mongos.LogStorage() != nil) {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.MongosLogVolClaimName,
 			MountPath: config.MongodContainerDataLogsDir,
@@ -291,7 +291,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 && cr.IsLogCollectorEnabled() {
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "LOGCOLLECTOR_ENABLED",
 			Value: "true",
@@ -486,7 +486,7 @@ func volumes(cr *api.PerconaServerMongoDB, configs StatefulConfigParams, mountKe
 		})
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 && cr.IsLogCollectorEnabled() {
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
 		// Add an emptyDir for logs if no persistent storage is specified
 		if cr.Spec.Sharding.Mongos.LogStorage() == nil {
 			volumes = append(volumes, corev1.Volume{
