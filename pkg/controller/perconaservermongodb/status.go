@@ -732,8 +732,8 @@ func outdatedContainerNames(pod *corev1.Pod, desired map[string]string) []string
 			if container.Image == "" {
 				continue
 			}
-			want, ok := desired[container.Name]
-			if !ok || (want != "" && container.Image != want) {
+want, ok := desired[container.Name]
+			if ok && want != "" && container.Image != want {
 				add(container.Name)
 			}
 		}
