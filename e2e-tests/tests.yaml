@@ -455,6 +455,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
 
+  pvc-auto-resize-mongos:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage]
+
   pvc-resize:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]

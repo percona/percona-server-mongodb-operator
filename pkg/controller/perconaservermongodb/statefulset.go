@@ -55,7 +55,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
+	mongodVol := mongodVolume(volumeSpec, ls[naming.LabelKubernetesComponent])
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, mongodVol, ls); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 

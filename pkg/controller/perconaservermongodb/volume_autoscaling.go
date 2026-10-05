@@ -19,12 +19,52 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
+// autoscaledVolume describes the volume of a single component that storage
+// autoscaling probes and grows. Components don't agree on any of it: replsets
+// hold data in mongod-data under /data/db, mongos holds its logs in mongos-logs
+// under /data/db/logs, and hidden and non-voting pods name their mongod
+// container after their component.
+type autoscaledVolume struct {
+	// claimName is the volume claim template name, which prefixes every PVC name
+	claimName string
+	// mountPath is the path to probe with df inside the container
+	mountPath string
+	// container is the container that mounts the volume
+	container string
+	// pvcSpec is the part of the CR spec holding the requested size, which is
+	// what a resize is triggered through
+	pvcSpec *api.PVCSpec
+}
+
+// mongodVolume returns the data volume autoscaled for a replset component.
+func mongodVolume(volumeSpec *api.VolumeSpec, component string) autoscaledVolume {
+	vol := autoscaledVolume{
+		claimName: config.MongodDataVolClaimName,
+		mountPath: config.MongodContainerDataDir,
+		container: naming.MongodContainerName(component),
+	}
+	if volumeSpec != nil {
+		vol.pvcSpec = &volumeSpec.PersistentVolumeClaim
+	}
+	return vol
+}
+
+// mongosVolume returns the log volume autoscaled for mongos.
+func mongosVolume(pvcSpec *api.PVCSpec) autoscaledVolume {
+	return autoscaledVolume{
+		claimName: config.MongosLogVolClaimName,
+		mountPath: config.MongodContainerDataLogsDir,
+		container: naming.ContainerMongos,
+		pvcSpec:   pvcSpec,
+	}
+}
+
 // reconcileStorageAutoscaling checks PVC disk usage and triggers resize if needed
 func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	sts *appsv1.StatefulSet,
-	volumeSpec *api.VolumeSpec,
+	vol autoscaledVolume,
 	ls map[string]string,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("statefulset", sts.Name)
@@ -44,7 +84,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
-	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+	if vol.pvcSpec == nil || vol.pvcSpec.PersistentVolumeClaimSpec == nil {
 		log.V(1).Info("skipping storage autoscaling: not using PVC")
 		return nil
 	}
@@ -72,23 +112,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return errors.Wrap(err, "list pods for autoscaling")
 	}
 
-	// Hidden and non-voting pods run mongod in a container named after their
-	// component, so the container to probe can't be assumed to be "mongod".
-	containerName := naming.MongodContainerName(ls[naming.LabelKubernetesComponent])
-
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
+		if !validatePVCName(vol.claimName, pvc, sts) {
 			continue
 		}
 
-		podName := extractPodNameFromPVC(pvc.Name, sts.Name)
+		podName := extractPodNameFromPVC(pvc.Name, vol.claimName)
 		pod := findPodByName(podList, podName)
 		if pod == nil {
 			log.V(1).Info("pod not found for PVC", "pvc", pvc.Name, "pod", podName)
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, volumeSpec, containerName); err != nil {
+		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, vol); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
@@ -103,18 +139,17 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	cr *api.PerconaServerMongoDB,
 	pvc *corev1.PersistentVolumeClaim,
 	pod *corev1.Pod,
-	volumeSpec *api.VolumeSpec,
-	containerName string,
+	vol autoscaledVolume,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
-	if !isContainerAndPodRunning(*pod, containerName) {
+	if !isContainerAndPodRunning(*pod, vol.container) {
 		log.V(1).Info("skipping PVC metrics check: container and pod not running",
-			"phase", pod.Status.Phase, "container", containerName)
+			"phase", pod.Status.Phase, "container", vol.container)
 		return nil
 	}
 
-	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, containerName)
+	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, vol.container, vol.mountPath)
 	if err != nil {
 		return errors.Wrap(err, "get PVC usage from metrics")
 	}
@@ -133,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		"usagePercent", usage.UsagePercent,
 		"threshold", cr.Spec.StorageAutoscaling().TriggerThresholdPercent)
 
-	return r.triggerResize(ctx, cr, pvc, newSize, volumeSpec)
+	return r.triggerResize(ctx, cr, pvc, newSize, vol.pvcSpec)
 }
 
 // shouldTriggerResize determines if a PVC should be resized
@@ -190,19 +225,19 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	return newSize
 }
 
-// triggerResize updates the CR volumeSpec to trigger a resize operation
+// triggerResize updates the CR pvcSpec to trigger a resize operation
 func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	pvc *corev1.PersistentVolumeClaim,
 	newSize resource.Quantity,
-	volumeSpec *api.VolumeSpec,
+	pvcSpec *api.PVCSpec,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
 	orig := cr.DeepCopy()
 
-	volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = newSize
+	pvcSpec.Resources.Requests[corev1.ResourceStorage] = newSize
 
 	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch CR with new storage size")
@@ -257,10 +292,10 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 }
 
 // extractPodNameFromPVC extracts the pod name from a PVC name
-// PVC format: "mongod-data-<statefulset-name>-<index>"
+// PVC format: "<claim-name>-<statefulset-name>-<index>"
 // Pod format: "<statefulset-name>-<index>"
-func extractPodNameFromPVC(pvcName string, stsName string) string {
-	prefix := config.MongodDataVolClaimName + "-"
+func extractPodNameFromPVC(pvcName string, claimName string) string {
+	prefix := claimName + "-"
 	if after, ok := strings.CutPrefix(pvcName, prefix); ok {
 		return after
 	}
