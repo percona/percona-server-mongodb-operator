@@ -1,0 +1,107 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: heterogeneous
+spec:
+  image:
+  imagePullPolicy: Always
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mongodb-operator:main-backup
+    storages:
+      minio:
+        type: s3
+        s3:
+          credentialsSecret: minio-secret
+          prefix: heterogeneous-prefix
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://minio-service:9000/
+          insecureSkipTLSVerify: false
+    pitr:
+      enabled: true
+      oplogSpanMin: 1
+      compressionType: gzip
+      compressionLevel: 6
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+    # Same heterogeneous shape as the heterogeneous-instance-basic test, with
+    # inst2 at one member to keep the physical restore's pod count down. No
+    # group is named mongod, so there is no cluster-rs0 StatefulSet and nothing
+    # in the backup path may assume a <cluster>-rs0-0 pod exists.
+    #
+    # Voters: 3 (inst1) + 1 (arbiter) + 1 (hidden) = 5, odd and under 7.
+    # Data-bearing voters: 3 + 1 = 4, at or above the minimum of 3.
+    # inst1 is the only primary-eligible group.
+    #
+    # Only data-bearing groups get a backup-agent sidecar, so the arbiter has
+    # no pbm-agent and must never be waited on or exec'd into.
+    instances:
+    - name: inst1
+      replicas: 3
+      rsConfig:
+        votes: 1
+        priority: 2
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: inst2
+      replicas: 1
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          workload: analytics
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: arbiter
+      replicas: 1
+      rsConfig:
+        arbiterOnly: true
+        votes: 1
+        priority: 0
+    - name: nonVoting
+      replicas: 1
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          nonVoting: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: hidden
+      replicas: 1
+      rsConfig:
+        hidden: true
+        votes: 1
+        priority: 0
+        tags:
+          hidden: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+  secrets:
+    users: some-users
