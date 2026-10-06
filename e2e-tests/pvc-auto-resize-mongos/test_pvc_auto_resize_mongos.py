@@ -182,15 +182,21 @@ class TestMongosPVCAutoResize:
 
         _wait_pvc_size(MONGOS_PVC, GROWN_SIZE)
 
-        status = retry(
-            lambda: _autoscaling_status(config.cluster),
-            max_attempts=30,
-            delay=10,
-            condition=lambda s: MONGOS_PVC in s,
-        )[MONGOS_PVC]
+        # resizeCount only moves once the operator probes the grown filesystem,
+        # which is a reconcile or two after the PVC itself reports the new size,
+        # so wait for the count rather than for the key to merely exist
+        try:
+            status = retry(
+                lambda: _autoscaling_status(config.cluster).get(MONGOS_PVC, {}),
+                max_attempts=30,
+                delay=10,
+                condition=lambda s: s.get("resizeCount") == 1,
+            )
+        except RuntimeError:
+            status = _autoscaling_status(config.cluster).get(MONGOS_PVC, {})
+            pytest.fail(f"resizeCount never reached 1 for {MONGOS_PVC}: {status}")
 
         assert not status.get("lastError"), f"autoscaling reported an error: {status}"
-        assert status.get("resizeCount") == 1, f"unexpected resize count: {status}"
 
         wait_cluster_consistency(config.cluster, 600)
 

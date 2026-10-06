@@ -18,20 +18,14 @@ import (
 )
 
 // autoscaledVolume identifies the volume of one component that storage
-// autoscaling probes and grows. Components share none of it: replsets hold data
-// in mongod-data, mongos holds its logs in mongos-logs, and hidden and
-// non-voting pods name their mongod container after their component.
+// autoscaling probes and grows.
 type autoscaledVolume struct {
-	// claimName is the volume claim template name, which prefixes every PVC name
 	claimName string
-	// container is the container to probe the volume in. It is named rather than
-	// looked up by whoever mounts the volume, because that is not unique: with
-	// the log collector enabled the fluentbit sidecars mount the very same
-	// volume, and the backup agent mounts mongod-data as well.
+	// named, not resolved by whoever mounts the volume: that isn't unique, since
+	// the fluentbit sidecars mount it too when log collection is on, and the
+	// backup agent mounts mongod-data as well
 	container string
-	// pvcSpec is the part of the CR spec holding the requested size, which is
-	// what a resize is triggered through
-	pvcSpec *api.PVCSpec
+	pvcSpec   *api.PVCSpec
 }
 
 // mountPath returns where the container mounts the volume in the statefulset's
@@ -87,8 +81,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
-	// df has to run against the path the volume is actually mounted at, which
-	// only the pod template knows
 	mountPath := vol.mountPath(sts)
 	if mountPath == "" {
 		log.V(1).Info("skipping storage autoscaling: volume is not mounted",
@@ -165,10 +157,9 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 
 	newSize := r.calculateNewSize(cr, pvc)
 
-	// The new size is derived from the capacity the PVC actually has, so a
-	// bigger expansion already requested in the spec would be downgraded to one
-	// autoscaling step. The PVC resize path runs right after this and applies
-	// that request, which covers the usage anyway.
+	// newSize is one step over the capacity the PVC has, so overwriting a bigger
+	// request already in the spec would downgrade it. The resize path runs right
+	// after this and applies that request, which covers the usage anyway.
 	if requested, ok := vol.pvcSpec.Resources.Requests[corev1.ResourceStorage]; ok && requested.Cmp(newSize) >= 0 {
 		log.V(1).Info("skipping resize: a larger size is already requested",
 			"requested", requested.String(), "autoscaledTo", newSize.String())
@@ -255,9 +246,9 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	requests[corev1.ResourceStorage] = newSize
 
 	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
-		// The spec is part of the CR our callers keep reconciling with: leaving
-		// a size the API server never accepted in it would resize the PVC past
-		// what the CR requests, and the next reconcile would read that as a shrink.
+		// callers keep reconciling with this spec, so a size the API server never
+		// accepted would grow the PVC past what the CR requests, and the next
+		// reconcile would read that as a shrink
 		if hadPrevious {
 			requests[corev1.ResourceStorage] = previous
 		} else {
