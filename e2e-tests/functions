@@ -1628,7 +1628,7 @@ compare_mongo_user() {
 }
 
 start_gke() {
-	gcloud container clusters create operator-testing-$RANDOM --zone europe-west3-c --project cloud-dev-112233 --preemptible --cluster-version 1.11
+	gcloud container clusters create operator-testing-$RANDOM --zone europe-west3-c --project cloud-dev-112233 --cluster-version 1.11
 }
 
 get_pumba() {
