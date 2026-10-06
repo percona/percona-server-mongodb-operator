@@ -186,7 +186,7 @@ MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[
 MINOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
 .PHONY: after-release after-release-versions
-after-release: update-version manifests after-release-versions
+after-release: update-version after-release-versions manifests update-upgrade-consistency-test
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongod8.0#}" deploy/cr-minimal.yaml
@@ -223,6 +223,76 @@ after-release-versions:
 		-e "s#^IMAGE_SEARCH=.*#IMAGE_SEARCH=$(IMAGE_TAG_BASE):main-mongot#" \
 		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \
 		e2e-tests/release_versions
+
+# Automates file versions but generation/new fields still need to be updated manually in the compare files.
+.PHONY: update-upgrade-consistency-test
+update-upgrade-consistency-test: SHELL := /bin/bash
+update-upgrade-consistency-test:
+	@test -n "$(NEXT_VER)" || \
+		(echo "Usage: make $@ NEXT_VER=1.24.0"; exit 1)
+	@set -eu; \
+	for test in \
+		e2e-tests/upgrade-consistency \
+		e2e-tests/upgrade-consistency-sharded-tls; do \
+		echo "Updating $$test..."; \
+		cd "$$test"; \
+		versions=($$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' run | awk '!seen[$$0]++')); \
+		v1="$${versions[0]}"; \
+		v2="$${versions[1]}"; \
+		v3="$${versions[2]}"; \
+		next="$(NEXT_VER)"; \
+		s1="$${v1//./}"; \
+		s2="$${v2//./}"; \
+		s3="$${v3//./}"; \
+		next_suffix="$${next//./}"; \
+		copy_compare_files() { \
+			source_suffix="$$1"; \
+			target_suffix="$$2"; \
+			source_version="$$3"; \
+			target_version="$$4"; \
+			for file in compare/*-"$$source_suffix"*.yml; do \
+				[[ -e "$$file" ]] || continue; \
+				new_file="$${file/-$$source_suffix/-$$target_suffix}"; \
+				cp "$$file" "$$new_file"; \
+				sed -i.bak \
+					-e "s/$$source_version/$$target_version/g" \
+					-e "s/-$$source_suffix/-$$target_suffix/g" \
+					"$$new_file"; \
+			done; \
+		}; \
+		if [[ "$${v3%.*}" == "$${next%.*}" ]]; then \
+			echo "  Patch release: $$v3 -> $$next"; \
+			echo "  Removing compare files for $$v3"; \
+			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
+			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
+			rm -f compare/*-"$$s3"*.yml; \
+			find . -type f \( -name run -o -path './conf/*.yml' \) \
+				-exec sed -i.bak \
+					-e "s/$$v3/$$next/g" \
+					-e "s/-$$s3/-$$next_suffix/g" {} +; \
+		else \
+			echo "  Minor release:"; \
+			echo "    $$v1 -> $$v2"; \
+			echo "    $$v2 -> $$v3"; \
+			echo "    $$v3 -> $$next"; \
+			echo "  Removing compare files for $$v1"; \
+			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
+			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
+			rm -f compare/*-"$$s1"*.yml; \
+			find . -type f \( -name run -o -path './conf/*.yml' \) \
+				-exec sed -i.bak \
+					-e "s/$$v3/__UPGRADE_V3__/g" \
+					-e "s/$$v2/$$v3/g" \
+					-e "s/$$v1/$$v2/g" \
+					-e "s/__UPGRADE_V3__/$$next/g" \
+					-e "s/-$$s3/-__UPGRADE_S3__/g" \
+					-e "s/-$$s2/-$$s3/g" \
+					-e "s/-$$s1/-$$s2/g" \
+					-e "s/-__UPGRADE_S3__/-$$next_suffix/g" {} +; \
+		fi; \
+		find . -name '*.bak' -delete; \
+		cd - >/dev/null; \
+	done
 
 version-service-client: swagger
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \

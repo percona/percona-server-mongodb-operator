@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   name: some-name
 spec:
-  crVersion: 1.21.2
+  crVersion: 1.22.0
   #platform: openshift
   image:
   imagePullPolicy: Always
