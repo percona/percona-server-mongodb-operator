@@ -594,7 +594,7 @@ boolean isManualBuild() {
 def skipRequested() {
     try {
         if (pullRequest.labels.contains('skip-e2e-tests')) {
-            echo "PR has the 'skip-e2e' label. Skipping e2e tests."
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
             return true
         }
     } catch (Exception e) {
