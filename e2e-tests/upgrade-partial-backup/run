@@ -120,13 +120,11 @@ setup_cluster() {
 		| yq '.spec.backup.pitr.enabled=true' \
 		| yq '.spec.backup.pitr.oplogSpanMin=1' \
 		| yq eval '.spec.backup.storages.gcp-cs = {
-		  "type": "s3",
-		  "s3": {
+		  "type": "gcs",
+		  "gcs": {
 		    "bucket": "operator-testing",
 		    "prefix": "upgrade-partial-backup",
-		    "region": "us-east-1",
-		    "credentialsSecret": "gcp-cs-secret",
-		    "endpointUrl": "https://storage.googleapis.com"
+		    "credentialsSecret": "gcp-cs-sa-key-secret"
 		  }
 		}' \
 		| add_arch_to_psmdb - \

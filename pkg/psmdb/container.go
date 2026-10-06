@@ -188,9 +188,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cr.Spec.Secrets.Users,
-					},
+					Name:     cr.Spec.Secrets.Users,
 					Optional: &fvar,
 				},
 			},
@@ -206,9 +204,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 	container.EnvFrom = []corev1.EnvFromSource{
 		{
 			SecretRef: &corev1.SecretEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: api.InternalUserSecretName(cr),
-				},
+				Name:     api.InternalUserSecretName(cr),
 				Optional: &fvar,
 			},
 		},

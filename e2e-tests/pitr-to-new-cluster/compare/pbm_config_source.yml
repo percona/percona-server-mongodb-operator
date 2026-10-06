@@ -19,3 +19,11 @@ backup:
   oplogSpanMin: 0
   compression: s2
 restore: {}
+lifecycle:
+  enabled: false
+  purgeFailed: false
+  dailyRetention: 0
+  weeklyRetention: 0
+  weeklyDay: 0
+  monthlyRetention: 0
+  monthlyDay: 0
