@@ -467,13 +467,23 @@ wait_backup() {
 
 wait_for_pbm_operations() {
 	local cluster=$1
+	local max_retries=${2:-540}
 
 	set +o xtrace
 	echo -n "waiting for PBM operation to finish"
-	retry=0
-	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
-		if [ $retry -ge 540 ]; then
-			echo max retry count $retry reached. something went wrong with PBM operations
+	local retry=0
+	local pbm_out
+	while true; do
+		if pbm_out=$(kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm status -o json -s running 2>/dev/null); then
+			if [[ $(echo "$pbm_out" | jq -r '.running.opID' 2>/dev/null) == "null" ]]; then
+				break
+			fi
+		fi
+
+		retry=$((retry + 1))
+		if [[ $retry -ge $max_retries ]]; then
+			echo
+			echo "max retry count $retry reached. something went wrong with PBM operations"
 			exit 1
 		fi
 		echo -n .
@@ -1191,7 +1201,7 @@ run_recovery_check() {
 	fi
 	echo
 
-	wait_cluster_consistency ${cluster}
+	wait_cluster_consistency ${cluster} 60
 	wait_for_pbm_operations ${cluster}
 
 	log "Operator triggered PBM resync: OK"
