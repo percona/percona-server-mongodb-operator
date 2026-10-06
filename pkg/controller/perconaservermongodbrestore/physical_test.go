@@ -84,10 +84,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			ctx := t.Context()
 
 			cluster := &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: "default",
-				},
+				Name:      "my-cluster",
+				Namespace: "default",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Backup: psmdbv1.BackupSpec{
@@ -113,10 +111,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			}
 
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster-rs0",
-					Namespace: "default",
-				},
+				Name:      "my-cluster-rs0",
+				Namespace: "default",
 				Spec: appsv1.StatefulSetSpec{
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{"app": "my-cluster"},
@@ -142,10 +138,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			}
 
 			secretTLS := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cluster.Spec.Secrets.SSL,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Spec.Secrets.SSL,
+				Namespace: cluster.Namespace,
 				Data: map[string][]byte{
 					"ca.crt":  {},
 					"tls.crt": {},

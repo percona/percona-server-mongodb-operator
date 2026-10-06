@@ -46,10 +46,8 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 			Name: "MONGODB_USER",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
+					Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
+					Name:     usersSecretName,
 					Optional: new(false),
 				},
 			},
@@ -58,10 +56,8 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 			Name: "MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
+					Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+					Name:     usersSecretName,
 					Optional: new(false),
 				},
 			},

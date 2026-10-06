@@ -267,7 +267,7 @@ spec:
                   items:
                     - key: ca.crt
                       path: ca-0.crt
-                  name: minio-ca-bundle
+                  name: s3-ca-bundle
         - emptyDir: {}
           name: ca-bundle
   updateStrategy:

@@ -74,11 +74,9 @@ func (c *caCert) Object() *cm.Certificate {
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}
 	return &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.Name(),
-			Namespace: c.Namespace(),
-			Labels:    labels,
-		},
+		Name:      c.Name(),
+		Namespace: c.Namespace(),
+		Labels:    labels,
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
 			CommonName: c.namePrefix() + "-ca",
@@ -129,19 +127,17 @@ func (c *tlsCert) SecretName() string {
 func (c *tlsCert) Object() *cm.Certificate {
 	cr := c.cr
 
-	issuerKind := cm.IssuerKind
-	issuerGroup := ""
-	if cr.CompareVersion("1.23.0") >= 0 && cr.Spec.TLS != nil {
-		issuerKind = cr.Spec.TLS.IssuerConf.Kind
-		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+	issuerKind := cr.Spec.TLS.IssuerConf.Kind
+	issuerGroup := cr.Spec.TLS.IssuerConf.Group
+	if cr.CompareVersion("1.23.1") < 0 && cr.Spec.TLS.IssuerConf.Name == "" {
+		// Before 1.23.1 the operator always created a namespaced Issuer, the configured kind applies to user-provided issuers only.
+		issuerKind, issuerGroup = cm.IssuerKind, ""
 	}
 
 	return &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.Name(),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      c.Name(),
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
 				Organizations: []string{"PSMDB"},
