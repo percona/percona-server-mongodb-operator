@@ -113,21 +113,17 @@ func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
 			stsLabels[naming.LabelKubernetesComponent] = naming.ComponentMongod
 			objects := []client.Object{
 				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "cluster-rs0",
-						Namespace: cr.Namespace,
-						Labels:    stsLabels,
-					},
+					Name:      "cluster-rs0",
+					Namespace: cr.Namespace,
+					Labels:    stsLabels,
 				},
 			}
 			for i := range rs.Size {
 				pod := clientTestPod(cr, fmt.Sprintf("cluster-rs0-%d", i), naming.RSLabels(cr, rs))
 				pod.Labels[naming.LabelKubernetesComponent] = naming.ComponentMongod
 				objects = append(objects, pod, &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      pod.Name,
-						Namespace: cr.Namespace,
-					},
+					Name:      pod.Name,
+					Namespace: cr.Namespace,
 					Spec: corev1.ServiceSpec{
 						Type:      corev1.ServiceTypeClusterIP,
 						ClusterIP: fmt.Sprintf("10.0.0.%d", 10+i),
@@ -138,10 +134,8 @@ func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
 				})
 				if tt.serviceImported {
 					objects = append(objects, &mcsv1alpha1.ServiceImport{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      pod.Name,
-							Namespace: cr.Namespace,
-						},
+						Name:      pod.Name,
+						Namespace: cr.Namespace,
 					})
 				}
 			}
@@ -183,11 +177,9 @@ func TestMongoConfigReturnsServiceImportLookupError(t *testing.T) {
 				WithScheme(clientTestScheme(t)).
 				WithObjects(
 					&appsv1.StatefulSet{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "cluster-rs0",
-							Namespace: cr.Namespace,
-							Labels:    stsLabels,
-						},
+						Name:      "cluster-rs0",
+						Namespace: cr.Namespace,
+						Labels:    stsLabels,
 					},
 					pod,
 				).
@@ -231,11 +223,9 @@ func TestMongoConfigSkipsTerminatingPods(t *testing.T) {
 		WithScheme(clientTestScheme(t)).
 		WithObjects(
 			&appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster-rs0",
-					Namespace: cr.Namespace,
-					Labels:    stsLabels,
-				},
+				Name:      "cluster-rs0",
+				Namespace: cr.Namespace,
+				Labels:    stsLabels,
 			},
 			pod0,
 			pod1,
@@ -366,10 +356,8 @@ func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
 
 func clientTestCluster() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "database",
-		},
+		Name:      "cluster",
+		Namespace: "database",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion:               "1.20.0",
 			ClusterServiceDNSMode:   api.DNSModeInternal,
@@ -395,20 +383,16 @@ func clientTestCredentials() Credentials {
 
 func clientTestPod(cr *api.PerconaServerMongoDB, name string, labels map[string]string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    labels,
 	}
 }
 
 func clientTestMongosService(cr *api.PerconaServerMongoDB, name string) *corev1.Service {
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{Name: "mongos", Port: 27017},
