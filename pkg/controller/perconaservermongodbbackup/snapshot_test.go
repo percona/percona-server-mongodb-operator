@@ -16,7 +16,6 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -104,7 +103,7 @@ func TestSnapshotBackups_Start(t *testing.T) {
 
 			b := &snapshotBackups{pbm: mockPBM}
 			cr := &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
+				Name: "test-backup",
 			}
 
 			status, err := b.Start(ctx, nil, tt.cluster, cr)
@@ -133,20 +132,16 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 	const namespace = "default"
 
 	bcp := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			VolumeSnapshotClass: new("csi-snapclass"),
 		},
 	}
 
 	existingSnapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.VolumeSnapshotName(bcp, "rs0"),
-			Namespace: namespace,
-		},
+		Name:      naming.VolumeSnapshotName(bcp, "rs0"),
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(true),
 		},
@@ -213,10 +208,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 	const namespace = "default"
 
 	bcp := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			VolumeSnapshotClass: new("csi-snapclass"),
 		},
@@ -228,10 +221,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 
 	readySnapshot := func(rsName string) *volumesnapshotv1.VolumeSnapshot {
 		return &volumesnapshotv1.VolumeSnapshot{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      snapshotName(rsName),
-				Namespace: namespace,
-			},
+			Name:      snapshotName(rsName),
+			Namespace: namespace,
 			Status: &volumesnapshotv1.VolumeSnapshotStatus{
 				ReadyToUse: new(true),
 			},
@@ -276,10 +267,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		"copy-ready but snapshot not yet ready": {
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      snapshotName("rs0"),
-						Namespace: namespace,
-					},
+					Name:      snapshotName("rs0"),
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						ReadyToUse: new(false),
 					},
@@ -298,10 +287,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		"snapshot with error returns error": {
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      snapshotName("rs0"),
-						Namespace: namespace,
-					},
+					Name:      snapshotName("rs0"),
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
 							Message: new("snapshot creation failed: insufficient storage"),
@@ -372,10 +359,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 
 	newCR := func() *api.PerconaServerMongoDBBackup {
 		return &api.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pbmName,
-				Namespace: namespace,
-			},
+			Name:      pbmName,
+			Namespace: namespace,
 			Spec: api.PerconaServerMongoDBBackupSpec{
 				Type:                defs.ExternalBackup,
 				VolumeSnapshotClass: new("csi-snapclass"),
@@ -390,20 +375,16 @@ func TestSnapshotBackups_Status(t *testing.T) {
 	rs0SnapshotName := naming.VolumeSnapshotName(newCR(), "rs0")
 
 	readyRS0Snapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rs0SnapshotName,
-			Namespace: namespace,
-		},
+		Name:      rs0SnapshotName,
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(true),
 		},
 	}
 
 	pendingRS0Snapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rs0SnapshotName,
-			Namespace: namespace,
-		},
+		Name:      rs0SnapshotName,
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(false),
 		},
@@ -611,10 +592,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			},
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      rs0SnapshotName,
-						Namespace: namespace,
-					},
+					Name:      rs0SnapshotName,
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
 							Message: new("csi driver error: disk unavailable"),
