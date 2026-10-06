@@ -8,7 +8,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -84,9 +83,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr 
 // caller is reconciling toward "absent".
 func (r *ReconcilePerconaServerMongoDB) deleteSearch(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) error {
 	ns := cr.Namespace
-	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: naming.SearchStatefulSetName(cr, rs), Namespace: ns}}
-	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: naming.SearchServiceName(cr, rs), Namespace: ns}}
-	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: naming.SearchConfigMapName(cr, rs), Namespace: ns}}
+	sts := &appsv1.StatefulSet{Name: naming.SearchStatefulSetName(cr, rs), Namespace: ns}
+	svc := &corev1.Service{Name: naming.SearchServiceName(cr, rs), Namespace: ns}
+	cm := &corev1.ConfigMap{Name: naming.SearchConfigMapName(cr, rs), Namespace: ns}
 
 	if err := k8sutils.DeleteIfExists(ctx, r.client, sts); err != nil {
 		return errors.Wrapf(err, "delete StatefulSet %s", sts.Name)
