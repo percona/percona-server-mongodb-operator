@@ -18,8 +18,11 @@ desc 'Testing on not sharded cluster'
 
 log "Creating PSMDB cluster"
 cluster="some-name"
+storage_prefix="psmdb-demand-backup-incremental-gcp-native/${RANDOM}-${RANDOM}"
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
-apply_cluster "${test_dir}/conf/${cluster}.yml"
+cat_config "${test_dir}/conf/${cluster}.yml" \
+	| yq eval ".spec.backup.storages.gcp-cs-native.gcs.prefix = \"${storage_prefix}\"" - \
+	| kubectl_bin apply -f -
 kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
 
 log "check if all pods started"
