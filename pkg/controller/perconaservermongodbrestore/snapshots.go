@@ -437,8 +437,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	}
 
 	// Collect all PVCs that need to be reconciled.
-	pvcs := make([]pvcInfo, 0)
+	replsetPVCs := make(map[string][]pvcInfo)
 	for _, rs := range replsets {
+		pvcs := make([]pvcInfo, 0)
 		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
@@ -490,17 +491,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 				})
 			}
 		}
+		replsetPVCs[rs.Name] = pvcs
 	}
 
-	// Rollout PVCs one-by-one.
-	for _, info := range pvcs {
-		if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
-			info.volumeClaimTemplate, restore); err != nil {
-			return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
-		} else if !ready {
-			log.Info("Waiting for PVC to be restored", "pvc", info.pvcName)
-			return false, nil
+	done := true
+	for rs, pvcs := range replsetPVCs {
+		// Rollout PVCs one-by-one for each replset.
+		for _, info := range pvcs {
+			if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
+				info.volumeClaimTemplate, restore); err != nil {
+				return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
+			} else if !ready {
+				log.Info("Waiting for PVC to be restored", "pvc", info.pvcName, "rsName", rs)
+				done = false
+				break
+			}
 		}
+	}
+
+	if !done {
+		return false, nil
 	}
 
 	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
