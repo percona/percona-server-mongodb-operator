@@ -144,7 +144,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 		cr.ObjectMeta.DeletionTimestamp == nil {
 		return reconcile.Result{}, nil
 	}
-	if cr.ObjectMeta.DeletionTimestamp != nil {
+	if cr.DeletionTimestamp != nil {
 		return r.reconcileDelete(ctx, cr)
 	}
 

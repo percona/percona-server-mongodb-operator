@@ -29,15 +29,13 @@ func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 
 	now := metav1.NewTime(time.Now())
 	cr := &psmdbv1.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              backupName,
-			Namespace:         ns,
-			UID:               types.UID("cccccccc-cccc-cccc-cccc-cccccccccccc"),
-			DeletionTimestamp: &now,
-			Finalizers: []string{
-				naming.FinalizerDeleteBackup,
-				naming.FinalizerReleaseLock,
-			},
+		Name:              backupName,
+		Namespace:         ns,
+		UID:               types.UID("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+		DeletionTimestamp: &now,
+		Finalizers: []string{
+			naming.FinalizerDeleteBackup,
+			naming.FinalizerReleaseLock,
 		},
 		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 			ClusterName: clusterName,
@@ -50,20 +48,16 @@ func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 	}
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: ns,
-		},
+		Name:      clusterName,
+		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			CRVersion: "1.21.0",
 		},
 	}
 
 	lease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.BackupLeaseName(clusterName),
-			Namespace: ns,
-		},
+		Name:      naming.BackupLeaseName(clusterName),
+		Namespace: ns,
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 			HolderIdentity: new(naming.BackupHolderId(cr)),
@@ -85,7 +79,7 @@ func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(context.Background(), reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: backupName, Namespace: ns},
+		Name: backupName, Namespace: ns,
 	})
 	require.NoError(t, err)
 
