@@ -716,10 +716,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 	)
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: namespace,
-		},
+		Name:      clusterName,
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 1}},
 		},
@@ -742,11 +740,9 @@ func TestImageUpgradeCondition(t *testing.T) {
 		ls := labelsFor(component)
 		initContainers := containers(init)
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    ls,
-			},
+			Name:      name,
+			Namespace: namespace,
+			Labels:    ls,
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: ls},
 				Template: corev1.PodTemplateSpec{
@@ -761,11 +757,9 @@ func TestImageUpgradeCondition(t *testing.T) {
 	}
 	pod := func(name, component string, images map[string]string, init map[string]string) *corev1.Pod {
 		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    labelsFor(component),
-			},
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labelsFor(component),
 			Spec: corev1.PodSpec{
 				InitContainers: containers(init),
 				Containers:     containers(images),
