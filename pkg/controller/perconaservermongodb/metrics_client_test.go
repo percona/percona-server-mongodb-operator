@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
@@ -143,10 +142,8 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 			}
 
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod-0",
-					Namespace: "test-namespace",
-				},
+				Name:      "test-pod-0",
+				Namespace: "test-namespace",
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -217,7 +214,7 @@ func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
 			}
 
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-pod-0", Namespace: "test-namespace"},
+				Name: "test-pod-0", Namespace: "test-namespace",
 			}
 
 			_, err := r.getPVCUsageFromMetrics(ctx, pod, "mongod-data-test-pod-0", tt.container)

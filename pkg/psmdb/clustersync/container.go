@@ -42,8 +42,8 @@ func pcsmEnv(cr *api.PerconaServerMongoDBClusterSync) []corev1.EnvVar {
 func uriEnvSource(secretName, key string) *corev1.EnvVarSource {
 	return &corev1.EnvVarSource{
 		SecretKeyRef: &corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-			Key:                  key,
+			Name: secretName,
+			Key:  key,
 		},
 	}
 }

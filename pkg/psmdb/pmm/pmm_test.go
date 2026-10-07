@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -151,10 +150,8 @@ func TestContainer(t *testing.T) {
 func defaultPMMCR() *api.PerconaServerMongoDB {
 	boolTrue := true
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cr",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cr",
+		Namespace: "test-ns",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion:       version.Version(),
 			ImagePullPolicy: corev1.PullAlways,
@@ -185,11 +182,9 @@ func customLivenessProbe() *corev1.Probe {
 	return &corev1.Probe{
 		InitialDelaySeconds: 15,
 		PeriodSeconds:       7,
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Port: intstr.FromInt(7777),
-				Path: "/custom/Liveness",
-			},
+		HTTPGet: &corev1.HTTPGetAction{
+			Port: intstr.FromInt(7777),
+			Path: "/custom/Liveness",
 		},
 	}
 }
@@ -198,10 +193,8 @@ func customReadinessProbe() *corev1.Probe {
 	return &corev1.Probe{
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       3,
-		ProbeHandler: corev1.ProbeHandler{
-			TCPSocket: &corev1.TCPSocketAction{
-				Port: intstr.FromInt(7777),
-			},
+		TCPSocket: &corev1.TCPSocketAction{
+			Port: intstr.FromInt(7777),
 		},
 	}
 }

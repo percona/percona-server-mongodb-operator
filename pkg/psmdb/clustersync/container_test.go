@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -14,17 +13,13 @@ import (
 
 func TestContainerProbes(t *testing.T) {
 	customLiveness := &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"sh", "-c", "true"}},
-		},
+		Exec:          &corev1.ExecAction{Command: []string{"sh", "-c", "true"}},
 		PeriodSeconds: 7,
 	}
 	customReadiness := &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/healthz",
-				Port: intstr.FromInt32(HTTPPort),
-			},
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: "/healthz",
+			Port: intstr.FromInt32(HTTPPort),
 		},
 		PeriodSeconds: 3,
 	}
@@ -140,8 +135,8 @@ func TestContainerEnv(t *testing.T) {
 					Name: "PCSM_REPL_BULK_OPS_SIZE",
 					ValueFrom: &corev1.EnvVarSource{
 						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "pcsm-tuning"},
-							Key:                  "bulkOpsSize",
+							Name: "pcsm-tuning",
+							Key:  "bulkOpsSize",
 						},
 					},
 				}},
@@ -150,8 +145,8 @@ func TestContainerEnv(t *testing.T) {
 				Name: "PCSM_REPL_BULK_OPS_SIZE",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "pcsm-tuning"},
-						Key:                  "bulkOpsSize",
+						Name: "pcsm-tuning",
+						Key:  "bulkOpsSize",
 					},
 				},
 			}),
@@ -161,8 +156,8 @@ func TestContainerEnv(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDBClusterSync{
-				ObjectMeta: metav1.ObjectMeta{Name: crName},
-				Spec:       tc.spec,
+				Name: crName,
+				Spec: tc.spec,
 			}
 			c := Container(cr)
 			assert.Equal(t, tc.want, c.Env)
