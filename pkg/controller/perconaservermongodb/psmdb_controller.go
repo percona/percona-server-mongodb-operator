@@ -100,7 +100,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, errors.Wrap(err, "get server version")
 	}
 
-	mgr.GetLogger().Info("server version", "platform", sv.Platform, "version", sv.Info)
+	mgr.GetLogger().Info("server version", "platform", sv.String(), "version", sv.Info)
 
 	initImage, err := getOperatorPodImage(context.TODO())
 	if err != nil {

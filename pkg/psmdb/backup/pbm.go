@@ -40,7 +40,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -1514,24 +1513,6 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
 	}
-	return nil
-}
-
-func ResyncConfigExec(ctx context.Context, cl clientcmd.Client, pod *corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	command := []string{"pbm", "config", "--force-resync"}
-
-	log.Info("starting config resync", "pod", pod.Name, "command", command)
-
-	err := cl.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		return errors.Wrapf(err, "start resync: run %v stderr: %s stdout: %s", command, stderrBuffer.String(), stdoutBuffer.String())
-	}
-
 	return nil
 }
 

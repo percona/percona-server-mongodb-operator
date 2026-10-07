@@ -272,9 +272,11 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		VolumeExpansionEnabled: cr.Spec.IsVolumeExpansionEnabled(),
 	}
 
+	sv := *r.serverVersion
 	if cr.Spec.Platform != nil {
-		vm.Platform = string(*cr.Spec.Platform)
+		sv.Platform = *cr.Spec.Platform
 	}
+	vm.Platform = sv.String()
 
 	for _, rs := range cr.Spec.Replsets {
 		if len(rs.Sidecars) > 0 {
