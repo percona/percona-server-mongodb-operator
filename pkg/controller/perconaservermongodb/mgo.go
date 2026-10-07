@@ -622,13 +622,27 @@ func inShard(ctx context.Context, client mongo.Client, rsName string) (bool, err
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
-func mongoInitAdminUser(user, pwd string) string {
-	return fmt.Sprintf("'db.getSiblingDB(\"admin\").createUser( "+
-		"{"+
-		"user: \"%s\","+
-		"pwd: \"%s\","+
-		"roles: [ \"userAdminAnyDatabase\" ]"+
-		"})'", strings.ReplaceAll(user, "'", `'"'"'`), strings.ReplaceAll(pwd, "'", `'"'"'`))
+// mongoExpression creates a mongodb shell call with a JSON-encoded argument
+func mongoExpression(function string, argument any) (string, error) {
+	arg, err := json.Marshal(argument)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal mongo expression argument")
+	}
+
+	return fmt.Sprintf("%s(%s)", function, arg), nil
+}
+
+func mongoInitAdminUser(user, pwd string) (string, error) {
+	expr, err := mongoExpression(`db.getSiblingDB("admin").createUser`, map[string]any{
+		"user":  user,
+		"pwd":   pwd,
+		"roles": []string{"userAdminAnyDatabase"},
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "create user admin expression")
+	}
+
+	return "'" + strings.ReplaceAll(expr, "'", `'"'"'`) + "'", nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
@@ -739,11 +753,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return nil, nil, errors.Wrapf(err, "get config member for pod %s", pod.Name)
 		}
 
-		memberBytes, err := json.Marshal(member)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "marshall member to json")
-		}
-
 		var errb, outb bytes.Buffer
 
 		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
@@ -751,38 +760,28 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 			return nil, nil, fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 		}
 
-		mongoCmd := "mongosh"
+		mongoArgs := []string{"mongosh"}
 		if strings.Contains(outb.String(), "v4.4") || strings.Contains(outb.String(), "v5.0") {
-			mongoCmd = "mongo"
+			mongoArgs[0] = "mongo"
 		}
 
 		if cr.TLSEnabled() {
-			mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+			mongoArgs = append(mongoArgs, "--tls", "--tlsCertificateKeyFile", "/tmp/tls.pem", "--tlsAllowInvalidCertificates", "--tlsCAFile", "/etc/mongodb-ssl/ca.crt")
 		}
 
-		mongoCmd += fmt.Sprintf(" --port %d", replset.GetPort())
-
-		cmd := []string{
-			"sh", "-c",
-			fmt.Sprintf(
-				`
-				cat <<-EOF | %s
-				rs.initiate(
-					{
-						_id: '%s',
-						version: 1,
-						members: [
-							%s,
-						]
-					}
-				)
-				EOF
-			`, mongoCmd, replsetName, memberBytes),
+		mongoArgs = append(mongoArgs, "--port", fmt.Sprint(replset.GetPort()))
+		mongoCmd := strings.Join(mongoArgs, " ")
+		replsetInitExpression, err := mongoExpression("rs.initiate", map[string]any{
+			"_id":     replsetName,
+			"version": 1,
+			"members": []mongo.ConfigMember{member},
+		})
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "create replset config expression")
 		}
-
 		errb.Reset()
 		outb.Reset()
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", cmd, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", mongoArgs, strings.NewReader(replsetInitExpression+"\n"), &outb, &errb, false)
 		if err != nil {
 			return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
@@ -796,8 +795,10 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		err = retry.OnError(backoff, func(err error) bool { return true }, func() error {
 			var stderr, stdout bytes.Buffer
 
-			hello := []string{"sh", "-c",
-				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'"}
+			hello := []string{
+				"sh", "-c",
+				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'",
+			}
 			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
 			if err != nil {
 				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
@@ -850,10 +851,15 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 
 	log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 
+	quotedCreateUserExpression, err := mongoInitAdminUser(userAdmin.Username, userAdmin.Password)
+	if err != nil {
+		return err
+	}
+
 	var outb, errb bytes.Buffer
 	cmd := []string{
 		"sh", "-c",
-		fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password)),
+		fmt.Sprintf(`%s --eval %s`, mongoCmd, quotedCreateUserExpression),
 	}
 
 	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false)

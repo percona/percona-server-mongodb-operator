@@ -143,7 +143,7 @@ deploy_pmm3_server() {
 	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm repo update
 
-	if [[ -n "$OPENSHIFT" ]]; then
+	if [[ -n $OPENSHIFT ]]; then
 		oc create sa pmm-server
 		oc adm policy add-scc-to-user privileged -z pmm-server
 		if [[ $OPERATOR_NS ]]; then
@@ -475,9 +475,9 @@ for instance in "${does_node_id_exists_in_pmm[@]}"; do
 	fi
 done
 
-if [[ -n "$OPENSHIFT" ]]; then
+if [[ -n $OPENSHIFT ]]; then
 	oc adm policy remove-scc-from-user privileged -z pmm-server
-	if [[ -n "$OPERATOR_NS" ]]; then
+	if [[ -n $OPERATOR_NS ]]; then
 		oc delete clusterrolebinding pmm-psmdb-operator-cluster-wide
 	else
 		oc delete rolebinding pmm-psmdb-operator-namespace-only

@@ -2,7 +2,9 @@ package perconaservermongodb
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"os/exec"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,6 +25,79 @@ import (
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestMongoInitAdminUserEscaping(t *testing.T) {
+	const prefix = `db.getSiblingDB("admin").createUser(`
+
+	for _, tc := range []struct {
+		name string
+		user string
+		pwd  string
+	}{
+		{name: "double quote", user: "userAdmin", pwd: `literal"quote`},
+		{name: "single quote", user: "user'Admin", pwd: "literal'quote"},
+		{name: "backslash and newline", user: "userAdmin", pwd: "back\\slash\nnext"},
+		{name: "shell metacharacters", user: "userAdmin", pwd: "$(false);`false`$HOME"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			quotedExpression, err := mongoInitAdminUser(tc.user, tc.pwd)
+			require.NoError(t, err)
+
+			actual, err := exec.Command("sh", "-c", `set -- `+quotedExpression+`; printf '%s' "$1"`).Output()
+			require.NoError(t, err)
+
+			expression := string(actual)
+			require.True(t, strings.HasPrefix(expression, prefix), "unexpected JavaScript: %q", expression)
+			require.True(t, strings.HasSuffix(expression, ")"), "unexpected JavaScript: %q", expression)
+
+			var userDoc struct {
+				User  string   `json:"user"`
+				Pwd   string   `json:"pwd"`
+				Roles []string `json:"roles"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(expression, prefix), ")")), &userDoc))
+			assert.Equal(t, tc.user, userDoc.User)
+			assert.Equal(t, tc.pwd, userDoc.Pwd)
+			assert.Equal(t, []string{"userAdminAnyDatabase"}, userDoc.Roles)
+		})
+	}
+}
+
+func TestHandleReplsetInitPassesConfigWithoutShell(t *testing.T) {
+	const replsetName = "rs'$(echo name)"
+	const tagValue = "literal\"quote'$(echo tag)\nnext"
+
+	exec := &replsetInitExecRecorder{authCheckErr: errors.New("Authentication failed")}
+	r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, exec)
+	rs.Configuration = api.MongoConfiguration("replication:\n  replSetName: \"" + replsetName + "\"\n")
+	podName := cr.Name + "-" + rs.Name + "-0"
+	rs.ReplsetOverrides = api.ReplsetOverrides{
+		podName: {Tags: map[string]string{"special": tagValue}},
+	}
+
+	_, _, err := r.handleReplsetInit(context.Background(), cr, rs, []corev1.Pod{*fakeMongodPod(cr, rs, podName)})
+	require.NoError(t, err)
+	require.NotEmpty(t, exec.initCommand)
+	assert.Equal(t, "mongosh", exec.initCommand[0])
+	assert.Contains(t, exec.initCommand, "--port")
+
+	const prefix = "rs.initiate("
+	require.True(t, strings.HasPrefix(exec.initInput, prefix), "unexpected JavaScript: %q", exec.initInput)
+	require.True(t, strings.HasSuffix(exec.initInput, ")\n"), "unexpected JavaScript: %q", exec.initInput)
+
+	var config struct {
+		ID      string `json:"_id"`
+		Version int    `json:"version"`
+		Members []struct {
+			Tags map[string]string `json:"tags"`
+		} `json:"members"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(exec.initInput, prefix), ")\n")), &config))
+	assert.Equal(t, replsetName, config.ID)
+	assert.Equal(t, 1, config.Version)
+	require.Len(t, config.Members, 1)
+	assert.Equal(t, tagValue, config.Members[0].Tags["special"])
+}
 
 // initMongoClientProvider lets a test decide, per role, whether obtaining a
 // mongo client succeeds. handleReplsetInit is only reached when the
@@ -66,6 +141,8 @@ type replsetInitExecRecorder struct {
 	authCheckErrAfterFirst    error
 	createUserCalls           atomic.Int32
 	authCheckCalls            atomic.Int32
+	initCommand               []string
+	initInput                 string
 }
 
 func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
@@ -76,7 +153,13 @@ func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, con
 			_, _ = stdout.Write([]byte("db version v7.0.0"))
 		}
 		return nil
-	case strings.Contains(joined, "rs.initiate"):
+	case stdin != nil:
+		input, err := io.ReadAll(stdin)
+		if err != nil {
+			return err
+		}
+		m.initCommand = append([]string(nil), command...)
+		m.initInput = string(input)
 		return nil
 	case strings.Contains(joined, "isWritablePrimary"):
 		if stdout != nil {
