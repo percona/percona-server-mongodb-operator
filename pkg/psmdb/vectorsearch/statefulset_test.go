@@ -487,7 +487,7 @@ func TestMongotContainer_ProbeHandlerOverrideWins(t *testing.T) {
 	exec := &corev1.ExecAction{Command: []string{"/bin/true"}}
 	search := &api.SearchSpec{
 		LivenessProbe: &corev1.Probe{
-			ProbeHandler:  corev1.ProbeHandler{Exec: exec},
+			Exec:          exec,
 			PeriodSeconds: 20,
 		},
 	}

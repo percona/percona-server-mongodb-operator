@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -24,7 +23,7 @@ func TestBuildTargetURI(t *testing.T) {
 	}{
 		"replicaset target": {
 			target: &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "ns"},
+				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 				},
@@ -35,7 +34,7 @@ func TestBuildTargetURI(t *testing.T) {
 		},
 		"replicaset target with custom dns suffix": {
 			target: &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "ns"},
+				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					ClusterServiceDNSSuffix: psmdbv1.MultiClusterDefaultDNSSuffix,
 					Replsets:                []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
@@ -47,7 +46,7 @@ func TestBuildTargetURI(t *testing.T) {
 		},
 		"sharded target points at mongos without replicaSet": {
 			target: &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "ns"},
+				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 					Sharding: psmdbv1.Sharding{
@@ -62,7 +61,7 @@ func TestBuildTargetURI(t *testing.T) {
 		},
 		"credentials are percent-encoded": {
 			target: &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "ns"},
+				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 				},
@@ -77,7 +76,7 @@ func TestBuildTargetURI(t *testing.T) {
 		},
 		"no replsets": {
 			target: &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "ns"},
+				Name: "cluster1", Namespace: "ns",
 			},
 			username: "sync",
 			password: "syncpass",
@@ -145,7 +144,7 @@ func TestBuildSourceURI(t *testing.T) {
 			}
 
 			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-				ObjectMeta: metav1.ObjectMeta{Name: "sync", Namespace: "ns"},
+				Name: "sync", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
 					Source: psmdbv1.ClusterSyncSource{URI: tc.uri, CredentialsSecret: "source-creds"},
 				},
@@ -166,7 +165,7 @@ func TestBuildSourceURI(t *testing.T) {
 
 func sourceSecret(username, password string) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "source-creds", Namespace: "ns"},
+		Name: "source-creds", Namespace: "ns",
 		Data: map[string][]byte{
 			"username": []byte(username),
 			"password": []byte(password),

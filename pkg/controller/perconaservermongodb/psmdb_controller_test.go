@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -110,10 +109,8 @@ func TestEnsureSecurityKeys(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: "some-ns",
-				},
+				Name:      "some-cluster",
+				Namespace: "some-ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Secrets: &psmdbv1.SecretsSpec{
@@ -150,10 +147,8 @@ var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 	ctx := context.Background()
 	const ns = "psmdb"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 	crName := ns + "-reconciler"
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
@@ -192,10 +187,8 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 	ctx := context.Background()
 	const ns = "psmdb-validation"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
