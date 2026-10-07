@@ -1,4 +1,4 @@
-import groovy.transform.Field
+Jenkinsfileimport groovy.transform.Field
 
 @Field def zone = 'us-central1-c'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
@@ -493,7 +493,7 @@ BASH
         // so the build aborts cleanly.
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
-            long elapsedMin = (new Date().getTime() - timeStart).longValue() / 60000L
+            def elapsedMin = (new Date().getTime() - timeStart) / 60000
             echo "Test $testName timed out after ${elapsedMin} minutes!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
@@ -508,7 +508,7 @@ BASH
         // step can surface as a plain "exit code 143" error before the timeout's
         // FlowInterruptedException propagates. Treat 143 as a timeout/termination
         // (error), not a test assertion failure, so the report shows the right icon.
-        long elapsedMin = (new Date().getTime() - timeStart).longValue() / 60000L
+        def elapsedMin = (new Date().getTime() - timeStart) / 60000
         if (exc.message?.contains('exit code 143')) {
             echo "Test $testName was terminated (exit 143) after ${elapsedMin} minutes - treating as timeout/error!"
             collectDebugLogs(testName, clusterSuffix)
@@ -526,8 +526,7 @@ BASH
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
         pushLogFile("${testName}-debug")
-        long totalSec = (timeStop - timeStart).longValue() / 1000L
-        echo "The $testName test was finished in ${totalSec}s (${totalSec / 60}m ${totalSec % 60}s)!"
+        echo "The $testName test was finished in ${durationSec}s (${(durationSec / 60).intValue()}m ${(durationSec % 60).intValue()}s)!"
     }
 }
 
