@@ -550,6 +550,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
 
+  tls-issue-cert-manager-renew:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [tls]
+
   unsafe-psa:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]

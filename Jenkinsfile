@@ -493,7 +493,8 @@ BASH
         // so the build aborts cleanly.
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
-            echo "Test $testName timed out!"
+            def elapsedMin = (new Date().getTime() - timeStart) / 60000
+            echo "Test $testName timed out after ${elapsedMin} minutes!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
             currentBuild.result = 'FAILURE'
@@ -507,12 +508,13 @@ BASH
         // step can surface as a plain "exit code 143" error before the timeout's
         // FlowInterruptedException propagates. Treat 143 as a timeout/termination
         // (error), not a test assertion failure, so the report shows the right icon.
+        def elapsedMin = (new Date().getTime() - timeStart) / 60000
         if (exc.message?.contains('exit code 143')) {
-            echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            echo "Test $testName was terminated (exit 143) after ${elapsedMin} minutes - treating as timeout/error!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
         } else {
-            echo "Test $testName has failed!"
+            echo "Test $testName has failed after ${elapsedMin} minutes!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "failure"
         }
@@ -524,7 +526,7 @@ BASH
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
         pushLogFile("${testName}-debug")
-        echo "The $testName test was finished!"
+        echo "The $testName test was finished in ${durationSec}s (${(durationSec / 60).intValue()}m ${(durationSec % 60).intValue()}s)!"
     }
 }
 
