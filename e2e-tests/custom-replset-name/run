@@ -8,9 +8,9 @@ test_dir=$(realpath $(dirname $0))
 
 create_infra $namespace
 apply_s3_storage_secrets
-deploy_minio
+deploy_s3_storage
 
-kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/minio-secret.yml
+kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml -f $conf_dir/s3-secret.yml
 cluster="some-name"
 
 desc 'create first PSMDB cluster'
@@ -41,17 +41,17 @@ wait_backup_agent $cluster-shard5-2
 wait_backup_agent $cluster-shard7-0
 wait_backup_agent $cluster-shard7-1
 wait_backup_agent $cluster-shard7-2
-backup_name_minio="backup-minio"
+backup_name_local_s3="backup-local-s3"
 
 desc 'run backups'
-run_backup minio
-wait_backup "$backup_name_minio"
+run_backup local-s3
+wait_backup "$backup_name_local_s3"
 
-desc 'check backup and restore -- minio'
-run_restore $backup_name_minio
+desc 'check backup and restore -- local-s3'
+run_restore $backup_name_local_s3
 
 sleep 120
-wait_restore $backup_name_minio $cluster "ready"
+wait_restore $backup_name_local_s3 $cluster "ready"
 
 destroy $namespace
 

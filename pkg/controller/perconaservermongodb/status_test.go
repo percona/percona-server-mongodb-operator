@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -41,6 +42,10 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		new(mcs.ServiceImportList),
 	)
 
+	if err := cmscheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
+
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDB{
@@ -54,21 +59,19 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 
 func mockReadyReplsetSts(name, namespace, crName, rsName, component string, replicas int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance:  crName,
-				naming.LabelKubernetesReplset:   rsName,
-				naming.LabelKubernetesComponent: component,
-			},
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: api.SchemeGroupVersion.String(),
-				Kind:       "PerconaServerMongoDB",
-				Name:       crName,
-				Controller: new(true),
-			}},
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance:  crName,
+			naming.LabelKubernetesReplset:   rsName,
+			naming.LabelKubernetesComponent: component,
 		},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: api.SchemeGroupVersion.String(),
+			Kind:       "PerconaServerMongoDB",
+			Name:       crName,
+			Controller: new(true),
+		}},
 		Status: appsv1.StatefulSetStatus{
 			ReadyReplicas:     replicas,
 			UpdatedReplicas:   replicas,
@@ -80,17 +83,15 @@ func mockReadyReplsetSts(name, namespace, crName, rsName, component string, repl
 
 func mockReadyReplsetPod(name, namespace, crName, rsName, component string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				naming.LabelKubernetesName:      "percona-server-mongodb",
-				naming.LabelKubernetesManagedBy: "percona-server-mongodb-operator",
-				naming.LabelKubernetesPartOf:    "percona-server-mongodb",
-				naming.LabelKubernetesInstance:  crName,
-				naming.LabelKubernetesReplset:   rsName,
-				naming.LabelKubernetesComponent: component,
-			},
+		Name:      name,
+		Namespace: namespace,
+		Labels: map[string]string{
+			naming.LabelKubernetesName:      "percona-server-mongodb",
+			naming.LabelKubernetesManagedBy: "percona-server-mongodb-operator",
+			naming.LabelKubernetesPartOf:    "percona-server-mongodb",
+			naming.LabelKubernetesInstance:  crName,
+			naming.LabelKubernetesReplset:   rsName,
+			naming.LabelKubernetesComponent: component,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -116,10 +117,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-initializing",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -138,10 +137,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-reconcile error",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -161,10 +158,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-ready",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -195,10 +190,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-backup version is empty",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -229,10 +222,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-no storages",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -264,10 +255,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-backup config hash is empty",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -306,10 +295,8 @@ func TestUpdateStatus(t *testing.T) {
 		{
 			name: "single replset-PBM is ready",
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-name",
-					Namespace: "some-namespace",
-				},
+				Name:      "some-name",
+				Namespace: "some-namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -380,7 +367,7 @@ func fakeVolumeSpec(t *testing.T) *api.VolumeSpec {
 func TestConnectionEndpoint(t *testing.T) {
 	ctx := context.Background()
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			Image:     "some-image",
 			CRVersion: version.Version(),
@@ -541,10 +528,8 @@ func TestConnectionEndpoint(t *testing.T) {
 					if cr.Spec.MultiCluster.Enabled {
 						for _, svc := range services {
 							obj = append(obj, &mcs.ServiceImport{
-								ObjectMeta: metav1.ObjectMeta{
-									Name:      svc.GetName(),
-									Namespace: svc.GetNamespace(),
-								},
+								Name:      svc.GetName(),
+								Namespace: svc.GetNamespace(),
 							})
 						}
 					}
@@ -588,10 +573,8 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 		ingress = nil
 	}
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: corev1.ServiceSpec{
 			Type:      svcType,
 			ClusterIP: clusterIP,
@@ -635,11 +618,9 @@ func groupAtRevision(
 func TestIsAwaitingSmartUpdate(t *testing.T) {
 	ctx := t.Context()
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "psmdb-mock",
-			Namespace:  "psmdb",
-			Generation: 1,
-		},
+		Name:       "psmdb-mock",
+		Namespace:  "psmdb",
+		Generation: 1,
 		Spec: api.PerconaServerMongoDBSpec{
 			Backup: api.BackupSpec{
 				Enabled: false,

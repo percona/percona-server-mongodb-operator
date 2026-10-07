@@ -175,11 +175,6 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
 
-  demand-backup-incremental-gcp-s3:
-    suites: [pr, release, backups, distro]
-    operatorModes: [cluster-wide, namespaced]
-    groups: [backup]
-
   demand-backup-incremental-minio:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
@@ -206,11 +201,6 @@ tests:
     groups: [backup, sharding]
 
   demand-backup-incremental-sharded-gcp-native:
-    suites: [pr, release, backups, distro]
-    operatorModes: [cluster-wide, namespaced]
-    groups: [backup, sharding]
-
-  demand-backup-incremental-sharded-gcp-s3:
     suites: [pr, release, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, sharding]
@@ -246,11 +236,6 @@ tests:
     groups: [backup]
 
   demand-backup-physical-gcp-native:
-    suites: [pr, release, minikube, backups, distro]
-    operatorModes: [cluster-wide, namespaced]
-    groups: [backup]
-
-  demand-backup-physical-gcp-s3:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]

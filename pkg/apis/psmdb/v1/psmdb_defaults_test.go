@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corevs "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -216,9 +215,9 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		},
 	}
 
-	cr := &PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
-		Spec: PerconaServerMongoDBSpec{
+	cr := &api.PerconaServerMongoDB{
+		Name: "psmdb-mock", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.15.0",
 			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},
@@ -383,9 +382,9 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 	}
 
-	cr := &PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
-		Spec: PerconaServerMongoDBSpec{
+	cr := &api.PerconaServerMongoDB{
+		Name: "psmdb-mock", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
 			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},

@@ -28,7 +28,7 @@ cluster="some-name"
 create_infra $namespace
 deploy_cert_manager
 apply_s3_storage_secrets
-deploy_minio
+deploy_s3_storage
 kubectl_bin apply \
 	-f $conf_dir/client.yml \
 	-f $conf_dir/secrets.yml
@@ -72,7 +72,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-nv-0.$cluster-rs0.$namespace
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-0.$cluster-rs0.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-1.$cluster-rs0.$namespace"
 
-run_backup minio backup-logical logical
+run_backup local-s3 backup-logical logical
 wait_backup backup-logical ready
 
 log "drop collection"
@@ -87,7 +87,7 @@ compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-nv-0.$cluster-rs0.$namespace
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-0.$cluster-rs0.$namespace"
 compare_mongo_cmd "find" "myApp:myPass@$cluster-rs0-hidden-1.$cluster-rs0.$namespace"
 
-run_backup minio backup-physical physical
+run_backup local-s3 backup-physical physical
 wait_backup backup-physical ready
 
 log "drop collection"

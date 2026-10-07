@@ -12,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -309,17 +308,13 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 
 func newStatefulSet(namespace, name string, labels map[string]string, storage resource.Quantity) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: config.MongodDataVolClaimName,
-					},
+					Name: config.MongodDataVolClaimName,
 					Spec: corev1.PersistentVolumeClaimSpec{
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -335,21 +330,17 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 
 func newPod(namespace, name string, labels map[string]string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    labels,
 	}
 }
 
 func newPVC(namespace, name string, labels map[string]string, requested, capacity resource.Quantity) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    labels,
 		Spec: corev1.PersistentVolumeClaimSpec{
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
@@ -421,16 +412,12 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			podName := stsName + "-0"
 
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stsName,
-					Namespace: ns,
-				},
+				Name:      stsName,
+				Namespace: ns,
 				Spec: appsv1.StatefulSetSpec{
 					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: config.MongodDataVolClaimName,
-							},
+							Name: config.MongodDataVolClaimName,
 							Spec: corev1.PersistentVolumeClaimSpec{
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -444,12 +431,10 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 
 			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: ns,
-					Labels: map[string]string{
-						"app": "test",
-					},
+				Name:      pvcName,
+				Namespace: ns,
+				Labels: map[string]string{
+					"app": "test",
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					Resources: corev1.VolumeResourceRequirements{
@@ -466,20 +451,16 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName,
-					Namespace: ns,
-					Labels: map[string]string{
-						"app": "test",
-					},
+				Name:      podName,
+				Namespace: ns,
+				Labels: map[string]string{
+					"app": "test",
 				},
 			}
 
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: ns,
-				},
+				Name:      "my-cluster",
+				Namespace: ns,
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					StorageScaling: &api.StorageScalingSpec{

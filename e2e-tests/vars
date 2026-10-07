@@ -129,7 +129,7 @@ fi
 
 # Dependencies versions
 export CERT_MANAGER_VER="1.21.0"
-export MINIO_VER="5.4.0"
+export SEAWEEDFS_VER="4.47.0"
 export CHAOS_MESH_VER="2.7.1"
 export PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
 export IMAGE_AWS_CLI=${IMAGE_AWS_CLI:-"docker.io/amazon/aws-cli:2.34.60"}

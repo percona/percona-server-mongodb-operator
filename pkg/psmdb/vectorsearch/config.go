@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -33,15 +32,11 @@ func ConfigMap(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (*corev1.Confi
 	}
 
 	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.SearchConfigMapName(cr, rs),
-			Namespace: cr.Namespace,
-			Labels:    naming.SearchLabels(cr, rs),
-		},
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+		Name:       naming.SearchConfigMapName(cr, rs),
+		Namespace:  cr.Namespace,
+		Labels:     naming.SearchLabels(cr, rs),
 		Data: map[string]string{
 			configFileName: data,
 		},

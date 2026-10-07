@@ -106,11 +106,9 @@ func fakeMongodPod(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, name strin
 	ls[naming.LabelKubernetesComponent] = naming.ComponentMongod
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    ls,
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    ls,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "mongod"}},
 		},
@@ -135,10 +133,8 @@ func fakeMongodPod(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, name strin
 
 func internalUsersSecret(cr *api.PerconaServerMongoDB) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      api.InternalUserSecretName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      api.InternalUserSecretName(cr),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			api.EnvMongoDBUserAdminUser:          []byte("userAdmin"),
 			api.EnvMongoDBUserAdminPassword:      []byte("userAdmin123"),
@@ -156,11 +152,9 @@ func internalUsersSecret(cr *api.PerconaServerMongoDB) *corev1.Secret {
 
 func newReplsetInitCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "init-test",
-			Namespace:  "psmdb",
-			Generation: 1,
-		},
+		Name:       "init-test",
+		Namespace:  "psmdb",
+		Generation: 1,
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Image:     "percona/percona-server-mongodb:latest",

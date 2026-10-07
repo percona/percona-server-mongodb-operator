@@ -345,10 +345,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
 					sfs.Spec.Template.Spec.Volumes = append(sfs.Spec.Template.Spec.Volumes, corev1.Volume{
 						Name: "pbm-db-config",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: r.dbConfigSecretName(cluster, rs),
-							},
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: r.dbConfigSecretName(cluster, rs),
 						},
 					})
 					sfs.Spec.Template.Spec.Containers[0].VolumeMounts = append(
@@ -542,10 +540,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) restorePVC(
 	restore *psmdbv1.PerconaServerMongoDBRestore,
 ) (bool, error) {
 	observedPVC := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pvcName,
-			Namespace: restore.GetNamespace(),
-		},
+		Name:      pvcName,
+		Namespace: restore.GetNamespace(),
 	}
 
 	log := logf.FromContext(ctx)
@@ -799,10 +795,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) deleteStatefulSetsForSnapshotRest
 
 	for _, nn := range toDelete {
 		if err := r.client.Delete(ctx, &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      nn.Name,
-				Namespace: nn.Namespace,
-			},
+			Name:      nn.Name,
+			Namespace: nn.Namespace,
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete statefulset %s", nn.Name)
 		}
@@ -911,11 +905,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 		}
 
 		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.dbConfigSecretName(cluster, rs),
-				Namespace: cluster.Namespace,
-				Labels:    naming.ClusterLabels(cluster),
-			},
+			Name:      r.dbConfigSecretName(cluster, rs),
+			Namespace: cluster.Namespace,
+			Labels:    naming.ClusterLabels(cluster),
 			Data: map[string][]byte{
 				"db_config.yaml": dataBytes,
 			},

@@ -55,10 +55,8 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 			StorageClassName: &oldClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Annotations: map[string]string{
-				"some-old-annotation": "value",
-			},
+		Annotations: map[string]string{
+			"some-old-annotation": "value",
 		},
 	}
 
@@ -110,10 +108,8 @@ func readyMongodPod(t *testing.T, cluster *psmdbv1.PerconaServerMongoDB, ordinal
 
 func TestReconcileSnapshotNew(t *testing.T) {
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: "default",
-		},
+		Name:      "my-cluster",
+		Namespace: "default",
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets: &psmdbv1.SecretsSpec{
@@ -130,10 +126,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 	}
 
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-restore",
-			Namespace: "default",
-		},
+		Name:      "my-restore",
+		Namespace: "default",
 		Status: psmdbv1.PerconaServerMongoDBRestoreStatus{
 			State:   psmdbv1.RestoreStateNew,
 			PBMname: "my-pbm-restore",
@@ -157,10 +151,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
   enableEncryption: false`)
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: ns,
-		},
+		Name:      "my-cluster",
+		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
@@ -190,10 +182,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("scales down statefulset and returns not done when ready replicas > 0", func(t *testing.T) {
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(cluster, rs),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(3)),
 				Template: corev1.PodTemplateSpec{
@@ -235,10 +225,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("returns done and sets condition when all statefulsets at zero ready replicas", func(t *testing.T) {
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(cluster, rs),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(0)),
 				Template: corev1.PodTemplateSpec{
@@ -262,10 +250,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("includes nonvoting and hidden statefulsets when enabled", func(t *testing.T) {
 		clusterWithExtra := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "cluster-extra",
-				Namespace: ns,
-			},
+			Name:      "cluster-extra",
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
@@ -288,10 +274,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 		makeSFS := func(name string) *appsv1.StatefulSet {
 			return &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: ns,
-				},
+				Name:      name,
+				Namespace: ns,
 				Spec: appsv1.StatefulSetSpec{
 					Replicas: new(int32(0)),
 					Template: corev1.PodTemplateSpec{
@@ -319,10 +303,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("encryption explicitly enabled adds db-config volume and bash wrapper command", func(t *testing.T) {
 		encCluster := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "enc-cluster",
-				Namespace: ns,
-			},
+			Name:      "enc-cluster",
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
@@ -338,10 +320,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		encRS := encCluster.Spec.Replsets[0]
 
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(encCluster, encRS),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(encCluster, encRS),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
@@ -395,10 +375,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("encryption explicitly disabled uses plain pbm-agent command", func(t *testing.T) {
 		noEncCluster := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "noenc-cluster",
-				Namespace: ns,
-			},
+			Name:      "noenc-cluster",
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
@@ -414,10 +392,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		noEncRS := noEncCluster.Spec.Replsets[0]
 
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(noEncCluster, noEncRS),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(noEncCluster, noEncRS),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
@@ -462,10 +438,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("encryption not specified defaults to encrypted for non-InMemory storage", func(t *testing.T) {
 		defaultCluster := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "default-cluster",
-				Namespace: ns,
-			},
+			Name:      "default-cluster",
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
@@ -479,10 +453,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		defaultRS := defaultCluster.Spec.Replsets[0]
 
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(defaultCluster, defaultRS),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(defaultCluster, defaultRS),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
 				Template: corev1.PodTemplateSpec{
@@ -526,10 +498,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 	const ns = "default"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: ns,
-		},
+		Name:      "my-cluster",
+		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{Name: "rs0", Size: new(int32(3))},
@@ -554,10 +524,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("scales up statefulset and returns not done when not yet ready", func(t *testing.T) {
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(cluster, rs),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(0)),
 			},
@@ -582,10 +550,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 
 	t.Run("returns done and sets condition when all statefulsets ready", func(t *testing.T) {
 		sfs := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(cluster, rs),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: rs.Size,
 			},
@@ -608,10 +574,8 @@ func TestRestorePVC(t *testing.T) {
 	const ns = "default"
 
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-restore",
-			Namespace: ns,
-		},
+		Name:      "my-restore",
+		Namespace: ns,
 	}
 
 	spec := corev1.PersistentVolumeClaimSpec{
@@ -639,12 +603,10 @@ func TestRestorePVC(t *testing.T) {
 
 	t.Run("returns true when PVC has correct restore annotation", func(t *testing.T) {
 		existingPVC := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-pvc",
-				Namespace: ns,
-				Annotations: map[string]string{
-					naming.AnnotationRestoreName: "my-restore",
-				},
+			Name:      "my-pvc",
+			Namespace: ns,
+			Annotations: map[string]string{
+				naming.AnnotationRestoreName: "my-restore",
 			},
 		}
 		r := fakeReconciler(restore, existingPVC)
@@ -656,12 +618,10 @@ func TestRestorePVC(t *testing.T) {
 
 	t.Run("deletes PVC with wrong restore annotation and returns false", func(t *testing.T) {
 		existingPVC := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-pvc",
-				Namespace: ns,
-				Annotations: map[string]string{
-					naming.AnnotationRestoreName: "other-restore",
-				},
+			Name:      "my-pvc",
+			Namespace: ns,
+			Annotations: map[string]string{
+				naming.AnnotationRestoreName: "other-restore",
 			},
 		}
 		r := fakeReconciler(restore, existingPVC)
@@ -678,14 +638,12 @@ func TestRestorePVC(t *testing.T) {
 	t.Run("returns false without deleting when PVC has deletion timestamp", func(t *testing.T) {
 		now := metav1.Now()
 		existingPVC := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              "my-pvc",
-				Namespace:         ns,
-				DeletionTimestamp: &now,
-				Finalizers:        []string{"kubernetes.io/pvc-protection"},
-				Annotations: map[string]string{
-					naming.AnnotationRestoreName: "other-restore",
-				},
+			Name:              "my-pvc",
+			Namespace:         ns,
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"kubernetes.io/pvc-protection"},
+			Annotations: map[string]string{
+				naming.AnnotationRestoreName: "other-restore",
 			},
 		}
 		r := fakeReconciler(restore, existingPVC)
@@ -707,10 +665,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 	const ns = "default"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: ns,
-		},
+		Name:      "my-cluster",
+		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{Name: "rs0", Size: new(int32(2))},
@@ -720,10 +676,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 	rs := cluster.Spec.Replsets[0]
 
 	backup := &psmdbv1.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-backup",
-			Namespace: ns,
-		},
+		Name:      "my-backup",
+		Namespace: ns,
 		Status: psmdbv1.PerconaServerMongoDBBackupStatus{
 			Snapshots: psmdbv1.SnapshotInfos{
 				{ReplsetName: "rs0", SnapshotName: "snapshot-rs0"},
@@ -732,16 +686,12 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 	}
 
 	sfs := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.MongodStatefulSetName(cluster, rs),
-			Namespace: ns,
-		},
+		Name:      naming.MongodStatefulSetName(cluster, rs),
+		Namespace: ns,
 		Spec: appsv1.StatefulSetSpec{
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: config.MongodDataVolClaimName,
-					},
+					Name: config.MongodDataVolClaimName,
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 					},
@@ -751,10 +701,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 	}
 
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-restore",
-			Namespace: ns,
-		},
+		Name:      "my-restore",
+		Namespace: ns,
 	}
 
 	t.Run("condition already set returns true immediately", func(t *testing.T) {
@@ -793,10 +741,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 
 	t.Run("returns error when no snapshot exists for replset", func(t *testing.T) {
 		backupNoSnapshot := &psmdbv1.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "backup-no-snapshot",
-				Namespace: ns,
-			},
+			Name:      "backup-no-snapshot",
+			Namespace: ns,
 			Status: psmdbv1.PerconaServerMongoDBBackupStatus{
 				Snapshots: psmdbv1.SnapshotInfos{},
 			},
@@ -812,10 +758,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 
 	t.Run("creates PVCs for nonvoting pods when enabled", func(t *testing.T) {
 		clusterWithNV := &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "cluster-nv",
-				Namespace: ns,
-			},
+			Name:      "cluster-nv",
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
@@ -832,10 +776,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 		rsNV := clusterWithNV.Spec.Replsets[0]
 
 		backupNV := &psmdbv1.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "backup-nv",
-				Namespace: ns,
-			},
+			Name:      "backup-nv",
+			Namespace: ns,
 			Status: psmdbv1.PerconaServerMongoDBBackupStatus{
 				Snapshots: psmdbv1.SnapshotInfos{
 					{ReplsetName: "rs0", SnapshotName: "snapshot-rs0"},
@@ -844,14 +786,12 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 		}
 
 		mongodSFS := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.MongodStatefulSetName(clusterWithNV, rsNV),
-				Namespace: ns,
-			},
+			Name:      naming.MongodStatefulSetName(clusterWithNV, rsNV),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: config.MongodDataVolClaimName},
+						Name: config.MongodDataVolClaimName,
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						},
@@ -860,14 +800,12 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 			},
 		}
 		nvSFS := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.NonVotingStatefulSetName(clusterWithNV, rsNV),
-				Namespace: ns,
-			},
+			Name:      naming.NonVotingStatefulSetName(clusterWithNV, rsNV),
+			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: config.MongodDataVolClaimName},
+						Name: config.MongodDataVolClaimName,
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						},
@@ -876,7 +814,7 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 			},
 		}
 		restoreNV := &psmdbv1.PerconaServerMongoDBRestore{
-			ObjectMeta: metav1.ObjectMeta{Name: "restore-nv", Namespace: ns},
+			Name: "restore-nv", Namespace: ns,
 		}
 
 		r := fakeReconciler(clusterWithNV, mongodSFS, nvSFS, restoreNV, backupNV)
@@ -900,10 +838,8 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 	const ns = "default"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: ns,
-		},
+		Name:      "my-cluster",
+		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
@@ -930,10 +866,8 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 	t.Run("deletes all statefulsets including arbiter nonvoting and hidden", func(t *testing.T) {
 		makeSFS := func(name string) *appsv1.StatefulSet {
 			return &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: ns,
-				},
+				Name:      name,
+				Namespace: ns,
 			}
 		}
 
@@ -969,10 +903,8 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 	ctx := context.Background()
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-cluster",
-			Namespace: "default",
-		},
+		Name:      "my-cluster",
+		Namespace: "default",
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Replsets: []*psmdbv1.ReplsetSpec{
@@ -986,10 +918,8 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 	}
 
 	restore := &psmdbv1.PerconaServerMongoDBRestore{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-restore",
-			Namespace: "default",
-		},
+		Name:      "my-restore",
+		Namespace: "default",
 		Status: psmdbv1.PerconaServerMongoDBRestoreStatus{
 			State: psmdbv1.RestoreStateNew,
 		},
@@ -1007,7 +937,7 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 	const ns = "default"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cl", Namespace: ns},
+		Name: "cl", Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{{
 				Name:    "rs0",
@@ -1020,10 +950,8 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 	pbmName := "pbm-op-123"
 
 	sfs := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.MongodStatefulSetName(cluster, rs),
-			Namespace: ns,
-		},
+		Name:      naming.MongodStatefulSetName(cluster, rs),
+		Namespace: ns,
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
@@ -1062,18 +990,16 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 
 	makeCluster := func(replsets ...*psmdbv1.ReplsetSpec) *psmdbv1.PerconaServerMongoDB {
 		return &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster", Namespace: ns},
-			Spec:       psmdbv1.PerconaServerMongoDBSpec{Replsets: replsets},
+			Name: "my-cluster", Namespace: ns,
+			Spec: psmdbv1.PerconaServerMongoDBSpec{Replsets: replsets},
 		}
 	}
 
 	makeSecret := func(cluster *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) *corev1.Secret {
 		r := fakeReconciler()
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.dbConfigSecretName(cluster, rs),
-				Namespace: ns,
-			},
+			Name:      r.dbConfigSecretName(cluster, rs),
+			Namespace: ns,
 		}
 	}
 
@@ -1113,10 +1039,8 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 
 	makeCluster := func(conf psmdbv1.MongoConfiguration) *psmdbv1.PerconaServerMongoDB {
 		return &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: ns,
-			},
+			Name:      clusterName,
+			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{Name: "rs0", Size: new(int32(1)), Configuration: conf, Storage: &psmdbv1.MongodSpecStorage{}},
