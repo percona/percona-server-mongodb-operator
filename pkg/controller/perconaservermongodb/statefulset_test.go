@@ -50,9 +50,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].EnvFrom = []corev1.EnvFromSource{
 		{
 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-configmap",
-				},
+				Name:     "test-configmap",
 				Optional: new(true),
 			},
 		},
@@ -64,9 +62,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Sharding.ConfigsvrReplSet.EnvFrom = []corev1.EnvFromSource{
 		{
 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-configmap-cfg",
-				},
+				Name:     "test-configmap-cfg",
 				Optional: new(true),
 			},
 		},
@@ -156,19 +152,15 @@ func TestReconcileStatefulSet(t *testing.T) {
 			},
 			additionalObjs: []client.Object{
 				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      logrotate.ConfigMapName(crName),
-						Namespace: ns,
-					},
+					Name:      logrotate.ConfigMapName(crName),
+					Namespace: ns,
 					Data: map[string]string{
 						logrotate.MongodbConfig: "custom-config",
 					},
 				},
 				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "extra-config",
-						Namespace: ns,
-					},
+					Name:      "extra-config",
+					Namespace: ns,
 					Data: map[string]string{
 						"custom.conf": "custom-config",
 					},
@@ -183,10 +175,8 @@ func TestReconcileStatefulSet(t *testing.T) {
 			mockObjs := []client.Object{
 				tt.cr,
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      crName + "-ssl",
-						Namespace: tt.cr.Namespace,
-					},
+					Name:      crName + "-ssl",
+					Namespace: tt.cr.Namespace,
 					Data: map[string][]byte{
 						"ca.crt":  []byte("fake-ca-cert"),
 						"tls.crt": []byte("fake-tls-cert"),
@@ -194,17 +184,13 @@ func TestReconcileStatefulSet(t *testing.T) {
 					},
 				},
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      crName + "-ssl-internal",
-						Namespace: tt.cr.Namespace,
-					},
+					Name:      crName + "-ssl-internal",
+					Namespace: tt.cr.Namespace,
 				},
 
 				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      logcollector.ConfigMapName(tt.cr.Name),
-						Namespace: tt.cr.Namespace,
-					},
+					Name:      logcollector.ConfigMapName(tt.cr.Name),
+					Namespace: tt.cr.Namespace,
 					Data: map[string]string{
 						"fluentbit_custom.conf": "config",
 					},

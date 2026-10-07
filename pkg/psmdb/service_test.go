@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,10 +20,8 @@ func TestMongosHost(t *testing.T) {
 	ctx := context.Background()
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mongos-0",
-			Namespace: "default",
-		},
+		Name:      "mongos-0",
+		Namespace: "default",
 	}
 
 	tests := map[string]struct {
@@ -41,10 +38,8 @@ func TestMongosHost(t *testing.T) {
 		"clusterip service type": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
@@ -66,10 +61,8 @@ func TestMongosHost(t *testing.T) {
 		"loadbalancer service type": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Ports: []corev1.ServicePort{
@@ -95,10 +88,8 @@ func TestMongosHost(t *testing.T) {
 		"loadbalancer service type with internal address": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type:      corev1.ServiceTypeLoadBalancer,
 						ClusterIP: "10.0.0.20",
@@ -119,10 +110,8 @@ func TestMongosHost(t *testing.T) {
 		"err: clusterip service type and port not found": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
@@ -146,10 +135,8 @@ func TestMongosHost(t *testing.T) {
 			tt.init(cl)
 
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					ClusterServiceDNSSuffix: "svc.cluster.local",
 					Sharding: api.Sharding{
@@ -201,25 +188,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -254,25 +237,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -310,25 +289,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -368,27 +343,23 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-					},
-					Annotations: map[string]string{
-						"percona.com/test":                          "annotation",
-						"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
-						"external-dns.alpha.kubernetes.io/ttl":      "300",
-						"percona.com/external-dns-managed":          "true",
-					},
+				Annotations: map[string]string{
+					"percona.com/test":                          "annotation",
+					"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+					"external-dns.alpha.kubernetes.io/ttl":      "300",
+					"percona.com/external-dns-managed":          "true",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -422,25 +393,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-2",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-2",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-2",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-					},
-					Annotations: map[string]string{
-						"external-dns.alpha.kubernetes.io/hostname": "staging-rs0-2.db.example.com",
-						"percona.com/external-dns-managed":          "true",
-					},
+				Annotations: map[string]string{
+					"external-dns.alpha.kubernetes.io/hostname": "staging-rs0-2.db.example.com",
+					"percona.com/external-dns-managed":          "true",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -462,10 +429,8 @@ func TestExternalService(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
+				Name:      "test-cr",
+				Namespace: "test-ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 				},
