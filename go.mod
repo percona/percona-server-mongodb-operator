@@ -11,6 +11,9 @@ require (
 	github.com/go-openapi/runtime v0.33.2
 	github.com/go-openapi/strfmt v0.27.2
 	github.com/go-openapi/swag v0.29.2
+	github.com/go-openapi/swag/conv v0.29.2
+	github.com/go-openapi/swag/jsonutils v0.29.2
+	github.com/go-openapi/swag/typeutils v0.29.2
 	github.com/go-openapi/validate v1.0.0
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
@@ -114,15 +117,12 @@ require (
 	github.com/go-openapi/runtime/server-middleware v0.33.2 // indirect
 	github.com/go-openapi/spec v1.0.0 // indirect
 	github.com/go-openapi/swag/cmdutils v0.29.2 // indirect
-	github.com/go-openapi/swag/conv v0.29.2 // indirect
 	github.com/go-openapi/swag/fileutils v0.29.2 // indirect
-	github.com/go-openapi/swag/jsonutils v0.29.2 // indirect
 	github.com/go-openapi/swag/loading v0.29.2 // indirect
 	github.com/go-openapi/swag/mangling v0.29.2 // indirect
 	github.com/go-openapi/swag/netutils v0.29.2 // indirect
 	github.com/go-openapi/swag/pools v0.29.2 // indirect
 	github.com/go-openapi/swag/stringutils v0.29.2 // indirect
-	github.com/go-openapi/swag/typeutils v0.29.2 // indirect
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

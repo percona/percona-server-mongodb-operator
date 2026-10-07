@@ -9,6 +9,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/versionservice"
 )
 
 func (r *ReconcilePerconaServerMongoDB) getFCV(ctx context.Context, cr *api.PerconaServerMongoDB) (string, error) {
@@ -55,5 +56,5 @@ func (r *ReconcilePerconaServerMongoDB) setFCV(ctx context.Context, cr *api.Perc
 		}
 	}()
 
-	return cli.SetFCV(ctx, MajorMinor(v))
+	return cli.SetFCV(ctx, versionservice.MajorMinor(v))
 }
