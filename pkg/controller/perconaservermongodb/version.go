@@ -62,7 +62,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 	log := logf.FromContext(ctx).WithValues("job", jn)
 
 	scheduleRaw, ok := r.crons.ensureVersionJobs.Load(jn)
-	if cr.Spec.UpgradeOptions.Schedule == "" || !(versionservice.UpgradeEnabled(cr) || versionservice.TelemetryEnabled()) {
+	if cr.Spec.UpgradeOptions.Schedule == "" || (!versionservice.UpgradeEnabled(cr) && !versionservice.TelemetryEnabled()) {
 		if ok {
 			r.deleteCronJob(jn)
 		}
@@ -325,7 +325,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleTelemetryRequests(ctx context.Co
 func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *api.PerconaServerMongoDB, vs versionservice.Service) error {
 	log := logf.FromContext(ctx)
 
-	if !(versionservice.UpgradeEnabled(cr) || versionservice.TelemetryEnabled()) {
+	if !versionservice.UpgradeEnabled(cr) && !versionservice.TelemetryEnabled() {
 		return nil
 	}
 

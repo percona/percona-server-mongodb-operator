@@ -1,13 +1,14 @@
 package perconaservermongodb
 
 import (
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -64,10 +65,8 @@ func fakeCR(t *testing.T, name, namespace string) *api.PerconaServerMongoDB {
 	t.Helper()
 
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Image:     "percona/percona-server-mongodb:8.0.4-1",
@@ -79,6 +78,22 @@ func fakeCR(t *testing.T, name, namespace string) *api.PerconaServerMongoDB {
 				},
 			},
 		},
+	}
+}
+
+func setTelemetry(t *testing.T, enabled bool) {
+	t.Helper()
+
+	t.Setenv("DISABLE_TELEMETRY", strconv.FormatBool(!enabled))
+}
+
+func unsetEnv(t *testing.T, key string) {
+	t.Helper()
+
+	old, ok := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	if ok {
+		t.Cleanup(func() { require.NoError(t, os.Setenv(key, old)) })
 	}
 }
 
@@ -176,9 +191,7 @@ func TestScheduleEnsureVersion(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			if tc.disableTelemetry {
-				t.Setenv("DISABLE_TELEMETRY", "true")
-			}
+			setTelemetry(t, !tc.disableTelemetry)
 
 			cr := fakeCR(t, "some-name", "some-namespace")
 			cr.Spec.UpgradeOptions.Schedule = tc.schedule
@@ -210,7 +223,7 @@ func TestScheduleEnsureVersion(t *testing.T) {
 
 func TestScheduleTelemetryRequestsDisabled(t *testing.T) {
 	ctx := t.Context()
-	t.Setenv("DISABLE_TELEMETRY", "true")
+	setTelemetry(t, false)
 
 	cr := fakeCR(t, "some-name", "some-namespace")
 	r := fakeReconciler(t, cr)
@@ -226,6 +239,8 @@ func TestScheduleTelemetryRequestsDisabled(t *testing.T) {
 
 func TestScheduleTelemetryRequestsKeepsRandomSchedule(t *testing.T) {
 	ctx := t.Context()
+	setTelemetry(t, true)
+	unsetEnv(t, "TELEMETRY_SCHEDULE")
 
 	cr := fakeCR(t, "some-name", "some-namespace")
 	r := fakeReconciler(t, cr)
@@ -319,9 +334,7 @@ func TestGetNewVersions(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(k8s.WatchNamespaceEnvVar, "some-namespace")
-			if tc.disableTelemetry {
-				t.Setenv("DISABLE_TELEMETRY", "true")
-			}
+			setTelemetry(t, !tc.disableTelemetry)
 
 			cr := fakeCR(t, "some-name", "some-namespace")
 			cr.Spec.UpgradeOptions.Apply = tc.apply
@@ -367,7 +380,7 @@ func TestEnsureVersionEarlyReturns(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("DISABLE_TELEMETRY", "true")
+			setTelemetry(t, false)
 
 			cr := fakeCR(t, "some-name", "some-namespace")
 			cr.Spec.UpgradeOptions.Apply = tc.apply
@@ -420,11 +433,9 @@ func TestIsPMM3Configured(t *testing.T) {
 			objs := []client.Object{cr}
 			if tc.hasSecret {
 				objs = append(objs, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      api.UserSecretName(cr),
-						Namespace: cr.Namespace,
-					},
-					Data: tc.secretData,
+					Name:      api.UserSecretName(cr),
+					Namespace: cr.Namespace,
+					Data:      tc.secretData,
 				})
 			}
 			r := fakeReconciler(t, objs...)

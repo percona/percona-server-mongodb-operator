@@ -510,9 +510,7 @@ func TestBuildMeta(t *testing.T) {
 			namespace: "test-namespace",
 			extraObjects: []client.Object{
 				&api.PerconaServerMongoDBClusterSync{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "some-name-sync",
-					},
+					Name: "some-name-sync",
 				},
 			},
 		},
