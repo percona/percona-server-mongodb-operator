@@ -104,8 +104,7 @@ main() {
 	sleep 30
 
 	desc 'delete ssl secrets, operator should recreate them'
-	kubectl_bin delete secret "$cluster-ssl-internal"
-	kubectl_bin delete secret "$cluster-ssl"
+	kubectl_bin delete secret "$cluster-ssl-internal" "$cluster-ssl" --ignore-not-found
 
 	sleep 30
 

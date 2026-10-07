@@ -129,8 +129,10 @@ def helm_arch_set_string_args(prefix: str = "") -> list[str]:
         "  effect: NoSchedule"
     )
     return [
-        "--set-string", f"{prefix}nodeSelector={node_selector}",
-        "--set-string", f"{prefix}tolerations={tolerations}",
+        "--set-string",
+        f"{prefix}nodeSelector={node_selector}",
+        "--set-string",
+        f"{prefix}tolerations={tolerations}",
     ]
 
 

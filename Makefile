@@ -185,6 +185,7 @@ release: manifests
 MAJOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
 MINOR_VER := $(shell grep -oE "crVersion: .*" deploy/cr.yaml|grep -oE "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
+.PHONY: after-release after-release-versions
 after-release: update-version after-release-versions manifests update-upgrade-consistency-test
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(NEXT_VER)/" \
@@ -207,19 +208,19 @@ after-release: update-version after-release-versions manifests update-upgrade-co
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
 
-.PHONY: after-release-versions
 after-release-versions:
 	$(SED) -i \
-		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
-		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
-		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
-		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0#" \
-		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
-		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:dev-latest#" \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=$(IMAGE_TAG_BASE):main#" \
+		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=$(IMAGE_TAG_BASE):main-mongod8.0#" \
+		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=$(IMAGE_TAG_BASE):main-mongod7.0#" \
+		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=$(IMAGE_TAG_BASE):main-mongod6.0#" \
+		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=$(IMAGE_TAG_BASE):main-backup#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=percona/pmm-client:2.44.1-1#" \
 		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:dev-latest#" \
 		-e "s#^IMAGE_PMM3_CLIENT=.*#IMAGE_PMM3_CLIENT=perconalab/pmm-client:3-dev-latest#" \
 		-e "s#^IMAGE_PMM3_SERVER=.*#IMAGE_PMM3_SERVER=perconalab/pmm-server:3-dev-latest#" \
 		-e "s#^IMAGE_LOGCOLLECTOR=.*#IMAGE_LOGCOLLECTOR=perconalab/fluentbit:main-logcollector#" \
+		-e "s#^IMAGE_SEARCH=.*#IMAGE_SEARCH=$(IMAGE_TAG_BASE):main-mongot#" \
 		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \
 		e2e-tests/release_versions
 
