@@ -471,10 +471,8 @@ func manualTLSSecret(t *testing.T, cr *api.PerconaServerMongoDB, name string, sa
 	require.NoError(t, err)
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"ca.crt":  caCrt,
 			"tls.crt": tlsCrt,
@@ -497,10 +495,8 @@ func manualCASecret(t *testing.T, cr *api.PerconaServerMongoDB) (*corev1.Secret,
 	require.NoError(t, err)
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tls.ManualCASecretName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      tls.ManualCASecretName(cr),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"ca.crt": caCrt,
 			"ca.key": caKey,
@@ -626,11 +622,9 @@ func TestUpdateCertManagerCerts_OldSecretAlreadyExists(t *testing.T) {
 	ssl := manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
 	internal := manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true)
 	leftover := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      api.SSLSecretName(cr) + "-old",
-			Namespace: cr.Namespace,
-		},
-		Data: ssl.Data,
+		Name:      api.SSLSecretName(cr) + "-old",
+		Namespace: cr.Namespace,
+		Data:      ssl.Data,
 	}
 	r := buildFakeClient(cr, ssl, internal, leftover)
 

@@ -88,10 +88,8 @@ func TestGetCertificateSans(t *testing.T) {
 func TestGetCertificateSansHorizonOverrides(t *testing.T) {
 	newCR := func(crVersion string, rs *api.ReplsetSpec) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mydb",
-				Namespace: "myns",
-			},
+			Name:      "mydb",
+			Namespace: "myns",
 			Spec: api.PerconaServerMongoDBSpec{
 				CRVersion:               crVersion,
 				ClusterServiceDNSSuffix: "svc.cluster.local",
