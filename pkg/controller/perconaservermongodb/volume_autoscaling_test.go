@@ -11,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -285,14 +284,10 @@ func TestFindPodByName(t *testing.T) {
 	podList := &corev1.PodList{
 		Items: []corev1.Pod{
 			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-cluster-rs0-0",
-				},
+				Name: "my-cluster-rs0-0",
 			},
 			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "my-cluster-rs0-1",
-				},
+				Name: "my-cluster-rs0-1",
 			},
 		},
 	}
@@ -506,10 +501,8 @@ func TestTriggerResize(t *testing.T) {
 	}{
 		"successful resize for replset": {
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -530,10 +523,8 @@ func TestTriggerResize(t *testing.T) {
 				},
 			},
 			pvc: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "mongod-data-test-cluster-rs0-0",
-					Namespace: "default",
-				},
+				Name:      "mongod-data-test-cluster-rs0-0",
+				Namespace: "default",
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{
 						corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -545,10 +536,8 @@ func TestTriggerResize(t *testing.T) {
 		},
 		"successful resize for sharding config": {
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					Sharding: api.Sharding{
 						Enabled: true,
@@ -570,10 +559,8 @@ func TestTriggerResize(t *testing.T) {
 				},
 			},
 			pvc: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "mongod-data-test-cluster-cfg-0",
-					Namespace: "default",
-				},
+				Name:      "mongod-data-test-cluster-cfg-0",
+				Namespace: "default",
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{
 						corev1.ResourceStorage: resource.MustParse("5Gi"),
@@ -585,10 +572,8 @@ func TestTriggerResize(t *testing.T) {
 		},
 		"multiple resizes increment counter": {
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -616,10 +601,8 @@ func TestTriggerResize(t *testing.T) {
 				},
 			},
 			pvc: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "mongod-data-test-cluster-rs0-0",
-					Namespace: "default",
-				},
+				Name:      "mongod-data-test-cluster-rs0-0",
+				Namespace: "default",
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{
 						corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -631,10 +614,8 @@ func TestTriggerResize(t *testing.T) {
 		},
 		"resize with multiple replsets": {
 			cr: &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					Replsets: []*api.ReplsetSpec{
 						{
@@ -669,10 +650,8 @@ func TestTriggerResize(t *testing.T) {
 				},
 			},
 			pvc: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "mongod-data-test-cluster-rs0-0",
-					Namespace: "default",
-				},
+				Name:      "mongod-data-test-cluster-rs0-0",
+				Namespace: "default",
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{
 						corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -762,7 +741,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		}
 
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+			Name: crName, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
 				StorageScaling: &api.StorageScalingSpec{
 					EnableVolumeScaling: true,
@@ -862,21 +841,21 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			pvcName := tt.claimName + "-" + podName
 
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: tt.stsName, Namespace: namespace, Labels: ls},
+				Name: tt.stsName, Namespace: namespace, Labels: ls,
 				Spec: appsv1.StatefulSetSpec{
 					Template: mountingTemplate(tt.containerName, tt.claimName, tt.mountPath),
 				},
 			}
 
 			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: ls},
+				Name: pvcName, Namespace: namespace, Labels: ls,
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
 				},
 			}
 
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace, Labels: ls},
+				Name: podName, Namespace: namespace, Labels: ls,
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: tt.containerName}},
 				},
@@ -936,7 +915,7 @@ func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
 
 	newCR := func(mongos *api.MongosSpec, sharded bool) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+			Name: crName, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
 				// the log collector gives mongos an emptyDir log volume, never a PVC
 				LogCollector: &api.LogCollectorSpec{Enabled: true},
@@ -1001,7 +980,7 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 	)
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+		Name: crName, Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			StorageScaling: &api.StorageScalingSpec{
 				EnableVolumeScaling: true,
@@ -1017,7 +996,7 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 	ls := naming.MongosLabels(cr)
 	stsName := crName + "-" + naming.ComponentMongos
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: namespace, Labels: ls},
+		Name: stsName, Namespace: namespace, Labels: ls,
 		Spec: appsv1.StatefulSetSpec{
 			Template: mountingTemplate(
 				naming.ContainerMongos,
@@ -1069,7 +1048,7 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 // data volume requests and holds `size`.
 func autoscalingCR(name, namespace, size string) *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			StorageScaling: &api.StorageScalingSpec{
 				EnableVolumeScaling: true,
@@ -1107,19 +1086,17 @@ func fullPVCAndPod(
 	podName := stsName + "-0"
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      psmdbconfig.MongodDataVolClaimName + "-" + podName,
-			Namespace: namespace,
-			Labels:    ls,
-		},
+		Name:      psmdbconfig.MongodDataVolClaimName + "-" + podName,
+		Namespace: namespace,
+		Labels:    ls,
 		Status: corev1.PersistentVolumeClaimStatus{
 			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(capacity)},
 		},
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace, Labels: ls},
-		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongod}}},
+		Name: podName, Namespace: namespace, Labels: ls,
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongod}}},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			ContainerStatuses: []corev1.ContainerStatus{
@@ -1162,7 +1139,7 @@ func TestAutoscalingKeepsLargerPendingRequest(t *testing.T) {
 	rs := cr.Spec.Replsets[0]
 	ls := naming.MongodLabels(cr, rs)
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: namespace, Labels: ls},
+		Name: stsName, Namespace: namespace, Labels: ls,
 		Spec: appsv1.StatefulSetSpec{
 			Template: mountingTemplate(
 				naming.ContainerMongod,
@@ -1232,7 +1209,7 @@ func TestTriggerResizeRestoresSizeOnPatchFailure(t *testing.T) {
 	r := &ReconcilePerconaServerMongoDB{client: fakeClient}
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: "mongod-data-test-cluster-rs0-0", Namespace: namespace},
+		Name: "mongod-data-test-cluster-rs0-0", Namespace: namespace,
 		Status: corev1.PersistentVolumeClaimStatus{
 			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
 		},
@@ -1263,7 +1240,7 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 	const customLogDir = "/mnt/mongos-logs"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: namespace},
+		Name: crName, Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			StorageScaling: &api.StorageScalingSpec{
@@ -1297,13 +1274,13 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 
 	// a settled statefulset: resizeMongosPVCs waits for the rollout to finish
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: namespace, Labels: ls},
+		Name: stsName, Namespace: namespace, Labels: ls,
 		Spec: appsv1.StatefulSetSpec{
 			// a non-default mount path: the probe path has to come from here
 			Template: mountingTemplate(naming.ContainerMongos, psmdbconfig.MongosLogVolClaimName, customLogDir),
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: psmdbconfig.MongosLogVolClaimName},
+					Name: psmdbconfig.MongosLogVolClaimName,
 					Spec: corev1.PersistentVolumeClaimSpec{
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -1318,7 +1295,7 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: ls},
+		Name: pvcName, Namespace: namespace, Labels: ls,
 		Spec: corev1.PersistentVolumeClaimSpec{
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
@@ -1330,8 +1307,8 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace, Labels: ls},
-		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongos}}},
+		Name: podName, Namespace: namespace, Labels: ls,
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongos}}},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			ContainerStatuses: []corev1.ContainerStatus{
@@ -1408,8 +1385,8 @@ func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
 			ctx := t.Context()
 
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: namespace, Labels: ls},
-				Spec:       appsv1.StatefulSetSpec{Template: tt.template},
+				Name: stsName, Namespace: namespace, Labels: ls,
+				Spec: appsv1.StatefulSetSpec{Template: tt.template},
 			}
 
 			r := buildFakeClient(cr.DeepCopy(), sts, pvc.DeepCopy(), pod.DeepCopy())
@@ -1457,7 +1434,7 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 	pvc, pod := fullPVCAndPod(stsName, namespace, "10Gi", ls)
 
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: namespace, Labels: ls},
+		Name: stsName, Namespace: namespace, Labels: ls,
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

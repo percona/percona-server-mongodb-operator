@@ -591,6 +591,18 @@ boolean isManualBuild() {
     return !causes.isEmpty()
 }
 
+def skipRequested() {
+    try {
+        if (pullRequest.labels.contains('skip-e2e-tests')) {
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+            return true
+        }
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
+}
+
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild()) {
@@ -645,6 +657,10 @@ void checkE2EIgnoreFiles() {
     }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
+    if (skipRequested()) {
+        needToRunTests = false
+        return
+    }
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
@@ -768,7 +784,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c '
+                            golang:1.27 sh -c '
                                 go install github.com/google/go-licenses@v1.6.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -796,7 +812,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+                            golang:1.27 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 
