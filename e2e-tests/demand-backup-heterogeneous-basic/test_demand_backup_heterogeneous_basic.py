@@ -15,8 +15,8 @@ from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
-LOGICAL_BACKUP = "backup-minio-logical"
-PHYSICAL_BACKUP = "backup-minio-physical"
+LOGICAL_BACKUP = "backup-local-s3-logical"
+PHYSICAL_BACKUP = "backup-local-s3-physical"
 
 # PBM-1265: a physical backup taken too soon after the agents come up can wedge.
 # The pitr-physical bash test works around it the same way.
@@ -41,14 +41,14 @@ def config(create_infra: Callable[[str], str]) -> BackupConfig:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Paths, deploy_minio: None) -> None:
-    """Deploy MinIO, then the secrets the cluster and PBM need"""
+def setup_tests(test_paths: Paths, deploy_s3_storage: None) -> None:
+    """Deploy the S3 fixture, then the secrets the cluster and PBM need"""
     kubectl_bin(
         "apply",
         "-f",
         f"{test_paths['conf_dir']}/secrets.yml",
         "-f",
-        f"{test_paths['conf_dir']}/minio-secret.yml",
+        f"{test_paths['conf_dir']}/s3-secret.yml",
     )
 
 

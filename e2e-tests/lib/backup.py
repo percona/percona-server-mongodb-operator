@@ -41,7 +41,7 @@ def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
 
 
 def create_backup(
-    name: str, cluster: str, storage: str = "minio", backup_type: str | None = None
+    name: str, cluster: str, storage: str = "local-s3", backup_type: str | None = None
 ) -> None:
     """Create a backup object. backup_type None means the operator's default (logical)."""
     spec: dict[str, Any] = {"clusterName": cluster, "storageName": storage}
