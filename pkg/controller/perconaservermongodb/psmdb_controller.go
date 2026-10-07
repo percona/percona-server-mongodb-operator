@@ -1508,12 +1508,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr
 	ls := naming.MongosLabels(cr)
 
 	// autoscaling grows the request in the spec, which the resize below applies
-	mongosVol := autoscaledVolume{
-		claimName: psmdbconfig.MongosLogVolClaimName,
-		container: naming.ContainerMongos,
-		pvcSpec:   pvcSpec,
-	}
-	if err := r.reconcileStorageAutoscaling(ctx, cr, msSts, mongosVol, ls); err != nil {
+	if err := r.reconcileStorageAutoscaling(ctx, cr, msSts, psmdbconfig.MongosLogVolClaimName, pvcSpec, ls); err != nil {
 		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", msSts.Name)
 	}
 
