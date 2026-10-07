@@ -10,15 +10,11 @@ import (
 
 func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "policy/v1",
-			Kind:       "PodDisruptionBudget",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      labels[naming.LabelKubernetesInstance] + "-" + labels[naming.LabelKubernetesComponent] + "-" + labels[naming.LabelKubernetesReplset],
-			Namespace: namespace,
-			Labels:    labels,
-		},
+		APIVersion: "policy/v1",
+		Kind:       "PodDisruptionBudget",
+		Name:       labels[naming.LabelKubernetesInstance] + "-" + labels[naming.LabelKubernetesComponent] + "-" + labels[naming.LabelKubernetesReplset],
+		Namespace:  namespace,
+		Labels:     labels,
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   spec.MinAvailable,
 			MaxUnavailable: spec.MaxUnavailable,

@@ -14,7 +14,6 @@ import (
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -656,10 +655,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 
 func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
+		Name:      secretName,
+		Namespace: namespace,
 	}
 	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err
@@ -856,10 +853,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteVolumeSnapshots(ctx context.
 
 	for _, snapshot := range cr.Status.Snapshots {
 		snapshot := &volumesnapshotv1.VolumeSnapshot{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      snapshot.SnapshotName,
-				Namespace: cr.Namespace,
-			},
+			Name:      snapshot.SnapshotName,
+			Namespace: cr.Namespace,
 		}
 		err := r.client.Delete(ctx, snapshot)
 		if client.IgnoreNotFound(err) != nil {
