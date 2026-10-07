@@ -19,6 +19,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -75,14 +76,35 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 	assert.Equal(t, labels, pvc.Labels)
 }
 
-func TestReconcileSnapshotNew(t *testing.T) {
-	podZero := &corev1.Pod{
-		Name:      "my-cluster-rs0-0",
-		Namespace: "default",
+// readyMongodPod builds the pod a restore execs PBM commands in.
+func readyMongodPod(t *testing.T, cluster *psmdbv1.PerconaServerMongoDB, ordinal int) *corev1.Pod {
+	t.Helper()
+
+	rs := cluster.Spec.Replsets[0]
+
+	set, err := membergroup.Resolve(cluster, rs)
+	require.NoError(t, err)
+
+	group, ok := set.GetByName(naming.GroupMongod)
+	require.Truef(t, ok, "no mongod group in replset %s (have %v)", rs.Name, set.GetNames())
+
+	return &corev1.Pod{
+		Name:      naming.GroupPodName(cluster, rs, group.Name, ordinal),
+		Namespace: cluster.Namespace,
+		Labels:    group.Labels,
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: group.ContainerName}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+			},
+		},
 	}
+}
 
-	r := fakeReconciler(podZero)
-
+func TestReconcileSnapshotNew(t *testing.T) {
 	cluster := &psmdbv1.PerconaServerMongoDB{
 		Name:      "my-cluster",
 		Namespace: "default",
@@ -94,7 +116,7 @@ func TestReconcileSnapshotNew(t *testing.T) {
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
 					Name:    "rs0",
-					Size:    3,
+					Size:    new(int32(3)),
 					Storage: &psmdbv1.MongodSpecStorage{},
 				},
 			},
@@ -109,6 +131,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 			PBMname: "my-pbm-restore",
 		},
 	}
+
+	r := fakeReconciler(readyMongodPod(t, cluster, 0))
 
 	status, err := r.reconcileSnapshotNew(t.Context(), restore, cluster)
 	assert.NoError(t, err)
@@ -131,7 +155,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
 					Name:          "rs0",
-					Size:          3,
+					Size:          new(int32(3)),
 					Storage:       &psmdbv1.MongodSpecStorage{},
 					Configuration: encryptionDisabledConf,
 				},
@@ -230,7 +254,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
 						Name:          "rs0",
-						Size:          1,
+						Size:          new(int32(1)),
 						Configuration: encryptionDisabledConf,
 						NonVoting: psmdbv1.NonVotingSpec{
 							Enabled: true,
@@ -283,7 +307,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
 						Name:    "rs0",
-						Size:    1,
+						Size:    new(int32(1)),
 						Storage: &psmdbv1.MongodSpecStorage{},
 						Configuration: psmdbv1.MongoConfiguration(`security:
   enableEncryption: true`),
@@ -355,7 +379,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
 						Name:    "rs0",
-						Size:    1,
+						Size:    new(int32(1)),
 						Storage: &psmdbv1.MongodSpecStorage{},
 						Configuration: psmdbv1.MongoConfiguration(`security:
   enableEncryption: false`),
@@ -418,7 +442,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
 						Name:    "rs0",
-						Size:    1,
+						Size:    new(int32(1)),
 						Storage: &psmdbv1.MongodSpecStorage{},
 					},
 				},
@@ -476,7 +500,7 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
-				{Name: "rs0", Size: 3},
+				{Name: "rs0", Size: new(int32(3))},
 			},
 		},
 	}
@@ -519,7 +543,7 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 		err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: ns}, updated)
 		require.NoError(t, err)
 		require.NotNil(t, updated.Spec.Replicas)
-		assert.Equal(t, rs.Size, *updated.Spec.Replicas)
+		assert.Equal(t, rs.GetMongodSize(), *updated.Spec.Replicas)
 	})
 
 	t.Run("returns done and sets condition when all statefulsets ready", func(t *testing.T) {
@@ -527,10 +551,10 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 			Name:      naming.MongodStatefulSetName(cluster, rs),
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: new(rs.Size),
+				Replicas: rs.Size,
 			},
 			Status: appsv1.StatefulSetStatus{
-				ReadyReplicas: rs.Size,
+				ReadyReplicas: rs.GetMongodSize(),
 			},
 		}
 		r := fakeReconciler(cluster, sfs)
@@ -643,7 +667,7 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 		Namespace: ns,
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{
-				{Name: "rs0", Size: 2},
+				{Name: "rs0", Size: new(int32(2))},
 			},
 		},
 	}
@@ -702,7 +726,7 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 		assert.True(t, done)
 		assert.True(t, apimeta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot))
 
-		for podIdx := 0; podIdx < int(rs.Size); podIdx++ {
+		for podIdx := 0; podIdx < int(rs.GetMongodSize()); podIdx++ {
 			pvcName := config.MongodDataVolClaimName + "-" + rs.PodName(cluster, podIdx)
 			pvc := &corev1.PersistentVolumeClaim{}
 			err = r.client.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: ns}, pvc)
@@ -738,7 +762,7 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 				Replsets: []*psmdbv1.ReplsetSpec{
 					{
 						Name: "rs0",
-						Size: 1,
+						Size: new(int32(1)),
 						NonVoting: psmdbv1.NonVotingSpec{
 							Enabled: true,
 							Size:    1,
@@ -818,7 +842,7 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
 					Name: "rs0",
-					Size: 3,
+					Size: new(int32(3)),
 					Arbiter: psmdbv1.Arbiter{
 						Enabled: true,
 						Size:    1,
@@ -884,7 +908,7 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 			Replsets: []*psmdbv1.ReplsetSpec{
 				{
 					Name:    "rs0",
-					Size:    3,
+					Size:    new(int32(3)),
 					Storage: &psmdbv1.MongodSpecStorage{},
 				},
 			},
@@ -899,12 +923,7 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 		},
 	}
 
-	podZero := &corev1.Pod{
-		Name:      "my-cluster-rs0-0",
-		Namespace: "default",
-	}
-
-	r := fakeReconciler(podZero)
+	r := fakeReconciler(readyMongodPod(t, cluster, 0))
 	status, err := r.reconcileExternalSnapshotRestore(ctx, restore, nil, cluster)
 	assert.NoError(t, err)
 	assert.Equal(t, psmdbv1.RestoreStateWaiting, status.State)
@@ -920,7 +939,7 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 		Spec: psmdbv1.PerconaServerMongoDBSpec{
 			Replsets: []*psmdbv1.ReplsetSpec{{
 				Name:    "rs0",
-				Size:    1,
+				Size:    new(int32(1)),
 				Storage: &psmdbv1.MongodSpecStorage{},
 			}},
 		},
@@ -984,8 +1003,8 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 
 	t.Run("deletes secrets for all replsets", func(t *testing.T) {
 		cluster := makeCluster(
-			&psmdbv1.ReplsetSpec{Name: "rs0", Size: 1},
-			&psmdbv1.ReplsetSpec{Name: "rs1", Size: 1},
+			&psmdbv1.ReplsetSpec{Name: "rs0", Size: new(int32(1))},
+			&psmdbv1.ReplsetSpec{Name: "rs1", Size: new(int32(1))},
 		)
 		rs0, rs1 := cluster.Spec.Replsets[0], cluster.Spec.Replsets[1]
 		secret0 := makeSecret(cluster, rs0)
@@ -1003,7 +1022,7 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 	})
 
 	t.Run("ignores not found secrets", func(t *testing.T) {
-		cluster := makeCluster(&psmdbv1.ReplsetSpec{Name: "rs0", Size: 1})
+		cluster := makeCluster(&psmdbv1.ReplsetSpec{Name: "rs0", Size: new(int32(1))})
 		r := fakeReconciler(cluster)
 
 		err := r.deleteDBConfigSecrets(ctx, cluster)
@@ -1022,7 +1041,7 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 			Namespace: ns,
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				Replsets: []*psmdbv1.ReplsetSpec{
-					{Name: "rs0", Size: 1, Configuration: conf, Storage: &psmdbv1.MongodSpecStorage{}},
+					{Name: "rs0", Size: new(int32(1)), Configuration: conf, Storage: &psmdbv1.MongodSpecStorage{}},
 				},
 			},
 		}
