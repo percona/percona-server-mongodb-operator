@@ -1,4 +1,4 @@
-Jenkinsfileimport groovy.transform.Field
+import groovy.transform.Field
 
 @Field def zone = 'us-central1-c'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
