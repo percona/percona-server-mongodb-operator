@@ -420,6 +420,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		labels              map[string]string
 	}
 
+	type replsetInfo struct {
+		rsName string
+		pvcs   []pvcInfo
+	}
+
 	getVolumeClaimTemplate := func(sfsName string) (corev1.PersistentVolumeClaimSpec, error) {
 		sfs := appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: sfsName, Namespace: cluster.Namespace}, &sfs); err != nil {
@@ -437,7 +442,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	}
 
 	// Collect all PVCs that need to be reconciled.
-	replsetPVCs := make(map[string][]pvcInfo)
+	allPVCs := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
 		pvcs := make([]pvcInfo, 0)
 		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
@@ -491,35 +496,33 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 				})
 			}
 		}
-		replsetPVCs[rs.Name] = pvcs
+		allPVCs = append(allPVCs, replsetInfo{rsName: rs.Name, pvcs: pvcs})
 	}
 
+	// Each replset is restored in parallel, but the PVCs within a replset are restored sequentially.
 	done := true
-	for rs, pvcs := range replsetPVCs {
-		// Rollout PVCs one-by-one for each replset.
-		for _, info := range pvcs {
+	for _, rsPVCs := range allPVCs {
+		for _, info := range rsPVCs.pvcs {
 			if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
 				info.volumeClaimTemplate, restore); err != nil {
 				return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
 			} else if !ready {
-				log.Info("Waiting for PVC to be restored", "pvc", info.pvcName, "rsName", rs)
+				log.Info("Waiting for PVC to be restored", "pvc", info.pvcName, "replset", rsPVCs.rsName)
 				done = false
 				break
 			}
 		}
 	}
 
-	if !done {
-		return false, nil
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllPVCsRestoredFromSnapshot",
+			Message: "All pvcs have been restored from snapshot",
+		})
 	}
-
-	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllPVCsRestoredFromSnapshot",
-		Message: "All pvcs have been restored from snapshot",
-	})
-	return true, nil
+	return done, nil
 }
 
 func generatePVCFromSnapshot(
