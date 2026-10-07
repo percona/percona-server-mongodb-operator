@@ -94,10 +94,8 @@ func TestReleaseLease(t *testing.T) {
 
 func lease(name, namespace, holder string) *coordv1.Lease {
 	return &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 			HolderIdentity: new(holder),

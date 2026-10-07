@@ -1,0 +1,7 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  name: backup-local-s3
+spec:
+  clusterName: upgrade-sharded
+  storageName: local-s3

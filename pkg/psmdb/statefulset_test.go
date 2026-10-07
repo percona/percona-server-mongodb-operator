@@ -62,10 +62,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "minio-ca",
-										},
-										Key: "ca.crt",
+										Name: "minio-ca",
+										Key:  "ca.crt",
 									},
 								},
 							},
@@ -91,9 +89,7 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "minio-ca",
-										},
+										Name: "minio-ca",
 										// Key not specified
 									},
 								},
@@ -120,10 +116,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "shared-ca",
-										},
-										Key: "ca.crt",
+										Name: "shared-ca",
+										Key:  "ca.crt",
 									},
 								},
 							},
@@ -131,10 +125,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "shared-ca",
-										},
-										Key: "ca.crt",
+										Name: "shared-ca",
+										Key:  "ca.crt",
 									},
 								},
 							},
@@ -160,10 +152,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "multi-ca",
-										},
-										Key: "ca1.crt",
+										Name: "multi-ca",
+										Key:  "ca1.crt",
 									},
 								},
 							},
@@ -171,10 +161,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 								Type: api.BackupStorageMinio,
 								Minio: api.BackupStorageMinioSpec{
 									CABundle: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "multi-ca",
-										},
-										Key: "ca2.crt",
+										Name: "multi-ca",
+										Key:  "ca2.crt",
 									},
 								},
 							},
@@ -500,16 +488,12 @@ func TestBackupAgentContainerProbes(t *testing.T) {
 	liveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
 		PeriodSeconds:       7,
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-		},
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
 	}
 	readiness := &corev1.Probe{
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       3,
-		ProbeHandler: corev1.ProbeHandler{
-			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt(27017)},
-		},
+		TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt(27017)},
 	}
 
 	newCR := func() *api.PerconaServerMongoDB {

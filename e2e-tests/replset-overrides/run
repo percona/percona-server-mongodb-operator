@@ -38,7 +38,7 @@ delete_cluster() {
 test_override_host_after_deploy() {
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating PSMDB cluster: ${cluster}"
 	apply_cluster ${test_dir}/conf/${cluster}.yml
@@ -52,8 +52,8 @@ test_override_host_after_deploy() {
 		"databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@${cluster}-rs0.${namespace}"
 
-	run_backup "minio" "backup-minio-logical"
-	wait_backup "backup-minio-logical"
+	run_backup "local-s3" "backup-local-s3-logical"
+	wait_backup "backup-local-s3-logical"
 
 	echo "creating external services"
 	kubectl_bin apply -f ${test_dir}/conf/external-services.yml
@@ -67,7 +67,7 @@ test_override_host_after_deploy() {
 	echo "checking if we can read existing data"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 
-	run_recovery_check "${cluster}" "backup-minio-logical" "external-rs0-0.${namespace}"
+	run_recovery_check "${cluster}" "backup-local-s3-logical" "external-rs0-0.${namespace}"
 
 	delete_cluster ${cluster}
 }
@@ -75,7 +75,7 @@ test_override_host_after_deploy() {
 test_deploy_with_host_overrides() {
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating external services"
 	kubectl_bin apply -f ${test_dir}/conf/external-services.yml
@@ -91,9 +91,9 @@ test_deploy_with_host_overrides() {
 		"databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 	compare_mongo_cmd "find" "databaseAdmin:databaseAdmin123456@external-rs0-0.${namespace}"
 
-	run_backup "minio" "backup-minio-physical" "physical"
-	wait_backup "backup-minio-physical"
-	run_recovery_check "${cluster}" "backup-minio-physical" "external-rs0-0.${namespace}"
+	run_backup "local-s3" "backup-local-s3-physical" "physical"
+	wait_backup "backup-local-s3-physical"
+	run_recovery_check "${cluster}" "backup-local-s3-physical" "external-rs0-0.${namespace}"
 
 	delete_cluster ${cluster}
 }
@@ -101,7 +101,7 @@ test_deploy_with_host_overrides() {
 test_override_priority() {
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets_with_tls.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating PSMDB cluster: ${cluster}"
 	apply_cluster ${test_dir}/conf/${cluster}-override-priority.yml
@@ -129,7 +129,7 @@ main() {
 	create_infra ${namespace}
 	kubectl_bin apply -f ${conf_dir}/client.yml
 
-	deploy_minio
+	deploy_s3_storage
 
 	desc "Case 1: Deploying a new cluster with hostname overrides"
 	test_deploy_with_host_overrides

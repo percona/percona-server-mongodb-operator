@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 import yaml
-from lib.arch import helm_arch_set_args
+from lib.arch import helm_arch_set_args, helm_arch_set_string_args
 from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
     clean_all_namespaces,
@@ -104,15 +104,17 @@ def _wait_for_nodes_ready() -> None:
     """Wait until K8s nodes are ready, failing the test if they aren't in time."""
     from lib import report_generator
 
+    platform = os.environ.get("PLATFORM") or detect_platform()
+    min_ready = report_generator.min_ready_nodes(platform)
     deadline = time.monotonic() + _NODES_READY_TIMEOUT
     while True:
-        status = report_generator.check_nodes_ready()
+        status = report_generator.check_nodes_ready(min_ready)
         if status["ok"]:
             return
         if time.monotonic() >= deadline:
             pytest.fail(
                 f"K8s nodes not ready: {status['ready']}/{status['total']} "
-                f"(need >= {report_generator.MIN_READY_NODES}) "
+                f"(need >= {status['required']}) "
                 f"after {_NODES_READY_TIMEOUT}s",
                 pytrace=False,
             )
@@ -241,7 +243,7 @@ def setup_env_vars() -> None:
         "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
         "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",
-        "MINIO_VER": "5.4.0",
+        "SEAWEEDFS_VER": "4.47.0",
         "PMM_SERVER_VER": "9.9.9",
         "CLEAN_NAMESPACE": "0",
         "DELETE_CRD_ON_START": "1",
@@ -433,6 +435,7 @@ def create_infra(
         """Create the necessary infrastructure for the tests."""
         global _current_namespace
         logger.info("Creating test environment")
+        _delete_cert_manager()
         if env_bool("DELETE_CRD_ON_START"):
             delete_crd_rbac(Path(test_paths["src_dir"]))
             check_crd_for_deletion(Path(test_paths["src_dir"]) / "deploy" / "crd.yaml")
@@ -509,12 +512,70 @@ def _cert_manager_url() -> str:
 
 
 def _delete_cert_manager() -> None:
-    """Best-effort removal of cert-manager; safe to call when it isn't installed."""
+    """Remove cert-manager before another test can use its stale API resources."""
     if env_bool("RANCHER"):
         logger.info("Rancher cluster detected, skipping cert-manager destroy")
         return
     logger.info("Deleting cert-manager")
-    kubectl_bin("delete", "-f", _cert_manager_url(), "--ignore-not-found", check=False)
+    # Remove admission hooks before their service, so CRs can still be deleted
+    # while the cert-manager namespace is being torn down.
+    kubectl_bin(
+        "delete",
+        "mutatingwebhookconfiguration",
+        "cert-manager-webhook",
+        "--ignore-not-found",
+    )
+    kubectl_bin(
+        "delete",
+        "validatingwebhookconfiguration",
+        "cert-manager-webhook",
+        "--ignore-not-found",
+    )
+    kubectl_bin(
+        "delete", "-f", _cert_manager_url(), "--ignore-not-found", "--wait=false", check=False
+    )
+
+    crds = (
+        "certificates.cert-manager.io",
+        "certificaterequests.cert-manager.io",
+        "issuers.cert-manager.io",
+        "clusterissuers.cert-manager.io",
+        "orders.acme.cert-manager.io",
+        "challenges.acme.cert-manager.io",
+    )
+    kubectl_bin("delete", "crd", *crds, "--ignore-not-found", "--wait=false")
+    kubectl_bin("delete", "namespace", "cert-manager", "--ignore-not-found", "--wait=false")
+
+    deadline = time.monotonic() + 120
+    while True:
+        remaining = [
+            kubectl_bin(
+                "get",
+                "mutatingwebhookconfiguration",
+                "cert-manager-webhook",
+                "--ignore-not-found",
+                "-o",
+                "name",
+            ).strip(),
+            kubectl_bin(
+                "get",
+                "validatingwebhookconfiguration",
+                "cert-manager-webhook",
+                "--ignore-not-found",
+                "-o",
+                "name",
+            ).strip(),
+            kubectl_bin("get", "crd", *crds, "--ignore-not-found", "-o", "name").strip(),
+            kubectl_bin(
+                "get", "namespace", "cert-manager", "--ignore-not-found", "-o", "name"
+            ).strip(),
+        ]
+        remaining = [resource for resource in remaining if resource]
+        if not remaining:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"cert-manager resources still present: {', '.join(remaining)}")
+        time.sleep(2)
 
 
 @pytest.fixture(scope="class")
@@ -567,8 +628,8 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
     _delete_cert_manager()
 
 
-def aws_cli_minio(command: str, endpoint: str) -> str:
-    """Run an aws-cli command against MinIO from a throwaway pod."""
+def aws_cli_s3(command: str, endpoint: str) -> str:
+    """Run an aws-cli command against the S3 fixture from a throwaway pod."""
     return kubectl_bin(
         "run",
         "-i",
@@ -588,50 +649,49 @@ def aws_cli_minio(command: str, endpoint: str) -> str:
 
 
 @pytest.fixture(scope="class")
-def deploy_minio() -> Generator[None]:
-    """Deploy MinIO and clean up after tests."""
-    service_name = "minio-service"
+def deploy_s3_storage() -> Generator[None]:
+    """Deploy the SeaweedFS S3 fixture and clean up after tests."""
+    fullname = "s3-storage"
     bucket = "operator-testing"
 
-    logger.info(f"Installing MinIO: {service_name}")
+    logger.info(f"Installing SeaweedFS: {fullname}")
 
-    helm_bin("uninstall", service_name, check=False, capture=True)
-    helm_bin("repo", "remove", "minio", check=False, capture=True)
-    helm_bin("repo", "add", "minio", "https://charts.min.io/")
+    helm_bin("uninstall", fullname, check=False, capture=True)
+    helm_bin("repo", "remove", "seaweedfs", check=False, capture=True)
+    helm_bin("repo", "add", "seaweedfs", "https://seaweedfs.github.io/seaweedfs/helm")
 
-    endpoint = f"http://{service_name}:9000"
-    minio_ver = os.environ.get("MINIO_VER", "")
-    settings = {
-        "replicas": "1",
-        "mode": "standalone",
-        "resources.requests.memory": "256Mi",
-        "rootUser": "rootuser",
-        "rootPassword": "rootpass123",
-        "users[0].accessKey": "some-access-key",
-        "users[0].secretKey": "some-secret-key",
-        "users[0].policy": "consoleAdmin",
-        "service.type": "ClusterIP",
-        "configPathmc": "/tmp/",
-        "securityContext.enabled": "false",
-        "persistence.size": "2G",
-        "fullnameOverride": service_name,
-        "serviceAccount.create": "true",
-        "serviceAccount.name": f"{service_name}-sa",
-    }
-    set_args = [arg for k, v in settings.items() for arg in ("--set", f"{k}={v}")]
-    set_args += helm_arch_set_args(("", "postJob."))
-    install_args = ["install", service_name, "minio/minio", "--version", minio_ver, *set_args]
+    endpoint = f"http://{fullname}-all-in-one:8333"
+    seaweedfs_ver = os.environ.get("SEAWEEDFS_VER", "")
+    conf_dir = Path(__file__).parent / "conf"
+    set_args = [
+        "--set",
+        "allInOne.data.type=persistentVolumeClaim",
+        "--set",
+        "allInOne.data.size=2G",
+        "--set",
+        f"fullnameOverride={fullname}",
+        "--set-string",
+        "s3.credentials.admin.accessKey=some-access-key",
+        "--set-string",
+        "s3.credentials.admin.secretKey=some-secret-key",
+        "--set-string",
+        f"global.seaweedfs.serviceAccountName={fullname}-sa",
+    ]
+    set_args += helm_arch_set_string_args("allInOne.")
+    install_args = [
+        "install",
+        fullname,
+        "seaweedfs/seaweedfs",
+        "--version",
+        seaweedfs_ver,
+        "-f",
+        f"{conf_dir}/seaweedfs-values.yaml",
+        *set_args,
+    ]
 
     retry(lambda: helm_bin(*install_args), max_attempts=6, delay=5, backoff=2)
 
-    minio_pod = kubectl_bin(
-        "get",
-        "pods",
-        f"--selector=release={service_name}",
-        "-o",
-        "jsonpath={.items[].metadata.name}",
-    ).strip()
-    wait_pod(minio_pod)
+    kubectl_bin("rollout", "status", f"deployment/{fullname}-all-in-one", "--timeout=300s")
 
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
@@ -644,20 +704,21 @@ def deploy_minio() -> Generator[None]:
             "-n",
             operator_ns,
             "externalname",
-            service_name,
-            f"--external-name={service_name}.{namespace}.svc.cluster.local",
-            "--tcp=9000",
+            f"{fullname}-all-in-one",
+            f"--external-name={fullname}-all-in-one.{namespace}.svc.cluster.local",
+            "--tcp=8333",
+            "--tcp=8443",
         )
 
-    logger.info(f"Creating MinIO bucket: {bucket}")
-    aws_cli_minio(f"s3 mb s3://{bucket}", endpoint)
+    logger.info(f"Creating S3 bucket: {bucket}")
+    aws_cli_s3(f"s3 mb s3://{bucket}", endpoint)
 
     yield
 
     try:
-        helm_bin("uninstall", service_name, "--wait", "--timeout", "60s")
+        helm_bin("uninstall", fullname, "--wait", "--timeout", "60s")
     except subprocess.CalledProcessError as e:
-        logger.warning(f"Failed to cleanup minio: {e}")
+        logger.warning(f"Failed to cleanup SeaweedFS: {e}")
 
 
 @pytest.fixture(scope="class")
@@ -685,7 +746,7 @@ def psmdb_client(test_paths: Paths) -> MongoManager:
 
 @pytest.fixture
 def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
-    """Tear down a bash-wrapped test's namespace after diagnostics are collected."""
+    """Tear down a bash-wrapped test after diagnostics are collected."""
     yield
 
     ns = _get_current_namespace()
@@ -699,4 +760,7 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
     operator_ns = os.environ.get("OPERATOR_NS")
     if operator_ns:
         namespaces.append(operator_ns)
-    _cleanup_infra(test_paths, namespaces)
+    try:
+        _delete_cert_manager()
+    finally:
+        _cleanup_infra(test_paths, namespaces)

@@ -167,7 +167,7 @@ run_snapshot_recovery_check() {
 cluster="some-name"
 
 create_infra "${namespace}"
-deploy_minio
+deploy_s3_storage
 apply_s3_storage_secrets
 deploy_volume_snapshot_class
 

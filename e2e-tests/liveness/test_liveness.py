@@ -30,14 +30,14 @@ def config(create_infra: Callable[[str], str]) -> LivenessConfig:
 
 
 @pytest.fixture(scope="class", autouse=True)
-def setup_tests(test_paths: Paths, deploy_minio: Any) -> None:
+def setup_tests(test_paths: Paths, deploy_s3_storage: Any) -> None:
     """Setup test environment"""
     kubectl_bin(
         "apply",
         "-f",
         f"{test_paths['conf_dir']}/secrets.yml",
         "-f",
-        f"{test_paths['conf_dir']}/minio-secret.yml",
+        f"{test_paths['conf_dir']}/s3-secret.yml",
     )
 
 

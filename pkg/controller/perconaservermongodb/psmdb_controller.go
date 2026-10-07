@@ -987,14 +987,10 @@ func (r *ReconcilePerconaServerMongoDB) ensureSecurityKeys(ctx context.Context, 
 
 func (r *ReconcilePerconaServerMongoDB) ensureSecurityKey(ctx context.Context, cr *api.PerconaServerMongoDB, secretName, keyName string, keyLen int, setOwner bool) (created bool, err error) {
 	key := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: cr.Namespace,
-		},
+		APIVersion: "v1",
+		Kind:       "Secret",
+		Name:       secretName,
+		Namespace:  cr.Namespace,
 	}
 
 	err = r.client.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, key)
@@ -1085,10 +1081,8 @@ func (r *ReconcilePerconaServerMongoDB) deleteCfgIfNeeded(ctx context.Context, c
 	}
 
 	svc := corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + api.ConfigReplSetName,
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.Name + "-" + api.ConfigReplSetName,
+		Namespace: cr.Namespace,
 	}
 	if err := k8sutils.DeleteIfExists(ctx, r.client, &svc); err != nil {
 		return errors.Wrapf(err, "failed to delete config service: %s", svc.Name)
@@ -1174,11 +1168,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			return nil
 		}
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.RSLabels(cr, rs),
-			},
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.RSLabels(cr, rs),
 			Data: map[string]string{
 				"mongod.conf": string(configuration),
 			},
@@ -1198,11 +1190,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongodConfigMaps(ctx context.Co
 			return nil
 		}
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.RSLabels(cr, rs),
-			},
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.RSLabels(cr, rs),
 			Data: map[string]string{
 				"hook.sh": hookscript.Script,
 			},
@@ -1273,11 +1263,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 			return nil
 		}
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.MongosLabels(cr),
-			},
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.MongosLabels(cr),
 			Data: map[string]string{
 				"mongos.conf": configuration,
 			},
@@ -1298,11 +1286,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosConfigMaps(ctx context.Co
 			return nil
 		}
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cr.Namespace,
-				Labels:    naming.MongosLabels(cr),
-			},
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    naming.MongosLabels(cr),
 			Data: map[string]string{
 				"hook.sh": cr.Spec.Sharding.Mongos.HookScript.Script,
 			},
@@ -1340,15 +1326,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogCollectorConfigMaps(ctx cont
 	}
 
 	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      logcollector.ConfigMapName(cr.Name),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		APIVersion: "v1",
+		Kind:       "ConfigMap",
+		Name:       logcollector.ConfigMapName(cr.Name),
+		Namespace:  cr.Namespace,
+		Labels:     naming.ClusterLabels(cr),
 		Data: map[string]string{
 			logcollector.FluentBitCustomConfigurationFile: cr.Spec.LogCollector.Configuration,
 		},
@@ -1378,11 +1360,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogRotateConfigMaps(ctx context
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      logrotate.ConfigMapName(cr.Name),
-			Namespace: cr.GetNamespace(),
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      logrotate.ConfigMapName(cr.Name),
+		Namespace: cr.GetNamespace(),
+		Labels:    naming.ClusterLabels(cr),
 		Data: map[string]string{
 			logrotate.MongodbConfig: cr.Spec.LogCollector.LogRotate.Configuration,
 		},
@@ -1551,7 +1531,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
-	if err == nil && cr.CompareVersion("1.24.0") >= 0 {
+	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
 		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
 			return vct.Name == psmdbconfig.MongosLogVolClaimName
@@ -1606,7 +1586,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrap(err, "check if mongos custom configuration exists")
 	}
 
-	if cr.CompareVersion("1.24.0") >= 0 {
+	if cr.CompareVersion("1.23.1") >= 0 {
 		if cr.IsLogCollectorEnabled() {
 			configs.LogCollectionConf, err = r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))
 			if err != nil {

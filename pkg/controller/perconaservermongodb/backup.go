@@ -55,11 +55,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Data: map[string]string{
 			"hook.sh": cr.Spec.Backup.HookScript.Script,
 		},
@@ -316,9 +314,13 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 	}
 
 	for _, bcp := range bcps.Items {
-		if bcp.Status.State != api.BackupStateReady &&
-			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.GetClusterName() == cr.Name {
+		if bcp.Spec.GetClusterName() != cr.Name {
+			continue
+		}
+		switch bcp.Status.State {
+		case api.BackupStateReady, api.BackupStateError, api.BackupStateWaiting:
+			continue
+		default:
 			return true, nil
 		}
 	}
