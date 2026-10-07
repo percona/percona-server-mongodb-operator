@@ -314,12 +314,10 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			return errors.Wrap(err, "get secret")
 		}
 		newSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secret.Name + "-old",
-				Namespace: secret.Namespace,
-				Labels:    naming.ClusterLabels(cr),
-			},
-			Data: secret.Data,
+			Name:      secret.Name + "-old",
+			Namespace: secret.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+			Data:      secret.Data,
 		}
 		if cr.CompareVersion("1.17.0") < 0 {
 			newSecret.Labels = nil
@@ -518,12 +516,10 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		}
 
 		secretObj := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            secretName,
-				Namespace:       cr.Namespace,
-				OwnerReferences: ownerReferences,
-				Labels:          naming.ClusterLabels(cr),
-			},
+			Name:            secretName,
+			Namespace:       cr.Namespace,
+			OwnerReferences: ownerReferences,
+			Labels:          naming.ClusterLabels(cr),
 			Data: map[string][]byte{
 				"ca.crt":  caCertPEM,
 				"tls.crt": tlsCert,
@@ -556,12 +552,10 @@ func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context,
 	}
 
 	caSecretObj := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            caSecretName,
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerRefs,
-			Labels:          labels,
-		},
+		Name:            caSecretName,
+		Namespace:       cr.Namespace,
+		OwnerReferences: ownerRefs,
+		Labels:          labels,
 		Data: map[string][]byte{
 			"ca.crt": caCertPEM,
 			"ca.key": caKeyPEM,

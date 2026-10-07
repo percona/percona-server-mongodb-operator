@@ -21,10 +21,8 @@ import (
 
 func newTestCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets: &api.SecretsSpec{
@@ -43,12 +41,10 @@ func newTestCR() *api.PerconaServerMongoDB {
 
 func TestCurrentSSLAnnotation(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -98,12 +94,10 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 
 func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -118,20 +112,16 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	}
 
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -196,20 +186,16 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 
 	// Now create secrets and call again - TLSSecretsReady should be true
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -301,10 +287,8 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "user-cluster-issuer",
-				Labels: labels,
-			},
+			Name:   "user-cluster-issuer",
+			Labels: labels,
 		}
 	}
 
@@ -375,20 +359,16 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 func TestIsExternalIssuer(t *testing.T) {
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "user-cluster-issuer",
-				Labels: labels,
-			},
+			Name:   "user-cluster-issuer",
+			Labels: labels,
 		}
 	}
 
 	issuer := func(labels map[string]string) *cm.Issuer {
 		return &cm.Issuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "user-issuer",
-				Namespace: "test-ns",
-				Labels:    labels,
-			},
+			Name:      "user-issuer",
+			Namespace: "test-ns",
+			Labels:    labels,
 		}
 	}
 

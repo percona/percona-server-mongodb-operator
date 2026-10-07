@@ -268,9 +268,9 @@ func TestReconcileModeInheritedFinalized(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-				ObjectMeta: metav1.ObjectMeta{Name: "sync3", Namespace: "ns", UID: "u"},
-				Spec:       tc.spec,
-				Status:     tc.status,
+				Name: "sync3", Namespace: "ns", UID: "u",
+				Spec:   tc.spec,
+				Status: tc.status,
 			}
 			cl := fake.NewClientBuilder().
 				WithScheme(clusterSyncScheme(t)).
@@ -344,7 +344,7 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 
 	secretWith := func(annotations map[string]string) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Annotations: annotations},
+			Annotations: annotations,
 			Data: map[string][]byte{
 				targetUserSecretUsernameKey: []byte(username),
 				targetUserSecretPasswordKey: []byte(password),

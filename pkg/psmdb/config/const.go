@@ -81,9 +81,7 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 	case VolumeSourceConfigMap:
 		return corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: name,
-				},
+				Name:     name,
 				Optional: &t,
 			},
 		}

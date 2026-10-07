@@ -43,12 +43,12 @@ Ekc4if1pC1UuXHjFwOqY
 
 func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
 	tlsSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vault-tls", Namespace: "new"},
-		Data:       map[string][]byte{"ca.crt": []byte(fakeCACert)},
+		Name: "vault-tls", Namespace: "new",
+		Data: map[string][]byte{"ca.crt": []byte(fakeCACert)},
 	}
 	tokenSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vault-token", Namespace: "new"},
-		Data:       map[string][]byte{"token": []byte("fake-token")},
+		Name: "vault-token", Namespace: "new",
+		Data: map[string][]byte{"token": []byte("fake-token")},
 	}
 	cl := newFakeClient(t, tlsSecret, tokenSecret)
 
@@ -96,12 +96,12 @@ func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
 
 func TestCachedClientUpdate_TokenSecretRotation(t *testing.T) {
 	tlsSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vault-tls", Namespace: "new"},
-		Data:       map[string][]byte{"ca.crt": []byte(fakeCACert)},
+		Name: "vault-tls", Namespace: "new",
+		Data: map[string][]byte{"ca.crt": []byte(fakeCACert)},
 	}
 	tokenSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vault-token", Namespace: "new"},
-		Data:       map[string][]byte{"token": []byte("initial-token")},
+		Name: "vault-token", Namespace: "new",
+		Data: map[string][]byte{"token": []byte("initial-token")},
 	}
 	cl := newFakeClient(t, tlsSecret, tokenSecret)
 
