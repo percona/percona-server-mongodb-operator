@@ -32,10 +32,8 @@ func TestCheckClusterSyncLease(t *testing.T) {
 		clusterName = "tgt"
 	)
 	activeLease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.ClusterSyncLeaseName(clusterName),
-			Namespace: ns,
-		},
+		Name:      naming.ClusterSyncLeaseName(clusterName),
+		Namespace: ns,
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 			HolderIdentity: new("sync-uid"),
@@ -83,11 +81,11 @@ func TestCheckClusterSyncLease(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "bcp", Namespace: ns},
-				Status:     psmdbv1.PerconaServerMongoDBBackupStatus{State: tc.state},
+				Name: "bcp", Namespace: ns,
+				Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: tc.state},
 			}
 			cluster := &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: ns},
+				Name: clusterName, Namespace: ns,
 			}
 
 			objs := []runtime.Object{}
@@ -128,15 +126,13 @@ func TestTryAcquireLease(t *testing.T) {
 	)
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: ns},
+		Name: clusterName, Namespace: ns,
 	}
 	newBackup := &psmdbv1.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "backup-new",
-			Namespace: ns,
-			UID:       types.UID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-		},
-		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
+		Name:      "backup-new",
+		Namespace: ns,
+		UID:       types.UID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+		Spec:      psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
 	}
 
 	tests := map[string]struct {
@@ -177,10 +173,8 @@ func TestTryAcquireLease(t *testing.T) {
 			}
 			if tc.seedLease {
 				objs = append(objs, &coordv1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      naming.BackupLeaseName(clusterName),
-						Namespace: ns,
-					},
+					Name:      naming.BackupLeaseName(clusterName),
+					Namespace: ns,
 					Spec: coordv1.LeaseSpec{
 						AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 						HolderIdentity: new(holder),
@@ -212,12 +206,10 @@ func TestTryAcquireLease(t *testing.T) {
 
 func backupWithState(name, namespace, uid, clusterName string, state psmdbv1.BackupState) *psmdbv1.PerconaServerMongoDBBackup {
 	return &psmdbv1.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			UID:       types.UID(uid),
-		},
-		Spec:   psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
-		Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: state},
+		Name:      name,
+		Namespace: namespace,
+		UID:       types.UID(uid),
+		Spec:      psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
+		Status:    psmdbv1.PerconaServerMongoDBBackupStatus{State: state},
 	}
 }

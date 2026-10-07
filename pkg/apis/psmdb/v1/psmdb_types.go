@@ -380,24 +380,25 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                            `json:"state,omitempty"`
-	MongoVersion       string                              `json:"mongoVersion,omitempty"`
-	MongoImage         string                              `json:"mongoImage,omitempty"`
-	Message            string                              `json:"message,omitempty"`
-	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
-	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
-	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
-	BackupVersion      string                              `json:"backupVersion,omitempty"`
-	BackupImage        string                              `json:"backupImage,omitempty"`
-	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
-	PMMVersion         string                              `json:"pmmVersion,omitempty"`
-	Host               string                              `json:"host,omitempty"`
-	Size               int32                               `json:"size"`
-	Ready              int32                               `json:"ready"`
-	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
-	Search             map[string]SearchStatus             `json:"search,omitempty"`
+	State                AppState                            `json:"state,omitempty"`
+	MongoVersion         string                              `json:"mongoVersion,omitempty"`
+	MongoImage           string                              `json:"mongoImage,omitempty"`
+	Message              string                              `json:"message,omitempty"`
+	Conditions           []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets             map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos               *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration   int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion        string                              `json:"backupVersion,omitempty"`
+	BackupImage          string                              `json:"backupImage,omitempty"`
+	BackupConfigHash     string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus            AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion           string                              `json:"pmmVersion,omitempty"`
+	Host                 string                              `json:"host,omitempty"`
+	Size                 int32                               `json:"size"`
+	Ready                int32                               `json:"ready"`
+	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	Search               map[string]SearchStatus             `json:"search,omitempty"`
+	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
 
 type ConditionStatus string
@@ -1089,6 +1090,13 @@ type VaultSpec struct {
 	TLSSecret   string `json:"tlsSecret,omitempty"`
 	//+optional
 	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+	//+optional
+	ReinitInterval *metav1.Duration `json:"reinitInterval,omitempty"`
+	// RequestInterval controls how often the operator queries Vault for the users secret.
+	// If unset, Vault is queried on every reconciliation. Set this to reduce the request
+	// rate against Vault for clusters that don't need near-instant credential propagation.
+	//+optional
+	RequestInterval *metav1.Duration `json:"requestInterval,omitempty"`
 }
 
 type SyncUsersSpec struct {
@@ -1290,9 +1298,10 @@ type S3Retryer struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket                string                  `json:"bucket"`
-	Prefix                string                  `json:"prefix,omitempty"`
-	Region                string                  `json:"region,omitempty"`
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix,omitempty"`
+	Region string `json:"region,omitempty"`
+	// +kubebuilder:validation:MaxLength=2048
 	EndpointURL           string                  `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
@@ -1448,6 +1457,7 @@ const (
 	BackupStorageOCI        BackupStorageType = "oci"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || !has(self.s3) || !has(self.s3.endpointUrl) || !self.s3.endpointUrl.contains('storage.googleapis.com')",message="S3 compatibility for Google Cloud Storage is not supported, use type 'gcs' instead"
 type BackupStorageSpec struct {
 	Type BackupStorageType   `json:"type"`
 	Main bool                `json:"main,omitempty"`
@@ -1499,9 +1509,10 @@ type BackupConfig struct {
 }
 
 type BackupSpec struct {
-	Enabled                  bool                         `json:"enabled"`
-	Annotations              map[string]string            `json:"annotations,omitempty"`
-	Labels                   map[string]string            `json:"labels,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`

@@ -6,7 +6,6 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -14,7 +13,7 @@ import (
 
 func TestCertificate(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			TLS:       &api.TLSSpec{},
@@ -156,6 +155,38 @@ func TestCertificate(t *testing.T) {
 						assert.Equal(t, cm.IssuerKind, obj.Spec.IssuerRef.Kind)
 						assert.Empty(t, obj.Spec.IssuerRef.Group)
 					})
+				})
+				t.Run("old version with user issuer", func(t *testing.T) {
+					cr := cr.DeepCopy()
+					cr.Spec.CRVersion = "1.21.0"
+					cr.Spec.TLS.IssuerConf.Name = "user-cluster-issuer"
+					t.Run("internal", func(t *testing.T) {
+						cert := CertificateTLS(cr, true)
+						obj := cert.Object()
+						assert.Equal(t, "user-cluster-issuer", obj.Spec.IssuerRef.Name)
+						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
+					})
+					t.Run("non-internal", func(t *testing.T) {
+						cert := CertificateTLS(cr, false)
+						obj := cert.Object()
+						assert.Equal(t, "user-cluster-issuer", obj.Spec.IssuerRef.Name)
+						assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
+						assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
+					})
+				})
+				t.Run("old version with external issuer", func(t *testing.T) {
+					cr := cr.DeepCopy()
+					cr.Spec.CRVersion = "1.21.0"
+					cr.Spec.TLS.IssuerConf = cmmeta.IssuerReference{
+						Name:  "aws-pca-issuer",
+						Kind:  "AWSPCAClusterIssuer",
+						Group: "awspca.cert-manager.io",
+					}
+					obj := CertificateTLS(cr, false).Object()
+					assert.Equal(t, "aws-pca-issuer", obj.Spec.IssuerRef.Name)
+					assert.Equal(t, "AWSPCAClusterIssuer", obj.Spec.IssuerRef.Kind)
+					assert.Equal(t, "awspca.cert-manager.io", obj.Spec.IssuerRef.Group)
 				})
 			})
 		})

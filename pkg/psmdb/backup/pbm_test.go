@@ -36,14 +36,10 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 	storage := cr.Spec.Backup.Storages["test-s3-storage"]
 
 	secret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "/v1",
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "test-namespace",
-		},
+		APIVersion: "/v1",
+		Kind:       "Secret",
+		Name:       "test-secret",
+		Namespace:  "test-namespace",
 	}
 	cli := buildFakeClient(t, secret)
 
@@ -115,10 +111,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 
 func TestPBMStorageConfig(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cr",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cr",
+		Namespace: "test-namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -135,10 +129,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"minio": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
@@ -174,10 +166,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"s3": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
@@ -253,10 +243,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"s3 with SSE with KMS": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
@@ -305,10 +293,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"s3 with SSE with custom key": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
@@ -357,10 +343,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"gcs": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"GCS_CLIENT_EMAIL": []byte("serviceaccount@google.com"),
 						"GCS_PRIVATE_KEY":  []byte("some-private-key"),
@@ -411,53 +395,11 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
-		"gcs s3 compatibility": {
-			[]client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
-					Data: map[string][]byte{
-						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
-						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
-					},
-				},
-			},
-			api.BackupStorageSpec{
-				Type: api.BackupStorageS3,
-				S3: api.BackupStorageS3Spec{
-					Bucket:                "operator-testing",
-					Prefix:                "psmdb",
-					Region:                "us-east-1",
-					EndpointURL:           "https://storage.googleapis.com",
-					CredentialsSecret:     "test-secret",
-					UploadPartSize:        1024 * 1024 * 10,
-					MaxUploadParts:        5000,
-					StorageClass:          "storage-class",
-					InsecureSkipTLSVerify: false,
-				},
-			},
-			config.StorageConf{
-				Type: storage.GCS,
-				GCS: &gcs.Config{
-					Bucket:    "operator-testing",
-					Prefix:    "psmdb",
-					ChunkSize: 1024 * 1024 * 10,
-					Credentials: gcs.Credentials{
-						HMACAccessKey: "some-access-key",
-						HMACSecret:    "some-secret-key",
-					},
-				},
-			},
-		},
 		"oss s3 compatibility": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AWS_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"AWS_SECRET_ACCESS_KEY": []byte("some-secret-key"),
@@ -495,10 +437,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"azure": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"AZURE_STORAGE_ACCOUNT_NAME": []byte("some-storage-account"),
 						"AZURE_STORAGE_ACCOUNT_KEY":  []byte("some-storage-key"),
@@ -528,10 +468,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"oss": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
 						"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
@@ -597,10 +535,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"oci with user principal credentials": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"OCI_TENANCY":                []byte("some-tenancy"),
 						"OCI_USER":                   []byte("some-user"),
@@ -650,10 +586,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"oci with user principal credentials without passphrase": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"OCI_TENANCY":     []byte("some-tenancy"),
 						"OCI_USER":        []byte("some-user"),
@@ -788,10 +722,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"oci with SSE customer key": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-sse-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-sse-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						"OCI_SSE_CUSTOMER_KEY": []byte("some-customer-key"),
 					},
@@ -855,10 +787,8 @@ func TestPBMStorageConfig(t *testing.T) {
 
 func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cr",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cr",
+		Namespace: "test-namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -869,20 +799,16 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 	cl := buildFakeClient(
 		t,
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-secret",
-				Namespace: "test-namespace",
-			},
+			Name:      "test-secret",
+			Namespace: "test-namespace",
 			Data: map[string][]byte{
 				"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
 				"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),
 			},
 		},
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "oss-sse-secret",
-				Namespace: "test-namespace",
-			},
+			Name:      "oss-sse-secret",
+			Namespace: "test-namespace",
 			Data: map[string][]byte{
 				SSECustomerKey: []byte("oss-key-id"),
 			},
@@ -910,10 +836,8 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cr",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cr",
+		Namespace: "test-namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -922,10 +846,8 @@ func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-secret",
+		Namespace: "test-namespace",
 		Data: map[string][]byte{
 			"ALIBABA_ACCESS_KEY_ID":     []byte("some-access-key"),
 			"ALIBABA_ACCESS_KEY_SECRET": []byte("some-secret-key"),

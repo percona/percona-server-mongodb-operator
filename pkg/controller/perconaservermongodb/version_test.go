@@ -385,11 +385,9 @@ func TestVersionMeta(t *testing.T) {
 							Name:       "rs0",
 							Size:       3,
 							VolumeSpec: fakeVolumeSpec(t),
-							MultiAZ: api.MultiAZ{
-								Sidecars: []corev1.Container{
-									{
-										Name: "sidecar",
-									},
+							Sidecars: []corev1.Container{
+								{
+									Name: "sidecar",
 								},
 							},
 						},
@@ -548,11 +546,9 @@ func TestVersionMeta(t *testing.T) {
 	size := int32(1)
 	operatorName := "percona-server-mongodb-operator"
 	operatorDepl := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      operatorName,
-			Namespace: "",
-			Labels:    make(map[string]string),
-		},
+		Name:      operatorName,
+		Namespace: "",
+		Labels:    make(map[string]string),
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &size,
 			Selector: &metav1.LabelSelector{

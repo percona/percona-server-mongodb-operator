@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,11 +27,9 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				rs := cr.Spec.Replsets[0]
 				return []client.Object{
 					&corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "app-user-conn-str",
-							Namespace: cr.Namespace,
-						},
-						Data: map[string][]byte{"stale": []byte("value")},
+						Name:      "app-user-conn-str",
+						Namespace: cr.Namespace,
+						Data:      map[string][]byte{"stale": []byte("value")},
 					},
 					fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
 					fakePodsForRS(cr, rs)[0],
@@ -48,10 +45,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
 				return []client.Object{
 					&corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "app-user-conn-str",
-							Namespace: cr.Namespace,
-						},
+						Name:      "app-user-conn-str",
+						Namespace: cr.Namespace,
 						Data: map[string][]byte{
 							"app_user_rs0_connectionString":    []byte("stale"),
 							"app_user_rs0_connectionStringSrv": []byte("stale"),
@@ -71,10 +66,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 					fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
 					pod,
 					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      pod.GetName(),
-							Namespace: cr.Namespace,
-						},
+						Name:      pod.GetName(),
+						Namespace: cr.Namespace,
 						Spec: corev1.ServiceSpec{
 							Type: corev1.ServiceTypeLoadBalancer,
 							Ports: []corev1.ServicePort{
@@ -105,10 +98,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 				return []client.Object{
 					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      naming.MongosServiceName(cr),
-							Namespace: cr.Namespace,
-						},
+						Name:      naming.MongosServiceName(cr),
+						Namespace: cr.Namespace,
 						Spec: corev1.ServiceSpec{
 							Ports: []corev1.ServicePort{
 								{Name: "mongos", Port: 27017},
@@ -139,10 +130,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				return []client.Object{
 					pod,
 					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      pod.GetName(),
-							Namespace: cr.Namespace,
-						},
+						Name:      pod.GetName(),
+						Namespace: cr.Namespace,
 						Spec: corev1.ServiceSpec{
 							Type:      corev1.ServiceTypeLoadBalancer,
 							ClusterIP: "10.0.0.20",
@@ -175,10 +164,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				}
 				return []client.Object{
 					&corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "app-user-conn-str",
-							Namespace: cr.Namespace,
-						},
+						Name:      "app-user-conn-str",
+						Namespace: cr.Namespace,
 						Data: map[string][]byte{
 							"app_user_mongos_connectionString":        []byte("stale"),
 							"app_user_mongos_connectionStringExposed": []byte("stale"),
@@ -194,11 +181,9 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := connectionStringTestCluster()
 			owner := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "app-user-password",
-					Namespace: cr.Namespace,
-					UID:       types.UID("owner-uid"),
-				},
+				Name:      "app-user-password",
+				Namespace: cr.Namespace,
+				UID:       types.UID("owner-uid"),
 			}
 			objects := append([]client.Object{owner}, tt.setup(cr)...)
 			r := buildFakeClient(objects...)
@@ -240,11 +225,9 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 	cr.Spec.Secrets = &api.SecretsSpec{Users: "cluster-users"}
 
 	users := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Secrets.Users,
-			Namespace: cr.Namespace,
-			UID:       types.UID("users-secret-uid"),
-		},
+		Name:      cr.Spec.Secrets.Users,
+		Namespace: cr.Namespace,
+		UID:       types.UID("users-secret-uid"),
 		Data: map[string][]byte{
 			api.EnvMongoDBDatabaseAdminUser:     []byte("databaseAdmin"),
 			api.EnvMongoDBDatabaseAdminPassword: []byte("password"),
@@ -285,11 +268,9 @@ func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t 
 		{Name: "report-user", DB: "reports", Roles: []api.UserRole{{Name: "read", DB: "reports"}}},
 	}
 	owner := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      users[0].DefaultSecretName(cr),
-			Namespace: cr.Namespace,
-			UID:       types.UID("custom-users-secret-uid"),
-		},
+		Name:      users[0].DefaultSecretName(cr),
+		Namespace: cr.Namespace,
+		UID:       types.UID("custom-users-secret-uid"),
 		Data: map[string][]byte{
 			"app-user":    []byte("p@ss/word"),
 			"report-user": []byte("report/pass"),
@@ -299,11 +280,9 @@ func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t 
 	r := buildFakeClient(
 		owner,
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
-				Namespace: cr.Namespace,
-			},
-			Data: map[string][]byte{"stale": []byte("value")},
+			Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
+			Namespace: cr.Namespace,
+			Data:      map[string][]byte{"stale": []byte("value")},
 		},
 		fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
 		fakePodsForRS(cr, rs)[0],
@@ -328,10 +307,8 @@ func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t 
 
 func connectionStringTestCluster() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "database",
-		},
+		Name:      "cluster",
+		Namespace: "database",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion:               "1.20.0",
 			ClusterServiceDNSMode:   api.DNSModeInternal,

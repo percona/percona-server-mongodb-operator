@@ -91,11 +91,9 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
 			PeriodSeconds:       10,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Port: intstr.FromInt32(7777),
-					Path: "/local/Status",
-				},
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.FromInt32(7777),
+				Path: "/local/Status",
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -107,10 +105,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "DB_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_USER",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  "MONGODB_CLUSTER_MONITOR_USER",
+						Name: secret.Name,
 					},
 				},
 			},
@@ -118,10 +114,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  "MONGODB_CLUSTER_MONITOR_PASSWORD",
+						Name: secret.Name,
 					},
 				},
 			},
@@ -168,10 +162,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "PMM_AGENT_SERVER_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: api.PMMServerToken,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  api.PMMServerToken,
+						Name: secret.Name,
 					},
 				},
 			},

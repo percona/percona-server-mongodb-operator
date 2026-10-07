@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -110,10 +109,8 @@ func TestEnsureSecurityKeys(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: "some-ns",
-				},
+				Name:      "some-cluster",
+				Namespace: "some-ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Secrets: &psmdbv1.SecretsSpec{
@@ -150,10 +147,8 @@ var _ = Describe("PerconaServerMongoDB", Ordered, func() {
 	ctx := context.Background()
 	const ns = "psmdb"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 	crName := ns + "-reconciler"
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
@@ -192,10 +187,8 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 	ctx := context.Background()
 	const ns = "psmdb-validation"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -372,6 +365,62 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			cr.Spec.PMM.Enabled = false
 			cr.Spec.PMM.QuerySource = "mongolog"
 			cr.Spec.LogCollector = &psmdbv1.LogCollectorSpec{Enabled: false}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Backup storage validation", func() {
+		It("should reject s3 storage with GCS endpoint", func() {
+			cr, err := readDefaultCR("psmdb-s3-gcs-endpoint", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"gcp-cs": {
+					Type: psmdbv1.BackupStorageS3,
+					S3: psmdbv1.BackupStorageS3Spec{
+						Bucket:      "some-bucket",
+						EndpointURL: "https://storage.googleapis.com",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("S3 compatibility for Google Cloud Storage is not supported, use type 'gcs' instead"))
+		})
+
+		It("should allow s3 storage with non-GCS endpoint", func() {
+			cr, err := readDefaultCR("psmdb-s3-minio-endpoint", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"minio": {
+					Type: psmdbv1.BackupStorageS3,
+					S3: psmdbv1.BackupStorageS3Spec{
+						Bucket:      "some-bucket",
+						EndpointURL: "http://minio-service:9000",
+					},
+				},
+			}
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow gcs storage", func() {
+			cr, err := readDefaultCR("psmdb-gcs-native", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+				"gcp-cs": {
+					Type: psmdbv1.BackupStorageGCS,
+					GCS: psmdbv1.BackupStorageGCSSpec{
+						Bucket: "some-bucket",
+					},
+				},
+			}
 
 			err = k8sClient.Create(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())

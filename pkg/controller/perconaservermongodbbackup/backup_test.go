@@ -28,10 +28,8 @@ func TestBackupStartOSSStorageDestination(t *testing.T) {
 	mockPBM.EXPECT().SendCmd(gomock.Any(), gomock.Any()).Return(nil)
 
 	cluster := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-cluster",
-			Namespace: "some-namespace",
-		},
+		Name:      "some-cluster",
+		Namespace: "some-namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.20.0",
 			Backup: api.BackupSpec{
@@ -58,10 +56,8 @@ func TestBackupStartOSSStorageDestination(t *testing.T) {
 	}
 
 	status, err := backup.Start(t.Context(), nil, cluster, &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-backup",
-			Namespace: "some-namespace",
-		},
+		Name:      "some-backup",
+		Namespace: "some-namespace",
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			ClusterName: "some-cluster",
 			StorageName: "oss",
@@ -92,7 +88,7 @@ func TestBackup_Status(t *testing.T) {
 					Return(nil, pbmErrors.ErrNotFound)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
+				Name: "test-backup",
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -123,8 +119,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -162,8 +158,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -203,8 +199,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -239,8 +235,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -276,8 +272,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -318,8 +314,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
@@ -355,8 +351,8 @@ func TestBackup_Status(t *testing.T) {
 					}, nil)
 			},
 			inputCR: &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
-				Spec:       api.PerconaServerMongoDBBackupSpec{Type: defs.IncrementalBackup},
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.IncrementalBackup},
 				Status: api.PerconaServerMongoDBBackupStatus{
 					PBMname: "test-backup",
 				},
