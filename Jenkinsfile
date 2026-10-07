@@ -526,7 +526,9 @@ BASH
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
         pushLogFile("${testName}-debug")
-        echo "The $testName test was finished in ${durationSec}s (${(durationSec / 60).intValue()}m ${(durationSec % 60).intValue()}s)!"
+        def mins = (durationSec / 60) as int
+        def secs = (durationSec % 60) as int
+        echo "The $testName test was finished in ${durationSec}s (${mins}m ${secs}s)!"
     }
 }
 
