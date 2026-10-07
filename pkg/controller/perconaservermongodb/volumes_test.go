@@ -802,8 +802,8 @@ func TestRevertVolumeTemplate(t *testing.T) {
 			})
 			rs := cr.Spec.Replsets[0]
 
-			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{
-				Name: "vol-cr-rs0", Namespace: cr.Namespace, Labels: tt.labels(cr, rs)}}
+			sts := &appsv1.StatefulSet{
+				Name: "vol-cr-rs0", Namespace: cr.Namespace, Labels: tt.labels(cr, rs)}
 
 			r := buildFakeClient(cr, sts)
 

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -293,7 +292,7 @@ func TestRemoveOutdatedServices(t *testing.T) {
 			objs := append([]client.Object{cr}, seedServices(cr, rs)...)
 			for _, name := range tt.pods {
 				objs = append(objs, &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+					Name: name, Namespace: ns,
 				})
 			}
 			r := buildFakeClient(objs...)
@@ -486,7 +485,7 @@ func TestRemoveOutdatedServicesInstanceMode(t *testing.T) {
 	// the shrunk group's pod is already gone, so its service is a leftover
 	for _, name := range []string{"svc-cr-rs0-0", "svc-cr-rs0-1", "svc-cr-rs0-hot-0", "svc-cr-rs0-hot-1"} {
 		objs = append(objs, &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
+			Name: name, Namespace: cr.Namespace,
 		})
 	}
 

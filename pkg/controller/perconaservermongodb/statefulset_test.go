@@ -280,12 +280,12 @@ func instanceModeCR(t *testing.T, base *api.PerconaServerMongoDB) *api.PerconaSe
 			Name: "hot", Replicas: 2,
 			RSConfig:   &api.MemberConfigSpec{Priority: new(int32(10)), Votes: new(int32(1))},
 			VolumeSpec: instanceVolumeSpec("fast-nvme", "42Gi"),
-			MultiAZ: api.MultiAZ{Resources: corev1.ResourceRequirements{
+			Resources: corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("2"),
 					corev1.ResourceMemory: resource.MustParse("4G"),
 				},
-			}},
+			},
 		},
 		{
 			Name: "arb", Replicas: 1,
@@ -388,12 +388,10 @@ func TestInstanceModeEquivalence(t *testing.T) {
 		require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
 
 		r := buildFakeClient(cr,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: crName + "-ssl", Namespace: ns,
-			}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name: crName + "-ssl-internal", Namespace: ns,
-			}},
+			&corev1.Secret{
+				Name: crName + "-ssl", Namespace: ns},
+			&corev1.Secret{
+				Name: crName + "-ssl-internal", Namespace: ns},
 		)
 
 		rs := cr.Spec.Replsets[0]

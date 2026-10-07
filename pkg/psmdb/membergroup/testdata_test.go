@@ -3,7 +3,6 @@ package membergroup
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -13,8 +12,8 @@ import (
 // defaulting build their own CR.
 func testCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "psmdb"},
-		Spec:       api.PerconaServerMongoDBSpec{CRVersion: "1.24.0"},
+		Name: "cluster1", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{CRVersion: "1.24.0"},
 	}
 }
 

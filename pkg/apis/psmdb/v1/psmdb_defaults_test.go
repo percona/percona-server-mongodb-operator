@@ -215,9 +215,9 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 		},
 	}
 
-	cr := &api.PerconaServerMongoDB{
+	cr := &PerconaServerMongoDB{
 		Name: "psmdb-mock", Namespace: "psmdb",
-		Spec: api.PerconaServerMongoDBSpec{
+		Spec: PerconaServerMongoDBSpec{
 			CRVersion: "1.15.0",
 			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},
@@ -382,9 +382,9 @@ func TestSetSafeDefault(t *testing.T) {
 		},
 	}
 
-	cr := &api.PerconaServerMongoDB{
+	cr := &PerconaServerMongoDB{
 		Name: "psmdb-mock", Namespace: "psmdb",
-		Spec: api.PerconaServerMongoDBSpec{
+		Spec: PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
 			Replsets:  []*ReplsetSpec{{Name: "rs0", Size: new(int32(3))}, {Name: "rs1", Size: new(int32(3))}},
 			Sharding:  Sharding{Enabled: true, Mongos: &MongosSpec{Size: 3}},

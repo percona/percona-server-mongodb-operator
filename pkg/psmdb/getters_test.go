@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -21,7 +20,7 @@ import (
 
 func gettersCR(replsets ...*api.ReplsetSpec) *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "psmdb"},
+		Name: "cluster1", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.24.0",
 			Replsets:  replsets,
@@ -67,7 +66,7 @@ func buildObjects(cr *api.PerconaServerMongoDB, rsName string, workloads []workl
 		}
 
 		objs = append(objs, &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: stsName, Namespace: cr.Namespace, Labels: ls},
+			Name: stsName, Namespace: cr.Namespace, Labels: ls,
 		})
 
 		for i := range w.pods {
@@ -75,11 +74,9 @@ func buildObjects(cr *api.PerconaServerMongoDB, rsName string, workloads []workl
 			podLabels[appsv1.PodIndexLabel] = strconv.Itoa(i)
 
 			objs = append(objs, &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stsName + "-" + strconv.Itoa(i),
-					Namespace: cr.Namespace,
-					Labels:    podLabels,
-				},
+				Name:      stsName + "-" + strconv.Itoa(i),
+				Namespace: cr.Namespace,
+				Labels:    podLabels,
 			})
 		}
 	}
@@ -261,7 +258,7 @@ func TestGetRSPodsForUndeclaredReplset(t *testing.T) {
 
 func TestSelectDesiredOrdinals(t *testing.T) {
 	pod := func(name string) corev1.Pod {
-		return corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		return corev1.Pod{Name: name}
 	}
 
 	all := []corev1.Pod{

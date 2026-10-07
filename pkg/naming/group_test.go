@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -12,7 +11,7 @@ import (
 
 func testCR() (*api.PerconaServerMongoDB, *api.ReplsetSpec) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "psmdb"},
+		Name: "cluster1", Namespace: "psmdb",
 	}
 	return cr, &api.ReplsetSpec{Name: "rs0"}
 }

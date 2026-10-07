@@ -147,8 +147,8 @@ func TestCleanupStaleGroupConfigs(t *testing.T) {
 	}
 
 	cm := func(name string, ls map[string]string, owned bool) *corev1.ConfigMap {
-		c := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: cr.Namespace, Labels: ls}}
+		c := &corev1.ConfigMap{
+			Name: name, Namespace: cr.Namespace, Labels: ls}
 		if owned {
 			c.OwnerReferences = []metav1.OwnerReference{ownedBy(cr)}
 		}

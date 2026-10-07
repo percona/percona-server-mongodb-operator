@@ -101,8 +101,8 @@ func (c *primaryFakeClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, 
 	defer c.provider.mu.Unlock()
 
 	return &mongo.IsMasterResp{
-		IsMaster:   c.provider.primaries[c.pod],
-		OKResponse: mongo.OKResponse{OK: 1},
+		IsMaster: c.provider.primaries[c.pod],
+		OK:       1,
 	}, nil
 }
 

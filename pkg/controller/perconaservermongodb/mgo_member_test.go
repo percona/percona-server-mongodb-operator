@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -36,12 +35,10 @@ func legacyCR(t *testing.T, name, ns string, mutate ...func(*api.PerconaServerMo
 
 func nodeFor(pod *corev1.Pod, region, zone string) *corev1.Node {
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: pod.Spec.NodeName,
-			Labels: map[string]string{
-				corev1.LabelTopologyRegion: region,
-				corev1.LabelTopologyZone:   zone,
-			},
+		Name: pod.Spec.NodeName,
+		Labels: map[string]string{
+			corev1.LabelTopologyRegion: region,
+			corev1.LabelTopologyZone:   zone,
 		},
 	}
 }

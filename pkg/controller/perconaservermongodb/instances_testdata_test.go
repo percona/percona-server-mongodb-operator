@@ -71,11 +71,9 @@ func groupPod(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, g membergroup.G
 	ls[appsv1.PodIndexLabel] = strconv.Itoa(idx)
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.GroupPodName(cr, rs, g.Name, idx),
-			Namespace: cr.Namespace,
-			Labels:    ls,
-		},
+		Name:      naming.GroupPodName(cr, rs, g.Name, idx),
+		Namespace: cr.Namespace,
+		Labels:    ls,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
 				Name:  g.ContainerName,
@@ -129,18 +127,16 @@ func terminating(pod *corev1.Pod) *corev1.Pod {
 // vacuously passing test.
 func groupSTS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, g membergroup.Group, specReplicas, readyReplicas int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      g.STSName,
-			Namespace: cr.Namespace,
-			Labels:    g.Labels,
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: api.SchemeGroupVersion.String(),
-				Kind:       "PerconaServerMongoDB",
-				Name:       cr.Name,
-				UID:        cr.UID,
-				Controller: new(true),
-			}},
-		},
+		Name:      g.STSName,
+		Namespace: cr.Namespace,
+		Labels:    g.Labels,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: api.SchemeGroupVersion.String(),
+			Kind:       "PerconaServerMongoDB",
+			Name:       cr.Name,
+			UID:        cr.UID,
+			Controller: new(true),
+		}},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: new(specReplicas),
 			Selector: &metav1.LabelSelector{MatchLabels: g.Labels},

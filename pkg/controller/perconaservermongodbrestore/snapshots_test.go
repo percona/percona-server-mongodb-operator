@@ -89,11 +89,9 @@ func readyMongodPod(t *testing.T, cluster *psmdbv1.PerconaServerMongoDB, ordinal
 	require.Truef(t, ok, "no mongod group in replset %s (have %v)", rs.Name, set.GetNames())
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.GroupPodName(cluster, rs, group.Name, ordinal),
-			Namespace: cluster.Namespace,
-			Labels:    group.Labels,
-		},
+		Name:      naming.GroupPodName(cluster, rs, group.Name, ordinal),
+		Namespace: cluster.Namespace,
+		Labels:    group.Labels,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: group.ContainerName}},
 		},

@@ -27,7 +27,7 @@ func ownedBy(cr *api.PerconaServerMongoDB) metav1.OwnerReference {
 
 func labelledSTS(cr *api.PerconaServerMongoDB, name string, ls map[string]string, owned bool) *appsv1.StatefulSet {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace, Labels: ls},
+		Name: name, Namespace: cr.Namespace, Labels: ls,
 	}
 	if owned {
 		sts.OwnerReferences = []metav1.OwnerReference{ownedBy(cr)}
@@ -36,12 +36,12 @@ func labelledSTS(cr *api.PerconaServerMongoDB, name string, ls map[string]string
 }
 
 func labelledPod(cr *api.PerconaServerMongoDB, name string, ls map[string]string) *corev1.Pod {
-	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace, Labels: ls}}
+	return &corev1.Pod{Name: name, Namespace: cr.Namespace, Labels: ls}
 }
 
 func labelledPVC(cr *api.PerconaServerMongoDB, name string, ls map[string]string) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace, Labels: ls},
+		Name: name, Namespace: cr.Namespace, Labels: ls,
 	}
 }
 

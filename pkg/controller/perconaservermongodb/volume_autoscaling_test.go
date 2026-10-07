@@ -11,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -303,7 +302,7 @@ func TestPVCPodName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: tt.stsName}}
+			sts := &appsv1.StatefulSet{Name: tt.stsName}
 
 			result, ok := pvcPodName(config.MongodDataVolClaimName, tt.pvcName, sts)
 			assert.Equal(t, tt.expected != "", ok)
@@ -311,7 +310,7 @@ func TestPVCPodName(t *testing.T) {
 
 			assert.Equal(t, tt.expected != "",
 				validatePVCName(config.MongodDataVolClaimName,
-					corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: tt.pvcName}}, sts),
+					corev1.PersistentVolumeClaim{Name: tt.pvcName}, sts),
 				"validatePVCName must agree with pvcPodName")
 		})
 	}
@@ -780,7 +779,7 @@ func TestTriggerResizeInstanceGroup(t *testing.T) {
 	r := buildFakeClient(cr)
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: "mongod-data-as-cr-rs0-hot-0", Namespace: cr.Namespace},
+		Name: "mongod-data-as-cr-rs0-hot-0", Namespace: cr.Namespace,
 		Status: corev1.PersistentVolumeClaimStatus{
 			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
 		},
@@ -833,11 +832,9 @@ func TestReconcileStorageAutoscalingSkipsArbiters(t *testing.T) {
 	sts := groupSTS(cr, rs, group, group.Replicas, group.Replicas)
 	pod := groupPod(cr, rs, group, 0)
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      config.MongodDataVolClaimName + "-" + pod.Name,
-			Namespace: cr.Namespace,
-			Labels:    group.Labels,
-		},
+		Name:      config.MongodDataVolClaimName + "-" + pod.Name,
+		Namespace: cr.Namespace,
+		Labels:    group.Labels,
 		Status: corev1.PersistentVolumeClaimStatus{
 			Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
 		},
@@ -950,7 +947,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			pvcName := config.MongodDataVolClaimName + "-" + pod.Name
 
 			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: namespace, Labels: group.Labels},
+				Name: pvcName, Namespace: namespace, Labels: group.Labels,
 				Status: corev1.PersistentVolumeClaimStatus{
 					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
 				},

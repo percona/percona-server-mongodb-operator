@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -16,7 +15,7 @@ import (
 // delegates to reads both.
 func testCR(crVersion string, tlsMode TLSMode) *PerconaServerMongoDB {
 	return &PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "psmdb"},
+		Name: "cluster1", Namespace: "psmdb",
 		Spec: PerconaServerMongoDBSpec{
 			CRVersion: crVersion,
 			TLS:       &TLSSpec{Mode: tlsMode},
@@ -37,40 +36,32 @@ func defaultedReplset(t *testing.T) *ReplsetSpec {
 	t.Helper()
 
 	rs := &ReplsetSpec{
-		Name: "rs0",
-		MultiAZ: MultiAZ{
-			ServiceAccountName: "rs-sa",
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
-			},
-			PodDisruptionBudget: &PodDisruptionBudgetSpec{
-				MinAvailable: new(intstr.FromInt(2)),
-			},
-			TerminationGracePeriodSeconds: new(int64(120)),
-			Annotations:                   map[string]string{"rs": "yes"},
+		Name:               "rs0",
+		ServiceAccountName: "rs-sa",
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
 		},
-		Env:                      []corev1.EnvVar{{Name: "FROM_RS", Value: "1"}},
-		EnvFrom:                  []corev1.EnvFromSource{{Prefix: "rs_"}},
-		PodSecurityContext:       &corev1.PodSecurityContext{RunAsUser: new(int64(1001))},
-		ContainerSecurityContext: &corev1.SecurityContext{RunAsNonRoot: new(true)},
+		PodDisruptionBudget: &PodDisruptionBudgetSpec{
+			MinAvailable: new(intstr.FromInt(2)),
+		},
+		TerminationGracePeriodSeconds: new(int64(120)),
+		Annotations:                   map[string]string{"rs": "yes"},
+		Env:                           []corev1.EnvVar{{Name: "FROM_RS", Value: "1"}},
+		EnvFrom:                       []corev1.EnvFromSource{{Prefix: "rs_"}},
+		PodSecurityContext:            &corev1.PodSecurityContext{RunAsUser: new(int64(1001))},
+		ContainerSecurityContext:      &corev1.SecurityContext{RunAsNonRoot: new(true)},
 	}
 
 	// 99 and 98 are values no defaulting path produces, so seeing one on an
 	// instance proves inheritance rather than a coincidental default.
 	rs.LivenessProbe = &LivenessProbeExtended{
-		Probe: corev1.Probe{
-			PeriodSeconds: 99,
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/rs/liveness"}},
-			},
-		},
+		PeriodSeconds:       99,
+		Exec:                &corev1.ExecAction{Command: []string{"/rs/liveness"}},
 		StartupDelaySeconds: 7200,
 	}
 	rs.ReadinessProbe = &corev1.Probe{
 		PeriodSeconds: 98,
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/rs/readiness"}},
-		},
+		Exec:          &corev1.ExecAction{Command: []string{"/rs/readiness"}},
 	}
 
 	return rs
@@ -114,20 +105,18 @@ func TestInstanceSetDefaultsKeepsDeclaredValues(t *testing.T) {
 
 	inst := &InstanceSpec{
 		Name: "hot", Replicas: 3, VolumeSpec: testVol("1Gi"),
-		MultiAZ: MultiAZ{
-			ServiceAccountName: "hot-sa",
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
-			},
-			PodDisruptionBudget:           &PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt(3))},
-			TerminationGracePeriodSeconds: new(int64(90)),
+		ServiceAccountName: "hot-sa",
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
 		},
-		Env:                      []corev1.EnvVar{{Name: "FROM_INSTANCE", Value: "1"}},
-		EnvFrom:                  []corev1.EnvFromSource{{Prefix: "inst_"}},
-		PodSecurityContext:       &corev1.PodSecurityContext{RunAsUser: new(int64(2002))},
-		ContainerSecurityContext: &corev1.SecurityContext{RunAsNonRoot: new(false)},
-		LivenessProbe:            &LivenessProbeExtended{Probe: corev1.Probe{TimeoutSeconds: 42}},
-		ReadinessProbe:           &corev1.Probe{TimeoutSeconds: 41},
+		PodDisruptionBudget:           &PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt(3))},
+		TerminationGracePeriodSeconds: new(int64(90)),
+		Env:                           []corev1.EnvVar{{Name: "FROM_INSTANCE", Value: "1"}},
+		EnvFrom:                       []corev1.EnvFromSource{{Prefix: "inst_"}},
+		PodSecurityContext:            &corev1.PodSecurityContext{RunAsUser: new(int64(2002))},
+		ContainerSecurityContext:      &corev1.SecurityContext{RunAsNonRoot: new(false)},
+		LivenessProbe:                 &LivenessProbeExtended{TimeoutSeconds: 42},
+		ReadinessProbe:                &corev1.Probe{TimeoutSeconds: 41},
 	}
 	require.NoError(t, inst.SetDefaults(cr, rs))
 
@@ -231,7 +220,7 @@ func TestInstanceSetDefaultsRejectsShortGracePeriod(t *testing.T) {
 
 	inst := &InstanceSpec{
 		Name: "hot", Replicas: 1, VolumeSpec: testVol("1Gi"),
-		MultiAZ: MultiAZ{TerminationGracePeriodSeconds: new(int64(5))},
+		TerminationGracePeriodSeconds: new(int64(5)),
 	}
 
 	err := inst.SetDefaults(cr, rs)
@@ -245,7 +234,7 @@ func TestInstanceSetDefaultsRejectsShortGracePeriod(t *testing.T) {
 
 		inst := &InstanceSpec{
 			Name: "hot", Replicas: 1, VolumeSpec: testVol("1Gi"),
-			MultiAZ: MultiAZ{TerminationGracePeriodSeconds: new(int64(5))},
+			TerminationGracePeriodSeconds: new(int64(5)),
 		}
 		require.NoError(t, inst.SetDefaults(cr, rs))
 		assert.Equal(t, int64(5), *inst.TerminationGracePeriodSeconds)
