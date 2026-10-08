@@ -726,7 +726,7 @@ func outdatedContainerNames(pod *corev1.Pod, desired map[string]string) []string
 				continue
 			}
 			want, ok := desired[container.Name]
-			if ok && want != "" && container.Image != want {
+			if ok && container.Image != want {
 				seen[container.Name] = struct{}{}
 			}
 		}
