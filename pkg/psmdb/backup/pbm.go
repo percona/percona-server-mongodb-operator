@@ -14,7 +14,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -1030,10 +1029,8 @@ func (b *pbmC) Logger() pbmLog.Logger {
 
 func getSecret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
+		Name:      secretName,
+		Namespace: namespace,
 	}
 	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err

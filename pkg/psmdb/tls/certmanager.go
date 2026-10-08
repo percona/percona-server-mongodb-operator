@@ -178,10 +178,8 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
-		IssuerConfig: cm.IssuerConfig{
-			CA: &cm.CAIssuer{
-				SecretName: CertificateCA(cr).SecretName(),
-			},
+		CA: &cm.CAIssuer{
+			SecretName: CertificateCA(cr).SecretName(),
 		},
 	}
 
@@ -228,9 +226,7 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
-		IssuerConfig: cm.IssuerConfig{
-			SelfSigned: &cm.SelfSignedIssuer{},
-		},
+		SelfSigned: &cm.SelfSignedIssuer{},
 	}
 	kind := cm.IssuerKind
 	if cr.CompareVersion("1.23.0") >= 0 {

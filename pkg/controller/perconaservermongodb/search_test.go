@@ -18,10 +18,8 @@ import (
 
 func searchTestCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "psmdb",
-			Namespace: "default",
-		},
+		Name:      "psmdb",
+		Namespace: "default",
 		Spec: api.PerconaServerMongoDBSpec{
 			Replsets: []*api.ReplsetSpec{
 				{Name: "rs0", Size: 3},
@@ -34,11 +32,9 @@ func searchTestCR() *api.PerconaServerMongoDB {
 // find it: the search-specific name/labels and a non-nil Replicas.
 func searchSts(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, replicas int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.SearchStatefulSetName(cr, rs),
-			Namespace: cr.Namespace,
-			Labels:    naming.SearchLabels(cr, rs),
-		},
+		Name:      naming.SearchStatefulSetName(cr, rs),
+		Namespace: cr.Namespace,
+		Labels:    naming.SearchLabels(cr, rs),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{MatchLabels: naming.SearchLabels(cr, rs)},
@@ -50,11 +46,9 @@ func searchSts(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, replicas int32
 // label selector matches it), then applies the given mutators.
 func searchPod(name string, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, mutators ...func(*corev1.Pod)) *corev1.Pod {
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.SearchLabels(cr, rs),
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    naming.SearchLabels(cr, rs),
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 		},

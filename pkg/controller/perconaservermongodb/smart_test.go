@@ -6,16 +6,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestSortPodsByOrdinal(t *testing.T) {
 	ordinalPod := func(i int) corev1.Pod {
 		return corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "pod-" + strconv.Itoa(i),
-				Labels: map[string]string{appsv1.PodIndexLabel: strconv.Itoa(i)},
-			},
+			Name:   "pod-" + strconv.Itoa(i),
+			Labels: map[string]string{appsv1.PodIndexLabel: strconv.Itoa(i)},
 		}
 	}
 

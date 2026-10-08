@@ -51,10 +51,8 @@ func TestNew(t *testing.T) {
 		cr.Spec.VaultSpec.TLSSecret = "vault-tls"
 
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "vault-tls",
-				Namespace: cr.Namespace,
-			},
+			Name:      "vault-tls",
+			Namespace: cr.Namespace,
 			Data: map[string][]byte{
 				"something-else.crt": []byte("some-data"),
 			},
