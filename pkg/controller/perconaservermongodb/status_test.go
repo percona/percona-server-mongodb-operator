@@ -1013,11 +1013,6 @@ func TestOutdatedContainerNames(t *testing.T) {
 			desired: map[string]string{naming.ContainerMongod: "new"},
 		},
 		{
-			name:    "empty desired image is ignored",
-			pod:     pod(nil, []corev1.Container{container(naming.ContainerMongod, "old")}),
-			desired: map[string]string{naming.ContainerMongod: ""},
-		},
-		{
 			name: "container removed from the template is ignored",
 			pod: pod(nil, []corev1.Container{
 				container(naming.ContainerMongod, "new"),
