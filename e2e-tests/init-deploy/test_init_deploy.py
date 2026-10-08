@@ -10,7 +10,7 @@ import pytest
 from lib.config import apply_cluster, apply_runtime_class, compare_kubectl
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secrets import apply_s3_storage_secrets, get_user_data
+from lib.secrets import apply_s3_storage_secrets, cloud_secret_exists, get_user_data
 from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
@@ -211,6 +211,7 @@ class TestInitDeploy:
     @pytest.mark.dependency(depends=["TestInitDeploy::test_primary_failover"])
     def test_create_second_cluster(self, config: InitDeployConfig, test_paths: Paths) -> None:
         """Check if possible to create second cluster"""
+        assert cloud_secret_exists(test_paths["conf_dir"]), "following requires cloud-secret.yml"
         apply_s3_storage_secrets(test_paths["conf_dir"])
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster2}.yml")
         wait_for_running(config.cluster2, 3)

@@ -46,13 +46,18 @@ def get_user_data(secret_name: str, data_key: str) -> str:
     return urllib.parse.quote(secret_data, safe="")
 
 
-def get_cloud_secret_default(conf_dir: Path | None = None) -> str:
-    """Return default for SKIP_BACKUPS_TO_AWS_GCP_AZURE based on cloud-secret.yml existence."""
+def cloud_secret_exists(conf_dir: Path | str | None = None) -> bool:
     if conf_dir is None:
         conf_dir = Path(__file__).parent.parent / "conf"
-    if (conf_dir / "cloud-secret.yml").exists():
-        return ""
-    return "1"
+    if isinstance(conf_dir, str):
+        conf_dir = Path(conf_dir)
+
+    return (conf_dir / "cloud-secret.yml").exists()
+
+
+def get_cloud_secret_default(conf_dir: Path | None = None) -> str:
+    """Return default for SKIP_BACKUPS_TO_AWS_GCP_AZURE based on cloud-secret.yml existence."""
+    return "1" if cloud_secret_exists(conf_dir) else ""
 
 
 def apply_s3_storage_secrets(conf_dir: str) -> None:
