@@ -150,7 +150,7 @@ update-version:
 
 
 _e2e_image_vars := IMAGE_OPERATOR IMAGE_BACKUP IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
-	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER IMAGE_LOGCOLLECTOR IMAGE_SEARCH IMAGE_CLUSTERSYNC
+	IMAGE_LOGCOLLECTOR IMAGE_SEARCH IMAGE_CLUSTERSYNC
 $(foreach v,$(_e2e_image_vars),$(eval _saved_$(v) := $$($(v))))
 
 # Prepare release
@@ -170,7 +170,7 @@ release: manifests
 		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOGCOLLECTOR)#}" \
 		-e "/^#  search:/,/^    image:/{s#image: .*#image: $(IMAGE_SEARCH)#}" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM3_CLIENT)#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
 	$(SED) -i \
 		-e "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" \
 		-e "s|perconalab/percona-server-mongodb-operator:main-backup|$(IMAGE_BACKUP)|g" \
@@ -215,10 +215,8 @@ after-release-versions:
 		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
 		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0#" \
 		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
-		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:dev-latest#" \
-		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:dev-latest#" \
-		-e "s#^IMAGE_PMM3_CLIENT=.*#IMAGE_PMM3_CLIENT=perconalab/pmm-client:3-dev-latest#" \
-		-e "s#^IMAGE_PMM3_SERVER=.*#IMAGE_PMM3_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
 		-e "s#^IMAGE_LOGCOLLECTOR=.*#IMAGE_LOGCOLLECTOR=perconalab/fluentbit:main-logcollector#" \
 		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \
 		e2e-tests/release_versions

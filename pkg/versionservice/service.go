@@ -95,7 +95,7 @@ func (c Client) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, v
 		return Dep{}, errors.Wrapf(err, "get backup version")
 	}
 
-	pmmVersion, err := getPMMVersion(resp.Payload.Versions[0].Matrix.Pmm, opts.PMM3Enabled)
+	pmmVersion, err := getPMMVersion(resp.Payload.Versions[0].Matrix.Pmm)
 	if err != nil {
 		return Dep{}, errors.Wrapf(err, "get pmm version")
 	}
@@ -121,36 +121,18 @@ func getVersion(versions map[string]models.VersionVersion) (string, error) {
 	return "", nil
 }
 
-func getPMMVersion(versions map[string]models.VersionVersion, isPMM3 bool) (string, error) {
+func getPMMVersion(versions map[string]models.VersionVersion) (string, error) {
 	if len(versions) == 0 {
 		return "", fmt.Errorf("response has zero versions")
 	}
-	// One version for PMM3 and one version for PMM2 should only exist.
-	if len(versions) > 2 {
-		return "", fmt.Errorf("response has more than 2 versions")
-	}
 
-	var pmm2Version, pmm3Version string
 	for version := range versions {
 		if strings.HasPrefix(version, "3.") {
-			pmm3Version = version
-		}
-		if strings.HasPrefix(version, "2.") {
-			pmm2Version = version
+			return version, nil
 		}
 	}
 
-	if isPMM3 && pmm3Version == "" {
-		return "", fmt.Errorf("pmm3 is configured, but no pmm3 version exists")
-	}
-	if isPMM3 && pmm3Version != "" {
-		return pmm3Version, nil
-	}
-	if pmm2Version != "" {
-		return pmm2Version, nil
-	}
-
-	return "", fmt.Errorf("no recognizable PMM version found")
+	return "", fmt.Errorf("no PMM3 version found")
 }
 
 type Dep struct {
@@ -160,10 +142,6 @@ type Dep struct {
 	BackupVersion string `json:"backupVersion,omitempty"`
 	PMMImage      string `json:"pmmImage,omitempty"`
 	PMMVersion    string `json:"pmmVersion,omitempty"`
-}
-
-type Options struct {
-	PMM3Enabled bool
 }
 
 type Service interface {
