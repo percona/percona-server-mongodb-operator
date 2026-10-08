@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -117,6 +118,33 @@ func onlyResourcesDiffer(a, b corev1.PodTemplateSpec, container string) bool {
 
 // planInPlaceResize decides whether the pod can be moved to updateRevision by
 // resizing it in place. It returns nil and the reason when it cannot.
+// inPlaceDisabledReason names the unmet precondition behind
+// VPAInPlaceResizeEnabled() returning false. Without it a user who sets
+// spec.vpa.inPlaceResize sees pods recreated on every apply with nothing in the
+// log to say why: the CR is accepted, and "smart update finished" reads as
+// healthy. Each reason names the setting and the value the cluster declares.
+func inPlaceDisabledReason(cr *api.PerconaServerMongoDB) string {
+	switch {
+	case cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled:
+		return "spec.vpa.enabled is false"
+	case !cr.Spec.VPA.InPlaceResize:
+		return "spec.vpa.inPlaceResize is false"
+	case cr.CompareVersion("1.24.0") < 0:
+		return fmt.Sprintf(
+			"spec.vpa.inPlaceResize needs crVersion 1.24.0 or higher, this cluster declares %s",
+			cr.Spec.CRVersion)
+	case cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType:
+		return fmt.Sprintf(
+			"spec.vpa.inPlaceResize needs spec.updateStrategy SmartUpdate, this cluster uses %s",
+			cr.Spec.UpdateStrategy)
+	case cr.Spec.VPA.UpdateMode != api.VPAUpdateModeAuto:
+		return fmt.Sprintf(
+			"spec.vpa.inPlaceResize needs spec.vpa.updateMode Auto, this cluster uses %s",
+			cr.Spec.VPA.UpdateMode)
+	}
+	return "in-place resize is disabled"
+}
+
 func (r *ReconcilePerconaServerMongoDB) planInPlaceResize(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
@@ -125,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) planInPlaceResize(
 	pod *corev1.Pod,
 ) (*inPlaceResize, string, error) {
 	if !cr.VPAInPlaceResizeEnabled() {
-		return nil, "in-place resize is disabled", nil
+		return nil, inPlaceDisabledReason(cr), nil
 	}
 	if !r.inPlaceResizeSupported() {
 		return nil, "Kubernetes server is older than 1.33", nil
@@ -203,7 +231,10 @@ func (r *ReconcilePerconaServerMongoDB) tryInPlaceResize(
 		return false, errors.Wrap(err, "plan in-place resize")
 	}
 	if plan == nil {
-		if cr.VPAInPlaceResizeEnabled() {
+		// Guard on what the user asked for, not on whether it is in effect.
+		// VPAInPlaceResizeEnabled() being false is itself one of the reasons, so
+		// guarding on it would silence exactly the case the user needs to see.
+		if cr.Spec.VPA != nil && cr.Spec.VPA.InPlaceResize {
 			log.Info("recreating pod instead of resizing in place", "reason", reason)
 		}
 		return false, nil

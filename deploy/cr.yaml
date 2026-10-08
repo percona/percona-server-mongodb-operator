@@ -70,7 +70,7 @@ spec:
 #    # recreating them, so applies cause no restarts or elections. Pods are still
 #    # recreated when a resize is not possible. Toggling it causes one rolling
 #    # restart. Keep updatePolicy.updateMode Off on the VPA objects.
-#    inPlaceResize: false
+#    inPlaceResize: true
   crVersion: 1.24.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always

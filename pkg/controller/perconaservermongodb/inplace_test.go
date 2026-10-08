@@ -14,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
@@ -85,4 +87,74 @@ func TestRevisionTemplateReadsFromAPIReader(t *testing.T) {
 	got, err := r.revisionTemplate(context.Background(), "ns", "rs0-abc")
 	require.NoError(t, err)
 	assert.Equal(t, naming.ContainerMongod, got.Spec.Containers[0].Name)
+}
+
+// A user who sets spec.vpa.inPlaceResize and still sees pods restart has no way
+// to find out why: the CR is accepted, the cluster looks healthy, and the
+// operator logs nothing. These cases name the unmet precondition instead.
+func TestInPlaceDisabledReasonNamesThePrecondition(t *testing.T) {
+	base := func() *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion:      "1.24.0",
+				UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
+				VPA: &api.VPASpec{
+					Enabled:       true,
+					UpdateMode:    api.VPAUpdateModeAuto,
+					InPlaceResize: true,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		mutate   func(*api.PerconaServerMongoDB)
+		contains string
+	}{
+		{
+			name:     "crVersion below 1.24.0",
+			mutate:   func(cr *api.PerconaServerMongoDB) { cr.Spec.CRVersion = "1.23.0" },
+			contains: "crVersion",
+		},
+		{
+			name:     "updateStrategy is not SmartUpdate",
+			mutate:   func(cr *api.PerconaServerMongoDB) { cr.Spec.UpdateStrategy = "RollingUpdate" },
+			contains: "SmartUpdate",
+		},
+		{
+			name:     "updateMode is Off",
+			mutate:   func(cr *api.PerconaServerMongoDB) { cr.Spec.VPA.UpdateMode = api.VPAUpdateModeOff },
+			contains: "updateMode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := base()
+			tt.mutate(cr)
+			reason := inPlaceDisabledReason(cr)
+			assert.Contains(t, reason, tt.contains,
+				"the reason must name the setting the user has to change")
+			assert.NotEqual(t, "in-place resize is disabled", reason,
+				"a generic reason leaves the user no better off than silence")
+		})
+	}
+}
+
+func TestInPlaceDisabledReasonMentionsTheDeclaredCRVersion(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion:      "1.23.0",
+			UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
+			VPA: &api.VPASpec{
+				Enabled:       true,
+				UpdateMode:    api.VPAUpdateModeAuto,
+				InPlaceResize: true,
+			},
+		},
+	}
+	reason := inPlaceDisabledReason(cr)
+	assert.Contains(t, reason, "1.23.0", "name the version the cluster actually declares")
+	assert.Contains(t, reason, "1.24.0", "name the version it needs")
 }
