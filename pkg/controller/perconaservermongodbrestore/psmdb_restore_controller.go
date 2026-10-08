@@ -53,11 +53,12 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
-		recorder:   mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		client:      mgr.GetClient(),
+		scheme:      mgr.GetScheme(),
+		clientcmd:   cli,
+		newPBMFunc:  backup.NewPBM,
+		recorder:    mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbrestore-controller"), "RESTORE_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -88,7 +89,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -100,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	log := logf.FromContext(ctx)
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 
 	// Fetch the PerconaSMDBBackupRestore instance
