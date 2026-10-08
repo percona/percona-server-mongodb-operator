@@ -616,7 +616,7 @@ func GetPBMStorageAzureConfig(
 //
 //	DefaultEndpointsProtocol=https;AccountName=<name>;AccountKey=<key>;EndpointSuffix=core.windows.net
 func parseAzureConnectionString(connStr string) (account, key string, err error) {
-	for _, part := range strings.Split(strings.TrimRight(connStr, ";"), ";") {
+	for part := range strings.SplitSeq(strings.TrimRight(connStr, ";"), ";") {
 		// Use approach (strings.SplitN per segment with limit 2) so that
 		// base64-padded AccountKey values containing '=' are handled correctly.
 		parts := strings.SplitN(part, "=", 2)

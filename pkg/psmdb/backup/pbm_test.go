@@ -468,10 +468,8 @@ func TestPBMStorageConfig(t *testing.T) {
 		"azure-connection-string": {
 			[]client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-secret",
-						Namespace: "test-namespace",
-					},
+					Name:      "test-secret",
+					Namespace: "test-namespace",
 					Data: map[string][]byte{
 						// AZURE_STORAGE_CONNECTION_STRING takes precedence over individual keys
 						"AZURE_STORAGE_CONNECTION_STRING": []byte("DefaultEndpointsProtocol=https;AccountName=some-storage-account;AccountKey=some-storage-key==;EndpointSuffix=core.windows.net"),
