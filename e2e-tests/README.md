@@ -217,10 +217,8 @@ You can use environment variables to override the default images used for testin
 * `IMAGE_MONGOD_CHAIN` - newline-separated mongod images used by upgrade tests; versions 6.0, 7.0, and 8.0 by default
 * `IMAGE_SEARCH` - Percona Search, `perconalab/percona-server-mongodb-operator:main-mongot` by default
 * `IMAGE_BACKUP` - backup, `perconalab/percona-server-mongodb-operator:main-backup` by default
-* `IMAGE_PMM_CLIENT` - PMM client, `percona/pmm-client:2.44.1-1` by default
-* `IMAGE_PMM_SERVER` - PMM server, `perconalab/pmm-server:dev-latest` by default
-* `IMAGE_PMM3_CLIENT` - PMM 3 client, `perconalab/pmm-client:3-dev-latest` by default
-* `IMAGE_PMM3_SERVER` - PMM 3 server, `perconalab/pmm-server:3-dev-latest` by default
+* `IMAGE_PMM_CLIENT` - PMM client, `perconalab/pmm-client:3-dev-latest` by default
+* `IMAGE_PMM_SERVER` - PMM server, `perconalab/pmm-server:3-dev-latest` by default
 * `IMAGE_LOGCOLLECTOR` - log collector, `perconalab/fluentbit:main-logcollector` by default
 * `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:0.9.0` by default
 
