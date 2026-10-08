@@ -591,6 +591,18 @@ boolean isManualBuild() {
     return !causes.isEmpty()
 }
 
+def skipRequested() {
+    try {
+        if (pullRequest.labels.contains('skip-e2e-tests')) {
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+            return true
+        }
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
+}
+
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild()) {
@@ -645,6 +657,10 @@ void checkE2EIgnoreFiles() {
     }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
+    if (skipRequested()) {
+        needToRunTests = false
+        return
+    }
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
