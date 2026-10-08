@@ -473,8 +473,8 @@ func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
 		require.NoError(t, err)
 
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
-			Data:       map[string][]byte{"tls.crt": tlsCert},
+			Name: api.SSLSecretName(cr), Namespace: cr.Namespace,
+			Data: map[string][]byte{"tls.crt": tlsCert},
 		}
 	}
 

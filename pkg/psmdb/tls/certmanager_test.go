@@ -544,7 +544,7 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 func TestApplyCertificateSansVersionGate(t *testing.T) {
 	newCR := func(crVersion string) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+			Name: "psmdb-mock", Namespace: "psmdb",
 			Spec: api.PerconaServerMongoDBSpec{
 				CRVersion: crVersion,
 				Secrets:   &api.SecretsSpec{SSL: "ssl"},
