@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
@@ -330,7 +331,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
-	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32,
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	namespacedName types.NamespacedName,
+	port int32,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -505,6 +509,45 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 
 	log.Info("Updated statefulset", "name", namespacedName.Name)
+
+	if err := r.terminateStatefulSetPods(ctx, &sts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
+	ctx context.Context,
+	sfs *appsv1.StatefulSet,
+) error {
+	targetGen := sfs.Generation
+	bo := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*2), 3), ctx)
+	if err := backoff.Retry(func() error {
+		observed := &appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), observed); err != nil {
+			return err
+		}
+
+		// When sfs is updated/patched, the client writes back the updated generation into the local object.
+		// We use it to ensure that the informers have been synced before deleting the pods.
+		if observed.Status.ObservedGeneration < targetGen {
+			return errors.New("updated statefulset not yet observed by informer")
+		}
+
+		podList := &corev1.PodList{}
+		if err := r.client.List(ctx, podList, client.InNamespace(sfs.Namespace), client.MatchingLabels(sfs.Spec.Selector.MatchLabels)); err != nil {
+			return err
+		}
+
+		for _, pod := range podList.Items {
+			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return err
+			}
+		}
+		return nil
+	}, bo); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -591,7 +634,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 				}
 				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+				if err := r.client.Patch(ctx, &sts, client.MergeFrom(orig)); err != nil {
+					return err
+				}
+
+				if err := r.terminateStatefulSetPods(ctx, &sts); err != nil {
+					return err
+				}
+				return nil
 			})
 			if err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -625,7 +675,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 				}
 				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
 
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+				if err := r.client.Patch(ctx, &sts, client.MergeFrom(orig)); err != nil {
+					return err
+				}
+
+				if err := r.terminateStatefulSetPods(ctx, &sts); err != nil {
+					return err
+				}
+				return nil
 			})
 			if err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
@@ -634,38 +691,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
-
-	usersSecret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: psmdbv1.UserSecretName(cluster), Namespace: cluster.Namespace}, &usersSecret)
-	if err != nil {
-		return creds, errors.Wrap(err, "get secret")
-	}
-
-	switch role {
-	case psmdbv1.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminPassword])
-	case psmdbv1.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminPassword])
-	case psmdbv1.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminPassword])
-	case psmdbv1.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorPassword])
-	case psmdbv1.RoleBackup:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
-
-	return creds, nil
 }
 
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
@@ -933,6 +958,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 
 	for _, pod := range podList.Items {
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return false, errors.Wrapf(err, "delete pod %s", pod.Name)
+			}
 			return false, nil
 		}
 
