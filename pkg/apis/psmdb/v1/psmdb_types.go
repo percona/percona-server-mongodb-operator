@@ -417,7 +417,7 @@ const (
 	ConditionTypePBMReady AppState = "PBMReady"
 
 	ConditionTypeTLSSecretsReady        AppState = "TLSSecretsReady"
-	ConditionTypeImageUpgradeInProgress AppState = "imageUpgradeInProgress"
+	ConditionTypeImageUpgradeInProgress AppState = "ImageUpgradeInProgress"
 )
 
 type ClusterCondition struct {
