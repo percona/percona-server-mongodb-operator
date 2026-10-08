@@ -17,7 +17,7 @@ import (
 
 const productName = "psmdb-operator"
 
-func (c Client) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm Meta, opts Options) (Dep, error) {
+func (c Client) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm Meta) (Dep, error) {
 	if strings.Contains(endpoint, "https://check.percona.com/versions") {
 		endpoint = api.GetDefaultVersionServiceEndpoint()
 	}
@@ -145,7 +145,7 @@ type Dep struct {
 }
 
 type Service interface {
-	GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm Meta, opts Options) (Dep, error)
+	GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, vm Meta) (Dep, error)
 }
 
 type Client struct{}

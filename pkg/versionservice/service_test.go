@@ -144,9 +144,6 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 						"3.1": {
 							ImagePath: "pmm3-image",
 						},
-						"2.1": {
-							ImagePath: "pmm2-image",
-						},
 					},
 				},
 			},
@@ -162,7 +159,6 @@ func TestVersionService(t *testing.T) {
 		vm         Meta
 		want       Dep
 		wantErrMsg string
-		isPMM3     bool
 	}{
 		"UpgradeOptions.Apply: disabled": {
 			cr: api.PerconaServerMongoDB{
@@ -198,9 +194,8 @@ func TestVersionService(t *testing.T) {
 			want:       Dep{},
 			wantErrMsg: "failed to version service apply",
 		},
-		"Request to version service with PMM3": {
-			cr:     api.PerconaServerMongoDB{},
-			isPMM3: true,
+		"Request to version service": {
+			cr: api.PerconaServerMongoDB{},
 			vm: Meta{
 				Apply:                   "",
 				MongoVersion:            "database-version",
@@ -231,38 +226,6 @@ func TestVersionService(t *testing.T) {
 				PMMVersion:    "3.1",
 			},
 		},
-		"Request to version service with PMM2": {
-			cr: api.PerconaServerMongoDB{},
-			vm: Meta{
-				Apply:                   "",
-				MongoVersion:            "database-version",
-				KubeVersion:             "kube-version",
-				Platform:                productName,
-				PMMVersion:              "3.1",
-				BackupVersion:           "backup-version",
-				CRUID:                   "custom-resource-uid",
-				Version:                 version.Version(),
-				ClusterWideEnabled:      true,
-				HashicorpVaultEnabled:   true,
-				ShardingEnabled:         true,
-				PMMEnabled:              true,
-				HelmDeployOperator:      true,
-				HelmDeployCR:            true,
-				SidecarsUsed:            true,
-				BackupsEnabled:          true,
-				ClusterSize:             3,
-				PITREnabled:             true,
-				PhysicalBackupScheduled: true,
-			},
-			want: Dep{
-				MongoImage:    "mongo-image",
-				MongoVersion:  "mongo-version",
-				BackupImage:   "backup-image",
-				BackupVersion: "backup-version",
-				PMMImage:      "pmm2-image",
-				PMMVersion:    "2.1",
-			},
-		},
 	}
 	addr := "127.0.0.1"
 	port := 10000
@@ -271,10 +234,7 @@ func TestVersionService(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			opts := Options{
-				PMM3Enabled: tc.isPMM3,
-			}
-			dv, err := vs.GetExactVersion(&tc.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tc.vm, opts)
+			dv, err := vs.GetExactVersion(&tc.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tc.vm)
 			if tc.wantErrMsg != "" {
 				require.ErrorContains(t, err, tc.wantErrMsg)
 				return

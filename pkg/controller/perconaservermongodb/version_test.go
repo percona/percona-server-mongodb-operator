@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -30,7 +29,7 @@ type fakeVersionService struct {
 	meta      versionservice.Meta
 }
 
-func (f *fakeVersionService) GetExactVersion(_ *api.PerconaServerMongoDB, endpoint string, vm versionservice.Meta, _ versionservice.Options) (versionservice.Dep, error) {
+func (f *fakeVersionService) GetExactVersion(_ *api.PerconaServerMongoDB, endpoint string, vm versionservice.Meta) (versionservice.Dep, error) {
 	f.calls++
 	f.endpoints = append(f.endpoints, endpoint)
 	f.meta = vm
@@ -397,52 +396,6 @@ func TestEnsureVersionEarlyReturns(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.Zero(t, vs.calls, "version service must not be contacted")
-		})
-	}
-}
-
-func TestIsPMM3Configured(t *testing.T) {
-	ctx := t.Context()
-
-	tests := map[string]struct {
-		secretData map[string][]byte
-		hasSecret  bool
-		want       bool
-	}{
-		"missing secret is not an error": {},
-		"secret without a token": {
-			hasSecret:  true,
-			secretData: map[string][]byte{"MONGODB_BACKUP_USER": []byte("backup")},
-		},
-		"secret with an empty token": {
-			hasSecret:  true,
-			secretData: map[string][]byte{api.PMMServerToken: []byte("")},
-		},
-		"secret with a PMM server token": {
-			hasSecret:  true,
-			secretData: map[string][]byte{api.PMMServerToken: []byte("token")},
-			want:       true,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			cr := fakeCR(t, "some-name", "some-namespace")
-			require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes), "set CR defaults")
-
-			objs := []client.Object{cr}
-			if tc.hasSecret {
-				objs = append(objs, &corev1.Secret{
-					Name:      api.UserSecretName(cr),
-					Namespace: cr.Namespace,
-					Data:      tc.secretData,
-				})
-			}
-			r := fakeReconciler(t, objs...)
-
-			got, err := r.isPMM3Configured(ctx, cr)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
 		})
 	}
 }
