@@ -20,9 +20,6 @@ func TestContainer(t *testing.T) {
 	tokenSecret := &corev1.Secret{
 		Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(`token`)},
 	}
-	pmm2Secret := &corev1.Secret{
-		Data: map[string][]byte{"PMM_SERVER_API_KEY": []byte(`key`)},
-	}
 
 	tests := map[string]struct {
 		secret *corev1.Secret
@@ -38,6 +35,10 @@ func TestContainer(t *testing.T) {
 		},
 		"pmm enabled but secret token is empty": {
 			secret: &corev1.Secret{Data: map[string][]byte{"PMM_SERVER_TOKEN": []byte(``)}},
+			assert: assertNilContainer,
+		},
+		"pmm enabled but secret has only PMM2 api key": {
+			secret: &corev1.Secret{Data: map[string][]byte{"PMM_SERVER_API_KEY": []byte(`key`)}},
 			assert: assertNilContainer,
 		},
 		"pmm enabled but secret token is missing": {
@@ -70,17 +71,6 @@ func TestContainer(t *testing.T) {
 			},
 			assert: assertAuthMechanism("SCRAM-SHA-1"),
 		},
-		"pmm2 enabled - explicit SCRAM-SHA-256 honored on >=1.23.0": {
-			secret: pmm2Secret,
-			setup: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.PMM.AuthenticationMechanism = "SCRAM-SHA-256"
-			},
-			assert: assertAuthMechanism("SCRAM-SHA-256"),
-		},
-		"pmm2 enabled - unset mechanism falls back to SCRAM-SHA-256 on >=1.23.0": {
-			secret: pmm2Secret,
-			assert: assertAuthMechanism("SCRAM-SHA-256"),
-		},
 		"pmm enabled - TLS disabled omits authentication-mechanism flag": {
 			secret: tokenSecret,
 			setup: func(cr *api.PerconaServerMongoDB) {
@@ -107,21 +97,12 @@ func TestContainer(t *testing.T) {
 			secret: tokenSecret,
 			assert: assertNoQuerySource(),
 		},
-		"pmm3 enabled - default probes: built-in liveness, no readiness": {
+		"pmm enabled - default probes: built-in liveness, no readiness": {
 			secret: tokenSecret,
 			assert: assertDefaultProbes(),
 		},
-		"pmm2 enabled - default probes: built-in liveness, no readiness": {
-			secret: pmm2Secret,
-			assert: assertDefaultProbes(),
-		},
-		"pmm3 enabled - custom liveness and readiness probes honored": {
+		"pmm enabled - custom liveness and readiness probes honored": {
 			secret: tokenSecret,
-			setup:  setupCustomProbes,
-			assert: assertCustomProbes(),
-		},
-		"pmm2 enabled - custom liveness and readiness probes honored": {
-			secret: pmm2Secret,
 			setup:  setupCustomProbes,
 			assert: assertCustomProbes(),
 		},
