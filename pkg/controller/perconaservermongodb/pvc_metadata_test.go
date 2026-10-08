@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -21,7 +20,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 	It("updates labels and annotations on existing PVCs", func() {
 		const namespaceName = "pvc-metadata-update"
 
-		namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}}
+		namespace := &corev1.Namespace{Name: namespaceName}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 		DeferCleanup(func() {
 			_ = k8sClient.Delete(ctx, namespace)
@@ -65,7 +64,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 	It("adds annotations to existing PVCs without annotations", func() {
 		const namespaceName = "pvc-metadata-add-annotations"
 
-		namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}}
+		namespace := &corev1.Namespace{Name: namespaceName}
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 		DeferCleanup(func() {
 			_ = k8sClient.Delete(ctx, namespace)
@@ -101,11 +100,9 @@ func existingPVC(namespace, name string, labels map[string]string) *corev1.Persi
 	maps.Copy(pvcLabels, labels)
 
 	return &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    pvcLabels,
-		},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    pvcLabels,
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
