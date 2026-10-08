@@ -809,7 +809,7 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCsSharded(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	const ns = "default"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
