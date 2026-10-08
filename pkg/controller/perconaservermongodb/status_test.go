@@ -840,6 +840,71 @@ func TestImageUpgradeCondition(t *testing.T) {
 			},
 			message: "Image upgrade is in progress for container(s) backup-agent",
 		},
+		{
+			name: "outdated containers are unioned across pods",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      oldImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-1", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: oldImage,
+				}, nil),
+			},
+			message: "Image upgrade is in progress for container(s) backup-agent, mongod",
+		},
+		{
+			name: "replset and mongos changes are combined",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: oldImage,
+				}, nil),
+				sts("psmdb-mock-mongos", naming.ComponentMongos, map[string]string{
+					naming.ContainerMongos: newImage,
+				}, nil),
+				pod("psmdb-mock-mongos-0", naming.ComponentMongos, map[string]string{
+					naming.ContainerMongos: oldImage,
+				}, nil),
+			},
+			message: "Image upgrade is in progress for container(s) mongod, mongos",
+		},
+		{
+			name: "pods outside the statefulset selector are ignored",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: newImage,
+				}, nil),
+				pod("unrelated", "other", map[string]string{
+					naming.ContainerMongod: oldImage,
+				}, nil),
+			},
+		},
+		{
+			name: "statefulsets from another cluster are ignored",
+			objs: []client.Object{
+				func() *appsv1.StatefulSet {
+					other := sts("other-rs0", naming.ComponentMongod, map[string]string{
+						naming.ContainerMongod: newImage,
+					}, nil)
+					other.Labels[naming.LabelKubernetesInstance] = "other-cluster"
+					return other
+				}(),
+				pod("other-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod: oldImage,
+				}, nil),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -867,6 +932,124 @@ func TestImageUpgradeCondition(t *testing.T) {
 			assert.Equal(t, api.ConditionTrue, cond.Status)
 			assert.Equal(t, "ImageUpgrade", cond.Reason)
 			assert.Equal(t, tt.message, cond.Message)
+		})
+	}
+}
+
+func TestOutdatedContainerNames(t *testing.T) {
+	pod := func(init, containers []corev1.Container) *corev1.Pod {
+		return &corev1.Pod{Spec: corev1.PodSpec{
+			InitContainers: init,
+			Containers:     containers,
+		}}
+	}
+	container := func(name, image string) corev1.Container {
+		return corev1.Container{Name: name, Image: image}
+	}
+
+	tests := []struct {
+		name    string
+		pod     *corev1.Pod
+		desired map[string]string
+		want    []string
+	}{
+		{
+			name: "matching images",
+			pod: pod(nil, []corev1.Container{
+				container(naming.ContainerMongod, "new"),
+				container(naming.ContainerBackupAgent, "new"),
+			}),
+			desired: map[string]string{
+				naming.ContainerMongod:      "new",
+				naming.ContainerBackupAgent: "new",
+			},
+		},
+		{
+			name: "container image differs",
+			pod: pod(nil, []corev1.Container{
+				container(naming.ContainerMongod, "old"),
+				container(naming.ContainerBackupAgent, "new"),
+			}),
+			desired: map[string]string{
+				naming.ContainerMongod:      "new",
+				naming.ContainerBackupAgent: "new",
+			},
+			want: []string{naming.ContainerMongod},
+		},
+		{
+			name: "init container image differs",
+			pod: pod(
+				[]corev1.Container{container("mongo-init", "old")},
+				[]corev1.Container{container(naming.ContainerMongod, "new")},
+			),
+			desired: map[string]string{
+				"mongo-init":           "new",
+				naming.ContainerMongod: "new",
+			},
+			want: []string{"mongo-init"},
+		},
+		{
+			name: "names are unique and sorted",
+			pod: pod(
+				[]corev1.Container{
+					container(naming.ContainerMongod, "old"),
+					container("mongo-init", "old"),
+				},
+				[]corev1.Container{
+					container(naming.ContainerMongod, "old"),
+					container(naming.ContainerBackupAgent, "old"),
+				},
+			),
+			desired: map[string]string{
+				naming.ContainerMongod:      "new",
+				"mongo-init":                "new",
+				naming.ContainerBackupAgent: "new",
+			},
+			want: []string{naming.ContainerBackupAgent, "mongo-init", naming.ContainerMongod},
+		},
+		{
+			name:    "empty pod image is ignored",
+			pod:     pod(nil, []corev1.Container{container(naming.ContainerMongod, "")}),
+			desired: map[string]string{naming.ContainerMongod: "new"},
+		},
+		{
+			name:    "empty desired image is ignored",
+			pod:     pod(nil, []corev1.Container{container(naming.ContainerMongod, "old")}),
+			desired: map[string]string{naming.ContainerMongod: ""},
+		},
+		{
+			name: "container removed from the template is ignored",
+			pod: pod(nil, []corev1.Container{
+				container(naming.ContainerMongod, "new"),
+				container("pmm-client", "old"),
+			}),
+			desired: map[string]string{naming.ContainerMongod: "new"},
+		},
+		{
+			name: "container added by the template",
+			pod:  pod(nil, []corev1.Container{container(naming.ContainerMongod, "new")}),
+			desired: map[string]string{
+				naming.ContainerMongod:      "new",
+				naming.ContainerBackupAgent: "new",
+			},
+			want: []string{naming.ContainerBackupAgent},
+		},
+		{
+			name:    "missing init container",
+			pod:     pod(nil, []corev1.Container{container(naming.ContainerMongod, "new")}),
+			desired: map[string]string{"mongo-init": "new", naming.ContainerMongod: "new"},
+			want:    []string{"mongo-init"},
+		},
+		{
+			name:    "empty inputs",
+			pod:     pod(nil, nil),
+			desired: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, outdatedContainerNames(tt.pod, tt.desired))
 		})
 	}
 }

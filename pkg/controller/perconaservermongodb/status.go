@@ -3,6 +3,8 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -708,12 +710,7 @@ func (r *ReconcilePerconaServerMongoDB) imageUpgradeInProgress(ctx context.Conte
 		}
 	}
 
-	names := make([]string, 0, len(pending))
-	for name := range pending {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names, nil
+	return slices.Sorted(maps.Keys(pending)), nil
 }
 
 func imageUpgradeMessage(containers []string) string {
@@ -722,23 +719,15 @@ func imageUpgradeMessage(containers []string) string {
 
 func outdatedContainerNames(pod *corev1.Pod, desired map[string]string) []string {
 	seen := map[string]struct{}{}
-	var names []string
-	add := func(name string) {
-		if _, ok := seen[name]; ok {
-			return
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
 
 	check := func(containers []corev1.Container) {
 		for _, container := range containers {
 			if container.Image == "" {
 				continue
 			}
-want, ok := desired[container.Name]
+			want, ok := desired[container.Name]
 			if ok && want != "" && container.Image != want {
-				add(container.Name)
+				seen[container.Name] = struct{}{}
 			}
 		}
 	}
@@ -754,10 +743,10 @@ want, ok := desired[container.Name]
 	}
 	for name := range desired {
 		if _, ok := present[name]; !ok {
-			add(name)
+			seen[name] = struct{}{}
 		}
 	}
-	return names
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func containerImages(spec corev1.PodSpec) map[string]string {
