@@ -131,6 +131,10 @@ func TestGetCertificateSansMongosServicePerPod(t *testing.T) {
 
 	cr.Spec.Sharding.Mongos.Expose.ServicePerPod = false
 	assert.NotContains(t, GetCertificateSans(cr), "mydb-mongos-0")
+
+	cr.Spec.Sharding.Mongos.Expose.ServicePerPod = true
+	cr.Spec.CRVersion = "1.23.0"
+	assert.NotContains(t, GetCertificateSans(cr), "mydb-mongos-0")
 }
 
 func TestSansToIssue(t *testing.T) {

@@ -266,7 +266,7 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
 	obj := cert.Object()
 
-	if len(obj.Spec.DNSNames) > 0 {
+	if cr.CompareVersion("1.24.0") >= 0 && len(obj.Spec.DNSNames) > 0 {
 		current := new(cm.Certificate)
 		err := c.cl.Get(ctx, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, current)
 		if client.IgnoreNotFound(err) != nil {

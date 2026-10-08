@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"slices"
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -14,6 +15,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -476,6 +478,56 @@ func TestIsExternalIssuer(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, external)
+		})
+	}
+}
+
+func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
+	sslSecret := func(t *testing.T, cr *api.PerconaServerMongoDB, sans []string) *corev1.Secret {
+		t.Helper()
+
+		caCert, caKey, err := tls.IssueCA()
+		require.NoError(t, err)
+
+		tlsCert, _, err := tls.IssueWithCA(sans, caCert, caKey)
+		require.NoError(t, err)
+
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
+			Data:       map[string][]byte{"tls.crt": tlsCert},
+		}
+	}
+
+	tests := map[string]struct {
+		crVersion string
+		extraSan  string
+		dropSan   string
+		expected  bool
+	}{
+		"1.23.0 reissues on extra san":      {crVersion: "1.23.0", extraSan: "stale.example.com", expected: true},
+		"1.24.0 keeps cert with extra san":  {crVersion: "1.24.0", extraSan: "stale.example.com"},
+		"1.23.0 reissues on missing san":    {crVersion: "1.23.0", dropSan: "test-cluster-rs0", expected: true},
+		"1.24.0 reissues on missing san":    {crVersion: "1.24.0", dropSan: "test-cluster-rs0", expected: true},
+		"1.23.0 keeps cert with exact sans": {crVersion: "1.23.0"},
+		"1.24.0 keeps cert with exact sans": {crVersion: "1.24.0"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newTestCR()
+			cr.Spec.CRVersion = tt.crVersion
+
+			sans := tls.GetCertificateSans(cr)
+			if tt.extraSan != "" {
+				sans = append(sans, tt.extraSan)
+			}
+			if tt.dropSan != "" {
+				sans = slices.DeleteFunc(sans, func(san string) bool { return san == tt.dropSan })
+			}
+
+			r := &ReconcilePerconaServerMongoDB{}
+
+			assert.Equal(t, tt.expected, r.needsManualSSLUpdate(t.Context(), cr, sslSecret(t, cr, sans)))
 		})
 	}
 }
