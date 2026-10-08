@@ -2,8 +2,6 @@
 
 import json
 import logging
-import os
-import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -57,19 +55,8 @@ def _deploy_cmctl(src_dir: str, conf_dir: str) -> None:
                 if "certificates/status" not in resources:
                     resources.append("certificates/status")
 
-    operator_ns = os.environ.get("OPERATOR_NS")
-    ns_flag = ["-n", operator_ns] if operator_ns else []
-
     combined = "\n---\n".join(yaml.dump(d) for d in docs if d)
-    if operator_ns:
-        combined = re.sub(
-            r"^(\s*)namespace:\s*.*$",
-            rf"\1namespace: {operator_ns}",
-            combined,
-            flags=re.MULTILINE,
-        )
-
-    kubectl_bin("apply", *ns_flag, "-f", "-", input_data=combined)
+    kubectl_bin("apply", "-f", "-", input_data=combined)
     kubectl_bin("apply", "-f", f"{conf_dir}/cmctl.yml")
 
 
