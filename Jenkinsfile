@@ -1,6 +1,6 @@
 import groovy.transform.Field
 
-@Field def zone = 'us-central1-c'
+@Field def zone = 'us-central1-a'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
 @Field def reportHtml = 'e2e-test-report.html'
