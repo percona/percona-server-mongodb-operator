@@ -69,25 +69,19 @@ outer:
 // ServiceExport returns a ServiceExport object needed for Multi-cluster Services
 func ServiceExport(namespace string, name string, ls map[string]string) *mcs.ServiceExport {
 	return &mcs.ServiceExport{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceExport",
-			APIVersion: MCSSchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    ls,
-		},
+		Kind:       "ServiceExport",
+		APIVersion: MCSSchemeGroupVersion.String(),
+		Name:       name,
+		Namespace:  namespace,
+		Labels:     ls,
 	}
 }
 
 // ServiceExportList returns a ServiceExport list needed for Multi-cluster Services
 func ServiceExportList() *mcs.ServiceExportList {
 	return &mcs.ServiceExportList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceExportList",
-			APIVersion: MCSSchemeGroupVersion.String(),
-		},
+		Kind:       "ServiceExportList",
+		APIVersion: MCSSchemeGroupVersion.String(),
 	}
 }
 

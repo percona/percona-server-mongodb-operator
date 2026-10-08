@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -54,11 +53,12 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
-		recorder:   mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		client:      mgr.GetClient(),
+		scheme:      mgr.GetScheme(),
+		clientcmd:   cli,
+		newPBMFunc:  backup.NewPBM,
+		recorder:    mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbrestore-controller"), "RESTORE_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -89,7 +89,8 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -101,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	log := logf.FromContext(ctx)
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 
 	// Fetch the PerconaSMDBBackupRestore instance
@@ -414,10 +415,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 		backupName := s[len(s)-1]
 
 		return &psmdbv1.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name,
-				Namespace: cr.Namespace,
-			},
+			Name:      cr.Name,
+			Namespace: cr.Namespace,
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				Type:        cr.Spec.BackupSource.Type,
 				ClusterName: cr.Spec.ClusterName,

@@ -25,15 +25,11 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 		finalizers = []string{}
 	}
 	backupCr := &api.PerconaServerMongoDBBackup{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: api.SchemeGroupVersion.String(),
-			Kind:       "PerconaServerMongoDBBackup",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Finalizers:   finalizers,
-			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
-			Labels:       naming.ScheduledBackupLabels(cr, task),
-		},
+		APIVersion:   api.SchemeGroupVersion.String(),
+		Kind:         "PerconaServerMongoDBBackup",
+		Finalizers:   finalizers,
+		GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
+		Labels:       naming.ScheduledBackupLabels(cr, task),
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			Type:                backupType,
 			ClusterName:         cr.Name,
