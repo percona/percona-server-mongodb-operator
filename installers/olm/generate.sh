@@ -423,6 +423,7 @@ build_owned_crds() {
 			else
 				({
 					"PerconaServerMongoDBBackup": ["Pod", "VolumeSnapshot"],
+					"PerconaServerMongoDBClusterSync": ["Deployment", "Secret"],
 					"PerconaServerMongoDBRestore": ["PersistentVolumeClaim", "Pod", "Secret", "StatefulSet"]
 				}[$crd_kind] // []) as $managed_kinds
 				| $managed_resources
