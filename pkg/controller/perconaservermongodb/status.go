@@ -227,7 +227,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	pbmStatus, err := r.pbmStatus(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get pbm status")
+		log.V(1).Info("failed to get PBM status", "error", err.Error())
+		pbmStatus = api.AppStateError
 	}
 
 	state := api.AppStateInit
@@ -556,6 +557,14 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 	}
 
 	log := logf.FromContext(ctx).WithName("PBM")
+
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if restore is running")
+	}
+	if isRestoring {
+		return api.AppStateInit, nil
+	}
 
 	pbm, err := r.newPBM(ctx, r.client, cr)
 	if err != nil {
