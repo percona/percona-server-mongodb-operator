@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -220,6 +221,25 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		}
 	}
 
+	if cacheSizeFromEnv(cr, replset, resources) {
+		container.Env = append(container.Env,
+			corev1.EnvVar{
+				Name: EnvMongodMemoryLimit,
+				ValueFrom: &corev1.EnvVarSource{
+					ResourceFieldRef: &corev1.ResourceFieldSelector{
+						Resource: "limits.memory",
+						// Set explicitly so the stored template matches what we generate.
+						Divisor: resource.MustParse("1"),
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name:  EnvWTCacheSizeRatio,
+				Value: strconv.FormatFloat(replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio.Float64(), 'f', -1, 64),
+			},
+		)
+	}
+
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, containerEnv...)
 		container.EnvFrom = append(container.EnvFrom, containerEnvFrom...)
@@ -295,7 +315,7 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 	if replset.Storage != nil {
 		switch replset.Storage.Engine {
 		case api.StorageEngineWiredTiger:
-			if limit, ok := resources.Limits[corev1.ResourceMemory]; ok && !limit.IsZero() {
+			if limit, ok := resources.Limits[corev1.ResourceMemory]; ok && !limit.IsZero() && !cacheSizeFromEnv(cr, replset, resources) {
 				args = append(args, fmt.Sprintf(
 					"--wiredTigerCacheSizeGB=%.2f",
 					getWiredTigerCacheSizeGB(resources.Limits, replset.Storage.WiredTiger.EngineConfig.CacheSizeRatio.Float64(), true),
@@ -355,6 +375,28 @@ func containerArgs(ctx context.Context, cr *api.PerconaServerMongoDB, replset *a
 // explicitly set the WiredTiger cache size to fix this.
 //
 // https://docs.mongodb.com/manual/reference/configuration-options/#storage.wiredTiger.engineConfig.cacheSizeGB
+const (
+	EnvMongodMemoryLimit = "MONGOD_MEMORY_LIMIT"
+	EnvWTCacheSizeRatio  = "WT_CACHE_SIZE_RATIO"
+)
+
+// WiredTigerCacheSizeGB returns the WiredTiger cache size mongod gets for the given limits.
+func WiredTigerCacheSizeGB(limits corev1.ResourceList, ratio float64) float64 {
+	return getWiredTigerCacheSizeGB(limits, ratio, true)
+}
+
+// cacheSizeFromEnv reports whether ps-entry.sh computes the WiredTiger cache size
+// from the container's memory limit instead of the operator passing it as an arg.
+// The env var references the limit rather than holding a value, so the pod
+// template does not change when the limit is resized in place.
+func cacheSizeFromEnv(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, resources corev1.ResourceRequirements) bool {
+	if !cr.VPAInPlaceResizeEnabled() || replset.Storage == nil || replset.Storage.Engine != api.StorageEngineWiredTiger {
+		return false
+	}
+	limit, ok := resources.Limits[corev1.ResourceMemory]
+	return ok && !limit.IsZero()
+}
+
 func getWiredTigerCacheSizeGB(resourceList corev1.ResourceList, cacheRatio float64, subtract1GB bool) float64 {
 	maxMemory := resourceList[corev1.ResourceMemory]
 	var size float64
