@@ -9,6 +9,7 @@ BUNDLE_REPO="${4:-}"
 
 CONTAINER="${CONTAINER:-docker}"
 CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
+CATALOG_RENDER_PLATFORM="${CATALOG_RENDER_PLATFORM:-${CATALOG_PLATFORM%%,*}}"
 CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
 CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
@@ -111,6 +112,45 @@ list_bundle_images() {
 	done
 
 	echo "${prefix}$(current_bundle_image)"
+}
+
+resolve_bundle_image() {
+	local image="$1"
+	local manifest
+	local digest
+	local platform_os
+	local platform_arch
+	local platform_variant
+
+	IFS=/ read -r platform_os platform_arch platform_variant <<<"$CATALOG_RENDER_PLATFORM"
+	[[ -n "$platform_os" && -n "$platform_arch" ]] ||
+		die "invalid catalog render platform: $CATALOG_RENDER_PLATFORM"
+
+	manifest="$(
+		"$CONTAINER" buildx imagetools inspect "$image" \
+			--format '{{json .Manifest}}'
+	)"
+	digest="$(
+		jq -er \
+			--arg os "$platform_os" \
+			--arg arch "$platform_arch" \
+			--arg variant "${platform_variant:-}" '
+				if .manifests then
+					[
+						.manifests[]
+						| select(
+							.platform.os == $os
+							and .platform.architecture == $arch
+							and ($variant == "" or .platform.variant == $variant)
+						)
+					][0].digest
+				else
+					.digest
+				end
+			' <<<"$manifest"
+	)" || die "image $image does not support $CATALOG_RENDER_PLATFORM"
+
+	printf '%s@%s' "${image%:*}" "$digest"
 }
 
 download_operatorhub() {
@@ -216,13 +256,19 @@ build_previous_bundle() {
 }
 
 write_catalog_template() {
+	local image
+	local resolved_image
+
 	{
 		echo "Schema: olm.semver"
 		echo "GenerateMajorChannels: false"
 		echo "GenerateMinorChannels: false"
 		echo "Stable:"
 		echo "  Bundles:"
-		list_bundle_images "    - Image: "
+		while IFS= read -r image; do
+			resolved_image="$(resolve_bundle_image "$image")"
+			echo "    - Image: $resolved_image"
+		done < <(list_bundle_images)
 	} >"$CATALOG_TEMPLATE"
 }
 
