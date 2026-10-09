@@ -55,6 +55,8 @@ var (
 	defaultImagePullPolicy                = corev1.PullAlways
 
 	DefaultMongoPort int32 = 27017
+
+	DefaultAllowInvalidCertificates = true
 )
 
 const (
@@ -113,11 +115,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 	cr.setStorageAutoscalingDefaults()
 
-	t := true
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &TLSSpec{
 			Mode:                     TLSModePrefer,
-			AllowInvalidCertificates: &t,
+			AllowInvalidCertificates: new(DefaultAllowInvalidCertificates),
 			CertValidityDuration:     metav1.Duration{Duration: time.Hour * 24 * 90},
 		}
 	}
@@ -131,7 +132,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
-		cr.Spec.TLS.AllowInvalidCertificates = &t
+		cr.Spec.TLS.AllowInvalidCertificates = new(DefaultAllowInvalidCertificates)
 	}
 
 	if cr.Spec.TLS.IssuerConf.Kind == "" {
