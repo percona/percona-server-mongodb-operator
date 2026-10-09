@@ -2633,6 +2633,35 @@ wait_certificate() {
 	done
 }
 
+verify_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	local san_list
+	san_list=$(kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' \
+		| base64 -d \
+		| openssl x509 -text -noout 2>/dev/null \
+		| grep "DNS:" \
+		| tr ',' '\n' \
+		| sed 's/.*DNS://g' \
+		| xargs)
+
+	if echo "${san_list}" | grep -q "${expected_san}"; then
+		echo "OK: SAN '${expected_san}' found in secret '${secret_name}'"
+	else
+		echo "FAIL: SAN '${expected_san}' NOT found in secret '${secret_name}'"
+		echo "  SANs found: ${san_list}"
+		return 1
+	fi
+}
+
+wait_for_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	retry 30 10 verify_cert_san "${secret_name}" "${expected_san}"
+}
+
 renew_certificate() {
 	certificate="$1"
 
