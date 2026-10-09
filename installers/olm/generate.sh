@@ -417,18 +417,31 @@ build_owned_crds() {
 				"PerconaServerMongoDBClusterSync": "Instance of a Percona Server for MongoDB Cluster Sync"
 			}[.spec.names.kind] // ("Instance of a " + .spec.names.kind);
 
+		def managed_resources_for($crd_kind):
+			if $crd_kind == "PerconaServerMongoDB" then
+				$managed_resources
+			else
+				({
+					"PerconaServerMongoDBBackup": ["Pod", "VolumeSnapshot"],
+					"PerconaServerMongoDBRestore": ["PersistentVolumeClaim", "Pod", "Secret", "StatefulSet"]
+				}[$crd_kind] // []) as $managed_kinds
+				| $managed_resources
+				| map(.kind as $kind | select($managed_kinds | index($kind)))
+			end;
+
 		[
 			.[]
 			| select(.kind == "CustomResourceDefinition")
+			| .spec.names.kind as $crd_kind
 			| {
 				"description": crd_description,
-				"displayName": .spec.names.kind,
-				"kind": .spec.names.kind,
+				"displayName": $crd_kind,
+				"kind": $crd_kind,
 				"name": .metadata.name,
 				"version": (.spec.versions[] | select(.storage == true) | .name),
 				"specDescriptors": [],
 				"statusDescriptors": [],
-				"resources": (if .spec.names.kind == "PerconaServerMongoDB" then $managed_resources else [] end)
+				"resources": managed_resources_for($crd_kind)
 			}
 		]
 	'
