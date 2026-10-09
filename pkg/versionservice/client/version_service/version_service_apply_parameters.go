@@ -103,9 +103,6 @@ type VersionServiceApplyParams struct {
 	// EncryptionEnabled.
 	EncryptionEnabled *bool
 
-	// EncryptionExplicitlySet.
-	EncryptionExplicitlySet *bool
-
 	// Extensions.
 	Extensions *string
 
@@ -378,17 +375,6 @@ func (o *VersionServiceApplyParams) WithEncryptionEnabled(encryptionEnabled *boo
 // SetEncryptionEnabled adds the encryptionEnabled to the version service apply params.
 func (o *VersionServiceApplyParams) SetEncryptionEnabled(encryptionEnabled *bool) {
 	o.EncryptionEnabled = encryptionEnabled
-}
-
-// WithEncryptionExplicitlySet adds the encryptionExplicitlySet to the version service apply params.
-func (o *VersionServiceApplyParams) WithEncryptionExplicitlySet(encryptionExplicitlySet *bool) *VersionServiceApplyParams {
-	o.SetEncryptionExplicitlySet(encryptionExplicitlySet)
-	return o
-}
-
-// SetEncryptionExplicitlySet adds the encryptionExplicitlySet to the version service apply params.
-func (o *VersionServiceApplyParams) SetEncryptionExplicitlySet(encryptionExplicitlySet *bool) {
-	o.EncryptionExplicitlySet = encryptionExplicitlySet
 }
 
 // WithExtensions adds the extensions to the version service apply params.
@@ -882,23 +868,6 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		if qEncryptionEnabled != "" {
 
 			if err := r.SetQueryParam("encryptionEnabled", qEncryptionEnabled); err != nil {
-				return err
-			}
-		}
-	}
-
-	if o.EncryptionExplicitlySet != nil {
-
-		// query param encryptionExplicitlySet
-		var qrEncryptionExplicitlySet bool
-
-		if o.EncryptionExplicitlySet != nil {
-			qrEncryptionExplicitlySet = *o.EncryptionExplicitlySet
-		}
-		qEncryptionExplicitlySet := conv.FormatBool(qrEncryptionExplicitlySet)
-		if qEncryptionExplicitlySet != "" {
-
-			if err := r.SetQueryParam("encryptionExplicitlySet", qEncryptionExplicitlySet); err != nil {
 				return err
 			}
 		}
