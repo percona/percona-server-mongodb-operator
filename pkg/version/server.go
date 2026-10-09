@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -178,6 +179,8 @@ func DetectCloudProvider(ctx context.Context, client rest.Interface, cfg *rest.C
 }
 
 func matchCloudProvider(ctx context.Context, groups map[string]struct{}, host string, cfg *rest.Config) CloudProvider {
+	hostname := hostnameOf(host)
+
 	for _, p := range cloudProbes {
 		for _, group := range p.apiGroups {
 			if _, ok := groups[group]; ok {
@@ -186,11 +189,15 @@ func matchCloudProvider(ctx context.Context, groups map[string]struct{}, host st
 			}
 		}
 		for _, h := range p.hosts {
-			if strings.Contains(host, h) {
+			if strings.HasSuffix(hostname, h) {
 				log.Info("cloud provider detected", "provider", p.provider, "signal", "host:"+h)
 				return p.provider
 			}
 		}
+	}
+
+	// custom probes may open network connections, run them only after every static signal failed
+	for _, p := range cloudProbes {
 		if p.custom != nil && p.custom(ctx, cfg) {
 			log.Info("cloud provider detected", "provider", p.provider, "signal", "custom")
 			return p.provider
@@ -198,6 +205,23 @@ func matchCloudProvider(ctx context.Context, groups map[string]struct{}, host st
 	}
 
 	return CloudProviderUnknown
+}
+
+func hostnameOf(host string) string {
+	if host == "" {
+		return ""
+	}
+	if !strings.Contains(host, "://") {
+		host = "https://" + host
+	}
+
+	u, err := url.Parse(host)
+	if err != nil {
+		log.V(1).Info("failed to parse host", "host", host, "error", err.Error())
+		return ""
+	}
+
+	return u.Hostname()
 }
 
 func serverGroups(ctx context.Context, client rest.Interface) (map[string]struct{}, error) {

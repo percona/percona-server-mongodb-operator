@@ -169,6 +169,8 @@ func TestMatchCloudProvider(t *testing.T) {
 		"platform9 net host":      {host: "https://abc.platform9.net", want: CloudProviderPlatform9},
 		"tanzu group":             {groups: groupSet("run.tanzu.vmware.com"), want: CloudProviderTanzu},
 		"rancher group":           {groups: groupSet("management.cattle.io"), want: CloudProviderRancher},
+		"lookalike host suffix":   {host: "https://api.oraclecloud.com.example.net:6443", want: CloudProviderUnknown},
+		"provider suffix in path": {host: "https://10.0.0.1:6443/.platform9.io", want: CloudProviderUnknown},
 		"vanilla cluster": {
 			groups: groupSet("apps", "batch", "rbac.authorization.k8s.io"),
 			host:   "https://kubernetes.default.svc",
