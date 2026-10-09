@@ -34,12 +34,7 @@ bundle_image() {
 	local version="$2"
 	local bundle_repo="$3"
 
-	local bundle_name="${distro}"
-	if [[ "${distro}" == "redhat" ]]; then
-		bundle_name="certified"
-	fi
-
-	local tag="${version}-${bundle_name}-bundle"
+	local tag="${version}-${distro}-bundle"
 
 	printf "%s:%s" "${bundle_repo}" "${tag}"
 }

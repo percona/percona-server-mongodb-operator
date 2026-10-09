@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Certified bundles resolve their images through the Red Hat catalog.
 # shellcheck disable=SC2016
 redhat_release="${VERSION}"
 redhat_skips_min_version="${REDHAT_SKIPS_MIN_VERSION:-1.17.0}"

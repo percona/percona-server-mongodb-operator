@@ -2,7 +2,7 @@
 set -euo pipefail
 shopt -s inherit_errexit 2>/dev/null || true
 
-DISTRIBUTION="${1:?Distribution argument required (community|redhat)}"
+DISTRIBUTION="${1:?Distribution argument required (community|certified)}"
 
 cd "${BASH_SOURCE[0]%/*}"
 
@@ -143,7 +143,7 @@ resolve_openshift_versions() {
 load_distribution_hooks() {
 	local hook_file="distributions/${DISTRIBUTION}.sh"
 
-	[[ "${DISTRIBUTION}" == "community" || "${DISTRIBUTION}" == "redhat" ]] \
+	[[ "${DISTRIBUTION}" == "community" || "${DISTRIBUTION}" == "certified" ]] \
 		|| abort "Unknown distribution: ${DISTRIBUTION}"
 	[[ -f "${hook_file}" ]] || abort "Distribution hooks not found: ${hook_file}"
 
@@ -173,10 +173,15 @@ prepare_operator_sources() {
 }
 
 render_operator_manifests() {
+	local manifest_distribution="${DISTRIBUTION}"
+
+	# Certified bundles use the Red Hat-specific operator manifests.
+	[[ "${DISTRIBUTION}" != "certified" ]] || manifest_distribution="redhat"
+
 	log "Rendering operator manifests for ${DISTRIBUTION}"
 
 	run_quiet "Rendering operator manifests" -o operator_yamls.yaml \
-		kubectl kustomize "../../config/${DISTRIBUTION}"
+		kubectl kustomize "../../config/${manifest_distribution}"
 
 	yq eval '. | select(.kind == "CustomResourceDefinition")' operator_yamls.yaml >operator_crds.yaml
 	yq eval '. | select(.kind == "Deployment")' operator_yamls.yaml >operator_deployments.yaml

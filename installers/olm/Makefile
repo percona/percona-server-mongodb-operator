@@ -54,8 +54,6 @@ export PATH := $(CURDIR)/$(TOOLS_DIR):$(PATH)
 GREEN := $(shell tput setaf 2)
 RESET := $(shell tput sgr0)
 
-bundle_distribution = $(if $(filter certified,$(1)),redhat,$(1))
-
 export VERSION CSV_VERSION BUNDLE_IMAGE_VERSION BUNDLE_PACKAGE_CHANNEL
 export PACKAGE_NAME_OVERRIDE CSV_NAME_OVERRIDE
 export BUNDLE_PLATFORM CONFIRM_PUSH BUNDLE_SKIP_DIGEST_FAILURE
@@ -129,15 +127,11 @@ check-bundle-type:
 generate-bundle: check-bundle-type tools $(KUSTOMIZE) check-version check-csv-version check-tools
 	@echo "$(GREEN)Building $(BUNDLE_TYPE) bundle...$(RESET)"
 	@set -euo pipefail; \
-	distribution='$(BUNDLE_TYPE)'; \
-	if [[ '$(BUNDLE_TYPE)' == 'certified' ]]; then \
-		distribution='redhat'; \
-	fi; \
 	manager_kustomization='../../config/manager/namespace/kustomization.yaml'; \
 	original_manager_kustomization="$$(mktemp)"; \
 	cp "$${manager_kustomization}" "$${original_manager_kustomization}"; \
 	trap 'cp "$${original_manager_kustomization}" "$${manager_kustomization}"; rm -f "$${original_manager_kustomization}"' EXIT; \
-	./generate.sh "$${distribution}" &&	echo "$(GREEN)Bundle stored in installers/olm/bundles/$${distribution}$(RESET)"
+	./generate.sh '$(BUNDLE_TYPE)' && echo "$(GREEN)Bundle stored in installers/olm/bundles/$(BUNDLE_TYPE)$(RESET)"
 
 # ==============================================================================
 # Development Rules
@@ -268,8 +262,8 @@ build build-prod: check-bundle-type check-version check-csv-version
 	./build-bundle.sh \
 		build \
 		'$(CONTAINER)' \
-		'bundles/$(call bundle_distribution,$(BUNDLE_TYPE))' \
-		'$(call bundle_distribution,$(BUNDLE_TYPE))' \
+		'bundles/$(BUNDLE_TYPE)' \
+		'$(BUNDLE_TYPE)' \
 		'$(BUNDLE_IMAGE_VERSION)' \
 		'$(BUNDLE_REPO)'
 
@@ -290,8 +284,8 @@ push push-prod: check-bundle-type check-version check-csv-version
 	./build-bundle.sh \
 		push \
 		'$(CONTAINER)' \
-		'bundles/$(call bundle_distribution,$(BUNDLE_TYPE))' \
-		'$(call bundle_distribution,$(BUNDLE_TYPE))' \
+		'bundles/$(BUNDLE_TYPE)' \
+		'$(BUNDLE_TYPE)' \
 		'$(BUNDLE_IMAGE_VERSION)' \
 		'$(BUNDLE_REPO)'
 
@@ -312,14 +306,14 @@ validate: $(BUNDLE_TYPES:%=validate-%-directory)
 
 .PHONY: validate/community validate/certified
 validate/community validate/certified: validate/%: tools
-	./validate-image.sh '$(CONTAINER)' 'bundles/$(call bundle_distribution,$*)'
-	./validate-directory.sh 'bundles/$(call bundle_distribution,$*)'
+	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
+	./validate-directory.sh 'bundles/$*'
 
 validate-%-directory:
-	./validate-directory.sh 'bundles/$(call bundle_distribution,$*)'
+	./validate-directory.sh 'bundles/$*'
 
 validate-%-image:
-	./validate-image.sh '$(CONTAINER)' 'bundles/$(call bundle_distribution,$*)'
+	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
 
 # ==============================================================================
 # Utility Rules

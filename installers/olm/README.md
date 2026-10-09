@@ -313,13 +313,12 @@ Validation uses:
 # Certified Metadata
 
 Certified bundles resolve image metadata and related image digests through
-`distributions/redhat.sh`.
+`distributions/certified.sh`.
 
-The public certified bundle type maps to the internal `redhat` distribution.
 Generated certified bundle files are written under:
 
 ```text
-installers/olm/bundles/redhat
+installers/olm/bundles/certified
 ```
 
 The bundle image tag still uses the public `certified` name, for example:
