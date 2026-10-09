@@ -159,8 +159,8 @@ deploy_pmm3_server() {
 
 	local pmm_args=(
 		--set fullnameOverride=monitoring-server
-		--set image.tag=${IMAGE_PMM3_SERVER#*:}
-		--set image.repository=${IMAGE_PMM3_SERVER%:*}
+		--set image.tag=${IMAGE_PMM_SERVER#*:}
+		--set image.repository=${IMAGE_PMM_SERVER%:*}
 		--set service.type=LoadBalancer
 	)
 	if arch_scheduling_enabled; then
@@ -341,7 +341,7 @@ kubectl_bin apply \
 desc "create first PSMDB cluster $cluster"
 custom_cluster_name="super-custom"
 yq eval '(.spec | select(.image == null)).image = "'"$IMAGE_MONGOD"'"' "$test_dir/conf/$cluster-rs0.yml" \
-	| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM3_CLIENT"'"' - \
+	| yq eval '(.spec | select(has("pmm"))).pmm.image = "'"$IMAGE_PMM_CLIENT"'"' - \
 	| yq eval '(.spec | select(has("pmm"))).pmm.customClusterName = "'"$custom_cluster_name"'"' - \
 	| yq eval '(.spec | select(has("logcollector"))).logcollector.image = "'"$IMAGE_LOGCOLLECTOR"'"' - \
 	| yq eval '(.spec | select(has("initImage"))).initImage = "'"$IMAGE"'"' - \
