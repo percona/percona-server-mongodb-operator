@@ -291,12 +291,15 @@ update-upgrade-consistency-test:
 		cd - >/dev/null; \
 	done
 
+VS_BRANCH ?= main
+VS_CLIENT_DIR = ./pkg/versionservice/client
 version-service-client: swagger
-	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
+	curl -fL https://raw.githubusercontent.com/Percona-Lab/percona-version-service/$(VS_BRANCH)/api/version.swagger.yaml \
 		--output ./version.swagger.yaml
-	rm -rf ./versionserviceclient
-	swagger generate client \
+	$(SWAGGER) validate ./version.swagger.yaml
+	rm -rf $(VS_CLIENT_DIR)
+	$(SWAGGER) generate client \
 		-f ./version.swagger.yaml \
-		-c ./versionserviceclient/ \
-		-m ./versionserviceclient/models
+		-c $(VS_CLIENT_DIR)/ \
+		-m $(VS_CLIENT_DIR)/models
 	rm ./version.swagger.yaml
