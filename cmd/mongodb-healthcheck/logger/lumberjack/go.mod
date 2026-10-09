@@ -1,3 +1,3 @@
 module gopkg.in/natefinch/lumberjack.v2
 
-go 1.26
+go 1.27

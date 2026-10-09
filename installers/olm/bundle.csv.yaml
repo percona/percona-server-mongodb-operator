@@ -140,7 +140,7 @@ spec:
         MONGODB_CLUSTER_MONITOR_PASSWORD: Y2x1c3Rlck1vbml0b3IxMjM0NTY=
         MONGODB_USER_ADMIN_USER: dXNlckFkbWlu
         MONGODB_USER_ADMIN_PASSWORD: dXNlckFkbWluMTIzNDU2
-        PMM_SERVER_API_KEY: dXNlckFkbWluMTIzNDU2
+        PMM_SERVER_TOKEN: dG9rZW4=
       ```
 
   version: ''

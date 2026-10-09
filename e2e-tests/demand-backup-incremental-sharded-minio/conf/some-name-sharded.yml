@@ -10,14 +10,14 @@ spec:
     enabled: true
     image:
     storages:
-      minio:
+      local-s3:
         type: s3
         main: true
         s3:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: http://minio-service:9000/
+          endpointUrl: http://s3-storage-all-in-one:8333/
           insecureSkipTLSVerify: false
   sharding:
     enabled: true

@@ -122,7 +122,7 @@ wait_sts_to_become_not_ready() {
 }
 
 create_infra $namespace
-deploy_minio
+deploy_s3_storage
 create_secrets
 apply_s3_storage_secrets
 
@@ -144,23 +144,23 @@ write_data "This is some data for backup if unhealthy"
 wait_sts_to_become_not_ready
 wait_for_cluster_state "$cluster" "initializing|error"
 
-backup_name_minio="backup-minio-$type"
-run_backup "minio" "$backup_name_minio" "$type"
-#wait_backup $backup_name_minio running #disabling this check temporarily as backup can be very fast in some platforms
+backup_name_local_s3="backup-local-s3-$type"
+run_backup "local-s3" "$backup_name_local_s3" "$type"
+#wait_backup $backup_name_local_s3 running #disabling this check temporarily as backup can be very fast in some platforms
 verify_sts_not_ready
 wait_for_cluster_state "$cluster" "initializing|error"
 
-desc "Verifying $backup_name_minio and update cluster back to ready state"
-wait_backup "$backup_name_minio" "ready"
+desc "Verifying $backup_name_local_s3 and update cluster back to ready state"
+wait_backup "$backup_name_local_s3" "ready"
 verify_sts_not_ready
 wait_for_cluster_state "$cluster" "initializing|error"
 rollback_invalid_image
 wait_for_cluster_state "$cluster" "ready"
 
-desc "Delete data and run restore of $backup_name_minio"
+desc "Delete data and run restore of $backup_name_local_s3"
 delete_data "This is some data for backup if unhealthy"
-run_restore "$backup_name_minio"
-wait_restore "$backup_name_minio" "$cluster"
+run_restore "$backup_name_local_s3"
+wait_restore "$backup_name_local_s3" "$cluster"
 wait_for_cluster_state "$cluster" "ready"
 
 desc "Verify data is back to the cluster"
