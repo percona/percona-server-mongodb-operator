@@ -636,38 +636,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
-
-	usersSecret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: psmdbv1.UserSecretName(cluster), Namespace: cluster.Namespace}, &usersSecret)
-	if err != nil {
-		return creds, errors.Wrap(err, "get secret")
-	}
-
-	switch role {
-	case psmdbv1.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminPassword])
-	case psmdbv1.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminPassword])
-	case psmdbv1.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminPassword])
-	case psmdbv1.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorPassword])
-	case psmdbv1.RoleBackup:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
-
-	return creds, nil
-}
-
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
 // PBM masks the storage credentials when masking to YAML/JSON, but they are preserved in BSON.
 func yamlMarshalUnsafe(in any) ([]byte, error) {

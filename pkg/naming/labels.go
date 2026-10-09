@@ -2,7 +2,6 @@ package naming
 
 import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 const (
@@ -117,16 +116,6 @@ func ScheduledBackupLabels(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpe
 	ls[LabelBackupAncestor] = task.Name
 	ls[LabelCluster] = cr.Name
 	ls[LabelBackupType] = "cron"
-
-	return ls
-}
-
-func NewBackupCronJobLabels(cr *api.PerconaServerMongoDB, labels map[string]string) map[string]string {
-	ls := ClusterLabels(cr)
-	ls[LabelKubernetesReplset] = "general"
-	ls[LabelKubernetesComponent] = "backup-schedule"
-
-	ls = util.MapMerge(util.MapCopy(labels), ls)
 
 	return ls
 }

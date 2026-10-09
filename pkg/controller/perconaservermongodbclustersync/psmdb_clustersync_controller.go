@@ -39,7 +39,7 @@ const (
 )
 
 // Add wires the ClusterSync controller into the manager.
-func Add(mgr manager.Manager) error {
+func Add(ctx context.Context, mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 			naming.ClusterSyncLeaseName(cr.Spec.ClusterName), foreignHolder))
 	}
 
-	svr, err := version.Server(r.clientcmd)
+	svr, err := version.Server(ctx, r.clientcmd)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
 	}

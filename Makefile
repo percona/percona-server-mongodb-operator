@@ -14,7 +14,7 @@ all: build
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-generate: controller-gen mockgen go-fix ## Generate CRDs and RBAC files
+generate: controller-gen mockgen go-fix check-deadcode ## Generate CRDs and RBAC files
 	go generate ./...
 	$(CONTROLLER_GEN) crd:maxDescLen=0,allowDangerousTypes=true rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) object paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -138,6 +138,9 @@ swagger: ## Download swagger locally if necessary.
 MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
+
+check-deadcode: ## Report functions unreachable from main or from tests.
+	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
 
 UV = $(shell pwd)/bin/uv
 uv: ## Download uv locally if necessary.
