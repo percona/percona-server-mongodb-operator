@@ -104,7 +104,7 @@ catalog_source_name() {
 }
 
 list_bundle_images() {
-	local prefix="$1"
+	local prefix="${1:-}"
 	local version
 
 	for version in "${OLD_VERSIONS[@]}"; do
