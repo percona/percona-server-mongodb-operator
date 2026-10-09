@@ -3,8 +3,6 @@ package backup
 import (
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
