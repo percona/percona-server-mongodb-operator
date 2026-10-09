@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
@@ -17,16 +18,23 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -847,4 +855,95 @@ func TestVersionService(t *testing.T) {
 			assert.Equal(t, tt.want, dv)
 		})
 	}
+}
+
+type buildInfoMongoClient struct {
+	mongo.Client
+	version string
+}
+
+func (c *buildInfoMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, error) {
+	return mongo.BuildInfo{Version: c.version}, nil
+}
+
+func (c *buildInfoMongoClient) Disconnect(ctx context.Context) error {
+	return nil
+}
+
+type buildInfoMongoProvider struct {
+	version string
+}
+
+func (p *buildInfoMongoProvider) Mongo(_ context.Context, _ *api.PerconaServerMongoDB, _ *api.ReplsetSpec, _ api.SystemUserRole) (mongo.Client, error) {
+	return &buildInfoMongoClient{Client: mongoFake.NewClient(), version: p.version}, nil
+}
+
+func (p *buildInfoMongoProvider) Mongos(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole) (mongo.Client, error) {
+	return mongoFake.NewClient(), nil
+}
+
+func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ string, _ bool) (mongo.Client, error) {
+	return mongoFake.NewClient(), nil
+}
+
+func TestFetchVersionFromMongo_RetryOnConflict(t *testing.T) {
+	ctx := t.Context()
+
+	s := k8sruntime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-cluster",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			Image: "percona/percona-server-mongodb:7.0.5-3",
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			ObservedGeneration: 1,
+			State:              api.AppStateReady,
+			MongoImage:         "percona/percona-server-mongodb:7.0.4-2",
+		},
+	}
+
+	replset := &api.ReplsetSpec{Name: "rs0"}
+
+	var updateCalls atomic.Int32
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(cr.DeepCopy()).
+		WithStatusSubresource(&api.PerconaServerMongoDB{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				n := updateCalls.Add(1)
+				if n == 1 {
+					return k8serrors.NewConflict(
+						schema.GroupResource{Group: "psmdb.percona.com", Resource: "perconaservermongodbs"},
+						obj.GetName(),
+						fmt.Errorf("the object has been modified"),
+					)
+				}
+				return cl.Status().Update(ctx, obj)
+			},
+		}).
+		Build()
+
+	r := &ReconcilePerconaServerMongoDB{
+		client:              cl,
+		scheme:              s,
+		mongoClientProvider: &buildInfoMongoProvider{version: "7.0.5"},
+	}
+
+	err := r.fetchVersionFromMongo(ctx, cr, replset)
+	require.NoError(t, err)
+
+	assert.GreaterOrEqual(t, updateCalls.Load(), int32(2), "expected at least 2 status update attempts (1 conflict + 1 success)")
+
+	updated := &api.PerconaServerMongoDB{}
+	require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: "test-cluster", Namespace: "default"}, updated))
+	assert.Equal(t, "7.0.5", updated.Status.MongoVersion)
+	assert.Equal(t, "percona/percona-server-mongodb:7.0.5-3", updated.Status.MongoImage)
 }

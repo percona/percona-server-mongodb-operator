@@ -600,7 +600,17 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 	cr.Status.MongoVersion = info.Version
 	cr.Status.MongoImage = cr.Spec.Image
 
-	// updating status resets our defaults, so we're passing a copy
-	err = r.client.Status().Update(ctx, cr.DeepCopy())
-	return errors.Wrapf(err, "failed to update CR")
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &api.PerconaServerMongoDB{}
+
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
+
+		c.Status.MongoVersion = info.Version
+		c.Status.MongoImage = cr.Spec.Image
+
+		return r.client.Status().Update(ctx, c)
+	})
 }
