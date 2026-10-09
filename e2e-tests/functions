@@ -3337,11 +3337,12 @@ wait_for_image_upgrade_condition() {
 	shift
 	local timeout=0
 	local status=""
+	local condition_type="ImageUpgradeInProgress"
 
 	set +o xtrace
-	echo -n "Waiting for imageUpgradeInProgress on ${cluster}"
+	echo -n "Waiting for ${condition_type} on ${cluster}"
 	until [[ ${status} == "True" ]]; do
-		status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].status}')
+		status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].status}")
 		if [[ ${status} == "True" ]]; then
 			break
 		fi
@@ -3350,7 +3351,7 @@ wait_for_image_upgrade_condition() {
 		echo -n '.'
 		if [[ ${timeout} -gt 180 ]]; then
 			echo
-			echo "imageUpgradeInProgress was not set on ${cluster}. Exiting..."
+			echo "${condition_type} was not set on ${cluster}. Exiting..."
 			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
 			echo
 			exit 1
@@ -3359,23 +3360,23 @@ wait_for_image_upgrade_condition() {
 	echo
 
 	local reason message container
-	reason=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].reason}')
-	message=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].message}')
+	reason=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].reason}")
+	message=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].message}")
 	if [[ ${reason} != "ImageUpgrade" ]]; then
-		echo "unexpected imageUpgradeInProgress reason: ${reason}"
+		echo "unexpected ${condition_type} reason: ${reason}"
 		exit 1
 	fi
 	if [[ ${message} != "Image upgrade is in progress for container"* ]]; then
-		echo "unexpected imageUpgradeInProgress message: ${message}"
+		echo "unexpected ${condition_type} message: ${message}"
 		exit 1
 	fi
 	for container in "$@"; do
 		if ! image_upgrade_message_has_container "${message}" "${container}"; then
-			echo "imageUpgradeInProgress message '${message}' does not mention container ${container}"
+			echo "${condition_type} message '${message}' does not mention container ${container}"
 			exit 1
 		fi
 	done
-	echo "imageUpgradeInProgress: ${message}"
+	echo "${condition_type}: ${message}"
 	set_debug
 }
 
@@ -3383,11 +3384,12 @@ wait_for_no_image_upgrade_condition() {
 	local cluster="$1"
 	local timeout=0
 	local condition_type="placeholder"
+	local expected_type="ImageUpgradeInProgress"
 
 	set +o xtrace
-	echo -n "Waiting for imageUpgradeInProgress to clear on ${cluster}"
+	echo -n "Waiting for ${expected_type} to clear on ${cluster}"
 	until [[ -z ${condition_type} ]]; do
-		condition_type=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions[?(@.type=="imageUpgradeInProgress")].type}')
+		condition_type=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${expected_type}\")].type}")
 		if [[ -z ${condition_type} ]]; then
 			break
 		fi
@@ -3396,7 +3398,7 @@ wait_for_no_image_upgrade_condition() {
 		echo -n '.'
 		if [[ ${timeout} -gt 300 ]]; then
 			echo
-			echo "imageUpgradeInProgress is still set on ${cluster}. Exiting..."
+			echo "${expected_type} is still set on ${cluster}. Exiting..."
 			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
 			echo
 			exit 1

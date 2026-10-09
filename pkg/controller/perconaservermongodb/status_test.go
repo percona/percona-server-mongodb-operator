@@ -768,9 +768,12 @@ func TestImageUpgradeCondition(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		objs    []client.Object
-		message string
+		name            string
+		objs            []client.Object
+		state           api.AppState
+		priorUpgrade    bool
+		message         string
+		expectCondition bool
 	}{
 		{
 			name: "images match",
@@ -784,6 +787,53 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerBackupAgent: newImage,
 				}, nil),
 			},
+			state: api.AppStateReady,
+		},
+		{
+			name: "images match, cluster not ready, no prior upgrade",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+			},
+			state: api.AppStateInit,
+		},
+		{
+			name: "images match, cluster not ready, upgrade finishing",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+			},
+			state:           api.AppStateInit,
+			priorUpgrade:    true,
+			expectCondition: true,
+			message:         "Image upgrade is waiting for the cluster to be ready",
+		},
+		{
+			name: "images match, cluster ready, clears prior upgrade",
+			objs: []client.Object{
+				sts("psmdb-mock-rs0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+				pod("psmdb-mock-rs0-0", naming.ComponentMongod, map[string]string{
+					naming.ContainerMongod:      newImage,
+					naming.ContainerBackupAgent: newImage,
+				}, nil),
+			},
+			state:        api.AppStateReady,
+			priorUpgrade: true,
 		},
 		{
 			name: "single container image change",
@@ -797,7 +847,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerBackupAgent: newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container(s) mongod",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) mongod",
 		},
 		{
 			name: "multiple container image changes",
@@ -813,7 +864,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					"pmm-client":                newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container(s) backup-agent, mongod",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) backup-agent, mongod",
 		},
 		{
 			name: "init container image change",
@@ -825,7 +877,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: newImage,
 				}, map[string]string{"init": oldImage}),
 			},
-			message: "Image upgrade is in progress for container(s) init",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) init",
 		},
 		{
 			name: "container added by template",
@@ -838,7 +891,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: newImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container(s) backup-agent",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) backup-agent",
 		},
 		{
 			name: "outdated containers are unioned across pods",
@@ -856,7 +910,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerBackupAgent: oldImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container(s) backup-agent, mongod",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) backup-agent, mongod",
 		},
 		{
 			name: "replset and mongos changes are combined",
@@ -874,7 +929,8 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongos: oldImage,
 				}, nil),
 			},
-			message: "Image upgrade is in progress for container(s) mongod, mongos",
+			expectCondition: true,
+			message:         "Image upgrade is in progress for container(s) mongod, mongos",
 		},
 		{
 			name: "pods outside the statefulset selector are ignored",
@@ -889,6 +945,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: oldImage,
 				}, nil),
 			},
+			state: api.AppStateReady,
 		},
 		{
 			name: "statefulsets from another cluster are ignored",
@@ -904,18 +961,22 @@ func TestImageUpgradeCondition(t *testing.T) {
 					naming.ContainerMongod: oldImage,
 				}, nil),
 			},
+			state: api.AppStateReady,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cluster := cr.DeepCopy()
-			cluster.Status.AddCondition(api.ClusterCondition{
-				Type:    api.ConditionTypeImageUpgradeInProgress,
-				Status:  api.ConditionTrue,
-				Reason:  "stale",
-				Message: "stale",
-			})
+			cluster.Status.State = tt.state
+			if tt.priorUpgrade {
+				cluster.Status.AddCondition(api.ClusterCondition{
+					Type:    api.ConditionTypeImageUpgradeInProgress,
+					Status:  api.ConditionTrue,
+					Reason:  "ImageUpgrade",
+					Message: "stale",
+				})
+			}
 
 			objs := append([]client.Object{cluster}, tt.objs...)
 			r := buildFakeClient(objs...)
@@ -924,7 +985,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 			require.NoError(t, err)
 
 			cond := cluster.Status.FindCondition(api.ConditionTypeImageUpgradeInProgress)
-			if tt.message == "" {
+			if !tt.expectCondition {
 				assert.Nil(t, cond)
 				return
 			}
