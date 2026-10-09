@@ -59,7 +59,7 @@ class MongoManager:
             base_file = base_path / f"{user}.json"
 
             image_mongod = os.environ.get("IMAGE_MONGOD", "")
-            version_mappings = [("8.0", "-80"), ("7.0", "-70"), ("6.0", "-60")]
+            version_mappings = [("8.0", "-80"), ("7.0", "-70")]
 
             for version, suffix in version_mappings:
                 if version in image_mongod:

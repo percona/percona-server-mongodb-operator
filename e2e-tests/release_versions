@@ -1,7 +1,6 @@
 IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main
 IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0
 IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0
-IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0
 IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup
 IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest
 IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest
