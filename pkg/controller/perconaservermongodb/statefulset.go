@@ -55,7 +55,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
+	var pvcSpec *api.PVCSpec
+	if volumeSpec != nil {
+		pvcSpec = &volumeSpec.PersistentVolumeClaim
+	}
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, psmdbconfig.MongodDataVolClaimName, pvcSpec, ls); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 

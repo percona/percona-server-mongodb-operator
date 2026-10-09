@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // mockClientCmd is a mock implementation of the ClientCmd interface for testing
@@ -25,8 +26,6 @@ func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName
 }
 
 func TestGetPVCUsageFromMetrics(t *testing.T) {
-	ctx := context.Background()
-
 	tests := map[string]struct {
 		pvcName     string
 		dfOutput    string
@@ -122,6 +121,8 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+
 			mockCmd := &mockClientCmd{
 				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 					if tt.dfError != nil {
@@ -164,7 +165,7 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				},
 			}
 
-			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName, naming.ContainerMongod)
+			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName, naming.ContainerMongod, config.MongodContainerDataDir)
 
 			if tt.expectedErr {
 				assert.Error(t, err)
@@ -182,30 +183,37 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 }
 
 // TestGetPVCUsageFromMetricsContainer ensures df is executed in the container
-// that actually runs mongod. Hidden, non-voting and arbiter pods name it after
-// their component, so a hardcoded "mongod" makes exec fail there.
+// that actually mounts the volume, on the path the volume is mounted at.
+// Hidden, non-voting and arbiter pods name their mongod container after their
+// component, and mongos keeps its log volume under /data/db/logs, so neither
+// the container nor the path can be hardcoded.
 func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
-	ctx := context.Background()
-
 	tests := map[string]struct {
-		container string
-		expected  string
+		container     string
+		mountPath     string
+		expected      string
+		expectedMount string
 	}{
-		"mongod":                     {container: naming.ContainerMongod, expected: "mongod"},
-		"hidden":                     {container: naming.ContainerHidden, expected: "mongod-hidden"},
-		"non-voting":                 {container: naming.ContainerNonVoting, expected: "mongod-nv"},
-		"arbiter":                    {container: naming.ContainerArbiter, expected: "mongod-arbiter"},
-		"empty falls back to mongod": {container: "", expected: "mongod"},
+		"mongod":                     {container: naming.ContainerMongod, mountPath: config.MongodContainerDataDir, expected: "mongod", expectedMount: "/data/db"},
+		"hidden":                     {container: naming.ContainerHidden, mountPath: config.MongodContainerDataDir, expected: "mongod-hidden", expectedMount: "/data/db"},
+		"non-voting":                 {container: naming.ContainerNonVoting, mountPath: config.MongodContainerDataDir, expected: "mongod-nv", expectedMount: "/data/db"},
+		"arbiter":                    {container: naming.ContainerArbiter, mountPath: config.MongodContainerDataDir, expected: "mongod-arbiter", expectedMount: "/data/db"},
+		"mongos logs":                {container: naming.ContainerMongos, mountPath: config.MongodContainerDataLogsDir, expected: "mongos", expectedMount: "/data/db/logs"},
+		"empty falls back to mongod": {container: "", mountPath: "", expected: "mongod", expectedMount: "/data/db"},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+
 			var gotContainer string
+			var gotCommand []string
 
 			r := &ReconcilePerconaServerMongoDB{
 				clientcmd: &mockClientCmd{
 					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 						gotContainer = containerName
+						gotCommand = command
 						_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb        3094126592  221798400  2855550976   8% /data/db`))
 						return nil
@@ -217,9 +225,10 @@ func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
 				Name: "test-pod-0", Namespace: "test-namespace",
 			}
 
-			_, err := r.getPVCUsageFromMetrics(ctx, pod, "mongod-data-test-pod-0", tt.container)
+			_, err := r.getPVCUsageFromMetrics(ctx, pod, "mongod-data-test-pod-0", tt.container, tt.mountPath)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, gotContainer)
+			assert.Equal(t, []string{"df", "-B1", tt.expectedMount}, gotCommand)
 		})
 	}
 }
