@@ -32,20 +32,18 @@ func TestCheckClusterSyncLease(t *testing.T) {
 	)
 	holder := "sync-uid"
 	csLease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.ClusterSyncLeaseName(clusterName),
-			Namespace: ns,
-		},
+		Name:      naming.ClusterSyncLeaseName(clusterName),
+		Namespace: ns,
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 			HolderIdentity: &holder,
 		},
 	}
 	cr := &psmdbv1.PerconaServerMongoDBRestore{
-		ObjectMeta: metav1.ObjectMeta{Name: "rst", Namespace: ns},
+		Name: "rst", Namespace: ns,
 	}
 	cluster := &psmdbv1.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: ns},
+		Name: clusterName, Namespace: ns,
 	}
 
 	tests := map[string]struct {

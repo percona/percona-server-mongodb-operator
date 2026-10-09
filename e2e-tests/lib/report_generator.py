@@ -10,6 +10,7 @@ from lib.k8s_collector import K8sCollector
 from lib.kubectl import kubectl_bin
 
 MIN_READY_NODES = 3
+MIN_READY_NODES_BY_PLATFORM = {"minikube": 1}
 
 ENV_VARS_TO_REPORT = [
     "KUBE_VERSION",
@@ -31,8 +32,6 @@ ENV_VARS_TO_REPORT = [
     "IMAGE_BACKUP",
     "IMAGE_PMM_CLIENT",
     "IMAGE_PMM_SERVER",
-    "IMAGE_PMM3_CLIENT",
-    "IMAGE_PMM3_SERVER",
     "IMAGE_LOGCOLLECTOR",
     "IMAGE_CLUSTERSYNC",
     "CERT_MANAGER_VER",
@@ -74,8 +73,17 @@ def pytest_html_results_summary(
         prefix.append(table)
 
 
-def check_nodes_ready(min_ready: int = MIN_READY_NODES) -> dict[str, Any]:
+def min_ready_nodes(platform: str | None = None) -> int:
+    """Return the minimum ready-node count required for a platform."""
+    platform = platform or os.environ.get("PLATFORM", "")
+    return MIN_READY_NODES_BY_PLATFORM.get(platform.lower(), MIN_READY_NODES)
+
+
+def check_nodes_ready(min_ready: int | None = None) -> dict[str, Any]:
     """Return node readiness counts at the current moment."""
+    if min_ready is None:
+        min_ready = min_ready_nodes()
+
     output = kubectl_bin(
         "get",
         "nodes",
@@ -89,7 +97,12 @@ def check_nodes_ready(min_ready: int = MIN_READY_NODES) -> dict[str, Any]:
     statuses = [s for s in output.split() if s in ("True", "False")]
     ready = sum(1 for s in statuses if s == "True")
     total = len(statuses)
-    return {"ready": ready, "total": total, "ok": total > 0 and ready >= min_ready}
+    return {
+        "ready": ready,
+        "total": total,
+        "required": min_ready,
+        "ok": total > 0 and ready >= min_ready,
+    }
 
 
 def _nodes_cell(nodes: dict[str, Any] | None) -> str:

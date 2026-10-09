@@ -52,15 +52,11 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 	volumes, claimTemplates := podVolumes(cr, rs, spec)
 
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.SearchStatefulSetName(cr, rs),
-			Namespace: cr.Namespace,
-			Labels:    objectLabels,
-		},
+		APIVersion: "apps/v1",
+		Kind:       "StatefulSet",
+		Name:       naming.SearchStatefulSetName(cr, rs),
+		Namespace:  cr.Namespace,
+		Labels:     objectLabels,
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName:          naming.SearchServiceName(cr, rs),
 			RevisionHistoryLimit: cr.Spec.RevisionHistoryLimit,
@@ -246,11 +242,9 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 // the override specifies no handler of its own.
 func mongotProbe(override *corev1.Probe) *corev1.Probe {
 	probe := &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/health",
-				Port: intstr.FromInt32(healthCheckPort),
-			},
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: "/health",
+			Port: intstr.FromInt32(healthCheckPort),
 		},
 	}
 
@@ -274,28 +268,20 @@ func mongotProbe(override *corev1.Probe) *corev1.Probe {
 func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.SearchSpec) ([]corev1.Volume, []corev1.PersistentVolumeClaim) {
 	volumes := []corev1.Volume{
 		{
-			Name: config.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     config.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: naming.SearchConfigMapName(cr, rs),
-					},
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name: naming.SearchConfigMapName(cr, rs),
 			},
 		},
 		{
 			Name: usersSecretVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.InternalUserSecretName(cr),
-					DefaultMode: new(secretFileMode),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.InternalUserSecretName(cr),
+				DefaultMode: new(secretFileMode),
 			},
 		},
 	}
@@ -303,12 +289,10 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 	if cr.TLSEnabled() {
 		volumes = append(volumes, corev1.Volume{
 			Name: "ssl",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.SSLInternalSecretName(cr),
-					DefaultMode: new(secretFileMode),
-					Optional:    &cr.Spec.Unsafe.TLS,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.SSLInternalSecretName(cr),
+				DefaultMode: new(secretFileMode),
+				Optional:    &cr.Spec.Unsafe.TLS,
 			},
 		})
 	}
@@ -321,18 +305,14 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 		}
 	case search.Storage != nil && (search.Storage.HostPath != nil || search.Storage.EmptyDir != nil):
 		volumes = append(volumes, corev1.Volume{
-			Name: dataVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: search.Storage.HostPath,
-				EmptyDir: search.Storage.EmptyDir,
-			},
+			Name:     dataVolumeName,
+			HostPath: search.Storage.HostPath,
+			EmptyDir: search.Storage.EmptyDir,
 		})
 	default:
 		volumes = append(volumes, corev1.Volume{
-			Name: dataVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     dataVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
@@ -341,14 +321,10 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 
 func persistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PersistentVolumeClaim",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Kind:       "PersistentVolumeClaim",
+		APIVersion: "v1",
+		Name:       name,
+		Namespace:  namespace,
 	}
 
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
