@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"sync"
 	"testing"
 
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
@@ -20,7 +22,24 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func startFakeVersionService(ctx context.Context, t *testing.T, addr string, port, gwport int) {
+type requestCapture struct {
+	mu    sync.Mutex
+	query url.Values
+}
+
+func (c *requestCapture) set(q url.Values) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.query = q
+}
+
+func (c *requestCapture) get() url.Values {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.query
+}
+
+func startFakeVersionService(ctx context.Context, t *testing.T, addr string, port, gwport int) *requestCapture {
 	t.Helper()
 
 	s := grpc.NewServer()
@@ -48,9 +67,13 @@ func startFakeVersionService(ctx context.Context, t *testing.T, addr string, por
 	gwmux := runtime.NewServeMux()
 	require.NoError(t, pbVersion.RegisterVersionServiceHandler(ctx, gwmux, conn), "register gateway")
 
+	capture := new(requestCapture)
 	gwServer := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", addr, gwport),
-		Handler: gwmux,
+		Addr: fmt.Sprintf("%s:%d", addr, gwport),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capture.set(r.URL.Query())
+			gwmux.ServeHTTP(w, r)
+		}),
 	}
 	gwLis, err := net.Listen("tcp", gwServer.Addr)
 	require.NoError(t, err, "listen gateway")
@@ -63,6 +86,8 @@ func startFakeVersionService(ctx context.Context, t *testing.T, addr string, por
 	t.Cleanup(func() {
 		assert.NoError(t, gwServer.Close(), "close grpc-gateway")
 	})
+
+	return capture
 }
 
 type fakeVS struct{}
@@ -158,6 +183,7 @@ func TestVersionService(t *testing.T) {
 		cr         api.PerconaServerMongoDB
 		vm         Meta
 		want       Dep
+		wantQuery  map[string]string
 		wantErrMsg string
 	}{
 		"UpgradeOptions.Apply: disabled": {
@@ -216,6 +242,51 @@ func TestVersionService(t *testing.T) {
 				ClusterSize:             3,
 				PITREnabled:             true,
 				PhysicalBackupScheduled: true,
+				MCSEnabled:              true,
+				VolumeExpansionEnabled:  true,
+				UserManagementEnabled:   true,
+				RoleManagementEnabled:   true,
+				VectorSearchEnabled:     true,
+				ClusterSyncEnabled:      true,
+				EncryptionEnabled:       true,
+				OCIBackupEnabled:        true,
+				AlibabaBackupEnabled:    true,
+				ArbiterEnabled:          true,
+				NonVotingEnabled:        true,
+				TLSMode:                 string(api.TLSModePrefer),
+				MongosSize:              2,
+			},
+			wantQuery: map[string]string{
+				"backupVersion":           "backup-version",
+				"clusterWideEnabled":      "true",
+				"customResourceUid":       "custom-resource-uid",
+				"databaseVersion":         "database-version",
+				"hashicorpVaultEnabled":   "true",
+				"kubeVersion":             "kube-version",
+				"platform":                productName,
+				"pmmVersion":              "3.1",
+				"shardingEnabled":         "true",
+				"pmmEnabled":              "true",
+				"helmDeployOperator":      "true",
+				"helmDeployCr":            "true",
+				"sidecarsUsed":            "true",
+				"backupsEnabled":          "true",
+				"clusterSize":             "3",
+				"pitrEnabled":             "true",
+				"physicalBackupScheduled": "true",
+				"mcsEnabled":              "true",
+				"volumeExpansionEnabled":  "true",
+				"userManagementEnabled":   "true",
+				"roleManagementEnabled":   "true",
+				"vectorSearchEnabled":     "true",
+				"clusterSyncEnabled":      "true",
+				"encryptionEnabled":       "true",
+				"ociBackupEnabled":        "true",
+				"alibabaBackupEnabled":    "true",
+				"arbiterEnabled":          "true",
+				"nonVotingEnabled":        "true",
+				"mongoTlsMode":            string(api.TLSModePrefer),
+				"mongosSize":              "2",
 			},
 			want: Dep{
 				MongoImage:    "mongo-image",
@@ -230,7 +301,7 @@ func TestVersionService(t *testing.T) {
 	addr := "127.0.0.1"
 	port := 10000
 	gwPort := 11000
-	startFakeVersionService(ctx, t, addr, port, gwPort)
+	capture := startFakeVersionService(ctx, t, addr, port, gwPort)
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -241,6 +312,11 @@ func TestVersionService(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, dv)
+
+			query := capture.get()
+			for k, want := range tc.wantQuery {
+				assert.Equal(t, want, query.Get(k), k)
+			}
 		})
 	}
 }
