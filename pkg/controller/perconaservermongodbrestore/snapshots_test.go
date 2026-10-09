@@ -15,6 +15,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -822,6 +823,99 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 		require.NoError(t, err, "expected nonvoting PVC to be created")
 		assert.Equal(t, "snapshot-rs0", nvPVC.Spec.DataSource.Name)
 	})
+}
+
+func TestRolloutRestoredPVCsSharded(t *testing.T) {
+	ctx := t.Context()
+	const ns = "default"
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name: "my-cluster", Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			Replsets: []*psmdbv1.ReplsetSpec{
+				{Name: "rs0", Size: 2},
+				{Name: "rs1", Size: 2},
+			},
+		},
+	}
+	backup := &psmdbv1.PerconaServerMongoDBBackup{
+		Name: "my-backup", Namespace: ns,
+		Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+			Snapshots: psmdbv1.SnapshotInfos{
+				{ReplsetName: "rs0", SnapshotName: "snapshot-rs0"},
+				{ReplsetName: "rs1", SnapshotName: "snapshot-rs1"},
+			},
+		},
+	}
+	restore := &psmdbv1.PerconaServerMongoDBRestore{Name: "my-restore", Namespace: ns}
+
+	pvcName := func(rs *psmdbv1.ReplsetSpec, podIdx int) string {
+		return config.MongodDataVolClaimName + "-" + rs.PodName(cluster, podIdx)
+	}
+
+	objs := []client.Object{cluster, backup, restore}
+	for _, rs := range cluster.Spec.Replsets {
+		objs = append(objs, &appsv1.StatefulSet{
+			Name: naming.MongodStatefulSetName(cluster, rs), Namespace: ns,
+			Spec: appsv1.StatefulSetSpec{
+				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+					Name: config.MongodDataVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					},
+				}},
+			},
+		})
+		for podIdx := 0; podIdx < int(rs.Size); podIdx++ {
+			objs = append(objs, &corev1.PersistentVolumeClaim{Name: pvcName(rs, podIdx), Namespace: ns})
+		}
+	}
+
+	r := fakeReconciler(objs...)
+	status := &psmdbv1.PerconaServerMongoDBRestoreStatus{}
+
+	exists := func(t *testing.T, name string) bool {
+		t.Helper()
+		err := r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, &corev1.PersistentVolumeClaim{})
+		if err != nil && !k8sErrors.IsNotFound(err) {
+			require.NoError(t, err)
+		}
+		return err == nil
+	}
+
+	rs0, rs1 := cluster.Spec.Replsets[0], cluster.Spec.Replsets[1]
+
+	done, err := r.rolloutRestoredPVCs(ctx, cluster, restore, backup, status)
+	require.NoError(t, err)
+	require.False(t, done, "rollout cannot be done while stale PVCs are still being deleted")
+
+	// Every replset advances on the first pass
+	assert.False(t, exists(t, pvcName(rs0, 0)), "rs0 pod-0 PVC should be deleted in pass 1")
+	assert.False(t, exists(t, pvcName(rs1, 0)), "rs1 pod-0 PVC should be deleted in pass 1: replsets must progress in parallel")
+
+	// Within a replset the rollout stays one-by-one, since those PVCs share a snapshot.
+	assert.True(t, exists(t, pvcName(rs0, 1)), "rs0 pod-1 PVC should wait for pod-0")
+	assert.True(t, exists(t, pvcName(rs1, 1)), "rs1 pod-1 PVC should wait for pod-0")
+
+	// Two replsets of two pods converge in 3 passes in parallel; serially it takes 5.
+	const maxPasses = 3
+	for pass := 2; !done && pass <= maxPasses; pass++ {
+		done, err = r.rolloutRestoredPVCs(ctx, cluster, restore, backup, status)
+		require.NoError(t, err)
+	}
+	require.True(t, done, "rollout should converge within %d passes when replsets run in parallel", maxPasses)
+	assert.True(t, apimeta.IsStatusConditionTrue(status.Conditions, psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot))
+
+	// Each pod ends up cloned from its own replset's snapshot.
+	for _, rs := range cluster.Spec.Replsets {
+		for podIdx := 0; podIdx < int(rs.Size); podIdx++ {
+			pvc := &corev1.PersistentVolumeClaim{}
+			require.NoError(t, r.client.Get(ctx, types.NamespacedName{Name: pvcName(rs, podIdx), Namespace: ns}, pvc))
+			require.NotNil(t, pvc.Spec.DataSource)
+			assert.Equal(t, "snapshot-"+rs.Name, pvc.Spec.DataSource.Name)
+			assert.Equal(t, restore.Name, pvc.Annotations[naming.AnnotationRestoreName])
+		}
+	}
 }
 
 func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
