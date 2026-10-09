@@ -3,6 +3,8 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +51,10 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
 		cr.Status.State = api.AppStateError
+
+		if err := r.updateImageUpgradeCondition(ctx, cr); err != nil {
+			log.Error(err, "update image upgrade condition")
+		}
 
 		return r.writeStatus(ctx, cr)
 	}
@@ -293,6 +299,10 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 			Status:  api.ConditionTrue,
 			Message: "Smart update is pending but has not yet started",
 		})
+	}
+
+	if err := r.updateImageUpgradeCondition(ctx, cr); err != nil {
+		return errors.Wrap(err, "update image upgrade condition")
 	}
 
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
@@ -638,4 +648,132 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updateImageUpgradeCondition(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	containers, err := r.imageUpgradeInProgress(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case len(containers) > 0:
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypeImageUpgradeInProgress,
+			Status:  api.ConditionTrue,
+			Reason:  "ImageUpgrade",
+			Message: imageUpgradeMessage(containers),
+		})
+	case imageUpgradeConditionSet(cr) && cr.Status.State != api.AppStateReady:
+		// keep the condition until the cluster is ready
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypeImageUpgradeInProgress,
+			Status:  api.ConditionTrue,
+			Reason:  "ImageUpgrade",
+			Message: "Image upgrade is waiting for the cluster to be ready",
+		})
+	default:
+		cr.Status.RemoveCondition(api.ConditionTypeImageUpgradeInProgress)
+	}
+	return nil
+}
+
+func imageUpgradeConditionSet(cr *api.PerconaServerMongoDB) bool {
+	cond := cr.Status.FindCondition(api.ConditionTypeImageUpgradeInProgress)
+	return cond != nil && cond.Status == api.ConditionTrue
+}
+
+func (r *ReconcilePerconaServerMongoDB) imageUpgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB) ([]string, error) {
+	stsList := &appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, stsList, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			naming.LabelKubernetesInstance: cr.Name,
+		}),
+	}); err != nil {
+		return nil, errors.Wrap(err, "list statefulsets")
+	}
+
+	pending := map[string]struct{}{}
+	for i := range stsList.Items {
+		sts := &stsList.Items[i]
+		if sts.Spec.Selector == nil {
+			continue
+		}
+		selector, err := metav1.LabelSelectorAsSelector(sts.Spec.Selector)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse selector for statefulset %s", sts.Name)
+		}
+		if selector.Empty() {
+			continue
+		}
+
+		podList := &corev1.PodList{}
+		if err := r.client.List(ctx, podList, &client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: selector,
+		}); err != nil {
+			return nil, errors.Wrapf(err, "list pods for statefulset %s", sts.Name)
+		}
+
+		desired := containerImages(sts.Spec.Template.Spec)
+		for j := range podList.Items {
+			for _, name := range outdatedContainerNames(&podList.Items[j], desired) {
+				pending[name] = struct{}{}
+			}
+		}
+	}
+
+	return slices.Sorted(maps.Keys(pending)), nil
+}
+
+func imageUpgradeMessage(containers []string) string {
+	return "Image upgrade is in progress for container(s) " + strings.Join(containers, ", ")
+}
+
+func outdatedContainerNames(pod *corev1.Pod, desired map[string]string) []string {
+	seen := map[string]struct{}{}
+
+	check := func(containers []corev1.Container) {
+		for _, container := range containers {
+			if container.Image == "" {
+				continue
+			}
+			want, ok := desired[container.Name]
+			if ok && container.Image != want {
+				seen[container.Name] = struct{}{}
+			}
+		}
+	}
+	check(pod.Spec.InitContainers)
+	check(pod.Spec.Containers)
+
+	present := map[string]struct{}{}
+	for _, container := range pod.Spec.InitContainers {
+		present[container.Name] = struct{}{}
+	}
+	for _, container := range pod.Spec.Containers {
+		present[container.Name] = struct{}{}
+	}
+	for name := range desired {
+		if _, ok := present[name]; !ok {
+			seen[name] = struct{}{}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+func containerImages(spec corev1.PodSpec) map[string]string {
+	images := make(map[string]string, len(spec.InitContainers)+len(spec.Containers))
+	for _, container := range spec.InitContainers {
+		if container.Image != "" {
+			images[container.Name] = container.Image
+		}
+	}
+	for _, container := range spec.Containers {
+		if container.Image != "" {
+			images[container.Name] = container.Image
+		}
+	}
+	return images
 }
