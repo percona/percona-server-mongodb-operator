@@ -51,7 +51,7 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 		vm.Platform = string(*cr.Spec.Platform)
 	}
 
-	for _, rs := range cr.Spec.Replsets {
+	for _, rs := range cr.GetAllReplsets() {
 		if len(rs.Sidecars) > 0 {
 			vm.SidecarsUsed = true
 		}
@@ -87,7 +87,12 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	if err := cl.List(ctx, clusterSyncList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		return Meta{}, errors.Wrap(err, "list PerconaServerMongoDBClusterSync")
 	}
-	vm.ClusterSyncEnabled = len(clusterSyncList.Items) > 0
+	for _, sync := range clusterSyncList.Items {
+		if sync.Spec.ClusterName == cr.Name {
+			vm.ClusterSyncEnabled = true
+			break
+		}
+	}
 
 	if _, ok := operatorDepl.Labels["helm.sh/chart"]; ok {
 		vm.HelmDeployOperator = true

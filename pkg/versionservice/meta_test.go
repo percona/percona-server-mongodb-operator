@@ -511,6 +511,45 @@ func TestBuildMeta(t *testing.T) {
 			extraObjects: []client.Object{
 				&api.PerconaServerMongoDBClusterSync{
 					Name: "some-name-sync",
+					Spec: api.PerconaServerMongoDBClusterSyncSpec{
+						ClusterName: "some-name",
+					},
+				},
+			},
+		},
+		"CR with cluster sync targeting another cluster": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:8.0.4-1",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			want: Meta{
+				Apply:             "disabled",
+				Version:           version.Version(),
+				ClusterSize:       3,
+				EncryptionEnabled: true,
+				TLSMode:           string(api.TLSModePrefer),
+			},
+			namespace: "test-namespace",
+			extraObjects: []client.Object{
+				&api.PerconaServerMongoDBClusterSync{
+					Name: "other-name-sync",
+					Spec: api.PerconaServerMongoDBClusterSyncSpec{
+						ClusterName: "other-name",
+					},
 				},
 			},
 		},
