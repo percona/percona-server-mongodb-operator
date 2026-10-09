@@ -5,8 +5,6 @@ platformSkips:
     - name: demand-backup-eks-credentials-irsa
       reason: requires EKS IRSA
   gke-arm64:
-    - name: monitoring-2-0
-      reason: PMM 2 images are unavailable for ARM64
     - name: monitoring-pmm3
       reason: PMM 3 images are unavailable for ARM64
     - name: upgrade
@@ -389,11 +387,6 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade, sharding]
-
-  monitoring-2-0:
-    suites: [pr, release]
-    operatorModes: [cluster-wide, namespaced]
-    groups: [monitoring]
 
   monitoring-pmm3:
     suites: [pr, release]
