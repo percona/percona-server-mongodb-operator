@@ -13,9 +13,9 @@ import (
 )
 
 type MongoClientProvider interface {
-	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error)
-	Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error)
-	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error)
+	Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error)
+	Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error)
+	Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error)
 }
 
 func (r *ReconcilePerconaServerMongoDB) getMongoClientProvider() MongoClientProvider {
@@ -29,45 +29,45 @@ type mongoClientProvider struct {
 	k8sclient client.Client
 }
 
-func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
+func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongoClient(ctx, p.k8sclient, cr, rs, c)
+	return psmdb.MongoClient(ctx, p.k8sclient, cr, rs, c, opts...)
 }
 
-func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
+func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.MongosClient(ctx, p.k8sclient, cr, c)
+	return psmdb.MongosClient(ctx, p.k8sclient, cr, c, opts...)
 }
 
-func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
-	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host, tlsEnabled)
+	return psmdb.StandaloneClient(ctx, p.k8sclient, cr, c, host, tlsEnabled, opts...)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
-	return r.getMongoClientProvider().Mongo(ctx, cr, rs, role)
+func (r *ReconcilePerconaServerMongoDB) mongoClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	return r.getMongoClientProvider().Mongo(ctx, cr, rs, role, opts...)
 }
 
-func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
-	return r.getMongoClientProvider().Mongos(ctx, cr, role)
+func (r *ReconcilePerconaServerMongoDB) mongosClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	return r.getMongoClientProvider().Mongos(ctx, cr, role, opts...)
 }
 
-func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod) (mongo.Client, error) {
+func (r *ReconcilePerconaServerMongoDB) standaloneClientWithRole(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, pod corev1.Pod, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, pod)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get mongo host")
 	}
-	return r.getMongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled())
+	return r.getMongoClientProvider().Standalone(ctx, cr, role, host, cr.TLSEnabled(), opts...)
 }

@@ -29,18 +29,23 @@ import (
 // RoleClusterAdmin connection fails, and createOrUpdateSystemUsers connects as
 // RoleUserAdmin.
 type initMongoClientProvider struct {
-	clusterAdminErr error
-	userAdminErr    error
-	cr              *api.PerconaServerMongoDB
-	pods            []client.Object
+	clusterAdminErr  error
+	userAdminErr     error
+	cr               *api.PerconaServerMongoDB
+	pods             []client.Object
+	clusterAdminConf *mongo.DialConfig
 }
 
-func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
+func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	if role == api.RoleUserAdmin {
 		if p.userAdminErr != nil {
 			return nil, p.userAdminErr
 		}
 		return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	}
+	p.clusterAdminConf = &mongo.DialConfig{Backoff: mongo.DefaultBackoff()}
+	for _, opt := range opts {
+		opt(p.clusterAdminConf)
 	}
 	if p.clusterAdminErr != nil {
 		return nil, p.clusterAdminErr
@@ -48,11 +53,11 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
 }
 
-func (p *initMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
+func (p *initMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
 }
 
-func (p *initMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (p *initMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
 }
 
@@ -375,4 +380,35 @@ func TestHandleReplsetInitIdempotentAdminUser(t *testing.T) {
 		assert.Equal(t, int32(0), exec.createUserCalls.Load(), "createUser should not run when auth check itself fails")
 		assert.Equal(t, int32(1), exec.authCheckCalls.Load())
 	})
+}
+
+// TestReconcileClusterRetriesOnlyInitializedReplsets checks that the clusterAdmin
+// connection fails fast before init, where a failure leads to replset init, and
+// retries after it, where a failure can lead to the full cluster crash handling.
+func TestReconcileClusterRetriesOnlyInitializedReplsets(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		initialized bool
+		retry       bool
+	}{
+		"not initialized": {initialized: false, retry: false},
+		"initialized":     {initialized: true, retry: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			provider := &initMongoClientProvider{
+				clusterAdminErr: errors.New("dial: no reachable servers"),
+			}
+			r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+			cr.Status.Replsets[rs.Name] = api.ReplsetStatus{Initialized: tt.initialized}
+
+			_, _, _ = r.reconcileCluster(ctx, cr, rs, nil)
+
+			require.NotNil(t, provider.clusterAdminConf)
+			assert.Equal(t, tt.retry, provider.clusterAdminConf.Backoff != nil)
+		})
+	}
 }

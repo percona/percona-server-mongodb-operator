@@ -83,6 +83,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [sharding]
 
+  connection-retry:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, networking]
+
   cross-site-sharded:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
