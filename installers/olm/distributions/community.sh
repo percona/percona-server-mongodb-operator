@@ -23,7 +23,7 @@ build_distribution_data() {
 		"backup IMAGE_BACKUP" \
 		"logcollector IMAGE_LOGCOLLECTOR" \
 		"mongod IMAGE_MONGOD80" \
-		"pmm IMAGE_PMM3_CLIENT" \
+		"pmm IMAGE_PMM_CLIENT" \
 		"clustersync IMAGE_CLUSTERSYNC"; do
 		set_release_image_ref ${image_ref} || return
 	done

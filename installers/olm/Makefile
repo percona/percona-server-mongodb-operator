@@ -32,9 +32,6 @@ CATALOG_PLATFORM ?= linux/amd64
 CATALOG_NAMESPACE ?= openshift-marketplace
 CATALOG_BUILD_PUSH ?= 1
 
-REPO_ROOT := $(shell git rev-parse --show-toplevel)
-KUSTOMIZE := $(REPO_ROOT)/bin/kustomize
-
 OS_KERNEL ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 OS_MACHINE ?= $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^x86_/amd/' -e 's/^aarch64$$/arm64/')
 SYSTEM := $(OS_KERNEL)-$(OS_MACHINE)
@@ -62,7 +59,7 @@ export BUNDLE_PLATFORM CONFIRM_PUSH BUNDLE_SKIP_DIGEST_FAILURE
 # Validation and Tool Helpers
 # ==============================================================================
 .PHONY: check-prereqs
-check-prereqs: check-version check-csv-version check-tools tools $(KUSTOMIZE)
+check-prereqs: check-version check-csv-version check-tools tools
 
 .PHONY: check-version
 check-version:
@@ -88,9 +85,6 @@ check-tools:
 			exit 1; \
 		fi; \
 	done
-
-$(KUSTOMIZE):
-	$(MAKE) -C ../.. bin/kustomize
 
 .PHONY: tools
 tools: $(TOOLS_DIR) $(TOOLS_DIR)/jq $(TOOLS_DIR)/operator-sdk $(TOOLS_DIR)/opm
@@ -124,7 +118,7 @@ check-bundle-type:
 		exit 1; \
 	fi
 
-generate-bundle: check-bundle-type tools $(KUSTOMIZE) check-version check-csv-version check-tools
+generate-bundle: check-bundle-type tools check-version check-csv-version check-tools
 	@echo "$(GREEN)Building $(BUNDLE_TYPE) bundle...$(RESET)"
 	@set -euo pipefail; \
 	manager_kustomization='../../config/manager/namespace/kustomization.yaml'; \

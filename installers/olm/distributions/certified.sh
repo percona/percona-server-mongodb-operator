@@ -109,9 +109,6 @@ validate_certified_tag() {
 			expected="${redhat_release}-backup"
 			;;
 		IMAGE_PMM_CLIENT)
-			expected="${redhat_release}-pmm"
-			;;
-		IMAGE_PMM3_CLIENT)
 			expected="${redhat_release}-pmm3"
 			;;
 		IMAGE_LOGCOLLECTOR)
@@ -201,7 +198,6 @@ build_redhat_related_images() {
 		IMAGE_MONGOD80 \
 		IMAGE_BACKUP \
 		IMAGE_PMM_CLIENT \
-		IMAGE_PMM3_CLIENT \
 		IMAGE_LOGCOLLECTOR \
 		IMAGE_CLUSTERSYNC; do
 		require_release_image "${key}"
@@ -216,8 +212,7 @@ build_redhat_related_images() {
 	add_related_image "IMAGE_MONGOD70" "mongod7.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod70_tag}" "${mongod70_tag}"
 	add_related_image "IMAGE_MONGOD60" "mongod6.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod60_tag}" "${mongod60_tag}"
 	add_related_image "IMAGE_BACKUP" "backup" "${redhat_containers_repository}" "${redhat_release}-backup"
-	add_related_image "IMAGE_PMM_CLIENT" "pmm" "${redhat_containers_repository}" "${redhat_release}-pmm"
-	add_related_image "IMAGE_PMM3_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
+	add_related_image "IMAGE_PMM_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
 	add_related_image "IMAGE_CLUSTERSYNC" "clustersync" "${redhat_containers_repository}" "${redhat_release}-clustersync"
 	add_related_image "IMAGE_LOGCOLLECTOR" "logcollector" "${redhat_containers_repository}" "${redhat_release}-logcollector-${logcollector_tag}" "${logcollector_tag}"
 	add_related_image "IMAGE_OPERATOR" "operator" "${redhat_operator_repository}" "${redhat_operator_tag}"
