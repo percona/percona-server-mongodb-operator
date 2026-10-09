@@ -19,6 +19,8 @@ import (
 
 var log = logf.Log.WithName("version")
 
+const cloudDetectionTimeout = 10 * time.Second
+
 type Platform string
 
 const (
@@ -70,14 +72,14 @@ var (
 
 // Server returns server version and platform (k8s|oc)
 // it performs API requests for the first invocation and then returns "cached" value
-func Server(cl clientcmd.Client) (*ServerVersion, error) {
+func Server(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error) {
 	mx.Lock()
 	defer mx.Unlock()
 	if cVersion != nil {
 		return cVersion, nil
 	}
 
-	v, err := GetServer(cl)
+	v, err := GetServer(ctx, cl)
 	if err != nil {
 		return nil, err
 	}
@@ -88,31 +90,35 @@ func Server(cl clientcmd.Client) (*ServerVersion, error) {
 }
 
 // GetServer make request to platform server and returns server version and platform (k8s|oc)
-func GetServer(cl clientcmd.Client) (*ServerVersion, error) {
+func GetServer(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error) {
 	client := cl.REST()
 
-	version, err := probePlatform(client)
+	version, err := probePlatform(ctx, client)
 	if err != nil {
 		return version, err
 	}
 
-	version.CloudProvider = DetectCloudProvider(context.TODO(), client, cl.Config())
+	// cloud detection is best-effort, don't let a stalled API server block startup
+	detectCtx, cancel := context.WithTimeout(ctx, cloudDetectionTimeout)
+	defer cancel()
+
+	version.CloudProvider = DetectCloudProvider(detectCtx, client, cl.Config())
 
 	return version, nil
 }
 
-func probePlatform(client rest.Interface) (*ServerVersion, error) {
+func probePlatform(ctx context.Context, client rest.Interface) (*ServerVersion, error) {
 	version := &ServerVersion{}
 	// oc 3.9
 	var err error
-	version.Info, err = probeAPI("/version/openshift", client)
+	version.Info, err = probeAPI(ctx, "/version/openshift", client)
 	if err == nil {
 		version.Platform = PlatformOpenshift
 		return version, nil
 	}
 
 	// oc 3.11+
-	version.Info, err = probeAPI("/oapi/v1", client)
+	version.Info, err = probeAPI(ctx, "/oapi/v1", client)
 	if err == nil {
 		version.Platform = PlatformOpenshift
 		version.Info.GitVersion = "undefined (v3.11+)"
@@ -120,7 +126,7 @@ func probePlatform(client rest.Interface) (*ServerVersion, error) {
 	}
 
 	// openshift 4.0
-	version.Info, err = probeAPI("/apis/quota.openshift.io", client)
+	version.Info, err = probeAPI(ctx, "/apis/quota.openshift.io", client)
 	if err == nil {
 		version.Platform = PlatformOpenshift
 		version.Info.GitVersion = "undefined (v4.0+)"
@@ -128,7 +134,7 @@ func probePlatform(client rest.Interface) (*ServerVersion, error) {
 	}
 
 	// k8s
-	version.Info, err = probeAPI("/version", client)
+	version.Info, err = probeAPI(ctx, "/version", client)
 	if err == nil {
 		version.Platform = PlatformKubernetes
 		return version, nil
@@ -286,9 +292,9 @@ func detectAKS(ctx context.Context, cfg *rest.Config) bool {
 	return false
 }
 
-func probeAPI(path string, client rest.Interface) (k8sversion.Info, error) {
+func probeAPI(ctx context.Context, path string, client rest.Interface) (k8sversion.Info, error) {
 	var vInfo k8sversion.Info
-	vBody, err := client.Get().AbsPath(path).Do(context.TODO()).Raw()
+	vBody, err := client.Get().AbsPath(path).Do(ctx).Raw()
 	if err != nil {
 		return vInfo, err
 	}

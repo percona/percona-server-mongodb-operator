@@ -72,15 +72,15 @@ func eventRegardingNameIndexer(o client.Object) []string {
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr)
+func Add(ctx context.Context, mgr manager.Manager) error {
+	r, err := newReconciler(ctx, mgr)
 	if err != nil {
 		return err
 	}
 
 	// the volume resize logic lists PVC events through the cached client,
 	// which requires the field to be indexed
-	err = mgr.GetFieldIndexer().IndexField(context.TODO(), &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
+	err = mgr.GetFieldIndexer().IndexField(ctx, &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
 	if err != nil {
 		return errors.Wrapf(err, "index events by %s", eventRegardingNameIndex)
 	}
@@ -89,20 +89,20 @@ func Add(mgr manager.Manager) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
+func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconciler, error) {
 	cli, err := clientcmd.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
-	sv, err := version.Server(cli)
+	sv, err := version.Server(ctx, cli)
 	if err != nil {
 		return nil, errors.Wrap(err, "get server version")
 	}
 
 	mgr.GetLogger().Info("server version", "platform", sv.String(), "version", sv.Info)
 
-	initImage, err := getOperatorPodImage(context.TODO())
+	initImage, err := getOperatorPodImage(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get operator pod image")
 	}

@@ -324,7 +324,7 @@ func TestGetServer(t *testing.T) {
 			cfg := &rest.Config{Host: srv.URL}
 			cl := &fakeCmdClient{rest: restClientFor(t, &rest.Config{Host: srv.URL}), cfg: cfg}
 
-			sv, err := GetServer(cl)
+			sv, err := GetServer(t.Context(), cl)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -465,7 +465,7 @@ func TestProbeAPI(t *testing.T) {
 			srv := httptest.NewServer(tc.handler)
 			t.Cleanup(srv.Close)
 
-			got, err := probeAPI("/version", restClientFor(t, &rest.Config{Host: srv.URL}))
+			got, err := probeAPI(t.Context(), "/version", restClientFor(t, &rest.Config{Host: srv.URL}))
 			if tc.wantErrMsg != "" {
 				require.ErrorContains(t, err, tc.wantErrMsg)
 				assert.Equal(t, k8sversion.Info{}, got)

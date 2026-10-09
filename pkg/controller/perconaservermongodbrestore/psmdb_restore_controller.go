@@ -36,7 +36,7 @@ import (
 
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
+func Add(ctx context.Context, mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	var svr *version.ServerVersion
-	svr, err = version.Server(r.clientcmd)
+	svr, err = version.Server(ctx, r.clientcmd)
 	if err != nil {
 		return rr, errors.Wrapf(err, "fetch server version")
 	}

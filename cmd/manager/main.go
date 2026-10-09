@@ -169,8 +169,10 @@ func main() {
 		}
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr); err != nil {
+	if err := controller.AddToManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "")
 		os.Exit(1)
 	}
@@ -185,7 +187,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
