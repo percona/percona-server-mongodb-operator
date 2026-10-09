@@ -139,12 +139,8 @@ MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
-check-deadcode: deadcode ## Report functions unreachable from main or from tests.
-	$(DEADCODE) -test ./...
-
-DEADCODE = $(shell pwd)/bin/deadcode
-deadcode: ## Download deadcode locally if necessary.
-	$(call go-get-tool,$(DEADCODE),golang.org/x/tools/cmd/deadcode@latest)
+check-deadcode: ## Report functions unreachable from main or from tests.
+	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
 
 UV = $(shell pwd)/bin/uv
 uv: ## Download uv locally if necessary.
