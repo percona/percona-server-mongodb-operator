@@ -31,13 +31,33 @@ func mergePEMBlocks(result []*pem.Block, toMerge []*pem.Block) ([]*pem.Block, er
 
 func hasBlock(data []*pem.Block, block *pem.Block) bool {
 	for _, b := range data {
-		if bytes.Equal(b.Bytes, block.Bytes) &&
-			reflect.DeepEqual(b.Headers, block.Headers) &&
-			b.Type == block.Type {
+		if equalBlock(b, block) {
 			return true
 		}
 	}
 	return false
+}
+
+func equalBlock(a, b *pem.Block) bool {
+	return bytes.Equal(a.Bytes, b.Bytes) &&
+		reflect.DeepEqual(a.Headers, b.Headers) &&
+		a.Type == b.Type
+}
+
+// EqualPEM reports whether a and b contain the same PEM blocks in the same order,
+// ignoring encoding differences such as whitespace. Inputs without PEM blocks are never equal.
+func EqualPEM(a, b []byte) bool {
+	aBlocks := decodePEMList(a)
+	bBlocks := decodePEMList(b)
+	if len(aBlocks) == 0 || len(aBlocks) != len(bBlocks) {
+		return false
+	}
+	for i := range aBlocks {
+		if !equalBlock(aBlocks[i], bBlocks[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func MergePEM(target []byte, toMerge ...[]byte) ([]byte, error) {
