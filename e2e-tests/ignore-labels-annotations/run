@@ -45,20 +45,24 @@ check_service() {
 	# `notIgnoredLabel` and `notIgnoredAnnotation` should be deleted
 	kubectl_bin patch "service/$svc_name" --type=json --patch '[
         {
-            "op": "add", 
-            "path": "/metadata/labels", 
-            "value": {
-                "notIgnoredLabel": "true",
-                "ignoredLabel": "true"
-            }
+            "op": "add",
+            "path": "/metadata/labels/notIgnoredLabel",
+            "value": "true"
         },
         {
-            "op": "add", 
-            "path": "/metadata/annotations", 
-            "value": {
-                "notIgnoredAnnotation": "true",
-                "ignoredAnnotation": "true"
-            }
+            "op": "add",
+            "path": "/metadata/labels/ignoredLabel",
+            "value": "true"
+        },
+        {
+            "op": "add",
+            "path": "/metadata/annotations/notIgnoredAnnotation",
+            "value": "true"
+        },
+        {
+            "op": "add",
+            "path": "/metadata/annotations/ignoredAnnotation",
+            "value": "true"
         }]'
 
 	sleep 7 # waiting for reconcile
