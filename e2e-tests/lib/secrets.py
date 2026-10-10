@@ -57,7 +57,7 @@ def cloud_secret_exists(conf_dir: Path | str | None = None) -> bool:
 
 def get_cloud_secret_default(conf_dir: Path | None = None) -> str:
     """Return default for SKIP_BACKUPS_TO_AWS_GCP_AZURE based on cloud-secret.yml existence."""
-    return "1" if cloud_secret_exists(conf_dir) else ""
+    return "" if cloud_secret_exists(conf_dir) else "1"
 
 
 def apply_s3_storage_secrets(conf_dir: str) -> None:
