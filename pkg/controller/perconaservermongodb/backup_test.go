@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -21,14 +20,14 @@ func TestIsBackupRunning(t *testing.T) {
 	)
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Name: crName, Namespace: ns,
 	}
 
 	backup := func(name, clusterName string, state api.BackupState) *api.PerconaServerMongoDBBackup {
 		return &api.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec:       api.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
-			Status:     api.PerconaServerMongoDBBackupStatus{State: state},
+			Name: name, Namespace: ns,
+			Spec:   api.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
+			Status: api.PerconaServerMongoDBBackupStatus{State: state},
 		}
 	}
 

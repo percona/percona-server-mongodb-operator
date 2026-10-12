@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -21,9 +20,7 @@ func TestContainers(t *testing.T) {
 	testEnvFrom := []corev1.EnvFromSource{
 		{
 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-configmap",
-				},
+				Name: "test-configmap",
 			},
 		},
 	}
@@ -100,10 +97,8 @@ func TestContainers(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: "default",
-				},
+				Name:      "my-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion:    version.Version(),
 					LogCollector: logColl,
@@ -136,32 +131,24 @@ func TestContainers(t *testing.T) {
 func TestContainersProbes(t *testing.T) {
 	logsLiveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-		},
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
 	}
 	logsReadiness := &corev1.Probe{
 		InitialDelaySeconds: 5,
-		ProbeHandler: corev1.ProbeHandler{
-			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt(2020)},
-		},
+		TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt(2020)},
 	}
 	rotateLiveness := &corev1.Probe{
 		InitialDelaySeconds: 20,
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-		},
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
 	}
 	rotateReadiness := &corev1.Probe{
 		InitialDelaySeconds: 3,
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-		},
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
 	}
 
 	newCR := func() *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster", Namespace: "default"},
+			Name: "my-cluster", Namespace: "default",
 			Spec: api.PerconaServerMongoDBSpec{
 				CRVersion: version.Version(),
 				Secrets:   &api.SecretsSpec{Users: "users-secret"},
@@ -303,9 +290,7 @@ func expectedContainers(
 				Name: "MONGODB_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "internal-my-cluster-users",
-						},
+						Name:     "internal-my-cluster-users",
 						Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
 						Optional: &boolFalse,
 					},
@@ -315,9 +300,7 @@ func expectedContainers(
 				Name: "MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "internal-my-cluster-users",
-						},
+						Name:     "internal-my-cluster-users",
 						Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
 						Optional: &boolFalse,
 					},

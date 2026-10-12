@@ -25,7 +25,7 @@ func TestCreateIssuer(t *testing.T) {
 	customIssuerName := "issuer-conf-name"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			TLS: &api.TLSSpec{
@@ -124,7 +124,7 @@ func TestCreateIssuer(t *testing.T) {
 
 func TestCreateCAIssuer(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			TLS: &api.TLSSpec{
@@ -149,7 +149,7 @@ func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
 	const issuerName = "user-cluster-issuer"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets:   &api.SecretsSpec{},
@@ -163,10 +163,8 @@ func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
 	}
 
 	userIssuer := &cm.ClusterIssuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        issuerName,
-			Annotations: map[string]string{"some-random-annotation": "true"},
-		},
+		Name:        issuerName,
+		Annotations: map[string]string{"some-random-annotation": "true"},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
 		},
@@ -189,7 +187,7 @@ func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
 	const issuerName = "user-issuer"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets:   &api.SecretsSpec{},
@@ -203,11 +201,9 @@ func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
 	}
 
 	userIssuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        issuerName,
-			Namespace:   cr.Namespace,
-			Annotations: map[string]string{"some-random-annotation": "true"},
-		},
+		Name:        issuerName,
+		Namespace:   cr.Namespace,
+		Annotations: map[string]string{"some-random-annotation": "true"},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
 		},
@@ -232,7 +228,7 @@ func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
 
 	newCR := func(name, namespace string) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Name: name, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
 				CRVersion: version.Version(),
 				Secrets:   &api.SecretsSpec{},
@@ -352,7 +348,7 @@ func TestCreateCertificate(t *testing.T) {
 	customIssuerGroup := "issuer-conf-group"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
 			Secrets: &api.SecretsSpec{
@@ -410,11 +406,9 @@ func TestCreateCertificate(t *testing.T) {
 
 func TestWaitForCerts(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "default",
-			UID:       "test-uid-123",
-		},
+		Name:      "test-cluster",
+		Namespace: "default",
+		UID:       "test-uid-123",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -428,30 +422,26 @@ func TestWaitForCerts(t *testing.T) {
 	}{
 		"with cert-manager managed secret": {
 			certificate: &cm.Certificate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					UID:       "cert-uid-456",
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				UID:       "cert-uid-456",
 				Spec: cm.CertificateSpec{
 					SecretName: certName,
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					Annotations: map[string]string{
-						cm.CertificateNameKey: certName,
-					},
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: cm.SchemeGroupVersion.String(),
-							Kind:       cm.CertificateKind,
-							Name:       certName,
-							UID:        "cert-uid-456",
-							Controller: new(true),
-						},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				Annotations: map[string]string{
+					cm.CertificateNameKey: certName,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: cm.SchemeGroupVersion.String(),
+						Kind:       cm.CertificateKind,
+						Name:       certName,
+						UID:        "cert-uid-456",
+						Controller: new(true),
 					},
 				},
 				Data: map[string][]byte{
@@ -463,22 +453,18 @@ func TestWaitForCerts(t *testing.T) {
 		},
 		"with cert-manager managed secret but without OwnerReferences": {
 			certificate: &cm.Certificate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					UID:       "cert-uid-456",
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				UID:       "cert-uid-456",
 				Spec: cm.CertificateSpec{
 					SecretName: certName,
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					Annotations: map[string]string{
-						cm.CertificateNameKey: certName,
-					},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				Annotations: map[string]string{
+					cm.CertificateNameKey: certName,
 				},
 				Data: map[string][]byte{
 					"ca.crt":  []byte("fake-ca-cert"),
@@ -490,10 +476,8 @@ func TestWaitForCerts(t *testing.T) {
 		"without cert-manager": {
 			certificate: nil,
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
 				Data: map[string][]byte{
 					"ca.crt":  []byte("fake-ca-cert"),
 					"tls.crt": []byte("fake-tls-cert"),

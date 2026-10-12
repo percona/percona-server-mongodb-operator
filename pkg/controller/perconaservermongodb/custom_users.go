@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -483,10 +482,8 @@ func getCustomUserSecret(ctx context.Context, cl client.Client, cr *api.PerconaS
 
 	if err != nil && k8serrors.IsNotFound(err) {
 		secret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: cr.Namespace,
-			},
+			Name:      secretName,
+			Namespace: cr.Namespace,
 		}
 
 		pass, err := s.GeneratePassword()

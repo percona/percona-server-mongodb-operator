@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
@@ -128,10 +127,8 @@ func TestMongosService(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
+				Name:      "test-cr",
+				Namespace: "test-ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Sharding: api.Sharding{
@@ -170,17 +167,13 @@ func TestMongosContainer(t *testing.T) {
 	cr.Spec.Sharding.Mongos.EnvFrom = []corev1.EnvFromSource{
 		{
 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-configmap",
-				},
+				Name:     "test-configmap",
 				Optional: new(false),
 			},
 		},
 		{
 			SecretRef: &corev1.SecretEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-secret",
-				},
+				Name:     "test-secret",
 				Optional: new(true),
 			},
 		},
@@ -331,10 +324,8 @@ func TestMongosServiceAnnotations(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
+				Name:      "test-cr",
+				Namespace: "test-ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Sharding: api.Sharding{
@@ -533,10 +524,8 @@ func TestMongosLogPVC(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
+				Name:      "test-cr",
+				Namespace: "test-ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Sharding: api.Sharding{
