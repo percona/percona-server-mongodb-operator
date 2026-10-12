@@ -50,6 +50,30 @@ wait_service_import() {
 	set -o xtrace
 }
 
+wait_mcs_dns() {
+	set +o xtrace
+	retry=0
+	local client_pod
+	client_pod=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	echo -n 'waiting for MCS DNS records to be resolvable'
+	for rs in rs0 cfg; do
+		for i in 0 1 2; do
+			local host="${cluster}-${rs}-${i}.${namespace}.svc.clusterset.local"
+			until kubectl exec "${client_pod}" -- getent hosts "${host}" >/dev/null 2>&1; do
+				let retry+=1
+				if [ $retry -ge 64 ]; then
+					echo max retry count $retry reached. ${host} is not resolvable, probably a problem with MCS DNS.
+					exit 1
+				fi
+				echo -n .
+				sleep 10
+			done
+		done
+	done
+	echo
+	set -o xtrace
+}
+
 wait_service_export() {
 	set +o xtrace
 	retry=0
@@ -151,7 +175,8 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/mu
 desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
-wait_cluster_consistency "${cluster}"
+wait_mcs_dns
+wait_cluster_consistency "${cluster}" 60
 
 desc "disable MCS and wait for exported/imported services to be removed"
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/multiCluster/enabled","value":false}]'
