@@ -276,6 +276,7 @@ spec:
                       debugLogLevels:
                         type: string
                       endpointUrl:
+                        maxLength: 2048
                         type: string
                       forcePathStyle:
                         type: boolean

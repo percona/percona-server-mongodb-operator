@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -381,24 +380,25 @@ func GetDefaultVersionServiceEndpoint() string {
 
 // PerconaServerMongoDBStatus defines the observed state of PerconaServerMongoDB
 type PerconaServerMongoDBStatus struct {
-	State              AppState                            `json:"state,omitempty"`
-	MongoVersion       string                              `json:"mongoVersion,omitempty"`
-	MongoImage         string                              `json:"mongoImage,omitempty"`
-	Message            string                              `json:"message,omitempty"`
-	Conditions         []ClusterCondition                  `json:"conditions,omitempty"`
-	Replsets           map[string]ReplsetStatus            `json:"replsets,omitempty"`
-	Mongos             *MongosStatus                       `json:"mongos,omitempty"`
-	ObservedGeneration int64                               `json:"observedGeneration,omitempty"`
-	BackupVersion      string                              `json:"backupVersion,omitempty"`
-	BackupImage        string                              `json:"backupImage,omitempty"`
-	BackupConfigHash   string                              `json:"backupConfigHash,omitempty"`
-	PMMStatus          AppState                            `json:"pmmStatus,omitempty"`
-	PMMVersion         string                              `json:"pmmVersion,omitempty"`
-	Host               string                              `json:"host,omitempty"`
-	Size               int32                               `json:"size"`
-	Ready              int32                               `json:"ready"`
-	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
-	Search             map[string]SearchStatus             `json:"search,omitempty"`
+	State                AppState                            `json:"state,omitempty"`
+	MongoVersion         string                              `json:"mongoVersion,omitempty"`
+	MongoImage           string                              `json:"mongoImage,omitempty"`
+	Message              string                              `json:"message,omitempty"`
+	Conditions           []ClusterCondition                  `json:"conditions,omitempty"`
+	Replsets             map[string]ReplsetStatus            `json:"replsets,omitempty"`
+	Mongos               *MongosStatus                       `json:"mongos,omitempty"`
+	ObservedGeneration   int64                               `json:"observedGeneration,omitempty"`
+	BackupVersion        string                              `json:"backupVersion,omitempty"`
+	BackupImage          string                              `json:"backupImage,omitempty"`
+	BackupConfigHash     string                              `json:"backupConfigHash,omitempty"`
+	PMMStatus            AppState                            `json:"pmmStatus,omitempty"`
+	PMMVersion           string                              `json:"pmmVersion,omitempty"`
+	Host                 string                              `json:"host,omitempty"`
+	Size                 int32                               `json:"size"`
+	Ready                int32                               `json:"ready"`
+	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	Search               map[string]SearchStatus             `json:"search,omitempty"`
+	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
 
 type ConditionStatus string
@@ -504,30 +504,6 @@ type PMMSpec struct {
 	// ReadinessProbe sets a readiness probe for the pmm-client container.
 	// When not set the pmm-client container has no readiness probe.
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
-}
-
-// HasSecret is used for PMM2. PMM2 is reaching its EOL.
-func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
-	if len(secret.Data) == 0 {
-		return false
-	}
-	s := sets.StringKeySet(secret.Data)
-	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
-		return true
-	}
-	return false
-}
-
-// ShouldUseAPIKeyAuth is used for PMM2. PMM2 is reaching its EOL.
-func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
-	if _, ok := secret.Data[PMMAPIKey]; !ok {
-		_, okl := secret.Data[PMMUserKey]
-		_, okp := secret.Data[PMMPasswordKey]
-		if okl && okp {
-			return false
-		}
-	}
-	return true
 }
 
 type MultiAZ struct {
@@ -1114,6 +1090,13 @@ type VaultSpec struct {
 	TLSSecret   string `json:"tlsSecret,omitempty"`
 	//+optional
 	SyncUsersSpec SyncUsersSpec `json:"syncUsers"`
+	//+optional
+	ReinitInterval *metav1.Duration `json:"reinitInterval,omitempty"`
+	// RequestInterval controls how often the operator queries Vault for the users secret.
+	// If unset, Vault is queried on every reconciliation. Set this to reduce the request
+	// rate against Vault for clusters that don't need near-instant credential propagation.
+	//+optional
+	RequestInterval *metav1.Duration `json:"requestInterval,omitempty"`
 }
 
 type SyncUsersSpec struct {
@@ -1154,6 +1137,21 @@ type MongosSpec struct {
 	Env                      []corev1.EnvVar            `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	Logs                     *MongosLogsSpec            `json:"logs,omitempty"`
+}
+
+type MongosLogsSpec struct {
+	// PersistentVolumeClaim specifies the PVC for storing Mongos logs.
+	//
+	// +kubebuilder:validation:XValidation:rule="has(self.resources) && has(self.resources.requests) && 'storage' in self.resources.requests",message="logs.persistentVolumeClaim.resources.requests.storage must be set"
+	PersistentVolumeClaim *PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
+func (ms *MongosSpec) LogStorage() *PVCSpec {
+	if ms == nil || ms.Logs == nil {
+		return nil
+	}
+	return ms.Logs.PersistentVolumeClaim
 }
 
 func (ms MongosSpec) GetPort() int32 {
@@ -1300,9 +1298,10 @@ type S3Retryer struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket                string                  `json:"bucket"`
-	Prefix                string                  `json:"prefix,omitempty"`
-	Region                string                  `json:"region,omitempty"`
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix,omitempty"`
+	Region string `json:"region,omitempty"`
+	// +kubebuilder:validation:MaxLength=2048
 	EndpointURL           string                  `json:"endpointUrl,omitempty"`
 	CredentialsSecret     string                  `json:"credentialsSecret,omitempty"`
 	UploadPartSize        int                     `json:"uploadPartSize,omitempty"`
@@ -1458,6 +1457,7 @@ const (
 	BackupStorageOCI        BackupStorageType = "oci"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || !has(self.s3) || !has(self.s3.endpointUrl) || !self.s3.endpointUrl.contains('storage.googleapis.com')",message="S3 compatibility for Google Cloud Storage is not supported, use type 'gcs' instead"
 type BackupStorageSpec struct {
 	Type BackupStorageType   `json:"type"`
 	Main bool                `json:"main,omitempty"`
@@ -1509,9 +1509,10 @@ type BackupConfig struct {
 }
 
 type BackupSpec struct {
-	Enabled                  bool                         `json:"enabled"`
-	Annotations              map[string]string            `json:"annotations,omitempty"`
-	Labels                   map[string]string            `json:"labels,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:validation:MaxProperties=64
 	Storages                 map[string]BackupStorageSpec `json:"storages,omitempty"`
 	Image                    string                       `json:"image"`
 	Tasks                    []BackupTaskSpec             `json:"tasks,omitempty"`
@@ -1697,9 +1698,6 @@ const (
 )
 
 const (
-	PMMUserKey     = "PMM_SERVER_USER"
-	PMMPasswordKey = "PMM_SERVER_PASSWORD"
-	PMMAPIKey      = "PMM_SERVER_API_KEY"
 	PMMServerToken = "PMM_SERVER_TOKEN"
 )
 
@@ -1714,9 +1712,6 @@ const (
 	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	EnvPMMServerUser                 = PMMUserKey
-	EnvPMMServerPassword             = PMMPasswordKey
-	EnvPMMServerAPIKey               = PMMAPIKey
 	EnvPMMServerToken                = PMMServerToken
 	EnvMongoDBSearchUser             = "MONGODB_SEARCH_USER"
 	EnvMongoDBSearchPassword         = "MONGODB_SEARCH_PASSWORD"

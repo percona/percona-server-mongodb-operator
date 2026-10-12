@@ -193,7 +193,7 @@ assert_event_present() {
 
 apply_backup_named() {
 	local name="$1"
-	yq eval ".metadata.name = \"${name}\"" "${test_dir}/conf/backup-minio.yml" \
+	yq eval ".metadata.name = \"${name}\"" "${test_dir}/conf/backup-local-s3.yml" \
 		| kubectl_bin apply -f -
 }
 
@@ -207,13 +207,13 @@ apply_restore_named() {
 desc 'create infra'
 create_infra "${namespace}"
 
-desc 'deploy minio (storage for target-cluster backups)'
-deploy_minio
+desc 'deploy local-s3 (storage for target-cluster backups)'
+deploy_s3_storage
 
-desc 'apply users secrets, minio secret and start client'
+desc 'apply users secrets, local-s3 secret and start client'
 kubectl_bin apply \
 	-f "${test_dir}/conf/secrets.yml" \
-	-f "${conf_dir}/minio-secret.yml" \
+	-f "${conf_dir}/s3-secret.yml" \
 	-f "${conf_dir}/client.yml"
 
 desc "deploy ${source_cluster}"

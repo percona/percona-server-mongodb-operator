@@ -290,3 +290,41 @@ func TestRestoreCheckFieldsBackupSourceOSS(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreCheckFieldsBackupSourceS3GCS(t *testing.T) {
+	tests := map[string]struct {
+		endpointURL string
+		wantErr     string
+	}{
+		"aws s3 source": {
+			endpointURL: "",
+		},
+		"gcs endpoint": {
+			endpointURL: "https://storage.googleapis.com",
+			wantErr:     "S3 compatibility for Google Cloud Storage is not supported, use backupSource.gcs instead",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := &PerconaServerMongoDBRestore{
+				Spec: PerconaServerMongoDBRestoreSpec{
+					ClusterName: "some-cluster",
+					BackupSource: &PerconaServerMongoDBBackupStatus{
+						Destination: "s3://some-bucket/some-prefix/2026-06-17T10:00:00Z",
+						S3: &BackupStorageS3Spec{
+							Bucket:      "some-bucket",
+							EndpointURL: tt.endpointURL,
+						},
+					},
+				},
+			}
+			err := r.CheckFields(defs.LogicalBackup)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
+}

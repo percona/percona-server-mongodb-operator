@@ -11,12 +11,12 @@ newpassencrypted=$(echo -n "$newpass" | base64)
 
 create_infra "$namespace"
 
-deploy_minio
+deploy_s3_storage
 
 desc 'create secrets and start client'
 kubectl_bin apply -f "${conf_dir}/client.yml" \
 	-f "${test_dir}/conf/secrets.yml" \
-	-f "${conf_dir}/minio-secret.yml"
+	-f "${conf_dir}/s3-secret.yml"
 
 cluster="some-name-rs0"
 desc "create first PSMDB cluster $cluster"
@@ -24,7 +24,7 @@ apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'Check if all 3 Pods started'
 wait_for_running $cluster 3
 
-backup_name="backup-minio"
+backup_name="backup-local-s3"
 
 desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
@@ -62,7 +62,7 @@ check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'run backup'
-run_backup minio
+run_backup local-s3
 wait_backup "$backup_name"
 
 desc 'change MONGODB_USER_ADMIN_PASSWORD'

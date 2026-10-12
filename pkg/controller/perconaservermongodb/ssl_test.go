@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"testing"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,10 +21,8 @@ import (
 
 func newTestCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets: &api.SecretsSpec{
@@ -42,12 +41,10 @@ func newTestCR() *api.PerconaServerMongoDB {
 
 func TestCurrentSSLAnnotation(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -97,12 +94,10 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 
 func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -117,20 +112,16 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	}
 
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -195,20 +186,16 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 
 	// Now create secrets and call again - TLSSecretsReady should be true
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -283,4 +270,192 @@ func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
 		assert.Zero(t, cm.ApplyCertificateCalls)
 		assert.Zero(t, cm.WaitForCertsCalls)
 	})
+}
+
+func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
+	newClusterIssuerCR := func(crVersion string) *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.CRVersion = crVersion
+		cr.Spec.TLS = &api.TLSSpec{
+			IssuerConf: cmmeta.IssuerReference{
+				Name: "user-cluster-issuer",
+				Kind: cm.ClusterIssuerKind,
+			},
+		}
+		return cr
+	}
+
+	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
+		return &cm.ClusterIssuer{
+			Name:   "user-cluster-issuer",
+			Labels: labels,
+		}
+	}
+
+	t.Run("user created cluster issuer is used as is", func(t *testing.T) {
+		cr := newClusterIssuerCR(version.Version())
+		r := buildFakeClient(cr, clusterIssuer(nil))
+		cmCtrl := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cmCtrl)
+		require.NoError(t, err)
+
+		assert.Zero(t, cmCtrl.ApplyCAIssuerCalls)
+		assert.Zero(t, cmCtrl.ApplyIssuerCalls)
+		assert.Equal(t, []string{"user-cluster-issuer", "user-cluster-issuer"}, cmCtrl.IssuerRefNames)
+		assert.Equal(t, []string{cm.ClusterIssuerKind, cm.ClusterIssuerKind}, cmCtrl.IssuerRefKinds)
+	})
+
+	t.Run("operator owned cluster issuer is reconciled", func(t *testing.T) {
+		cr := newClusterIssuerCR(version.Version())
+		r := buildFakeClient(cr, clusterIssuer(naming.Labels()))
+		cmCtrl := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cmCtrl)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, cmCtrl.ApplyCAIssuerCalls)
+		assert.Equal(t, 1, cmCtrl.ApplyIssuerCalls)
+	})
+
+	t.Run("missing cluster issuer is created by the operator", func(t *testing.T) {
+		cr := newClusterIssuerCR(version.Version())
+		r := buildFakeClient(cr)
+		cmCtrl := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cmCtrl)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, cmCtrl.ApplyCAIssuerCalls)
+		assert.Equal(t, 1, cmCtrl.ApplyIssuerCalls)
+	})
+
+	t.Run("old cr version keeps ClusterIssuer in issuerRef", func(t *testing.T) {
+		cr := newClusterIssuerCR("1.22.0")
+		r := buildFakeClient(cr, clusterIssuer(nil))
+		cmCtrl := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cmCtrl)
+		require.NoError(t, err)
+
+		assert.Zero(t, cmCtrl.ApplyIssuerCalls)
+		assert.Equal(t, []string{cm.ClusterIssuerKind, cm.ClusterIssuerKind}, cmCtrl.IssuerRefKinds)
+	})
+
+	t.Run("old cr version does not fall back to namespaced issuers", func(t *testing.T) {
+		cr := newClusterIssuerCR("1.22.0")
+		r := buildFakeClient(cr)
+		cmCtrl := faketls.NewCertManagerController(nil, nil, false).(*faketls.CertManagerController)
+
+		_, err := r.applyCertManagerCertificates(t.Context(), cr, cmCtrl)
+		require.NoError(t, err)
+
+		assert.Zero(t, cmCtrl.ApplyCAIssuerCalls)
+		assert.Zero(t, cmCtrl.ApplyIssuerCalls)
+		assert.Equal(t, []string{cm.ClusterIssuerKind, cm.ClusterIssuerKind}, cmCtrl.IssuerRefKinds)
+	})
+}
+
+func TestIsExternalIssuer(t *testing.T) {
+	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
+		return &cm.ClusterIssuer{
+			Name:   "user-cluster-issuer",
+			Labels: labels,
+		}
+	}
+
+	issuer := func(labels map[string]string) *cm.Issuer {
+		return &cm.Issuer{
+			Name:      "user-issuer",
+			Namespace: "test-ns",
+			Labels:    labels,
+		}
+	}
+
+	tests := []struct {
+		name      string
+		crVersion string
+		tls       *api.TLSSpec
+		objects   []client.Object
+		want      bool
+		wantErr   string
+	}{
+		{
+			name: "no tls spec",
+			tls:  nil,
+		},
+		{
+			name: "namespaced issuer",
+			tls:  &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "issuer", Kind: cm.IssuerKind}},
+		},
+		{
+			name: "unknown issuer kind",
+			tls:  &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "external-issuer", Kind: "AWSPCAIssuer"}},
+			want: true,
+		},
+		{
+			name:    "unknown issuer kind without name",
+			tls:     &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Kind: "AWSPCAIssuer"}},
+			wantErr: "external issuer requires tls.issuerConf.name",
+		},
+		{
+			name:    "user created namespaced issuer",
+			tls:     &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-issuer", Kind: cm.IssuerKind}},
+			objects: []client.Object{issuer(nil)},
+			want:    true,
+		},
+		{
+			name:    "operator owned namespaced issuer",
+			tls:     &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-issuer", Kind: cm.IssuerKind}},
+			objects: []client.Object{issuer(naming.Labels())},
+		},
+		{
+			name:      "user created namespaced issuer on old cr version",
+			crVersion: "1.22.0",
+			tls:       &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-issuer", Kind: cm.IssuerKind}},
+			objects:   []client.Object{issuer(nil)},
+			want:      true,
+		},
+		{
+			name:    "user created cluster issuer",
+			tls:     &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-cluster-issuer", Kind: cm.ClusterIssuerKind}},
+			objects: []client.Object{clusterIssuer(nil)},
+			want:    true,
+		},
+		{
+			name:    "operator owned cluster issuer",
+			tls:     &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-cluster-issuer", Kind: cm.ClusterIssuerKind}},
+			objects: []client.Object{clusterIssuer(naming.Labels())},
+		},
+		{
+			name: "missing cluster issuer",
+			tls:  &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-cluster-issuer", Kind: cm.ClusterIssuerKind}},
+		},
+		{
+			name:      "missing cluster issuer on old cr version",
+			crVersion: "1.22.0",
+			tls:       &api.TLSSpec{IssuerConf: cmmeta.IssuerReference{Name: "user-cluster-issuer", Kind: cm.ClusterIssuerKind}},
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newTestCR()
+			if tt.crVersion != "" {
+				cr.Spec.CRVersion = tt.crVersion
+			}
+			cr.Spec.TLS = tt.tls
+			r := buildFakeClient(append([]client.Object{cr}, tt.objects...)...)
+
+			external, err := r.isExternalIssuer(t.Context(), cr)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, external)
+		})
+	}
 }

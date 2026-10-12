@@ -68,6 +68,31 @@ wait_service_export() {
 	set -o xtrace
 }
 
+# Wait until ServiceExport/ServiceImport objects are gone before the cluster is
+# deregistered from the fleet. Once the membership is deleted the gke-mcs
+# controllers stop clearing their finalizers, so the namespace would otherwise
+# get stuck in Terminating and hang the whole job until the pipeline timeout.
+wait_mcs_cleanup() {
+	set +o xtrace
+	retry=0
+	echo -n 'waiting for MCS services to be removed'
+	until [[ "$(kubectl_bin get serviceexport,serviceimport --ignore-not-found 2>/dev/null | grep -v 'NAME' | wc -l)" -eq "0" ]]; do
+		let retry+=1
+		if [ $retry -ge 30 ]; then
+			echo
+			echo "MCS objects still present after ${retry} retries; clearing finalizers"
+			for name in $(kubectl_bin get serviceexport,serviceimport -o name --ignore-not-found); do
+				kubectl_bin patch "$name" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+			done
+			break
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo
+	set -o xtrace
+}
+
 desc "Register Kubernetes cluster"
 
 cat <<EOF | add_arch_to_podspecs - | kubectl_bin -n default apply -f -
@@ -127,6 +152,10 @@ desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
 wait_cluster_consistency "${cluster}"
+
+desc "disable MCS and wait for exported/imported services to be removed"
+kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/multiCluster/enabled","value":false}]'
+wait_mcs_cleanup
 
 desc "delete cluster membership"
 gcloud container fleet memberships delete $k8s_cluster_name --quiet

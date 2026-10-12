@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"time"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -48,18 +47,17 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 	}
 
 	msSts := psmdb.MongosStatefulset(cr)
+	if err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts); k8sErrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
+	}
 
-	for {
-		err = r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
-		if err != nil && !k8sErrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get statefulset %s", msSts.Name)
-		}
-
-		if msSts.ObjectMeta.Generation == msSts.Status.ObservedGeneration {
-			break
-		}
-
-		time.Sleep(1 * time.Second)
+	if msSts.Generation != msSts.Status.ObservedGeneration {
+		log.Info("waiting for mongos statefulset to be observed",
+			"generation", msSts.Generation,
+			"observedGeneration", msSts.Status.ObservedGeneration)
+		return nil
 	}
 
 	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {

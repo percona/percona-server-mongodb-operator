@@ -14,7 +14,6 @@ import (
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -42,6 +41,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -63,12 +63,13 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBBackup{
-		client:     mgr.GetClient(),
-		apiReader:  mgr.GetAPIReader(),
-		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
-		clientcmd:  cli,
-		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		client:      mgr.GetClient(),
+		apiReader:   mgr.GetAPIReader(),
+		scheme:      mgr.GetScheme(),
+		newPBMFunc:  backup.NewPBM,
+		clientcmd:   cli,
+		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -101,7 +102,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -116,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	defer log.V(1).Info("Reconcile finished")
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
@@ -473,28 +475,6 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 			}
 		}
 
-		if strings.Contains(s3Conf.EndpointURL, naming.GCSEndpointURL) {
-			gcsConf := &gcs.Config{
-				Bucket:    cr.Status.S3.Bucket,
-				Prefix:    cr.Status.S3.Prefix,
-				ChunkSize: cr.Status.S3.UploadPartSize,
-			}
-
-			if cr.Status.S3.CredentialsSecret != "" {
-				gcsSecret, err := secret(ctx, r.client, cr.Namespace, cr.Status.S3.CredentialsSecret)
-				if err != nil {
-					return nil, errors.Wrap(err, "get s3 credentials secret")
-				}
-
-				gcsConf.Credentials = gcs.Credentials{
-					HMACAccessKey: storage.MaskedString(gcsSecret.Data[backup.AWSAccessKeySecretKey]),
-					HMACSecret:    storage.MaskedString(gcsSecret.Data[backup.AWSSecretAccessKeySecretKey]),
-				}
-			}
-
-			return gcs.New(gcsConf, "", nil)
-		}
-
 		if len(cr.Status.S3.ServerSideEncryption.SSECustomerAlgorithm) != 0 {
 			switch {
 			case len(cr.Status.S3.ServerSideEncryption.SSECustomerKey) != 0:
@@ -635,10 +615,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 
 func secret(ctx context.Context, cl client.Client, namespace, secretName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-		},
+		Name:      secretName,
+		Namespace: namespace,
 	}
 	err := cl.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 	return secret, err
@@ -835,10 +813,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteVolumeSnapshots(ctx context.
 
 	for _, snapshot := range cr.Status.Snapshots {
 		snapshot := &volumesnapshotv1.VolumeSnapshot{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      snapshot.SnapshotName,
-				Namespace: cr.Namespace,
-			},
+			Name:      snapshot.SnapshotName,
+			Namespace: cr.Namespace,
 		}
 		err := r.client.Delete(ctx, snapshot)
 		if client.IgnoreNotFound(err) != nil {

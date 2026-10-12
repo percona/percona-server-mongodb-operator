@@ -113,7 +113,7 @@ check_vector_search() {
 
 main() {
 	create_infra "${namespace}"
-	deploy_minio
+	deploy_s3_storage
 	apply_s3_storage_secrets
 
 	desc 'create secrets and start client'
@@ -157,10 +157,10 @@ main() {
 	wait_for_pbm_operations "${cluster}"
 
 	desc 'run physical backup'
-	backup_name="backup-minio"
-	run_backup minio "${backup_name}" 'physical'
+	backup_name="backup-local-s3"
+	run_backup local-s3 "${backup_name}" 'physical'
 	wait_backup "${backup_name}"
-	check_backup_in_storage "${backup_name}" minio rs0
+	check_backup_in_storage "${backup_name}" local-s3 rs0
 
 	desc 'drop collections'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"

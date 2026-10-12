@@ -23,55 +23,55 @@ spec:
 EOF
 
 ###############################################################################
-# Phase 1: First MinIO
+# Phase 1: First SeaweedFS instance
 ###############################################################################
 
-desc 'Generate certificate for first MinIO via cert-manager'
+desc 'Generate certificate for first SeaweedFS instance via cert-manager'
 
 kubectl_bin apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: minio-cert
+  name: s3-cert
   namespace: ${namespace}
 spec:
-  secretName: minio-tls-temp
+  secretName: s3-tls-temp
   issuerRef:
     name: selfsigned-issuer
     kind: Issuer
-  commonName: minio-service
+  commonName: s3-storage-all-in-one
   dnsNames:
-  - minio-service
-  - minio-service.${namespace}
-  - minio-service.${namespace}.svc
-  - minio-service.${namespace}.svc.cluster.local
+  - s3-storage-all-in-one
+  - s3-storage-all-in-one.${namespace}
+  - s3-storage-all-in-one.${namespace}.svc
+  - s3-storage-all-in-one.${namespace}.svc.cluster.local
   usages:
   - digital signature
   - key encipherment
   - server auth
 EOF
 
-kubectl_bin wait --for=condition=Ready certificate/minio-cert \
+kubectl_bin wait --for=condition=Ready certificate/s3-cert \
   -n ${namespace} --timeout=120s
 
-kubectl_bin get secret minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/minio-cert.pem
+kubectl_bin get secret s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/s3-cert.pem
 
-kubectl_bin get secret minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/minio-key.pem
+kubectl_bin get secret s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/s3-key.pem
 
-kubectl_bin create secret generic minio-tls -n ${namespace} \
-  --from-file=public.crt=/tmp/minio-cert.pem \
-  --from-file=private.key=/tmp/minio-key.pem
+kubectl_bin create secret tls s3-tls -n ${namespace} \
+  --cert=/tmp/s3-cert.pem \
+  --key=/tmp/s3-key.pem
 
-kubectl_bin create secret generic minio-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/minio-cert.pem
+kubectl_bin create secret generic s3-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/s3-cert.pem
 
-desc 'Deploy first MinIO with TLS'
-deploy_minio minio-tls
+desc 'Deploy first SeaweedFS instance with TLS'
+deploy_s3_storage s3-tls
 apply_s3_storage_secrets
 
-kubectl_bin apply -f "${test_dir}/conf/secondary-minio-secret.yml"
+kubectl_bin apply -f "${test_dir}/conf/secondary-s3-secret.yml"
 
 ###############################################################################
 # Phase 1: Single CA bundle test
@@ -104,51 +104,51 @@ cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -
 [ "$cert_count" = "1" ]
 
 ###############################################################################
-# Phase 2: Second MinIO
+# Phase 2: Second SeaweedFS instance
 ###############################################################################
 
-desc 'Generate certificate for secondary MinIO'
+desc 'Generate certificate for secondary SeaweedFS instance'
 
 kubectl_bin apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: secondary-minio-cert
+  name: secondary-s3-cert
   namespace: ${namespace}
 spec:
-  secretName: secondary-minio-tls-temp
+  secretName: secondary-s3-tls-temp
   issuerRef:
     name: selfsigned-issuer
     kind: Issuer
-  commonName: secondary-minio-service
+  commonName: secondary-s3-storage-all-in-one
   dnsNames:
-  - secondary-minio-service
-  - secondary-minio-service.${namespace}
-  - secondary-minio-service.${namespace}.svc
-  - secondary-minio-service.${namespace}.svc.cluster.local
+  - secondary-s3-storage-all-in-one
+  - secondary-s3-storage-all-in-one.${namespace}
+  - secondary-s3-storage-all-in-one.${namespace}.svc
+  - secondary-s3-storage-all-in-one.${namespace}.svc.cluster.local
   usages:
   - digital signature
   - key encipherment
   - server auth
 EOF
 
-kubectl_bin wait --for=condition=Ready certificate/secondary-minio-cert \
+kubectl_bin wait --for=condition=Ready certificate/secondary-s3-cert \
   -n ${namespace} --timeout=120s
 
-kubectl_bin get secret secondary-minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/secondary-minio-cert.pem
+kubectl_bin get secret secondary-s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/secondary-s3-cert.pem
 
-kubectl_bin get secret secondary-minio-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/secondary-minio-key.pem
+kubectl_bin get secret secondary-s3-tls-temp -n ${namespace} \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/secondary-s3-key.pem
 
-kubectl_bin create secret generic secondary-minio-tls -n ${namespace} \
-  --from-file=public.crt=/tmp/secondary-minio-cert.pem \
-  --from-file=private.key=/tmp/secondary-minio-key.pem
+kubectl_bin create secret tls secondary-s3-tls -n ${namespace} \
+  --cert=/tmp/secondary-s3-cert.pem \
+  --key=/tmp/secondary-s3-key.pem
 
-kubectl_bin create secret generic secondary-minio-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/secondary-minio-cert.pem
+kubectl_bin create secret generic secondary-s3-ca-bundle -n ${namespace} \
+  --from-file=ca.crt=/tmp/secondary-s3-cert.pem
 
-deploy_minio "secondary-minio-tls" "secondary-minio-service"
+deploy_s3_storage "secondary-s3-tls" "secondary-s3-storage"
 
 desc "Add second storage (secondary)"
 
@@ -160,14 +160,14 @@ kubectl_bin patch psmdb ${cluster} -n ${namespace} --type=merge -p '
         "secondary": {
           "type": "minio",
           "minio": {
-            "credentialsSecret": "secondary-minio-secret",
+            "credentialsSecret": "secondary-s3-secret",
             "region": "us-east-1",
             "bucket": "operator-testing",
-            "endpointUrl": "https://secondary-minio-service:9000",
+            "endpointUrl": "https://secondary-s3-storage-all-in-one:8443",
             "secure": true,
             "insecureSkipTLSVerify": false,
             "caBundle": {
-              "name": "secondary-minio-ca-bundle",
+              "name": "secondary-s3-ca-bundle",
               "key": "ca.crt"
             }
           }
@@ -198,11 +198,11 @@ run_mongo_tls \
   'db.getSiblingDB("myApp").test.insert({ x: 100500 })' \
   "myApp:myPass@${cluster}-rs0.${namespace}"
 
-backup_name_single="backup-minio"
-run_backup minio ${backup_name_single} 'physical'
+backup_name_single="backup-local-s3"
+run_backup local-s3 ${backup_name_single} 'physical'
 wait_backup "${backup_name_single}"
 
-check_backup_in_storage ${backup_name_single} minio rs0 filelist.pbm https
+check_backup_in_storage ${backup_name_single} local-s3 rs0 filelist.pbm https
 
 run_mongo_tls \
   'db.getSiblingDB("myApp").test.drop()' \
@@ -211,8 +211,8 @@ run_mongo_tls \
 run_restore ${backup_name_single}
 run_recovery_check ${backup_name_single} "" "" "true"
 
-rm -f /tmp/minio-cert.pem /tmp/minio-key.pem
-rm -f /tmp/secondary-minio-cert.pem /tmp/secondary-minio-key.pem
+rm -f /tmp/s3-cert.pem /tmp/s3-key.pem
+rm -f /tmp/secondary-s3-cert.pem /tmp/secondary-s3-key.pem
 
 destroy "${namespace}"
 

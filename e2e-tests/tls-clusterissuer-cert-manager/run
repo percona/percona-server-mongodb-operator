@@ -46,6 +46,45 @@ delete_clusterissuer_rbac() {
 	kubectl_bin delete clusterrole "${cluster_issuer_name}-reader" --ignore-not-found
 }
 
+check_issuer_not_created() {
+	local issuer_name=$1
+	local found
+
+	found=$(kubectl_bin get issuer "$issuer_name" --ignore-not-found -o 'jsonpath={.metadata.name}')
+
+	if [ -n "$found" ]; then
+		echo "Issuer $issuer_name should not be created when ClusterIssuer is configured"
+		exit 1
+	fi
+}
+
+check_certificates_not_reissued() {
+	local wait_time=$1
+	shift
+	local certificates=("$@")
+	local revisions=()
+	local certificate
+	local new_revision
+	local i
+
+	for certificate in "${certificates[@]}"; do
+		wait_certificate "$certificate"
+		revisions+=("$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')")
+	done
+
+	sleep "$wait_time"
+
+	for i in "${!certificates[@]}"; do
+		certificate="${certificates[$i]}"
+		new_revision=$(kubectl_bin get certificate "$certificate" -o 'jsonpath={.status.revision}')
+		if [ "${revisions[$i]}" != "$new_revision" ]; then
+			echo "Certificate $certificate is continuously reissued: revision ${revisions[$i]} -> $new_revision"
+			kubectl_bin describe certificate "$certificate"
+			exit 1
+		fi
+	done
+}
+
 check_operator_cannot_read_clusterissuers() {
 	local operator_sa=${1:-percona-server-mongodb-operator}
 	local can_i
@@ -58,7 +97,7 @@ check_operator_cannot_read_clusterissuers() {
 	exit_status=$?
 	set -e
 
-	if [ "$exit_status" -eq 0 ] || [[ "$can_i" != no* ]]; then
+	if [ "$exit_status" -eq 0 ] || [[ $can_i != no* ]]; then
 		echo "Operator service account should not be able to get clusterissuers.cert-manager.io"
 		echo "$can_i"
 		exit 1
@@ -141,9 +180,45 @@ main() {
 
 	kubectl delete pvc --all
 
-	desc 'step 3: operator creates its own ClusterIssuer and certificates when no user ClusterIssuer exists'
+	desc 'step 3: operator issues certificates with the user ClusterIssuer and leaves it untouched'
 	create_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
 	create_clusterissuer_rbac "$cluster-psmdb-issuer"
+
+	kubectl_bin delete secret "$cluster-ssl-old" "$cluster-ssl-internal-old" --ignore-not-found
+
+	desc "recreate PSMDB cluster $cluster with clusterissuer RBAC"
+	apply_cluster "$test_dir/conf/$cluster.yml"
+
+	desc 'check if all Pods started'
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'compare certificates issued by the user clusterissuer'
+	compare_kubectl "certificate/${cluster}-ssl" "-custom"
+	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
+
+	desc 'compare clusterissuers are not overwritten'
+	compare_kubectl "clusterissuer/$cluster-psmdb-ca-issuer" "-custom"
+	compare_kubectl "clusterissuer/$cluster-psmdb-issuer" "-custom"
+
+	desc 'check operator does not create namespaced issuers'
+	check_issuer_not_created "$cluster-psmdb-issuer"
+	check_issuer_not_created "$cluster-psmdb-ca-issuer"
+
+	desc 'check certificates are not continuously reissued'
+	check_certificates_not_reissued 60 "$cluster-ssl" "$cluster-ssl-internal"
+
+	desc 'check cluster is still ready'
+	wait_for_cluster_state "${cluster}" "ready"
+
+	desc 'delete cluster'
+	kubectl delete psmdb --all
+	wait_for_delete psmdb/$cluster 180
+
+	kubectl delete pvc --all
+
+	desc 'step 4: operator creates its own ClusterIssuer and certificates when no user ClusterIssuer exists'
 
 	desc 'delete custom cert-manager issuers and certificates'
 	kubectl_bin delete -f "$test_dir/conf/some-name-psmdb-ca-issuer.yml" --ignore-not-found

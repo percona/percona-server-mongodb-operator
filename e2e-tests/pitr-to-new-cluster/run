@@ -11,7 +11,7 @@ set_debug
 
 source_cluster="some-name-source"
 target_cluster="some-name-target"
-backup_name_minio="backup-minio"
+backup_name_local_s3="backup-local-s3"
 
 create_user() {
 	local cluster=$1
@@ -96,13 +96,13 @@ check_if_resync_triggered() {
 
 setup_infra() {
 	create_infra $namespace
-	deploy_minio
+	deploy_s3_storage
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f ${conf_dir}/secrets.yml \
 		-f ${conf_dir}/client.yml \
-		-f ${conf_dir}/minio-secret.yml
+		-f ${conf_dir}/s3-secret.yml
 }
 
 setup_source_cluster() {
@@ -122,11 +122,11 @@ setup_source_cluster() {
 
 	compare_mongo_cmd "find" "myApp:myPass@${source_cluster}-rs0.${namespace}"
 
-	run_backup ${source_cluster} ${backup_name_minio} logical
+	run_backup ${source_cluster} ${backup_name_local_s3} logical
 
 	sleep_with_log 70 "wait for oplog chunks to be uploaded"
 
-	run_backup ${source_cluster} ${backup_name_minio} physical
+	run_backup ${source_cluster} ${backup_name_local_s3} physical
 
 	desc "write data for PiTR"
 
@@ -155,55 +155,55 @@ setup_target_cluster() {
 }
 
 test_case_1() {
-	run_restore ${target_cluster} ${backup_name_minio} logical
+	run_restore ${target_cluster} ${backup_name_local_s3} logical
 
-	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "requested" 0
+	wait_restore "${backup_name_local_s3}-logical" "${target_cluster}" "requested" 0
 	compare_pbm_config ${target_cluster} source
 	log "Backup source is set as main storage during restore: OK"
 
 	local now_ts=$(date +%s)
 
-	wait_restore "${backup_name_minio}-logical" "${target_cluster}" "ready"
+	wait_restore "${backup_name_local_s3}-logical" "${target_cluster}" "ready"
 	compare_pbm_config ${target_cluster} target
-	log "Main storage is reverted after ${backup_name_minio}-logical: OK"
+	log "Main storage is reverted after ${backup_name_local_s3}-logical: OK"
 
 	wait_for_pbm_operations ${target_cluster}
 	check_if_resync_triggered ${target_cluster} ${now_ts}
 
 	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd" \
 		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
-	log "Data is restored from ${backup_name_minio}-logical: OK"
+	log "Data is restored from ${backup_name_local_s3}-logical: OK"
 }
 
 test_case_2() {
-	run_restore ${target_cluster} ${backup_name_minio} physical
+	run_restore ${target_cluster} ${backup_name_local_s3} physical
 
-	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "requested" 0
+	wait_restore "${backup_name_local_s3}-physical" "${target_cluster}" "requested" 0
 	compare_pbm_config ${target_cluster} source mongod
 	log "Backup source is set as main storage during restore: OK"
 
 	local now_ts=$(date +%s)
 
-	wait_restore "${backup_name_minio}-physical" "${target_cluster}" "ready"
+	wait_restore "${backup_name_local_s3}-physical" "${target_cluster}" "ready"
 	compare_pbm_config ${target_cluster} target
-	log "Main storage is reverted after ${backup_name_minio}-physical: OK"
+	log "Main storage is reverted after ${backup_name_local_s3}-physical: OK"
 
 	wait_for_pbm_operations ${target_cluster}
 	check_if_resync_triggered ${target_cluster} ${now_ts}
 
 	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0.${namespace}" "-2nd" \
 		".svc.cluster.local" myApp test 'sort( { x: 1 } )'
-	log "Data is restored from ${backup_name_minio}-physical: OK"
+	log "Data is restored from ${backup_name_local_s3}-physical: OK"
 }
 
 test_case_3() {
-	local backup_name=target-${backup_name_minio}
+	local backup_name=target-${backup_name_local_s3}
 
 	write_document ${target_cluster} 100504
 
 	run_backup ${target_cluster} ${backup_name} logical
 	log "checking ${backup_name}-logical in storage"
-	check_backup_in_storage ${backup_name}-logical minio rs0 myApp.test.gz
+	check_backup_in_storage ${backup_name}-logical local-s3 rs0 myApp.test.gz
 	log "${backup_name} is uploaded to correct storage: OK"
 
 	log "enabling PiTR on ${target_cluster}"

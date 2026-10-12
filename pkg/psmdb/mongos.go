@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,19 +18,16 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 )
 
 func MongosStatefulset(cr *api.PerconaServerMongoDB) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.MongosStatefulSetName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.MongosLabels(cr),
-		},
+		APIVersion: "apps/v1",
+		Kind:       "StatefulSet",
+		Name:       naming.MongosStatefulSetName(cr),
+		Namespace:  cr.Namespace,
+		Labels:     naming.MongosLabels(cr),
 	}
 }
 
@@ -61,10 +59,36 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
 	}
 
+	if cr.CompareVersion("1.23.1") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil {
+		spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{mongosLogPVC(cr)}
+	}
+
 	return spec
 }
 
-func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, customConf config.CustomConfig, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
+// MongosLogPVC returns the volume claim template backing mongos log storage.
+func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
+	storage := cr.Spec.Sharding.Mongos.LogStorage()
+
+	labels := map[string]string{}
+	maps.Copy(labels, storage.Labels)
+	maps.Copy(labels, naming.MongosLabels(cr))
+
+	pvc := corev1.PersistentVolumeClaim{
+		Name:        config.MongosLogVolClaimName,
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: storage.Annotations,
+	}
+
+	if storage.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *storage.PersistentVolumeClaimSpec
+	}
+
+	return pvc
+}
+
+func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, configs StatefulConfigParams, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {
 	ls := naming.MongosLabels(cr)
 
 	if cr.Spec.Sharding.Mongos.Labels != nil {
@@ -72,7 +96,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	mountKeyFile := cr.KeyFileAuthEnabled() || keyfileExists
-	c, err := mongosContainer(cr, customConf.Type.IsUsable(), cfgInstances, mountKeyFile)
+	c, err := mongosContainer(cr, configs.MongoDConf.Type.IsUsable(), cfgInstances, mountKeyFile)
 	if err != nil {
 		return corev1.PodTemplateSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
@@ -87,20 +111,29 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
+		logCollectorCs, err := logcollector.Containers(cr, cr.Spec.Sharding.Mongos.GetPort(), config.MongosLogVolume())
+		if err != nil {
+			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
+		}
+		containers = append(containers, logCollectorCs...)
+	}
+
 	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
 
-	if cr.CompareVersion("1.9.0") >= 0 && customConf.Type.IsUsable() {
-		annotations[naming.AnnotationConfigHash] = customConf.HashHex
+	if configs.MongoDConf.Type.IsUsable() {
+		annotations[naming.AnnotationConfigHash] = configs.MongoDConf.HashHex
+	}
+	if hash := configs.HashHex(cr); hash != "" && cr.CompareVersion("1.23.1") >= 0 {
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	return corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:      ls,
-			Annotations: annotations,
-		},
+		Labels:      ls,
+		Annotations: annotations,
 		Spec: corev1.PodSpec{
 			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
@@ -115,7 +148,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 			Containers:                    containers,
 			InitContainers:                initContainers,
-			Volumes:                       volumes(cr, customConf.Type, mountKeyFile),
+			Volumes:                       volumes(cr, configs, mountKeyFile),
 			SchedulerName:                 cr.Spec.SchedulerName,
 			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
 		},
@@ -190,6 +223,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		})
 	}
 
+	if cr.CompareVersion("1.23.1") >= 0 && (cr.IsLogCollectorEnabled() || cr.Spec.Sharding.Mongos.LogStorage() != nil) {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      config.MongosLogVolClaimName,
+			MountPath: config.MongodContainerDataLogsDir,
+		})
+	}
+
 	container := corev1.Container{
 		Name:            "mongos",
 		Image:           cr.Spec.Image,
@@ -211,17 +251,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cr.Spec.Secrets.Users,
-					},
+					Name:     cr.Spec.Secrets.Users,
 					Optional: &fvar,
 				},
 			},
 			{
 				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cr),
-					},
+					Name:     api.UserSecretName(cr),
 					Optional: &fvar,
 				},
 			},
@@ -241,6 +277,13 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, cr.Spec.Sharding.Mongos.Env...)
 		container.EnvFrom = append(container.EnvFrom, cr.Spec.Sharding.Mongos.EnvFrom...)
+	}
+
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "LOGCOLLECTOR_ENABLED",
+			Value: "true",
+		})
 	}
 
 	return container, nil
@@ -308,7 +351,7 @@ func mongosContainerArgs(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgIn
 	return args
 }
 
-func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType, mountKeyFile bool) []corev1.Volume {
+func volumes(cr *api.PerconaServerMongoDB, configs StatefulConfigParams, mountKeyFile bool) []corev1.Volume {
 	fvar, tvar := false, true
 
 	sslVolumeOptional := &cr.Spec.Unsafe.TLS
@@ -316,36 +359,28 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 	volumes := []corev1.Volume{
 		{
 			Name: "ssl",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.SSLSecretName(cr),
-					Optional:    sslVolumeOptional,
-					DefaultMode: &secretFileMode,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.SSLSecretName(cr),
+				Optional:    sslVolumeOptional,
+				DefaultMode: &secretFileMode,
 			},
 		},
 		{
 			Name: "ssl-internal",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.SSLInternalSecretName(cr),
-					Optional:    &tvar,
-					DefaultMode: &secretFileMode,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.SSLInternalSecretName(cr),
+				Optional:    &tvar,
+				DefaultMode: &secretFileMode,
 			},
 		},
 		{
-			Name: config.MongodDataVolClaimName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     config.MongodDataVolClaimName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "users-secret-file",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: api.InternalUserSecretName(cr),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: api.InternalUserSecretName(cr),
 			},
 		},
 	}
@@ -353,12 +388,10 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 	if mountKeyFile {
 		volumes = append([]corev1.Volume{{
 			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &secretFileMode,
-					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-					Optional:    &fvar,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				DefaultMode: &secretFileMode,
+				SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
+				Optional:    &fvar,
 			},
 		}}, volumes...)
 	}
@@ -369,46 +402,38 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 		for _, v := range cr.Spec.Sharding.Mongos.SidecarPVCs {
 			volumes = append(volumes, corev1.Volume{
 				Name: v.Name,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: v.Name,
-					},
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: v.Name,
 				},
 			})
 		}
 	}
 
-	if configSource.IsUsable() {
+	if configs.MongoDConf.Type.IsUsable() {
 		volumes = append(volumes, corev1.Volume{
 			Name:         "config",
-			VolumeSource: configSource.VolumeSource(naming.MongosCustomConfigName(cr)),
+			VolumeSource: configs.MongoDConf.Type.VolumeSource(naming.MongosCustomConfigName(cr)),
 		})
 	}
 
 	volumes = append(volumes, corev1.Volume{
-		Name: config.BinVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
+		Name:     config.BinVolumeName,
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
 
 	if cr.Spec.Secrets.LDAPSecret != "" {
 		volumes = append(volumes, []corev1.Volume{
 			{
 				Name: config.LDAPTLSVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName:  cr.Spec.Secrets.LDAPSecret,
-						Optional:    &tvar,
-						DefaultMode: &secretFileMode,
-					},
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.LDAPSecret,
+					Optional:    &tvar,
+					DefaultMode: &secretFileMode,
 				},
 			},
 			{
-				Name: config.LDAPConfVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
+				Name:     config.LDAPConfVolClaimName,
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		}...)
 	}
@@ -420,15 +445,31 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
-					},
-					Optional: new(true),
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name:     name,
+				Optional: new(true),
 			},
 		})
+	}
+
+	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
+		// Add an emptyDir for logs if no persistent storage is specified
+		if cr.Spec.Sharding.Mongos.LogStorage() == nil {
+			volumes = append(volumes, corev1.Volume{
+				Name:     config.MongosLogVolClaimName,
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			})
+		}
+
+		if configs.LogCollectionConf.Type.IsUsable() {
+			volumes = append(volumes, corev1.Volume{
+				Name:         logcollector.VolumeName,
+				VolumeSource: configs.LogCollectionConf.Type.VolumeSource(logcollector.ConfigMapName(cr.Name)),
+			})
+		}
+		if vol := logRotateConfigVolume(configs, cr); vol != nil {
+			volumes = append(volumes, *vol)
+		}
 	}
 
 	return volumes
@@ -436,14 +477,10 @@ func volumes(cr *api.PerconaServerMongoDB, configSource config.VolumeSourceType,
 
 func MongosService(cr *api.PerconaServerMongoDB, name string) corev1.Service {
 	svc := corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-		},
+		APIVersion: "v1",
+		Kind:       "Service",
+		Name:       name,
+		Namespace:  cr.Namespace,
 	}
 	if cr.CompareVersion("1.12.0") >= 0 {
 		svc.Labels = naming.MongosLabels(cr)

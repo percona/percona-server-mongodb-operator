@@ -1,16 +1,20 @@
 import groovy.transform.Field
 
-@Field def region = 'us-central1-a'
+@Field def zone = 'us-central1-a'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
+@Field def reportHtml = 'e2e-test-report.html'
+@Field def reportXml = 'e2e-test-report.xml'
+@Field int clusterCount = 15
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-            gcloud config set project $GCP_PROJECT
-            GKE_VERSION=\$(gcloud container get-server-config --zone ${region} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
+            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+            gcloud config set project "\$GCP_PROJECT"
+            GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
             if [ -z "\${GKE_VERSION}" ]; then
                 echo "Failed to detect the minimum Kubernetes version from the GKE stable release channel"
                 exit 1
@@ -18,11 +22,10 @@ void createCluster(String CLUSTER_SUFFIX) {
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
                 gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
-                    --preemptible \
-                    --zone=${region} \
+                    --zone=${zone} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
                     --num-nodes=3 \
@@ -36,14 +39,14 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --monitoring=NONE \
                     --logging=NONE \
                     --no-enable-managed-prometheus \
-                    --workload-pool=cloud-dev-112233.svc.id.goog \
+                    --workload-pool=\$GCP_PROJECT.svc.id.goog \
                     --quiet && \
-                kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
+                kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"\$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${region} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${region} --quiet || true
+                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 exit 1
             fi
         """
@@ -54,8 +57,9 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-            gcloud config set project $GCP_PROJECT
+            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+            gcloud config set project "\$GCP_PROJECT"
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
                 kubectl delete deployments --all -n \$namespace --force --grace-period=0 || true
                 kubectl delete sts --all -n \$namespace --force --grace-period=0 || true
@@ -65,7 +69,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone ${region} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${zone} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
         """
    }
 }
@@ -74,8 +78,8 @@ void deleteOldClusters(String FILTER) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             if gcloud --version > /dev/null 2>&1; then
-                gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
-                gcloud config set project $GCP_PROJECT
+                gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
+                gcloud config set project "\$GCP_PROJECT"
                 for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
                     GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
                     retry=0
@@ -89,7 +93,7 @@ void deleteOldClusters(String FILTER) {
                             break
                         fi
                     done
-                    gcloud container clusters delete --async --zone ${region} --quiet \$GKE_CLUSTER || true
+                    gcloud container clusters delete --async --zone ${zone} --quiet \$GKE_CLUSTER || true
                 done
             fi
         """
@@ -102,9 +106,27 @@ void pushLogFile(String FILE_NAME) {
     echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
-            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
+            if [ ! -f ${LOG_FILE_PATH} ]; then
+                mkdir -p e2e-tests/logs
+                cat > ${LOG_FILE_PATH} <<EOF
+Log file ${LOG_FILE_NAME} was not found in Jenkins workspace.
+The test may have timed out or terminated before the test runner created/flushed the log.
+Build URL: ${BUILD_URL}
+EOF
+            fi
             aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
-            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME}
+        """
+    }
+}
+
+void pushReportFile() {
+    echo "Push ${reportHtml} to S3!"
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
+            aws s3 cp --content-type text/html --quiet ${reportHtml} \$S3_PATH/${reportHtml} || :
         """
     }
 }
@@ -115,20 +137,53 @@ void pushArtifactFile(String FILE_NAME) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         sh """
             touch ${FILE_NAME}
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/${env.GIT_SHORT_COMMIT}
             aws s3 ls \$S3_PATH/${FILE_NAME} || :
             aws s3 cp --quiet ${FILE_NAME} \$S3_PATH/${FILE_NAME} || :
         """
     }
 }
 
+String detectMongoVersion() {
+    return sh(
+        script: '''
+            set -eu
+            mongo_image=${IMAGE_MONGOD:-}
+            if [ -z "$mongo_image" ]; then
+                assignment=$(sed -n '/^export IMAGE_MONGOD=/{p;q;}' e2e-tests/vars)
+                if [ -z "$assignment" ]; then
+                    echo "IMAGE_MONGOD assignment not found in e2e-tests/vars" >&2
+                    exit 1
+                fi
+                eval "$assignment"
+                mongo_image=$IMAGE_MONGOD
+            fi
+
+            mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')
+            if [ -z "$mongo_version" ]; then
+                echo "Unable to detect MongoDB version from image: $mongo_image" >&2
+                exit 1
+            fi
+
+            printf '%s' "$mongo_version"
+        ''',
+        returnStdout: true
+    ).trim()
+}
+
 void initTests() {
     echo "Populating tests into the tests array!"
+    def mongoVersion = detectMongoVersion()
+    echo "Detected MongoDB version: ${mongoVersion}"
 
-    def records = readCSV file: 'e2e-tests/run-pr.csv'
+    def output = sh(
+        script: "export PATH=\"\$HOME/.local/bin:\$PATH\"; uv run e2e-tests/select_tests.py list --suite pr --platform gke --operator-mode cluster-wide --mongo-version ${mongoVersion} --format lines",
+        returnStdout: true
+    ).trim()
+    def records = output.split('\n').findAll { it }
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
+        tests.add(["name": records[i], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
     markPassedTests()
@@ -142,36 +197,24 @@ void markPassedTests() {
             aws s3 ls "s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/" || :
         """
 
+        def marked = 0
         for (int i=0; i<tests.size(); i++) {
             def testName = tests[i]["name"]
             def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
-            def retFileExists = sh(script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1", returnStatus: true)
+            def retFileExists = sh(
+                script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1",
+                returnStatus: true
+            )
 
             if (retFileExists == 0) {
                 tests[i]["result"] = "passed"
+                marked++
             }
         }
+        echo "Marked ${marked}/${tests.size()} test(s) as already passed (will skip on this run)"
     }
 }
 
-void printKubernetesStatus(String LOCATION, String CLUSTER_SUFFIX) {
-    sh """
-        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-        echo "========== KUBERNETES STATUS $LOCATION TEST =========="
-        gcloud container clusters list|grep -E "NAME|${CLUSTER_NAME}-${CLUSTER_SUFFIX} "
-        echo
-        kubectl get nodes
-        echo
-        kubectl top nodes
-        echo
-        kubectl get pods --all-namespaces
-        echo
-        kubectl top pod --all-namespaces
-        echo
-        kubectl get events --field-selector type!=Normal --all-namespaces --sort-by=".lastTimestamp"
-        echo "======================================================"
-    """
-}
 
 String formatTime(def time) {
     if (!time || time == "N/A") return "N/A"
@@ -191,11 +234,21 @@ String formatTime(def time) {
 }
 
 @Field def TestsReport = '| Test Name | Result | Time |\r\n| ----------- | -------- | ------ |'
-@Field def TestsReportXML = '<testsuite name=\\"PSMDB\\">\n'
+
+String resultIcon(def result) {
+    switch (result) {
+        case "passed":  return "✅"
+        case "failure": return "❌"
+        case "error":   return "⚠️"
+        default:        return "⏭️"
+    }
+}
 
 void makeReport() {
     def wholeTestAmount = tests.size()
     def startedTestAmount = 0
+    def failedTestAmount = 0
+    def erroredTestAmount = 0
     def totalTestTime = 0
 
     for (int i=0; i<tests.size(); i++) {
@@ -208,25 +261,111 @@ void makeReport() {
             totalTestTime += testTime
         }
 
-        if (tests[i]["result"] != "skipped") {
+        if (testResult != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
+        if (testResult == "failure") {
+            failedTestAmount++
+        }
+        if (testResult == "error") {
+            erroredTestAmount++
+        }
+        TestsReport = TestsReport + "\r\n| [" + testName + "](" + testUrl + ") | " + resultIcon(testResult) + " | " + formatTime(testTime) + " |"
     }
     TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
     TestsReport = TestsReport + "\r\n| Tests Run | $startedTestAmount/$wholeTestAmount |"
+    TestsReport = TestsReport + "\r\n| Tests Failed | $failedTestAmount/$wholeTestAmount  |"
+    TestsReport = TestsReport + "\r\n| Tests Errored | $erroredTestAmount/$wholeTestAmount  |"
     TestsReport = TestsReport + "\r\n| Job Duration | " + formatTime(currentBuild.duration / 1000) + " |"
     TestsReport = TestsReport + "\r\n| Total Test Time | "  + formatTime(totalTestTime) + " |"
-    TestsReportXML = TestsReportXML + '</testsuite>\n'
+}
 
-    sh """
-        echo "${TestsReportXML}" > TestsReport.xml
-    """
+void normalizeReports() {
+    sh "mkdir -p e2e-tests/reports"
+
+    for (int i = 0; i < tests.size(); i++) {
+        def testName = tests[i]["name"]
+        def testResult = tests[i]["result"]
+        def testTime = tests[i]["time"] ?: 0
+
+        if (testResult == "skipped") {
+            continue
+        }
+
+        def xmlFile = "e2e-tests/reports/${testName}.xml"
+        def htmlFile = "e2e-tests/reports/${testName}.html"
+
+        // Always collapse to a single testcase per test so python (multi-method) and
+        // bash-wrapper tests are counted identically in JUnit. Detail stays in the HTML.
+        def failures = testResult == "failure" ? 1 : 0
+        def errors = testResult == "error" ? 1 : 0
+        def resultElement = ""
+        if (testResult == "failure") {
+            resultElement = '<failure message="Jenkins reported test failure">Jenkins reported this test as failed. See the HTML report for details.</failure>'
+        } else if (testResult == "error") {
+            resultElement = '<error message="Jenkins reported test error">Jenkins reported this test as errored (infrastructure/timeout). See the HTML report for details.</error>'
+        }
+
+        writeFile file: xmlFile, text: """<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="pytest tests">
+<testsuite name="psmdb-e2e" errors="${errors}" failures="${failures}" skipped="0" tests="1" time="${testTime}">
+<testcase classname="" name="${testName}" time="${testTime}">
+${resultElement}
+</testcase>
+</testsuite>
+</testsuites>"""
+
+        if (!fileExists(htmlFile)) {
+            def formattedTime = formatTime(testTime)
+            def resultCapitalized
+            def logMessage
+            if (testResult == "failure") {
+                resultCapitalized = "Failed"
+                logMessage = "Test did not produce a report"
+            } else if (testResult == "error") {
+                resultCapitalized = "Error"
+                logMessage = "Test errored (infrastructure/timeout) and did not produce a report"
+            } else {
+                resultCapitalized = "Passed"
+                logMessage = "Test marked as passed (from previous run)"
+            }
+
+            writeFile file: htmlFile, text: """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title id="head-title">${testName}.html</title>
+</head>
+<body>
+<div id="data-container" data-jsonblob='{"environment": {"Note": "Placeholder report generated because the test report was missing"}, "tests": {"${testName}": [{"extras": [], "result": "${resultCapitalized}", "testId": "${testName}", "duration": "${formattedTime}", "resultsTableRow": ["<td class=\\"col-result\\">${resultCapitalized}</td>", "<td>-</td>", "<td class=\\"col-testId\\">${testName}</td>", "<td class=\\"col-duration\\">${formattedTime}</td>", "<td>-</td>"], "log": "${logMessage}"}]}}'></div>
+</body>
+</html>"""
+        }
+    }
+}
+
+void formatReportDuration(String htmlFile) {
+    def marker = ' tests ran in '
+    def suffix = ' seconds'
+    def html = readFile(htmlFile)
+
+    def valueStart = html.indexOf(marker)
+    if (valueStart < 0) {
+        return
+    }
+    valueStart += marker.length()
+
+    def valueEnd = html.indexOf(suffix, valueStart)
+    if (valueEnd < 0) {
+        return
+    }
+
+    def formatted = formatTime(html.substring(valueStart, valueEnd))
+    writeFile file: htmlFile, text: html.substring(0, valueStart) + formatted + html.substring(valueEnd + suffix.length())
 }
 
 void clusterRunner(String cluster) {
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]){
+    withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         def clusterCreated=0
 
         for (int i=0; i<tests.size(); i++) {
@@ -247,53 +386,145 @@ void clusterRunner(String cluster) {
     }
 }
 
+void collectDebugLogs(String testName, String clusterSuffix) {
+    try {
+        sh """
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+            export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
+            DEBUG_LOG=e2e-tests/logs/${testName}-debug.log
+
+            {
+                echo "=== DEBUG LOGS FOR ${testName} (collected at \$(date -u)) ==="
+
+                NAMESPACE=""
+                if [ -f "\$PYTEST_NAMESPACE_FILE" ]; then
+                    NAMESPACE=\$(cat "\$PYTEST_NAMESPACE_FILE" | tail -1)
+                fi
+                if [ -z "\$NAMESPACE" ]; then
+                    NAMESPACE=\$(kubectl get namespaces --no-headers 2>/dev/null | awk '{print \$1}' | grep -vE '^kube-|^default\$|^gke-|^gmp-' | head -1)
+                fi
+                echo "Namespace: \$NAMESPACE"
+
+                echo ""
+                echo "=== PSMDB Objects ==="
+                kubectl get psmdb --all-namespaces -o wide 2>&1 || true
+
+                if [ -n "\$NAMESPACE" ]; then
+                    echo ""
+                    echo "=== PSMDB Describe ==="
+                    for obj in \$(kubectl get psmdb -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== StatefulSets ==="
+                    kubectl get sts -n "\$NAMESPACE" -o wide 2>&1 || true
+                    for obj in \$(kubectl get sts -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== Pods ==="
+                    kubectl get pods -n "\$NAMESPACE" -o wide 2>&1 || true
+
+                    echo ""
+                    echo "=== Pod Events ==="
+                    kubectl get events -n "\$NAMESPACE" --sort-by='.lastTimestamp' 2>&1 || true
+
+                    echo ""
+                    echo "=== Operator Logs (last 100 lines) ==="
+                    OPERATOR_NS=\$(kubectl get deployments --all-namespaces 2>/dev/null | grep percona-server-mongodb-operator | awk '{print \$1}' | head -1)
+                    if [ -n "\$OPERATOR_NS" ]; then
+                        OPERATOR_POD=\$(kubectl get pods -n "\$OPERATOR_NS" -l name=percona-server-mongodb-operator -o name 2>/dev/null | head -1)
+                        if [ -n "\$OPERATOR_POD" ]; then
+                            kubectl logs -n "\$OPERATOR_NS" "\$OPERATOR_POD" --tail=100 2>&1 || true
+                        fi
+                    fi
+                fi
+
+                echo ""
+                echo "=== Cert-Manager Resources ==="
+                kubectl get crd 2>/dev/null | grep cert-manager || echo "No cert-manager CRDs"
+                kubectl get validatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager validating webhooks"
+                kubectl get mutatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager mutating webhooks"
+            } > "\$DEBUG_LOG" 2>&1
+        """
+    } catch (debugExc) {
+        echo "Failed to collect debug logs for $testName: ${debugExc.message}"
+    }
+}
+
 void runTest(Integer TEST_ID) {
-    def retryCount = 0
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
+    def timeStart = new Date().getTime()
 
-    waitUntil {
-        def timeStart = new Date().getTime()
-        try {
-            echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
-            tests[TEST_ID]["result"] = "failure"
+    try {
+        echo "The $testName test was started on cluster ${CLUSTER_NAME}-${clusterSuffix} !"
+        tests[TEST_ID]["result"] = "failure"
 
-            timeout(time: 90, unit: 'MINUTES') {
-                withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT')]) {
-                    sh """
-                        if [ $retryCount -eq 0 ]; then
-                            export DEBUG_TESTS=0
-                        else
-                            export DEBUG_TESTS=1
-                        fi
-                        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-                        export GCP_PROJECT=\$GCP_PROJECT
-                        export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
-                        time ./e2e-tests/$testName/run
-                    """
-                }
-            }
-            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
-            tests[TEST_ID]["result"] = "passed"
-            return true
+        timeout(time: 100, unit: 'MINUTES') {
+            sh """
+                export DEBUG_TESTS=1
+                export SKIP_DELETE=0
+                export COLUMNS=200
+                export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+                export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
+                export GCP_PROJECT=\$GCP_PROJECT
+                export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
+                export PATH="\$HOME/.local/bin:\$PATH"
+                mkdir -p e2e-tests/logs
+                bash -o pipefail <<BASH
+                {
+                    make e2e-test TEST=${testName}
+                } 2>&1 | tee e2e-tests/logs/${testName}.log
+BASH
+            """
         }
-        catch (exc) {
-            printKubernetesStatus("AFTER","$clusterSuffix")
+        pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
+        tests[TEST_ID]["result"] = "passed"
+    }
+    catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        // A per-test timeout is an environment/hang problem, not a test assertion
+        // failure: record it as an error and keep the rest of the suite running.
+        // Any other interruption (user abort, newer/superseded build) is propagated
+        // so the build aborts cleanly.
+        def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
+        if (timedOut) {
+            echo "Test $testName timed out!"
+            collectDebugLogs(testName, clusterSuffix)
+            tests[TEST_ID]["result"] = "error"
+            currentBuild.result = 'FAILURE'
+        } else {
+            echo "Test $testName was interrupted (build aborted/superseded)!"
+            throw exc
+        }
+    }
+    catch (exc) {
+        // When a timeout aborts the sh step the shell is killed with SIGTERM and the
+        // step can surface as a plain "exit code 143" error before the timeout's
+        // FlowInterruptedException propagates. Treat 143 as a timeout/termination
+        // (error), not a test assertion failure, so the report shows the right icon.
+        if (exc.message?.contains('exit code 143')) {
+            echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            collectDebugLogs(testName, clusterSuffix)
+            tests[TEST_ID]["result"] = "error"
+        } else {
             echo "Test $testName has failed!"
-            if (retryCount >= 1 || currentBuild.nextBuild != null) {
-                currentBuild.result = 'FAILURE'
-                return true
-            }
-            retryCount++
-            return false
+            collectDebugLogs(testName, clusterSuffix)
+            tests[TEST_ID]["result"] = "failure"
         }
-        finally {
-            def timeStop = new Date().getTime()
-            def durationSec = (timeStop - timeStart) / 1000
-            tests[TEST_ID]["time"] = durationSec
-            pushLogFile("$testName")
-            echo "The $testName test was finished!"
-        }
+        currentBuild.result = 'FAILURE'
+    }
+    finally {
+        def timeStop = new Date().getTime()
+        def durationSec = (timeStop - timeStart) / 1000
+        tests[TEST_ID]["time"] = durationSec
+        pushLogFile("$testName")
+        pushLogFile("${testName}-debug")
+        echo "The $testName test was finished!"
     }
 }
 
@@ -319,6 +550,10 @@ EOF
         sudo yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
         curl -sL https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz | sudo tar -C /usr/local/bin -xzf - golicense
+
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="\$HOME/.local/bin:\$PATH"
+        uv sync --locked
     """
     installAzureCLI()
     azureAuth()
@@ -354,6 +589,18 @@ EOF
 boolean isManualBuild() {
     def causes = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
     return !causes.isEmpty()
+}
+
+def skipRequested() {
+    try {
+        if (pullRequest.labels.contains('skip-e2e-tests')) {
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+            return true
+        }
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
 }
 
 @Field def needToRunTests = true
@@ -410,6 +657,10 @@ void checkE2EIgnoreFiles() {
     }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
+    if (skipRequested()) {
+        needToRunTests = false
+        return
+    }
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
@@ -441,8 +692,7 @@ pipeline {
         GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-psmdb-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", returnStdout: true).trim()
-        AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
-        ENABLE_LOGGING = "true"
+        AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", returnStdout: true).trim()
     }
     agent {
         label 'docker-x64-min'
@@ -469,11 +719,11 @@ pipeline {
                 }
             }
             steps {
-                initTests()
                 prepareNode()
+                initTests()
                 script {
                     if (AUTHOR_NAME == 'null') {
-                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+                        AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
@@ -534,7 +784,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c '
+                            golang:1.27 sh -c '
                                 go install github.com/google/go-licenses@v1.6.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -562,7 +812,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+                            golang:1.27 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 
@@ -586,83 +836,20 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 4, unit: 'HOURS')
+                timeout(time: 7, unit: 'HOURS')
             }
-            parallel {
-                stage('cluster1') {
-                    steps {
-                        clusterRunner('cluster1')
+            steps {
+                script {
+                    def branches = [:]
+                    for (int i = 1; i <= clusterCount; i++) {
+                        def cluster = "cluster${i}".toString()
+                        branches[cluster] = {
+                            stage(cluster) {
+                                clusterRunner(cluster)
+                            }
+                        }
                     }
-                }
-                stage('cluster2') {
-                    steps {
-                        clusterRunner('cluster2')
-                    }
-                }
-                stage('cluster3') {
-                    steps {
-                        clusterRunner('cluster3')
-                    }
-                }
-                stage('cluster4') {
-                    steps {
-                        clusterRunner('cluster4')
-                    }
-                }
-                stage('cluster5') {
-                    steps {
-                        clusterRunner('cluster5')
-                    }
-                }
-                stage('cluster6') {
-                    steps {
-                        clusterRunner('cluster6')
-                    }
-                }
-                stage('cluster7') {
-                    steps {
-                        clusterRunner('cluster7')
-                    }
-                }
-                stage('cluster8') {
-                    steps {
-                        clusterRunner('cluster8')
-                    }
-                }
-                stage('cluster9') {
-                    steps {
-                        clusterRunner('cluster9')
-                    }
-                }
-                stage('cluster10') {
-                    steps {
-                        clusterRunner('cluster10')
-                    }
-                }
-                stage('cluster11') {
-                    steps {
-                        clusterRunner('cluster11')
-                    }
-                }
-                stage('cluster12') {
-                    steps {
-                        clusterRunner('cluster12')
-                    }
-                }
-                stage('cluster13') {
-                    steps {
-                        clusterRunner('cluster13')
-                    }
-                }
-                stage('cluster14') {
-                    steps {
-                        clusterRunner('cluster14')
-                    }
-                }
-                stage('cluster15') {
-                    steps {
-                        clusterRunner('cluster15')
-                    }
+                    parallel branches
                 }
             }
         }
@@ -690,12 +877,24 @@ pipeline {
                             }
                         }
                         makeReport()
-                        junit testResults: '*.xml', healthScaleFactor: 1.0
-                        archiveArtifacts '*.xml'
+                        normalizeReports()
+                        
+                        sh """
+                            export PATH="\$HOME/.local/bin:\$PATH"
+                            uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
+                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
+                        """
+                        formatReportDuration(reportHtml)
+                        junit testResults: reportXml, healthScaleFactor: 1.0
+                        archiveArtifacts "${reportXml}, ${reportHtml}"
+                        pushReportFile()
+
+                        def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
+                        currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${reportUrl})\r\n"
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")

@@ -4,5 +4,5 @@ metadata:
   name:
 spec:
   clusterName:
-  storageName: minio
+  storageName: local-s3
   type: 

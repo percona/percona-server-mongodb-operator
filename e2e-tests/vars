@@ -98,17 +98,15 @@ perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 export IMAGE_SEARCH=${IMAGE_SEARCH:-"perconalab/percona-server-mongodb-operator:main-mongot"}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
-export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"percona/pmm-client:2.44.1-1"}
-export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-export IMAGE_PMM3_CLIENT=${IMAGE_PMM3_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
-export IMAGE_PMM3_SERVER=${IMAGE_PMM3_SERVER:-"perconalab/pmm-server:3-dev-latest"}
+export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
+export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"}
 export IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
 export IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:0.9.0"}
 
+
 for image in \
-	IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_BACKUP \
+	IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_SEARCH IMAGE_BACKUP \
 	IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
-	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER \
 	IMAGE_LOGCOLLECTOR IMAGE_CLUSTERSYNC IMAGE_OPERATOR; do
 	qualify_image_var "$image"
 done
@@ -127,10 +125,11 @@ if [[ -z ${ARCH} ]]; then
 fi
 
 # Dependencies versions
-export CERT_MANAGER_VER="1.19.3"
-export MINIO_VER="5.4.0"
+export CERT_MANAGER_VER="1.21.0"
+export SEAWEEDFS_VER="4.47.0"
 export CHAOS_MESH_VER="2.7.1"
 export PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
+export IMAGE_AWS_CLI=${IMAGE_AWS_CLI:-"docker.io/amazon/aws-cli:2.34.60"}
 export SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
 export UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
 export DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}

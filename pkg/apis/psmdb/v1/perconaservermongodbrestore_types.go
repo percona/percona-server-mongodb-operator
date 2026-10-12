@@ -163,6 +163,10 @@ func (r *PerconaServerMongoDBRestore) CheckFields(backupType defs.BackupType) er
 			return errors.New("backupSource destination should use s3 protocol format")
 		}
 
+		if r.Spec.BackupSource.S3 != nil && strings.Contains(r.Spec.BackupSource.S3.EndpointURL, "storage.googleapis.com") {
+			return errors.New("S3 compatibility for Google Cloud Storage is not supported, use backupSource.gcs instead")
+		}
+
 		if r.Spec.BackupSource.OSS != nil && !strings.HasPrefix(r.Spec.BackupSource.Destination, "oss://") {
 			return errors.New("backupSource destination should use oss protocol format")
 		}

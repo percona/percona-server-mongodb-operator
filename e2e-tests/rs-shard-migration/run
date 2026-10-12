@@ -24,7 +24,7 @@ function main() {
 	kubectl_bin apply -f $conf_dir/secrets.yml -f $conf_dir/client.yml
 
 	apply_s3_storage_secrets
-	deploy_minio
+	deploy_s3_storage
 
 	spinup_psmdb ${cluster}-rs0 ${test_dir}/conf/${cluster}.yml
 
@@ -34,8 +34,8 @@ function main() {
 	desc 'write data, read from all'
 	simple_data_check "${cluster}-rs0" ${CLUSTER_SIZE}
 
-	run_backup "minio" "backup-minio-1"
-	wait_backup "backup-minio-1"
+	run_backup "local-s3" "backup-local-s3-1"
+	wait_backup "backup-local-s3-1"
 
 	desc 'initiate migration from replicaset to sharded cluster'
 	sharding_patch=$(jq -nc \
@@ -91,8 +91,8 @@ function main() {
 		exit 1
 	fi
 
-	run_backup "minio" "backup-minio-2"
-	wait_backup "backup-minio-2"
+	run_backup "local-s3" "backup-local-s3-2"
+	wait_backup "backup-local-s3-2"
 
 	desc 'get back from sharded cluster to replicaset'
 	kubectl_bin patch psmdb/${cluster} --type json -p='[{"op":"remove","path":"/spec/sharding"}]'
@@ -110,8 +110,8 @@ function main() {
 		exit 1
 	fi
 
-	run_backup "minio" "backup-minio-3"
-	wait_backup "backup-minio-3"
+	run_backup "local-s3" "backup-local-s3-3"
+	wait_backup "backup-local-s3-3"
 
 	desc 'cleanup CRDs and RBAC'
 	kubectl_bin delete -f "${src_dir}/deploy/crd.yaml" || :

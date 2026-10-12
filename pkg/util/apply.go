@@ -24,6 +24,12 @@ const (
 )
 
 func Apply(ctx context.Context, cl client.Client, obj client.Object) (ApplyStatus, error) {
+	return ApplyIf(ctx, cl, obj, nil)
+}
+
+// ApplyIf works like Apply but skips the update when canWrite rejects the object stored in the cluster.
+// The check runs on the object read for the write, so an object created concurrently is never overwritten.
+func ApplyIf(ctx context.Context, cl client.Client, obj client.Object, canWrite func(client.Object) bool) (ApplyStatus, error) {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(make(map[string]string))
 	}
@@ -47,17 +53,30 @@ func Apply(ctx context.Context, cl client.Client, obj client.Object) (ApplyStatu
 	}
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
 
-	err = cl.Get(ctx, types.NamespacedName{
+	nn := types.NamespacedName{
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
-	}, oldObject)
+	}
 
+	err = cl.Get(ctx, nn, oldObject)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return "", errors.Wrap(err, "get object")
 	}
 
 	if k8serrors.IsNotFound(err) {
-		return ApplyStatusCreated, cl.Create(ctx, obj)
+		err := cl.Create(ctx, obj)
+		if err == nil || !k8serrors.IsAlreadyExists(err) {
+			return ApplyStatusCreated, err
+		}
+
+		// Someone created the object between the get and the create: re-read it and treat it as an update.
+		if err := cl.Get(ctx, nn, oldObject); err != nil {
+			return "", errors.Wrap(err, "get object")
+		}
+	}
+
+	if canWrite != nil && !canWrite(oldObject) {
+		return ApplyStatusUnchanged, nil
 	}
 
 	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
@@ -90,6 +109,8 @@ func getObjectHash(obj client.Object) (string, error) {
 	case *cm.Certificate:
 		dataToMarshall = object.Spec
 	case *cm.Issuer:
+		dataToMarshall = object.Spec
+	case *cm.ClusterIssuer:
 		dataToMarshall = object.Spec
 	default:
 		dataToMarshall = obj

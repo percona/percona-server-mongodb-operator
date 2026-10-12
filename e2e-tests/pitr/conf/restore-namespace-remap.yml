@@ -5,7 +5,7 @@ metadata:
 spec:
   clusterName:
   backupName:
-  storageName: minio
+  storageName: local-s3
   pitr:
     type:
     date:

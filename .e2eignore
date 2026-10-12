@@ -10,3 +10,4 @@ kubernetes.svg
 e2e-tests/release_versions
 .github/**
 .e2eignore
+installers/olm/**

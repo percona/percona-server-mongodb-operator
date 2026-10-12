@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -437,10 +436,8 @@ func TestGetCustomUserSecret(t *testing.T) {
 			crName: "my-cluster-user-has-secret",
 			client: func() client.Client {
 				existingSecret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "custom-secret",
-						Namespace: ns,
-					},
+					Name:      "custom-secret",
+					Namespace: ns,
 					Data: map[string][]byte{
 						passKey: []byte("existing-password"),
 					},
@@ -471,11 +468,9 @@ func TestGetCustomUserSecret(t *testing.T) {
 			crName: "my-cluster-existing-secret-missing-password",
 			client: func() client.Client {
 				defaultSecret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "my-cluster-existing-secret-missing-password-custom-user-secret",
-						Namespace: ns,
-					},
-					Data: map[string][]byte{},
+					Name:      "my-cluster-existing-secret-missing-password-custom-user-secret",
+					Namespace: ns,
+					Data:      map[string][]byte{},
 				}
 
 				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(defaultSecret).Build()
@@ -486,10 +481,8 @@ func TestGetCustomUserSecret(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tt.crName,
-					Namespace: ns,
-				},
+				Name:      tt.crName,
+				Namespace: ns,
 			}
 
 			secret, err := getCustomUserSecret(ctx, tt.client(), cr, tt.user, passKey)
@@ -576,10 +569,8 @@ func TestBuildAnnotationKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tt.crName,
-					Namespace: "namespace",
-				},
+				Name:      tt.crName,
+				Namespace: "namespace",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 				},
@@ -608,10 +599,8 @@ func TestBuildAnnotationKey(t *testing.T) {
 // prefix that would have been truncated to an identical value by the old logic.
 func TestBuildAnnotationKeyNoCollision(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      strings.Repeat("c", 20),
-			Namespace: "namespace",
-		},
+		Name:      strings.Repeat("c", 20),
+		Namespace: "namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
