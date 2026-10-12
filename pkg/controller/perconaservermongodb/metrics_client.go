@@ -29,6 +29,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	pod *corev1.Pod,
 	pvcName string,
 	containerName string,
+	mountPath string,
 ) (*PVCUsage, error) {
 	if pod == nil {
 		return nil, errors.New("pod is nil")
@@ -38,19 +39,23 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		containerName = naming.ContainerMongod
 	}
 
+	if mountPath == "" {
+		mountPath = config.MongodContainerDataDir
+	}
+
 	backoff := wait.Backoff{
 		Steps:    5,
 		Duration: 5 * time.Second,
 		Factor:   2.0,
 	}
 
-	// Execute df command in the pod's mongod container to get disk usage
-	// df -B1 /data/db outputs in bytes
+	// Execute df command in the container mounting the volume to get disk usage
+	// df -B1 <mount path> outputs in bytes
 	// Example output:
 	// Filesystem       1B-blocks       Used   Available Use% Mounted on
 	// /dev/sdb        3094126592  221798400  2855550976   8% /data/db
 	var stdout, stderr bytes.Buffer
-	command := []string{"df", "-B1", config.MongodContainerDataDir}
+	command := []string{"df", "-B1", mountPath}
 
 	err := retry.OnError(backoff, func(err error) bool { return true }, func() error {
 		stdout.Reset()
@@ -58,7 +63,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 
 		err := r.clientcmd.Exec(ctx, pod, containerName, command, nil, &stdout, &stderr, false)
 		if err != nil {
-			return errors.Wrapf(err, "failed to execute df in pod %s container %s: %s", pod.Name, containerName, stderr.String())
+			return errors.Wrapf(err, "failed to execute df on %s in pod %s container %s: %s", mountPath, pod.Name, containerName, stderr.String())
 		}
 		return nil
 	})
