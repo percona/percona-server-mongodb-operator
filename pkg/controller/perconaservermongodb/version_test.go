@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -335,6 +336,7 @@ func TestVersionMeta(t *testing.T) {
 	tests := []struct {
 		name            string
 		cr              api.PerconaServerMongoDB
+		serverVersion   *version.ServerVersion
 		want            VersionMeta
 		clusterWide     bool
 		helmDeploy      bool
@@ -364,6 +366,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:       "disabled",
 				Version:     version.Version(),
+				Platform:    "kubernetes",
 				ClusterSize: 3,
 			},
 			namespace: "test-namespace",
@@ -429,6 +432,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:                   "disabled",
 				Version:                 "1.13.0",
+				Platform:                "kubernetes",
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
 				PMMEnabled:              true,
@@ -473,6 +477,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:          "disabled",
 				Version:        version.Version(),
+				Platform:       "kubernetes",
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
@@ -501,6 +506,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -533,6 +539,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -541,6 +548,71 @@ func TestVersionMeta(t *testing.T) {
 			helmDeploy:      true,
 			namespace:       "test-namespace",
 			watchNamespaces: "",
+		},
+		{
+			name: "Detected cloud provider",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderGKE,
+			},
+			want: VersionMeta{
+				Apply:       "disabled",
+				Version:     version.Version(),
+				Platform:    "kubernetes-gke",
+				ClusterSize: 3,
+			},
+			namespace: "test-namespace",
+		},
+		{
+			name: "Platform from CR overrides detected platform",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image:    "percona/percona-server-mongodb:5.0.11-10",
+					Platform: ptr.To(version.PlatformOpenshift),
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderEKS,
+			},
+			want: VersionMeta{
+				Apply:       "disabled",
+				Version:     version.Version(),
+				Platform:    "openshift-eks",
+				ClusterSize: 3,
+			},
+			namespace: "test-namespace",
 		},
 	}
 	size := int32(1)
@@ -595,7 +667,10 @@ func TestVersionMeta(t *testing.T) {
 			}
 
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&tt.cr, &operatorDepl).Build()
-			sv := &version.ServerVersion{Platform: version.PlatformKubernetes}
+			sv := tt.serverVersion
+			if sv == nil {
+				sv = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			}
 			r := &ReconcilePerconaServerMongoDB{
 				client:        cl,
 				scheme:        scheme,
