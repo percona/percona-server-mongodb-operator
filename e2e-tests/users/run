@@ -39,7 +39,10 @@ actual_tag=$(kubectl_bin exec "$cluster-0" -c mongod -- \
 	"$mongo_shell" --quiet --host localhost --authenticationDatabase admin \
 	--username clusterAdmin --password clusterAdmin123456 \
 	--eval 'print(rs.conf().members[0].tags.special)')
-[[ $actual_tag == "$tag_value" ]]
+if [[ $actual_tag != "$tag_value" ]]; then
+	printf 'ERROR: replica set tag mismatch: expected %q, got %q\n' "$tag_value" "$actual_tag" >&2
+	exit 1
+fi
 
 backup_name="backup-local-s3"
 
