@@ -467,13 +467,23 @@ wait_backup() {
 
 wait_for_pbm_operations() {
 	local cluster=$1
+	local max_retries=${2:-540}
 
 	set +o xtrace
 	echo -n "waiting for PBM operation to finish"
-	retry=0
-	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
-		if [ $retry -ge 540 ]; then
-			echo max retry count $retry reached. something went wrong with PBM operations
+	local retry=0
+	local pbm_out
+	while true; do
+		if pbm_out=$(kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm status -o json -s running 2>/dev/null); then
+			if [[ $(echo "$pbm_out" | jq -r '.running.opID' 2>/dev/null) == "null" ]]; then
+				break
+			fi
+		fi
+
+		retry=$((retry + 1))
+		if [[ $retry -ge $max_retries ]]; then
+			echo
+			echo "max retry count $retry reached. something went wrong with PBM operations"
 			exit 1
 		fi
 		echo -n .
@@ -1191,7 +1201,46 @@ run_recovery_check() {
 	fi
 	echo
 
-	wait_cluster_consistency ${cluster}
+	# After physical restore the operator recreates StatefulSets, which may
+	# cause pods to land on different nodes. Volume reattachment and crash
+	# recovery (especially on sharded clusters) can keep the cluster in
+	# "error" state for several minutes on resource-constrained GKE nodes.
+	local max_wait=120
+	local error_grace=600
+	local error_time=0
+	local retry=0
+
+	sleep 7
+	echo -n "waiting for cluster ${cluster} to be ready after physical restore"
+	while true; do
+		local state
+		state=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')
+		if [[ "${state}" == "ready" ]]; then
+			break
+		fi
+
+		if [[ "${state}" == "error" ]]; then
+			error_time=$((error_time + 10))
+			if [[ ${error_time} -ge ${error_grace} ]]; then
+				echo
+				echo "cluster ${cluster} has been in error state for ${error_time}s after physical restore"
+				exit 1
+			fi
+		else
+			error_time=0
+		fi
+
+		retry=$((retry + 1))
+		if [[ ${retry} -ge ${max_wait} ]]; then
+			echo
+			echo "max retry count ${retry} reached (state: ${state})"
+			exit 1
+		fi
+		echo -n .
+		sleep 10
+	done
+	echo '.OK'
+
 	wait_for_pbm_operations ${cluster}
 
 	log "Operator triggered PBM resync: OK"
