@@ -1,3 +1,5 @@
+- name: mongod8.3
+  image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_mongod8.3_SHA_value>
 - name: mongod8.0
   image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_mongod8.0_SHA_value>
 - name: mongod7.0

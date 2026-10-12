@@ -211,6 +211,7 @@ after-release: update-version after-release-versions manifests update-upgrade-co
 after-release-versions:
 	$(SED) -i \
 		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
+		-e "s#^IMAGE_MONGOD83=.*#IMAGE_MONGOD83=perconalab/percona-server-mongodb-operator:main-mongod8.3#" \
 		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
 		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
 		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \

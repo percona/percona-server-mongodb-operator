@@ -156,6 +156,8 @@ func canUpgradeVersion(fcv, new string) bool {
 		return new == "7.0"
 	case "7.0":
 		return new == "8.0"
+	case "8.0":
+		return new == "8.3"
 	default:
 		return false
 	}
