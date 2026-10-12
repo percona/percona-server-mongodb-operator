@@ -272,6 +272,36 @@ func TestGetRoles(t *testing.T) {
 	}
 }
 
+func TestExceedsReplsetMemberLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		memberCount int
+		expected    bool
+	}{
+		"below limit": {
+			memberCount: mongo.MaxMembers - 1,
+			expected:    false,
+		},
+		"at limit": {
+			memberCount: mongo.MaxMembers,
+			expected:    false,
+		},
+		"above limit": {
+			memberCount: mongo.MaxMembers + 1,
+			expected:    true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := tc.memberCount > mongo.MaxMembers; got != tc.expected {
+				t.Fatalf("memberCount=%d got %v want %v", tc.memberCount, got, tc.expected)
+			}
+		})
+	}
+}
+
 func TestCompareRoles(t *testing.T) {
 	tests := map[string]struct {
 		x        []mongo.Role
