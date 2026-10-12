@@ -1048,9 +1048,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) shutdownStatefulSetForRestore(
 		}
 
 		orig := sts.DeepCopy()
-		zero := int32(0)
 
-		sts.Spec.Replicas = &zero
+		sts.Spec.Replicas = new(int32(0))
 
 		if sts.Annotations == nil {
 			sts.Annotations = make(map[string]string)
