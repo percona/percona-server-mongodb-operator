@@ -34,7 +34,7 @@ func GeneratePassword() ([]byte, error) {
 	mrand.Seed(time.Now().UnixNano())
 	ln := mrand.Intn(passwordMaxLen-passwordMinLen) + passwordMinLen
 	b := make([]byte, ln)
-	for i := 0; i < ln; i++ {
+	for i := range ln {
 		randInt, err := rand.Int(rand.Reader, big.NewInt(int64(len(passSymbols))))
 		if err != nil {
 			return nil, err

@@ -7,30 +7,31 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestCreateIssuer(t *testing.T) {
-	ctx := context.Background()
-
 	customIssuerName := "issuer-conf-name"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
-			CRVersion: "1.16.0",
+			CRVersion: version.Version(),
 			TLS: &api.TLSSpec{
-				IssuerConf: &cmmeta.ObjectReference{
+				IssuerConf: cmmeta.IssuerReference{
 					Name: customIssuerName,
+					Kind: cm.IssuerKind,
 				},
 			},
 		},
@@ -38,38 +39,305 @@ func TestCreateIssuer(t *testing.T) {
 
 	r := buildFakeClient(cr)
 
-	issuer := &cm.Issuer{}
-
 	t.Run("Create issuer with custom name", func(t *testing.T) {
-		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
+		ctx := t.Context()
+		cr := cr.DeepCopy()
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
-		if err != nil {
-			t.Fatal(err)
-		}
+		issuer := &cm.Issuer{}
 
-		if issuer.Name != customIssuerName {
-			t.Fatalf("Expected issuer name %s, got %s", customIssuerName, issuer.Name)
-		}
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: customIssuerName}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, customIssuerName, issuer.Name)
 	})
 
 	t.Run("Create issuer with default name", func(t *testing.T) {
-		cr.Spec.CRVersion = "1.15.0"
-		if _, err := r.ApplyIssuer(ctx, cr); err != nil {
-			t.Fatal(err)
-		}
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Name = ""
 
-		err := r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
-		if err != nil {
-			t.Fatal(err)
-		}
+		issuer := &cm.Issuer{}
 
-		if issuer.Name != issuerName(cr) {
-			t.Fatalf("Expected issuer name %s, got %s", issuerName(cr), issuer.Name)
-		}
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Namespace: "psmdb", Name: issuerName(cr)}, issuer)
+		assert.NoError(t, err)
+		assert.Equal(t, "psmdb-mock-psmdb-issuer", issuer.Name)
 	})
+
+	t.Run("Create clusterissuer with custom name", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = customIssuerName
+
+		issuer := &cm.ClusterIssuer{}
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Name: customIssuerName}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, customIssuerName, issuer.Name)
+	})
+
+	t.Run("Create clusterissuer with default name", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = ""
+
+		issuer := &cm.ClusterIssuer{}
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		assert.NoError(t, err)
+
+		err = r.GetClient().Get(ctx, types.NamespacedName{Name: issuerName(cr)}, issuer)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "psmdb-mock-psmdb-psmdb-issuer", issuer.Name)
+	})
+
+	t.Run("Use namespaced issuer for old CR version", func(t *testing.T) {
+		ctx := t.Context()
+		cr := cr.DeepCopy()
+		cr.Spec.CRVersion = "1.22.0"
+		cr.Spec.TLS.IssuerConf.Kind = cm.ClusterIssuerKind
+		cr.Spec.TLS.IssuerConf.Name = ""
+
+		_, err := r.ApplyIssuer(ctx, cr)
+		require.NoError(t, err)
+
+		issuer := new(cm.Issuer)
+		err = r.GetClient().Get(ctx, types.NamespacedName{
+			Name:      issuerName(cr),
+			Namespace: cr.Namespace,
+		}, issuer)
+		require.NoError(t, err)
+	})
+}
+
+func TestCreateCAIssuer(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		Name: "psmdb-mock", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Kind: cm.ClusterIssuerKind,
+				},
+			},
+		},
+	}
+	r := buildFakeClient(cr)
+
+	_, err := r.ApplyCAIssuer(t.Context(), cr)
+	require.NoError(t, err)
+
+	issuer := new(cm.ClusterIssuer)
+	err = r.GetClient().Get(t.Context(), types.NamespacedName{Name: caIssuerName(cr)}, issuer)
+	require.NoError(t, err)
+	assert.Empty(t, issuer.Namespace)
+}
+
+func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
+	const issuerName = "user-cluster-issuer"
+
+	cr := &api.PerconaServerMongoDB{
+		Name: "psmdb-mock", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{},
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Name: issuerName,
+					Kind: cm.ClusterIssuerKind,
+				},
+			},
+		},
+	}
+
+	userIssuer := &cm.ClusterIssuer{
+		Name:        issuerName,
+		Annotations: map[string]string{"some-random-annotation": "true"},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
+		},
+	}
+
+	r := buildFakeClient(cr, userIssuer.DeepCopy())
+
+	status, err := r.ApplyIssuer(t.Context(), cr)
+	require.NoError(t, err)
+	assert.Equal(t, util.ApplyStatusUnchanged, status)
+
+	stored := new(cm.ClusterIssuer)
+	require.NoError(t, r.GetClient().Get(t.Context(), types.NamespacedName{Name: issuerName}, stored))
+	assert.Equal(t, userIssuer.Spec, stored.Spec)
+	assert.Equal(t, userIssuer.Annotations, stored.Annotations)
+	assert.Empty(t, stored.Labels)
+}
+
+func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
+	const issuerName = "user-issuer"
+
+	cr := &api.PerconaServerMongoDB{
+		Name: "psmdb-mock", Namespace: "psmdb",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{},
+			TLS: &api.TLSSpec{
+				IssuerConf: cmmeta.IssuerReference{
+					Name: issuerName,
+					Kind: cm.IssuerKind,
+				},
+			},
+		},
+	}
+
+	userIssuer := &cm.Issuer{
+		Name:        issuerName,
+		Namespace:   cr.Namespace,
+		Annotations: map[string]string{"some-random-annotation": "true"},
+		Spec: cm.IssuerSpec{
+			IssuerConfig: cm.IssuerConfig{Vault: &cm.VaultIssuer{Path: "pki/sign/psmdb"}},
+		},
+	}
+
+	r := buildFakeClient(cr, userIssuer.DeepCopy())
+
+	status, err := r.ApplyIssuer(t.Context(), cr)
+	require.NoError(t, err)
+	assert.Equal(t, util.ApplyStatusUnchanged, status)
+
+	stored := new(cm.Issuer)
+	require.NoError(t, r.GetClient().Get(t.Context(), types.NamespacedName{Name: issuerName, Namespace: cr.Namespace}, stored))
+	assert.Equal(t, userIssuer.Spec, stored.Spec)
+	assert.Equal(t, userIssuer.Annotations, stored.Annotations)
+	assert.Empty(t, stored.Labels)
+	assert.Empty(t, stored.OwnerReferences)
+}
+
+func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
+	const issuerName = "shared-cluster-issuer"
+
+	newCR := func(name, namespace string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Name: name, Namespace: namespace,
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &api.SecretsSpec{},
+				TLS: &api.TLSSpec{
+					IssuerConf: cmmeta.IssuerReference{
+						Name:  issuerName,
+						Kind:  cm.ClusterIssuerKind,
+						Group: cm.SchemeGroupVersion.Group,
+					},
+				},
+			},
+		}
+	}
+
+	clusters := []*api.PerconaServerMongoDB{
+		newCR("cluster-one", "namespace-one"),
+		newCR("cluster-two", "namespace-two"),
+	}
+	cl := buildFakeClient(clusters[0], clusters[1])
+
+	resources := []struct {
+		name   string
+		shared bool
+		apply  func(context.Context, *api.PerconaServerMongoDB) (util.ApplyStatus, error)
+	}{
+		{
+			name:   "CA issuer",
+			shared: true,
+			apply:  cl.ApplyCAIssuer,
+		},
+		{
+			name:   "CA certificate",
+			shared: true,
+			apply: func(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+				return cl.ApplyCertificate(ctx, cr, CertificateCA(cr))
+			},
+		},
+		{
+			name:   "issuer",
+			shared: true,
+			apply:  cl.ApplyIssuer,
+		},
+		{
+			name: "TLS certificate",
+			apply: func(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+				return cl.ApplyCertificate(ctx, cr, CertificateTLS(cr, false))
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		cluster          *api.PerconaServerMongoDB
+		sharedStatus     util.ApplyStatus
+		namespacedStatus util.ApplyStatus
+	}{
+		{
+			name:             "first cluster creates resources",
+			cluster:          clusters[0],
+			sharedStatus:     util.ApplyStatusCreated,
+			namespacedStatus: util.ApplyStatusCreated,
+		},
+		{
+			name:             "second cluster reuses shared resources",
+			cluster:          clusters[1],
+			sharedStatus:     util.ApplyStatusUnchanged,
+			namespacedStatus: util.ApplyStatusCreated,
+		},
+		{
+			name:             "first cluster does not overwrite shared resources",
+			cluster:          clusters[0],
+			sharedStatus:     util.ApplyStatusUnchanged,
+			namespacedStatus: util.ApplyStatusUnchanged,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, resource := range resources {
+				t.Run(resource.name, func(t *testing.T) {
+					expectedStatus := tt.namespacedStatus
+					if resource.shared {
+						expectedStatus = tt.sharedStatus
+					}
+
+					status, err := resource.apply(t.Context(), tt.cluster)
+					require.NoError(t, err)
+					assert.Equal(t, expectedStatus, status)
+				})
+			}
+		})
+	}
+
+	caCertificate := new(cm.Certificate)
+	require.NoError(t, cl.GetClient().Get(t.Context(), types.NamespacedName{
+		Name:      issuerName + "-ca-cert",
+		Namespace: "cert-manager",
+	}, caCertificate))
+	assert.Equal(t, issuerName+"-ca", caCertificate.Spec.CommonName)
+	assert.NotContains(t, caCertificate.Labels, naming.LabelKubernetesInstance)
+
+	for _, cr := range clusters {
+		certificate := new(cm.Certificate)
+		require.NoError(t, cl.GetClient().Get(t.Context(), types.NamespacedName{
+			Name:      CertificateTLS(cr, false).Name(),
+			Namespace: cr.Namespace,
+		}, certificate))
+		assert.Equal(t, issuerName, certificate.Spec.IssuerRef.Name)
+	}
 }
 
 func TestCreateCertificate(t *testing.T) {
@@ -80,14 +348,14 @@ func TestCreateCertificate(t *testing.T) {
 	customIssuerGroup := "issuer-conf-group"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.16.0",
 			Secrets: &api.SecretsSpec{
 				SSL: "ssl",
 			},
 			TLS: &api.TLSSpec{
-				IssuerConf: &cmmeta.ObjectReference{
+				IssuerConf: cmmeta.IssuerReference{
 					Name:  customIssuerName,
 					Kind:  customIssuerKind,
 					Group: customIssuerGroup,
@@ -137,14 +405,10 @@ func TestCreateCertificate(t *testing.T) {
 }
 
 func TestWaitForCerts(t *testing.T) {
-	ctx := context.Background()
-
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "default",
-			UID:       "test-uid-123",
-		},
+		Name:      "test-cluster",
+		Namespace: "default",
+		UID:       "test-uid-123",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -158,30 +422,26 @@ func TestWaitForCerts(t *testing.T) {
 	}{
 		"with cert-manager managed secret": {
 			certificate: &cm.Certificate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					UID:       "cert-uid-456",
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				UID:       "cert-uid-456",
 				Spec: cm.CertificateSpec{
 					SecretName: certName,
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					Annotations: map[string]string{
-						cm.CertificateNameKey: certName,
-					},
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: cm.SchemeGroupVersion.String(),
-							Kind:       cm.CertificateKind,
-							Name:       certName,
-							UID:        "cert-uid-456",
-							Controller: ptr.To(true),
-						},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				Annotations: map[string]string{
+					cm.CertificateNameKey: certName,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: cm.SchemeGroupVersion.String(),
+						Kind:       cm.CertificateKind,
+						Name:       certName,
+						UID:        "cert-uid-456",
+						Controller: new(true),
 					},
 				},
 				Data: map[string][]byte{
@@ -193,22 +453,18 @@ func TestWaitForCerts(t *testing.T) {
 		},
 		"with cert-manager managed secret but without OwnerReferences": {
 			certificate: &cm.Certificate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					UID:       "cert-uid-456",
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				UID:       "cert-uid-456",
 				Spec: cm.CertificateSpec{
 					SecretName: certName,
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-					Annotations: map[string]string{
-						cm.CertificateNameKey: certName,
-					},
+				Name:      certName,
+				Namespace: cr.Namespace,
+				Annotations: map[string]string{
+					cm.CertificateNameKey: certName,
 				},
 				Data: map[string][]byte{
 					"ca.crt":  []byte("fake-ca-cert"),
@@ -220,10 +476,8 @@ func TestWaitForCerts(t *testing.T) {
 		"without cert-manager": {
 			certificate: nil,
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      certName,
-					Namespace: cr.Namespace,
-				},
+				Name:      certName,
+				Namespace: cr.Namespace,
 				Data: map[string][]byte{
 					"ca.crt":  []byte("fake-ca-cert"),
 					"tls.crt": []byte("fake-tls-cert"),
@@ -257,7 +511,7 @@ func TestWaitForCerts(t *testing.T) {
 				dryRun: false,
 			}
 
-			err := controller.WaitForCerts(ctx, cr, CertificateCA(cr))
+			err := controller.WaitForCerts(t.Context(), cr, CertificateCA(cr))
 			assert.NoError(t, err)
 		})
 	}
@@ -267,12 +521,15 @@ func TestWaitForCerts(t *testing.T) {
 func buildFakeClient(objs ...client.Object) CertManagerController {
 	s := scheme.Scheme
 
-	s.AddKnownTypes(api.SchemeGroupVersion,
+	s.AddKnownTypes(
+		api.SchemeGroupVersion,
 		new(api.PerconaServerMongoDB),
 	)
 
-	s.AddKnownTypes(cm.SchemeGroupVersion,
+	s.AddKnownTypes(
+		cm.SchemeGroupVersion,
 		new(cm.Issuer),
+		new(cm.ClusterIssuer),
 		new(cm.Certificate),
 	)
 

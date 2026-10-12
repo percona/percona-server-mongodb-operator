@@ -14,274 +14,36 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-// containerForPMM2 returns a pmm2 container from the given spec.
-func containerForPMM2(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPort int32, customAdminParams string) corev1.Container {
-	_, oka := secret.Data[api.PMMAPIKey]
-	_, okl := secret.Data[api.PMMUserKey]
-	_, okp := secret.Data[api.PMMPasswordKey]
-	customLogin := oka || (okl && okp)
+const (
+	scramSHA1AuthMechanism   = "SCRAM-SHA-1"
+	scramSHA256AuthMechanism = "SCRAM-SHA-256"
+)
 
-	spec := cr.Spec.PMM
-	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
-
-	for i := 30100; i <= 30105; i++ {
-		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(i)})
-	}
-
-	dbEnv := []corev1.EnvVar{
-		{
-			Name: "DB_USER",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_USER",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "DB_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		},
-		{
-			Name:  "DB_HOST",
-			Value: "localhost",
-		},
-		{
-			Name:  "DB_CLUSTER",
-			Value: cr.Name,
-		},
-		{
-			Name:  "DB_PORT",
-			Value: strconv.Itoa(int(dbPort)),
-		},
-		{
-			Name:  "DB_PORT_MIN",
-			Value: "30100",
-		},
-		{
-			Name:  "DB_PORT_MAX",
-			Value: "30105",
-		},
-	}
-	pmm := corev1.Container{
-		Name:            "pmm-client",
-		Image:           spec.Image,
-		ImagePullPolicy: cr.Spec.ImagePullPolicy,
-		Resources:       cr.Spec.PMM.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "PMM_SERVER",
-				Value: spec.ServerHost,
-			},
-			{
-				Name:  "DB_TYPE",
-				Value: "mongodb",
-			},
-		},
-		Ports: ports,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "ssl",
-				MountPath: config.SSLDir,
-				ReadOnly:  true,
-			},
-		},
-	}
-
-	pmm.Env = append(pmm.Env, dbEnv...)
-
-	if customLogin {
-		pmmPassKey := api.PMMAPIKey
-		if spec.ShouldUseAPIKeyAuth(secret) {
-			pmm.Env = append(pmm.Env, corev1.EnvVar{
-				Name:  "PMM_USER",
-				Value: "api_key",
-			})
-		} else {
-			pmmPassKey = api.PMMPasswordKey
-			pmm.Env = append(pmm.Env, corev1.EnvVar{
-				Name: "PMM_USER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: api.PMMUserKey,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
-					},
-				},
-			})
-		}
-		pmm.Env = append(pmm.Env, corev1.EnvVar{
-			Name: "PMM_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: pmmPassKey,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		})
-	}
-
-	if cr.CompareVersion("1.6.0") >= 0 {
-		pmm.LivenessProbe = &corev1.Probe{
-			InitialDelaySeconds: 60,
-			TimeoutSeconds:      5,
-			PeriodSeconds:       10,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Port: intstr.FromInt(7777),
-					Path: "/local/Status",
-				},
-			},
-		}
-		pmm.Env = append(pmm.Env, pmmAgentEnvs(spec, secret, customLogin, customAdminParams)...)
-	}
-
-	if cr.CompareVersion("1.21.0") >= 0 {
-		pmm.VolumeMounts = append(pmm.VolumeMounts, corev1.VolumeMount{
-			Name:      config.MongodDataVolClaimName,
-			MountPath: config.MongodContainerDataDir,
-			ReadOnly:  true,
-		})
-	}
-
-	return pmm
-}
-
-func pmmAgentEnvs(spec api.PMMSpec, secret *corev1.Secret, customLogin bool, customAdminParams string) []corev1.EnvVar {
-	pmmAgentEnvs := []corev1.EnvVar{
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-		{
-			Name: "POD_NAMESPASE",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.namespace",
-				},
-			},
-		},
-		{
-			Name:  "PMM_AGENT_SERVER_ADDRESS",
-			Value: spec.ServerHost,
-		},
-		{
-			Name:  "PMM_AGENT_LISTEN_PORT",
-			Value: "7777",
-		},
-		{
-			Name:  "PMM_AGENT_PORTS_MIN",
-			Value: "30100",
-		},
-		{
-			Name:  "PMM_AGENT_PORTS_MAX",
-			Value: "30105",
-		},
-		{
-			Name:  "PMM_AGENT_CONFIG_FILE",
-			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
-		},
-		{
-			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
-			Value: "1",
-		},
-		{
-			Name:  "PMM_AGENT_LISTEN_ADDRESS",
-			Value: "0.0.0.0",
-		},
-		{
-			Name:  "PMM_AGENT_SETUP_NODE_NAME",
-			Value: "$(POD_NAMESPASE)-$(POD_NAME)",
-		},
-		{
-			Name:  "PMM_AGENT_SETUP",
-			Value: "1",
-		},
-		{
-			Name:  "PMM_AGENT_SETUP_FORCE",
-			Value: "1",
-		},
-		{
-			Name:  "PMM_AGENT_SETUP_NODE_TYPE",
-			Value: "container",
-		},
-		{
-			Name:  "PMM_AGENT_SETUP_METRICS_MODE",
-			Value: "push",
-		},
-		{
-			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
-			Value: customAdminParams,
-		},
-	}
-
-	if customLogin {
-		pmmPassKey := api.PMMAPIKey
-		if spec.ShouldUseAPIKeyAuth(secret) {
-			pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
-				Name:  "PMM_AGENT_SERVER_USERNAME",
-				Value: "api_key",
-			})
-		} else {
-			pmmPassKey = api.PMMPasswordKey
-			pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
-				Name: "PMM_AGENT_SERVER_USERNAME",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: api.PMMUserKey,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
-					},
-				},
-			})
-		}
-		pmmAgentEnvs = append(pmmAgentEnvs, corev1.EnvVar{
-			Name: "PMM_AGENT_SERVER_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: pmmPassKey,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: secret.Name,
-					},
-				},
-			},
-		})
-	}
-
-	return pmmAgentEnvs
-}
-
-func PMMAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
+func pmmAgentScript(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	// handle disabled TLS
 
 	pmmServerArgs := "$(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push "
 	pmmServerArgs += " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) "
 	pmmServerArgs += "--service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT)"
 
+	if cr.Spec.PMM.QuerySource != "" {
+		pmmServerArgs += " --query-source=" + cr.Spec.PMM.QuerySource
+	}
+
 	if cr.TLSEnabled() {
+		authMechanism := scramSHA256AuthMechanism
+		switch {
+		case cr.CompareVersion("1.23.0") < 0:
+			authMechanism = scramSHA1AuthMechanism
+		case cr.Spec.PMM.AuthenticationMechanism != "":
+			authMechanism = cr.Spec.PMM.AuthenticationMechanism
+		}
 		tlsParams := []string{
 			"--tls",
 			"--tls-skip-verify",
 			"--tls-certificate-key-file=/tmp/tls.pem",
 			fmt.Sprintf("--tls-ca-file=%s/ca.crt", config.SSLDir),
-			"--authentication-mechanism=SCRAM-SHA-1",
+			fmt.Sprintf("--authentication-mechanism=%s", authMechanism),
 			"--authentication-database=admin",
 		}
 		pmmServerArgs += " " + strings.Join(tlsParams, " ")
@@ -329,11 +91,9 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
 			PeriodSeconds:       10,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Port: intstr.FromInt32(7777),
-					Path: "/local/Status",
-				},
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.FromInt32(7777),
+				Path: "/local/Status",
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -345,10 +105,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "DB_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_USER",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  "MONGODB_CLUSTER_MONITOR_USER",
+						Name: secret.Name,
 					},
 				},
 			},
@@ -356,10 +114,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  "MONGODB_CLUSTER_MONITOR_PASSWORD",
+						Name: secret.Name,
 					},
 				},
 			},
@@ -406,10 +162,8 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 				Name: "PMM_AGENT_SERVER_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: api.PMMServerToken,
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: secret.Name,
-						},
+						Key:  api.PMMServerToken,
+						Name: secret.Name,
 					},
 				},
 			},
@@ -504,7 +258,7 @@ func containerForPMM3(cr *api.PerconaServerMongoDB, secret *corev1.Secret, dbPor
 		})
 	}
 
-	pmmAgentScriptEnv := PMMAgentScript(cr)
+	pmmAgentScriptEnv := pmmAgentScript(cr)
 	pmm.Env = append(pmm.Env, pmmAgentScriptEnv...)
 
 	return &pmm
@@ -522,83 +276,32 @@ func Container(ctx context.Context, cr *api.PerconaServerMongoDB, secret *corev1
 		return nil
 	}
 
-	if SecretHasToken(secret) {
-		return containerForPMM3(cr, secret, dbPort, customAdminParams)
-	}
-
-	if !cr.Spec.PMM.HasSecret(secret) {
-		log.Error(
-			fmt.Errorf("PMM is enabled and requires the configuration of either %s for PMM3 or %s for PMM2", api.PMMServerToken, api.PMMAPIKey),
-			"secret is missing the required PMM credentials",
-		)
+	if !SecretHasToken(secret) {
+		log.Info(fmt.Sprintf("Secret is missing the required PMM credentials: PMM is enabled and requires the configuration of %s", api.PMMServerToken))
 		return nil
 	}
 
-	pmmC := containerForPMM2(cr, secret, dbPort, customAdminParams)
+	c := containerForPMM3(cr, secret, dbPort, customAdminParams)
+	applyCustomProbes(cr, c)
+	return c
+}
 
-	clusterName := cr.Name
-	if len(cr.Spec.PMM.CustomClusterName) > 0 {
-		clusterName = cr.Spec.PMM.CustomClusterName
-
-	}
-	clusterPmmEnvs := []corev1.EnvVar{
-		{
-			Name:  "CLUSTER_NAME",
-			Value: clusterName,
-		},
-	}
-	pmmC.Env = append(pmmC.Env, clusterPmmEnvs...)
-
-	pmmAgentScriptEnv := PMMAgentScript(cr)
-	pmmC.Env = append(pmmC.Env, pmmAgentScriptEnv...)
-
-	if cr.CompareVersion("1.10.0") >= 0 {
-		// PMM team added these flags which allows us to avoid
-		// container crash, but just restart pmm-agent till it recovers
-		// the connection.
-		sidecarEnvs := []corev1.EnvVar{
-			{
-				Name:  "PMM_AGENT_SIDECAR",
-				Value: "true",
-			},
-			{
-				Name:  "PMM_AGENT_SIDECAR_SLEEP",
-				Value: "5",
-			},
-		}
-		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
-	}
-	if cr.CompareVersion("1.15.0") >= 0 {
-		// PMM team moved temp directory to /usr/local/percona/pmm2/tmp
-		// but it doesn't work on OpenShift so we set it back to /tmp
-		sidecarEnvs := []corev1.EnvVar{
-			{
-				Name:  "PMM_AGENT_PATHS_TEMPDIR",
-				Value: "/tmp",
-			},
-		}
-		pmmC.Env = append(pmmC.Env, sidecarEnvs...)
+// applyCustomProbes overrides the liveness and readiness probes of the
+// pmm-client container with the ones defined in the CR, if any. When the
+// corresponding field is not set the Operator keeps its default behavior:
+// the built-in liveness probe and no readiness probe.
+func applyCustomProbes(cr *api.PerconaServerMongoDB, container *corev1.Container) {
+	if container == nil || cr.CompareVersion("1.23.0") < 0 {
+		return
 	}
 
-	if cr.CompareVersion("1.16.0") >= 0 {
-		pmmC.Lifecycle = &corev1.Lifecycle{
-			PreStop: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"bash",
-						"-c",
-						"pmm-admin unregister --force",
-					},
-				},
-			},
-		}
+	if cr.Spec.PMM.LivenessProbe != nil {
+		container.LivenessProbe = cr.Spec.PMM.LivenessProbe
 	}
 
-	if cr.CompareVersion("1.17.0") >= 0 {
-		pmmC.SecurityContext = cr.Spec.PMM.ContainerSecurityContext
+	if cr.Spec.PMM.ReadinessProbe != nil {
+		container.ReadinessProbe = cr.Spec.PMM.ReadinessProbe
 	}
-
-	return &pmmC
 }
 
 // SecretHasToken checks if the PMM3 token is configured as part of the given secret.

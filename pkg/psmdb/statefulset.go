@@ -3,6 +3,7 @@ package psmdb
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path"
 	"sort"
 	"strconv"
@@ -12,12 +13,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
@@ -26,23 +27,52 @@ import (
 // NewStatefulSet returns a StatefulSet object configured for a name
 func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		APIVersion: "apps/v1",
+		Kind:       "StatefulSet",
+		Name:       name,
+		Namespace:  namespace,
 	}
 }
 
 var secretFileMode int32 = 288
 
+// tmpVolumeName and tmpMountPath define the writable /tmp emptyDir that is
+// injected into containers running with readOnlyRootFilesystem enabled. mongod
+// (WiredTiger temp/sort-spill files) and the backup agent (pbm-entry.sh writes
+// /tmp/tls.pem) both require a writable /tmp at runtime.
+const (
+	tmpVolumeName = "tmp"
+	tmpMountPath  = "/tmp"
+)
+
+// readOnlyRootFilesystemEnabled reports whether the given container security
+// context requests a read-only root filesystem.
+func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
+	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
+}
+
+// needsTmpVolume reports whether a shared writable /tmp emptyDir must be added
+// to the pod because the mongod or backup agent container runs with a read-only
+// root filesystem.
+func needsTmpVolume(cr *api.PerconaServerMongoDB, mongodSecurityContext *corev1.SecurityContext) bool {
+	if cr.CompareVersion("1.23.0") < 0 {
+		return false
+	}
+	// mongod needs a writable /tmp whenever its own root filesystem is read-only,
+	// regardless of whether the backup agent is running.
+	if readOnlyRootFilesystemEnabled(mongodSecurityContext) {
+		return true
+	}
+	// Otherwise the shared volume is only needed for an enabled backup agent that
+	// runs with a read-only root filesystem.
+	return cr.Spec.Backup.Enabled && readOnlyRootFilesystemEnabled(cr.Spec.Backup.ContainerSecurityContext)
+}
+
 // StatefulSpecSecretParams contains secrets params for the StatefulSpec.
 type StatefulSpecSecretParams struct {
-	UsersSecret *corev1.Secret
-	SSLSecret   *corev1.Secret
+	UsersSecret   *corev1.Secret
+	SSLSecret     *corev1.Secret
+	KeyfileExists bool
 }
 
 type StatefulConfigParams struct {
@@ -124,9 +154,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	customLabels := make(map[string]string, len(ls))
-	for k, v := range ls {
-		customLabels[k] = v
-	}
+	maps.Copy(customLabels, ls)
 
 	for k, v := range multiAZ.Labels {
 		if _, ok := customLabels[k]; !ok {
@@ -138,29 +166,38 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumes := []corev1.Volume{
 		{
-			Name: cr.Spec.Secrets.GetInternalKey(cr),
-			VolumeSource: corev1.VolumeSource{
+			Name:     config.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+
+	if cr.KeyFileAuthEnabled() || secrets.KeyfileExists {
+		volumes = append([]corev1.Volume{
+			{
+				Name: cr.Spec.Secrets.GetInternalKey(cr),
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &secretFileMode,
 					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
 					Optional:    &fvar,
 				},
 			},
-		},
-		{
-			Name: config.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
+		}, volumes...)
 	}
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: config.MongoshHomeVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     config.MongoshHomeVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		})
+	}
+
+	// When readOnlyRootFilesystem is enabled on the mongod or backup agent
+	// container, the pod needs a shared writable /tmp emptyDir. The matching
+	// volumeMounts are added to the respective containers below.
+	if needsTmpVolume(cr, containerSecurityContext) {
+		volumes = append(volumes, corev1.Volume{
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
@@ -190,28 +227,26 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if encryptionEnabled {
 		if len(cr.Spec.Secrets.Vault) != 0 {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.Vault,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.Secrets.Vault,
-							Optional:    &fvar,
-						},
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.Vault,
+						Optional:    &fvar,
 					},
 				},
 			)
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.EncryptionKey,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.Secrets.EncryptionKey,
-							Optional:    &fvar,
-						},
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.EncryptionKey,
+						Optional:    &fvar,
 					},
 				},
 			)
@@ -222,6 +257,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		name:                     containerName,
 		resources:                resources,
 		ikeyName:                 cr.Spec.Secrets.GetInternalKey(cr),
+		mountKeyFile:             cr.KeyFileAuthEnabled() || secrets.KeyfileExists,
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,
@@ -234,7 +270,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		return appsv1.StatefulSetSpec{}, fmt.Errorf("failed to create container %v", err)
 	}
 
-	initContainers := InitContainers(cr, initImage)
+	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
 	}
@@ -250,74 +286,65 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	}
 
 	if hash := configs.HashHex(cr); hash != "" {
-		annotations["percona.com/configuration-hash"] = hash
+		annotations[naming.AnnotationConfigHash] = hash
 	}
 
 	volumeClaimTemplates := []corev1.PersistentVolumeClaim{}
 
 	sslVolume := corev1.Volume{
 		Name: "ssl",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName:  api.SSLSecretName(cr),
-				Optional:    &cr.Spec.Unsafe.TLS,
-				DefaultMode: &secretFileMode,
-			},
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  api.SSLSecretName(cr),
+			Optional:    &cr.Spec.Unsafe.TLS,
+			DefaultMode: &secretFileMode,
 		},
 	}
 
 	// add TLS/SSL Volume
 	t := true
-	volumes = append(volumes,
+	volumes = append(
+		volumes,
 		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.SSLInternalSecretName(cr),
-					Optional:    &t,
-					DefaultMode: &secretFileMode,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.SSLInternalSecretName(cr),
+				Optional:    &t,
+				DefaultMode: &secretFileMode,
 			},
 		},
 		corev1.Volume{
 			Name: "users-secret-file",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: api.InternalUserSecretName(cr),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: api.InternalUserSecretName(cr),
 			},
 		},
 	)
 	if cr.Spec.Secrets.LDAPSecret != "" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName:  cr.Spec.Secrets.LDAPSecret,
-						Optional:    &t,
-						DefaultMode: &secretFileMode,
-					},
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.LDAPSecret,
+					Optional:    &t,
+					DefaultMode: &secretFileMode,
 				},
 			},
 			corev1.Volume{
-				Name: config.LDAPConfVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
+				Name:     config.LDAPConfVolClaimName,
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		)
 	}
 
 	if ls[naming.LabelKubernetesComponent] == "arbiter" {
-		volumes = append(volumes,
+		volumes = append(
+			volumes,
 			[]corev1.Volume{
 				{
-					Name: config.MongodDataVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
+					Name:     config.MongodDataVolClaimName,
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			}...,
 		)
@@ -327,13 +354,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				PersistentVolumeClaim(config.MongodDataVolClaimName, cr.Namespace, volumeSpec),
 			}
 		} else {
-			volumes = append(volumes,
+			volumes = append(
+				volumes,
 				corev1.Volume{
-					Name: config.MongodDataVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						HostPath: volumeSpec.HostPath,
-						EmptyDir: volumeSpec.EmptyDir,
-					},
+					Name:     config.MongodDataVolClaimName,
+					HostPath: volumeSpec.HostPath,
+					EmptyDir: volumeSpec.EmptyDir,
 				},
 			)
 		}
@@ -352,13 +378,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				}
 				volumes = append(volumes, corev1.Volume{
 					Name: config.PBMHookscriptVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: name,
-							},
-							Optional: ptr.To(true),
-						},
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						Name:     name,
+						Optional: new(true),
 					},
 				})
 			}
@@ -370,7 +392,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 
 		if cr.CompareVersion("1.21.0") >= 0 {
-			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort())
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), config.MongodLogVolume())
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")
 			}
@@ -385,13 +407,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
-					},
-					Optional: ptr.To(true),
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name:     name,
+				Optional: new(true),
 			},
 		})
 	}
@@ -422,7 +440,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 	}
 
-	return appsv1.StatefulSetSpec{
+	spec := appsv1.StatefulSetSpec{
 		ServiceName: cr.Name + "-" + replset.Name,
 		Replicas:    &size,
 		Selector: &metav1.LabelSelector{
@@ -454,7 +472,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		},
 		UpdateStrategy:       updateStrategy,
 		VolumeClaimTemplates: volumeClaimTemplates,
-	}, nil
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 {
+		spec.RevisionHistoryLimit = cr.Spec.RevisionHistoryLimit
+	}
+
+	return spec, nil
 }
 
 func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMongoDB) *corev1.Volume {
@@ -468,10 +492,8 @@ func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMo
 	if len(logrotateConfigVolumeProjections) > 0 {
 		return &corev1.Volume{
 			Name: logrotate.VolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: logrotateConfigVolumeProjections,
-				},
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: logrotateConfigVolumeProjections,
 			},
 		}
 	}
@@ -504,6 +526,12 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	if len(cr.Spec.Backup.VolumeMounts) > 0 {
 		volumeMounts = append(volumeMounts, cr.Spec.Backup.VolumeMounts...)
 	}
+	if cr.CompareVersion("1.23.0") >= 0 && readOnlyRootFilesystemEnabled(cr.Spec.Backup.ContainerSecurityContext) {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      tmpVolumeName,
+			MountPath: tmpMountPath,
+		})
+	}
 	if attachHookScript {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      config.PBMHookscriptVolClaimName,
@@ -522,10 +550,8 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name: "PBM_AGENT_MONGODB_USERNAME",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_USER_ESCAPED",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: usersSecretName,
-						},
+						Key:      "MONGODB_BACKUP_USER_ESCAPED",
+						Name:     usersSecretName,
 						Optional: &fvar,
 					},
 				},
@@ -534,10 +560,8 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name: "PBM_AGENT_MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: usersSecretName,
-						},
+						Key:      "MONGODB_BACKUP_PASSWORD_ESCAPED",
+						Name:     usersSecretName,
 						Optional: &fvar,
 					},
 				},
@@ -566,6 +590,14 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	if cr.CompareVersion("1.19.0") < 0 {
 		c.Env[0].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_USER"
 		c.Env[1].ValueFrom.SecretKeyRef.Key = "MONGODB_BACKUP_PASSWORD"
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetAWSSDKChecksumEnvVars(cr) {
+		c.Env = append(c.Env, AWSSDKChecksumEnvVars()...)
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 && ShouldSetOCIResourcePrincipalEnvVars(cr) {
+		c.Env = append(c.Env, OCIResourcePrincipalEnvVars(cr)...)
 	}
 
 	if cr.Spec.Sharding.Enabled {
@@ -607,7 +639,84 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 		}
 	}
 
+	if cr.CompareVersion("1.23.0") >= 0 {
+		if cr.Spec.Backup.LivenessProbe != nil {
+			c.LivenessProbe = cr.Spec.Backup.LivenessProbe
+		}
+		if cr.Spec.Backup.ReadinessProbe != nil {
+			c.ReadinessProbe = cr.Spec.Backup.ReadinessProbe
+		}
+	}
+
 	return c
+}
+
+func AWSSDKChecksumEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "AWS_REQUEST_CHECKSUM_CALCULATION",
+			Value: "when_required",
+		},
+		{
+			Name:  "AWS_RESPONSE_CHECKSUM_VALIDATION",
+			Value: "when_required",
+		},
+	}
+}
+
+func ShouldSetAWSSDKChecksumEnvVars(cr *api.PerconaServerMongoDB) bool {
+	pbm2110OrOlder, err := cr.ComparePBMAgentVersion("2.11.0")
+	if err != nil || pbm2110OrOlder > 0 {
+		return false
+	}
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageS3 && strings.Contains(storage.S3.EndpointURL, naming.OSSCloudEndpointURL) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ShouldSetOCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) bool {
+	pbm2150OrNewer, err := cr.ComparePBMAgentVersion("2.15.0")
+	if err != nil || pbm2150OrNewer < 0 {
+		return false
+	}
+
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageOCI && storage.OCI.Credentials.Type == api.AuthTypeOkeWorkloadIdentity {
+			return true
+		}
+	}
+
+	return false
+}
+
+const OCIResourcePrincipalVersion = "2.2"
+
+func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
+	var oci api.BackupStorageOCISpec
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage.Type == api.BackupStorageOCI && storage.OCI.Credentials.Type == api.AuthTypeOkeWorkloadIdentity {
+			oci = storage.OCI
+			break
+		}
+	}
+
+	return []corev1.EnvVar{
+		{
+			Name:  "OCI_RESOURCE_PRINCIPAL_VERSION",
+			Value: OCIResourcePrincipalVersion,
+		},
+		{
+			// if user defines more than one OCI storages and tries to use okeWorkloadIdentity for them
+			// all storages need to be in same region
+			Name:  "OCI_RESOURCE_PRINCIPAL_REGION",
+			Value: oci.Region,
+		},
+	}
 }
 
 func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
@@ -652,14 +761,10 @@ func sslSecretDataExist(ctx context.Context, secret *corev1.Secret) bool {
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
 func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PersistentVolumeClaim",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Kind:       "PersistentVolumeClaim",
+		APIVersion: "v1",
+		Name:       name,
+		Namespace:  namespace,
 	}
 
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
@@ -675,9 +780,7 @@ func PodAffinity(cr *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[s
 	}
 
 	labelsCopy := make(map[string]string)
-	for k, v := range labels {
-		labelsCopy[k] = v
-	}
+	maps.Copy(labelsCopy, labels)
 
 	switch {
 	case af.Advanced != nil:
@@ -769,9 +872,7 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 	for i, ca := range cas {
 		sources = append(sources, corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: ca.Name,
-				},
+				Name: ca.Name,
 				Items: []corev1.KeyToPath{
 					// Items field ensures only the specified key is mounted.
 					// This prevents mounting server certificates (tls.crt) or
@@ -788,23 +889,18 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 	return []corev1.Volume{
 		{
 			Name: naming.BackupStorageCAInputVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: sources,
-				},
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: sources,
 			},
 		},
 		{
-			Name: naming.BackupStorageCAFileVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     naming.BackupStorageCAFileVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 }
 
 func GetCAVolumeMounts() []corev1.VolumeMount {
-
 	return []corev1.VolumeMount{
 		{
 			Name:      naming.BackupStorageCAInputVolumeName,

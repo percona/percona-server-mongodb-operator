@@ -3,7 +3,19 @@ set -e
 
 export PATH="$PATH:/opt/fluent-bit/bin"
 
-LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 0 * * *}"
+LOGROTATE_SCHEDULE="${LOGROTATE_SCHEDULE:-0 0 * * *}"
+
+run_cron() {
+	local schedule="$1"
+	local cmd="$2"
+
+	if [ -f /usr/bin/supercronic ]; then
+        printf '%s %s\n' "$schedule" "$cmd" > /tmp/crontab
+        exec supercronic /tmp/crontab
+    else
+        exec go-cron "$schedule" sh -c "$cmd"
+    fi
+}
 
 is_logrotate_config_invalid() {
 	local config_file="$1"
@@ -25,6 +37,14 @@ run_logrotate() {
 	local logrotate_conf_file="/opt/percona/logcollector/logrotate/logrotate.conf"
 	local logrotate_additional_conf_files=()
 	local conf_d_dir="/opt/percona/logcollector/logrotate/conf.d"
+
+	# Ensure logrotate can run with current UID
+	if [[ $EUID != 1001 ]]; then
+		# logrotate requires UID in /etc/passwd
+		sed -e "s^x:1001:^x:$EUID:^" /etc/passwd >/tmp/passwd
+		cat /tmp/passwd >/etc/passwd
+		rm -rf /tmp/passwd
+	fi
 
 	# Check if mongodb.conf exists and validate it
 	if [ -f "$conf_d_dir/mongodb.conf" ]; then
@@ -49,13 +69,6 @@ run_logrotate() {
 			fi
 		done
 	fi
-	# Ensure logrotate can run with current UID
-	if [[ $EUID != 1001 ]]; then
-		# logrotate requires UID in /etc/passwd
-		sed -e "s^x:1001:^x:$EUID:^" /etc/passwd >/tmp/passwd
-		cat /tmp/passwd >/etc/passwd
-		rm -rf /tmp/passwd
-	fi
 
 	local logrotate_cmd="logrotate -s \"$logrotate_status_file\" \"$logrotate_conf_file\""
 	for additional_conf in "${logrotate_additional_conf_files[@]}"; do
@@ -63,7 +76,7 @@ run_logrotate() {
 	done
 
 	set -o xtrace
-	exec go-cron "$LOGROTATE_SCHEDULE" sh -c "$logrotate_cmd"
+	run_cron "$LOGROTATE_SCHEDULE" "$logrotate_cmd"
 }
 
 run_fluentbit() {

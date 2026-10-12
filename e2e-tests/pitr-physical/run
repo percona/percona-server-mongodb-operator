@@ -24,13 +24,13 @@ run_backup() {
 
 main() {
 	create_infra $namespace
-	deploy_minio
+	deploy_s3_storage
 
 	desc 'create secrets and start client'
 	kubectl_bin apply \
 		-f "$conf_dir/secrets.yml" \
 		-f "$conf_dir/client.yml" \
-		-f $conf_dir/minio-secret.yml
+		-f $conf_dir/s3-secret.yml
 
 	cluster="some-name"
 	desc "create first PSMDB cluster $cluster"
@@ -61,8 +61,8 @@ main() {
 	log "Sleeping for 360 seconds to avoid PBM-1265"
 	sleep 360
 
-	backup_name_minio="backup-minio"
-	run_backup $backup_name_minio 2 physical
+	backup_name_local_s3="backup-local-s3"
+	run_backup $backup_name_local_s3 2 physical
 
 	write_document "-2nd" '130'
 
@@ -86,12 +86,12 @@ main() {
 
 	sleep 10
 
-	check_recovery $backup_name_minio-2 date "${last_chunk}" "-2nd" "$cluster"
+	check_recovery $backup_name_local_s3-2 date "${last_chunk}" "-2nd" "$cluster"
 
-	run_backup $backup_name_minio 3 physical
-	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_minio}-3"
+	run_backup $backup_name_local_s3 3 physical
+	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_local_s3}-3"
 
-	check_recovery $backup_name_minio-3 latest "" "-3rd" "$cluster"
+	check_recovery $backup_name_local_s3-3 latest "" "-3rd" "$cluster"
 
 	destroy $namespace
 	desc 'test passed'

@@ -65,7 +65,7 @@ func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulset(ctx context.Contex
 func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr *api.PerconaServerMongoDB, rs string) (appsv1.StatefulSet, error) {
 	sts := appsv1.StatefulSet{}
 
-	err := r.client.Get(ctx, cr.StatefulsetNamespacedName(rs), &sts)
+	err := r.client.Get(ctx, naming.ReplsetNamespacedName(cr, rs), &sts)
 
 	return sts, err
 }

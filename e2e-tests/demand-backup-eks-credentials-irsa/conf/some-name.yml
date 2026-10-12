@@ -22,12 +22,6 @@ spec:
           region: us-east-1
           bucket: operator-testing
           prefix: psmdb-demand-backup-eks-irsa
-    tasks:
-    - name: weekly
-      enabled: true
-      schedule: "0 0 * * 0"
-      compressionType: gzip
-      storageName: aws-s3
   replsets:
   - name: rs0
     affinity:

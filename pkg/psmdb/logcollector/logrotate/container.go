@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -27,7 +26,7 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container, error) {
+func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
 	}
@@ -47,11 +46,9 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 			Name: "MONGODB_USER",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
-					Optional: ptr.To(false),
+					Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
+					Name:     usersSecretName,
+					Optional: new(false),
 				},
 			},
 		},
@@ -59,11 +56,9 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 			Name: "MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: usersSecretName,
-					},
-					Optional: ptr.To(false),
+					Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+					Name:     usersSecretName,
+					Optional: new(false),
 				},
 			},
 		},
@@ -82,8 +77,8 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 		Command: []string{"/opt/percona/logcollector/entrypoint.sh"},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
+				Name:      logVol.Name,
+				MountPath: logVol.MountPath,
 			},
 			{
 				Name:      config.BinVolumeName,
@@ -104,6 +99,15 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32) (*corev1.Container
 				Name:  "LOGROTATE_SCHEDULE",
 				Value: cr.Spec.LogCollector.LogRotate.Schedule,
 			})
+		}
+
+		if cr.CompareVersion("1.23.0") >= 0 {
+			if cr.Spec.LogCollector.LogRotate.LivenessProbe != nil {
+				container.LivenessProbe = cr.Spec.LogCollector.LogRotate.LivenessProbe
+			}
+			if cr.Spec.LogCollector.LogRotate.ReadinessProbe != nil {
+				container.ReadinessProbe = cr.Spec.LogCollector.LogRotate.ReadinessProbe
+			}
 		}
 	}
 

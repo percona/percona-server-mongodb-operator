@@ -18,6 +18,7 @@ type containerFnParams struct {
 	name                     string
 	resources                corev1.ResourceRequirements
 	ikeyName                 string
+	mountKeyFile             bool
 	useConfigFile            bool
 	livenessProbe            *api.LivenessProbeExtended
 	readinessProbe           *corev1.Probe
@@ -32,6 +33,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		name                     = params.name
 		resources                = params.resources
 		ikeyName                 = params.ikeyName
+		mountKeyFile             = params.mountKeyFile
 		useConfigFile            = params.useConfigFile
 		livenessProbe            = params.livenessProbe
 		readinessProbe           = params.readinessProbe
@@ -46,22 +48,28 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
-		{
+	}
+
+	if mountKeyFile {
+		volumes = append(volumes, corev1.VolumeMount{
 			Name:      ikeyName,
 			MountPath: config.MongodSecretsDir,
 			ReadOnly:  true,
-		},
-		{
+		})
+	}
+
+	volumes = append(volumes,
+		corev1.VolumeMount{
 			Name:      "ssl",
 			MountPath: config.SSLDir,
 			ReadOnly:  true,
 		},
-		{
+		corev1.VolumeMount{
 			Name:      "ssl-internal",
 			MountPath: config.SSLInternalDir,
 			ReadOnly:  true,
 		},
-	}
+	)
 
 	if useConfigFile {
 		volumes = append(volumes, corev1.VolumeMount{
@@ -132,6 +140,16 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		})
 	}
 
+	// mongod requires a writable /tmp (WiredTiger temp/sort-spill files) when
+	// the root filesystem is read-only. The matching emptyDir volume is added
+	// to the pod spec in StatefulSpec.
+	if cr.CompareVersion("1.23.0") >= 0 && readOnlyRootFilesystemEnabled(containerSecurityContext) {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      tmpVolumeName,
+			MountPath: tmpMountPath,
+		})
+	}
+
 	rsName := replset.Name
 	if name, err := replset.CustomReplsetName(); err == nil {
 		rsName = name
@@ -170,9 +188,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		EnvFrom: []corev1.EnvFromSource{
 			{
 				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cr.Spec.Secrets.Users,
-					},
+					Name:     cr.Spec.Secrets.Users,
 					Optional: &fvar,
 				},
 			},
@@ -188,9 +204,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 	container.EnvFrom = []corev1.EnvFromSource{
 		{
 			SecretRef: &corev1.SecretEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: api.InternalUserSecretName(cr),
-				},
+				Name:     api.InternalUserSecretName(cr),
 				Optional: &fvar,
 			},
 		},

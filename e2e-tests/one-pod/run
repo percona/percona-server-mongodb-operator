@@ -30,9 +30,9 @@ main() {
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml" \
-		-f "${conf_dir}/minio-secret.yml"
+		-f "${conf_dir}/s3-secret.yml"
 
-	deploy_minio
+	deploy_s3_storage
 
 	cluster='one-pod-rs0'
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
@@ -81,9 +81,9 @@ main() {
 			>$tmp_dir/parsed_systemLog_secret-2.json
 	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret-2.json $tmp_dir/parsed_systemLog_secret-2.json
 
-	run_backup "minio"
-	wait_backup "backup-minio"
-	run_recovery_check "$cluster" "backup-minio"
+	run_backup "local-s3"
+	wait_backup "backup-local-s3"
+	run_recovery_check "$cluster" "backup-local-s3"
 
 	destroy $namespace
 

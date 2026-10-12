@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -27,6 +28,8 @@ const (
 	ComponentNonVotingShort = "nv"
 	ComponentHidden         = "hidden"
 	ComponentArbiter        = "arbiter"
+	ComponentSearch         = "search"
+	ComponentConfigSrv      = "cfg"
 )
 
 const (
@@ -36,7 +39,23 @@ const (
 	ContainerNonVoting   = ContainerMongod + "-" + ComponentNonVotingShort
 	ContainerArbiter     = ContainerMongod + "-" + ComponentArbiter
 	ContainerHidden      = ContainerMongod + "-" + ComponentHidden
+	ContainerMongot      = "mongot"
 )
+
+// MongodContainerName returns the name of the mongod container for the given
+// replset component.
+func MongodContainerName(component string) string {
+	switch component {
+	case ComponentNonVoting:
+		return ContainerNonVoting
+	case ComponentHidden:
+		return ContainerHidden
+	case ComponentArbiter:
+		return ContainerArbiter
+	default:
+		return ContainerMongod
+	}
+}
 
 func MongodStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s", cr.Name, rs.Name)
@@ -44,6 +63,18 @@ func MongodStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.Replset
 
 func MongodCustomConfigName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentMongod)
+}
+
+func MongosStatefulSetName(cr *psmdbv1.PerconaServerMongoDB) string {
+	return fmt.Sprintf("%s-%s", cr.Name, ComponentMongos)
+}
+
+func SearchStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
+	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentSearch)
+}
+
+func SearchConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
+	return SearchStatefulSetName(cr, rs) + "-config"
 }
 
 func MongosCustomConfigName(cr *psmdbv1.PerconaServerMongoDB) string {
@@ -95,4 +126,12 @@ func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 
 func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
 	return fmt.Sprintf("%s-%s", bcp.Name, rsName)
+}
+
+func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
+}
+
+func MongosNamespacedName(cr *psmdbv1.PerconaServerMongoDB) types.NamespacedName {
+	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }

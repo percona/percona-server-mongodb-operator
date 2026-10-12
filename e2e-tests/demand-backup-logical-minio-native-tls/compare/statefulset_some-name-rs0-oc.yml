@@ -128,9 +128,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -222,23 +219,15 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 1001
+      securityContext: {}
       serviceAccount: default
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: some-name-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}
@@ -275,7 +264,7 @@ spec:
                   items:
                     - key: ca.crt
                       path: ca-0.crt
-                  name: minio-ca-bundle
+                  name: s3-ca-bundle
         - emptyDir: {}
           name: ca-bundle
   updateStrategy:

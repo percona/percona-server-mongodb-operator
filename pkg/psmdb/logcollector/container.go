@@ -25,17 +25,17 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Containers(cr *api.PerconaServerMongoDB, mongoPort int32) ([]corev1.Container, error) {
+func Containers(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) ([]corev1.Container, error) {
 	if cr.Spec.LogCollector == nil || !cr.Spec.LogCollector.Enabled {
 		return nil, nil
 	}
 
-	logCont, err := logContainer(cr)
+	logCont, err := logContainer(cr, logVol)
 	if err != nil {
 		return nil, err
 	}
 
-	logRotationCont, err := logrotate.Container(cr, mongoPort)
+	logRotationCont, err := logrotate.Container(cr, mongoPort, logVol)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func Containers(cr *api.PerconaServerMongoDB, mongoPort int32) ([]corev1.Contain
 	return []corev1.Container{*logCont, *logRotationCont}, nil
 }
 
-func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
+func logContainer(cr *api.PerconaServerMongoDB, logVol config.LogVolume) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
 	}
@@ -84,8 +84,8 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 		Resources:       cr.Spec.LogCollector.Resources,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      config.MongodDataVolClaimName,
-				MountPath: config.MongodContainerDataDir,
+				Name:      logVol.Name,
+				MountPath: logVol.MountPath,
 			},
 			{
 				Name:      config.BinVolumeName,
@@ -104,6 +104,15 @@ func logContainer(cr *api.PerconaServerMongoDB) (*corev1.Container, error) {
 	if cr.CompareVersion("1.22.0") >= 0 {
 		container.Env = append(container.Env, cr.Spec.LogCollector.Env...)
 		container.EnvFrom = append(container.EnvFrom, cr.Spec.LogCollector.EnvFrom...)
+	}
+
+	if cr.CompareVersion("1.23.0") >= 0 {
+		if cr.Spec.LogCollector.LivenessProbe != nil {
+			container.LivenessProbe = cr.Spec.LogCollector.LivenessProbe
+		}
+		if cr.Spec.LogCollector.ReadinessProbe != nil {
+			container.ReadinessProbe = cr.Spec.LogCollector.ReadinessProbe
+		}
 	}
 
 	return &container, nil

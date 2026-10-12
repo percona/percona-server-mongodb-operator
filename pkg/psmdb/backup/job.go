@@ -52,16 +52,12 @@ func BackupCronJob(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (batc
 	}
 
 	return batchv1.CronJob{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "CronJob",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        task.Name,
-			Namespace:   cr.Namespace,
-			Labels:      naming.NewBackupCronJobLabels(cr, backupSpec.Labels),
-			Annotations: backupSpec.Annotations,
-		},
+		APIVersion:  "batch/v1",
+		Kind:        "CronJob",
+		Name:        task.Name,
+		Namespace:   cr.Namespace,
+		Labels:      naming.NewBackupCronJobLabels(cr, backupSpec.Labels),
+		Annotations: backupSpec.Annotations,
 		Spec: batchv1.CronJobSpec{
 			Schedule:          task.Schedule,
 			ConcurrencyPolicy: batchv1.ForbidConcurrent,
@@ -98,15 +94,11 @@ func BackupFromTask(cr *api.PerconaServerMongoDB, task *api.BackupTaskSpec) (*ap
 		finalizers = []string{}
 	}
 	backupCr := &api.PerconaServerMongoDBBackup{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: api.SchemeGroupVersion.String(),
-			Kind:       "PerconaServerMongoDBBackup",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Finalizers:   finalizers,
-			GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
-			Labels:       naming.ScheduledBackupLabels(cr, task),
-		},
+		APIVersion:   api.SchemeGroupVersion.String(),
+		Kind:         "PerconaServerMongoDBBackup",
+		Finalizers:   finalizers,
+		GenerateName: "cron-" + shortClusterName + "-" + time.Now().Format("20060102150405") + "-",
+		Labels:       naming.ScheduledBackupLabels(cr, task),
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			Type:                backupType,
 			ClusterName:         cr.Name,

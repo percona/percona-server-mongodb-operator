@@ -15,6 +15,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
+	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 )
@@ -28,11 +29,9 @@ func TestValidate(t *testing.T) {
 	backupName := ns + "-backup"
 	secretName := ns + "-secret"
 	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: ns,
-		},
-		Data: map[string][]byte{},
+		Name:      secretName,
+		Namespace: ns,
+		Data:      map[string][]byte{},
 	}
 
 	storageName := ns + "-stg"
@@ -158,6 +157,66 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestGetStorageFromBackupSource(t *testing.T) {
+	ns := "get-storage"
+	clusterName := ns + "-cr"
+	restoreName := ns + "-restore"
+
+	cluster := readDefaultCluster(t, clusterName, ns)
+	r := fakeReconciler()
+
+	tests := []struct {
+		name         string
+		backupSource *psmdbv1.PerconaServerMongoDBBackupStatus
+		expectedType psmdbv1.BackupStorageType
+		assert       func(t *testing.T, stg psmdbv1.BackupStorageSpec)
+	}{
+		{
+			name: "oci",
+			backupSource: &psmdbv1.PerconaServerMongoDBBackupStatus{
+				OCI: &psmdbv1.BackupStorageOCISpec{
+					Region: "some-region",
+					Bucket: "some-bucket",
+					Prefix: "some-prefix",
+				},
+			},
+			expectedType: psmdbv1.BackupStorageOCI,
+			assert: func(t *testing.T, stg psmdbv1.BackupStorageSpec) {
+				assert.Equal(t, "some-region", stg.OCI.Region)
+				assert.Equal(t, "some-bucket", stg.OCI.Bucket)
+				assert.Equal(t, "some-prefix", stg.OCI.Prefix)
+			},
+		},
+		{
+			name: "s3",
+			backupSource: &psmdbv1.PerconaServerMongoDBBackupStatus{
+				S3: &psmdbv1.BackupStorageS3Spec{Bucket: "some-bucket"},
+			},
+			expectedType: psmdbv1.BackupStorageS3,
+			assert: func(t *testing.T, stg psmdbv1.BackupStorageSpec) {
+				assert.Equal(t, "some-bucket", stg.S3.Bucket)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBRestore{
+				Name: restoreName, Namespace: ns,
+				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
+					ClusterName:  clusterName,
+					BackupSource: tt.backupSource,
+				},
+			}
+
+			stg, err := r.getStorage(cr, cluster, "")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedType, stg.Type)
+			tt.assert(t, stg)
+		})
+	}
+}
+
 func TestValidatePiTR(t *testing.T) {
 	ctx := context.Background()
 
@@ -167,11 +226,9 @@ func TestValidatePiTR(t *testing.T) {
 	backupName := ns + "-backup"
 	secretName := ns + "-secret"
 	secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: ns,
-		},
-		Data: map[string][]byte{},
+		Name:      secretName,
+		Namespace: ns,
+		Data:      map[string][]byte{},
 	}
 
 	storageName := ns + "-stg"
@@ -200,10 +257,8 @@ func TestValidatePiTR(t *testing.T) {
 		{
 			"logical: pitr target time is equal to backup's last write",
 			&psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: ns,
-				},
+				Name:      backupName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 					Type:        defs.LogicalBackup,
 					ClusterName: clusterName,
@@ -218,10 +273,8 @@ func TestValidatePiTR(t *testing.T) {
 				},
 			},
 			&psmdbv1.PerconaServerMongoDBRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: ns,
-				},
+				Name:      restoreName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
 					BackupName:  backupName,
 					ClusterName: clusterName,
@@ -240,10 +293,8 @@ func TestValidatePiTR(t *testing.T) {
 		{
 			"physical: pitr target time is equal to backup's last write",
 			&psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: ns,
-				},
+				Name:      backupName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 					Type:        defs.PhysicalBackup,
 					ClusterName: clusterName,
@@ -258,10 +309,8 @@ func TestValidatePiTR(t *testing.T) {
 				},
 			},
 			&psmdbv1.PerconaServerMongoDBRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: ns,
-				},
+				Name:      restoreName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
 					BackupName:  backupName,
 					ClusterName: clusterName,
@@ -280,10 +329,8 @@ func TestValidatePiTR(t *testing.T) {
 		{
 			"logical: pitr target time is later than backup's last write",
 			&psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: ns,
-				},
+				Name:      backupName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 					Type:        defs.LogicalBackup,
 					ClusterName: clusterName,
@@ -298,10 +345,8 @@ func TestValidatePiTR(t *testing.T) {
 				},
 			},
 			&psmdbv1.PerconaServerMongoDBRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: ns,
-				},
+				Name:      restoreName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
 					BackupName:  backupName,
 					ClusterName: clusterName,
@@ -320,10 +365,8 @@ func TestValidatePiTR(t *testing.T) {
 		{
 			"physical: pitr target time is later than backup's last write",
 			&psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: ns,
-				},
+				Name:      backupName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 					Type:        defs.PhysicalBackup,
 					ClusterName: clusterName,
@@ -338,10 +381,8 @@ func TestValidatePiTR(t *testing.T) {
 				},
 			},
 			&psmdbv1.PerconaServerMongoDBRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: ns,
-				},
+				Name:      restoreName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
 					BackupName:  backupName,
 					ClusterName: clusterName,
@@ -360,10 +401,8 @@ func TestValidatePiTR(t *testing.T) {
 		{
 			"logical: pitr target time is valid",
 			&psmdbv1.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: ns,
-				},
+				Name:      backupName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 					Type:        defs.LogicalBackup,
 					ClusterName: clusterName,
@@ -378,10 +417,8 @@ func TestValidatePiTR(t *testing.T) {
 				},
 			},
 			&psmdbv1.PerconaServerMongoDBRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: ns,
-				},
+				Name:      restoreName,
+				Namespace: ns,
 				Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
 					BackupName:  backupName,
 					ClusterName: clusterName,
@@ -438,5 +475,6 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		client:     cl,
 		scheme:     s,
 		newPBMFunc: fakeBackup.NewPBM,
+		clientcmd:  fakeClientcmd.New(),
 	}
 }

@@ -10,22 +10,24 @@ spec:
     tls: true
   tls:
     mode: disabled
+  defaultRWConcern:
+    readConcern: majority
+    writeConcern:
+      w: majority
+      wtimeout: 5000
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      gcp-cs-s3:
-        type: s3
-        s3:
-          credentialsSecret: gcp-cs-secret
-          region: us-east-1
+      gcp-cs:
+        type: gcs
+        gcs:
+          credentialsSecret: gcp-cs-sa-key-secret
           bucket: operator-testing
           prefix: psmdb-demand-backup-physical
-          endpointUrl: https://storage.googleapis.com
-          insecureSkipTLSVerify: false
   replsets:
   - name: rs0
-    terminationGracePeriodSeconds: 300
+    terminationGracePeriodSeconds: 30
     configuration: |
       operationProfiling:
         mode: slowOp
@@ -52,7 +54,7 @@ spec:
     resources:
       limits:
         cpu: 500m
-        memory: 0.5G
+        memory: 1G
       requests:
         cpu: 100m
         memory: 0.1G
@@ -62,15 +64,15 @@ spec:
           requests:
             storage: 1Gi
     sidecars:
-    - image: busybox
+    - image: docker.io/busybox:latest
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: my-sidecar-1
-    - image: busybox
+    - image: docker.io/busybox:latest
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: my-sidecar-2
-    - image: busybox
+    - image: docker.io/busybox:latest
       name: mongod
     runtimeClassName: container-rc
     size: 3

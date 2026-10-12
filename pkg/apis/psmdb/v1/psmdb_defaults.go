@@ -7,12 +7,14 @@ import (
 	"strings"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-backup-mongodb/pbm/compress"
@@ -130,6 +132,13 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
 		cr.Spec.TLS.AllowInvalidCertificates = &t
+	}
+
+	if cr.Spec.TLS.IssuerConf.Kind == "" {
+		cr.Spec.TLS.IssuerConf.Kind = cm.IssuerKind
+	}
+	if cr.Spec.TLS.IssuerConf.Group == "" {
+		cr.Spec.TLS.IssuerConf.Group = "cert-manager.io"
 	}
 
 	if cr.Spec.UnsafeConf {
@@ -257,7 +266,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.11.0") >= 0 && !cr.Spec.Sharding.Mongos.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command = append(
 					cr.Spec.Sharding.Mongos.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(cr.Spec.Sharding.Mongos.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -349,6 +359,24 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if len(cr.Spec.Sharding.Mongos.ServiceAccountName) == 0 && cr.CompareVersion("1.16.0") >= 0 {
 			cr.Spec.Sharding.Mongos.ServiceAccountName = WorkloadSA
+		}
+
+		if dns := cr.Spec.Sharding.Mongos.Expose.ExternalDNS; dns != nil {
+			if dns.Domain == "" {
+				return errors.New("externalDNS requires domain for mongos")
+			}
+			if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+				return fmt.Errorf("externalDNS domain %q for mongos is not a valid domain name: %s", dns.Domain, strings.Join(errs, "; "))
+			}
+			if dns.Prefix == "" {
+				dns.Prefix = cr.Name
+			}
+		}
+
+		if s := cr.Spec.Sharding.Mongos.LogStorage(); s != nil && s.PersistentVolumeClaimSpec != nil {
+			if len(cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes) == 0 {
+				cr.Spec.Sharding.Mongos.Logs.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+			}
 		}
 	}
 
@@ -453,7 +481,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			if cr.CompareVersion("1.4.0") >= 0 && !replset.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 				replset.LivenessProbe.Exec.Command = append(
 					replset.LivenessProbe.Exec.Command,
-					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds))
+					startupDelaySecondsFlag, strconv.Itoa(replset.LivenessProbe.StartupDelaySeconds),
+				)
 			}
 
 			if cr.CompareVersion("1.14.0") >= 0 {
@@ -629,6 +658,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				cr.Spec.Backup.Storages[name] = stg
 			}
 		}
+
+		if err := validateOCIStorages(cr); err != nil {
+			return errors.Wrap(err, "validate oci storages")
+		}
 	}
 
 	if !cr.Spec.Backup.Enabled {
@@ -675,6 +708,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		return errors.New("MCS is not available on this cluster")
 	}
 
+	cr.setSearchDefaults(platform)
+
 	return nil
 }
 
@@ -717,6 +752,18 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 		if len(rs.Expose.DeprecatedServiceAnnotations) > 0 {
 			rs.Expose.ServiceAnnotations = util.MapMerge(rs.Expose.DeprecatedServiceAnnotations, rs.Expose.ServiceAnnotations)
+		}
+	}
+
+	if dns := rs.Expose.ExternalDNS; dns != nil {
+		if dns.Domain == "" {
+			return fmt.Errorf("externalDNS requires domain for replset %s", rs.Name)
+		}
+		if errs := validation.IsDNS1123Subdomain(dns.Domain); len(errs) > 0 {
+			return fmt.Errorf("externalDNS domain %q for replset %s is not a valid domain name: %s", dns.Domain, rs.Name, strings.Join(errs, "; "))
+		}
+		if dns.Prefix == "" {
+			dns.Prefix = cr.Name
 		}
 	}
 
@@ -859,7 +906,8 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
 			nv.LivenessProbe.ProbeHandler.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 
 	if nv.ReadinessProbe == nil {
@@ -960,7 +1008,8 @@ func (h *HiddenSpec) setLivenessProbe(cr *PerconaServerMongoDB, rs *ReplsetSpec)
 	if !h.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
 		h.LivenessProbe.Exec.Command = append(
 			h.LivenessProbe.Exec.Command,
-			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds))
+			startupDelaySecondsFlag, strconv.Itoa(h.LivenessProbe.StartupDelaySeconds),
+		)
 	}
 }
 
@@ -1246,4 +1295,51 @@ func (cr *PerconaServerMongoDB) setStorageAutoscalingDefaults() {
 	if spec.GrowthStep.IsZero() {
 		spec.GrowthStep = resource.MustParse("2Gi")
 	}
+}
+
+func (cr *PerconaServerMongoDB) setSearchDefaults(platform version.Platform) {
+	if cr.Spec.Search == nil {
+		return
+	}
+
+	var userId *int64
+	if platform == version.PlatformKubernetes {
+		userId = new(int64(1001))
+	}
+
+	if cr.Spec.Search.ContainerSecurityContext == nil {
+		cr.Spec.Search.ContainerSecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot: new(true),
+			RunAsGroup:   userId,
+			RunAsUser:    userId,
+		}
+	}
+
+	if cr.Spec.Search.PodSecurityContext == nil {
+		cr.Spec.Search.PodSecurityContext = &corev1.PodSecurityContext{
+			RunAsUser:  userId,
+			RunAsGroup: userId,
+			FSGroup:    userId,
+		}
+	}
+}
+
+func validateOCIStorages(cr *PerconaServerMongoDB) error {
+	var okeWorkloadIdentityRegion string
+
+	for _, stg := range cr.Spec.Backup.Storages {
+		if stg.Type != BackupStorageOCI {
+			continue
+		}
+
+		if stg.OCI.Credentials.Type == AuthTypeOkeWorkloadIdentity {
+			if okeWorkloadIdentityRegion == "" {
+				okeWorkloadIdentityRegion = stg.OCI.Region
+			} else if okeWorkloadIdentityRegion != stg.OCI.Region {
+				return errors.New("all OCI storages using okeWorkloadIdentity need to be in the same region")
+			}
+		}
+	}
+
+	return nil
 }

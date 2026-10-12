@@ -25,7 +25,7 @@ type Client interface {
 
 	Update(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) error
 
-	FillSecretData(ctx context.Context, data map[string][]byte) (bool, error)
+	FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, secretExists bool) (bool, error)
 
 	Close() error
 }
@@ -94,7 +94,7 @@ func (h *ProviderHandler) Update(ctx context.Context, cl client.Client, cr *api.
 	return stderrors.Join(errs...)
 }
 
-func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte) (bool, error) {
+func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaServerMongoDB, data map[string][]byte, secretExists bool) (bool, error) {
 	if h == nil {
 		return false, nil
 	}
@@ -112,7 +112,7 @@ func (h *ProviderHandler) FillSecretData(ctx context.Context, cr *api.PerconaSer
 	for _, p := range clients {
 		newData := make(map[string][]byte)
 		maps.Copy(newData, data)
-		c, err := p.FillSecretData(ctx, newData)
+		c, err := p.FillSecretData(ctx, cr, newData, secretExists)
 		if err != nil {
 			errs = append(errs, err)
 			continue

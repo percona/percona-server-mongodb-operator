@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: psmdb-client
+  name: psmdb-client-mongosh
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: psmdb-client
+      name: psmdb-client-mongosh
   template:
     metadata:
       labels:
-        name: psmdb-client
+        name: psmdb-client-mongosh
     spec:
       terminationGracePeriodSeconds: 10
       containers:

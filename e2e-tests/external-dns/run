@@ -1,0 +1,130 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+ANNOTATION_HOSTNAME='external-dns.alpha.kubernetes.io/hostname'
+ANNOTATION_TTL='external-dns.alpha.kubernetes.io/ttl'
+ANNOTATION_MANAGED='percona.com/external-dns-managed'
+
+get_annotation() {
+	local svc=$1
+	local key=$2
+
+	kubectl_bin get service/$svc -o json | jq -r ".metadata.annotations[\"$key\"] // \"\""
+}
+
+wait_annotation() {
+	local svc=$1
+	local key=$2
+	local expected=$3
+
+	echo -n "waiting for annotation $key=\"$expected\" on service/$svc"
+	local timeout=0
+	until [[ $(get_annotation $svc $key) == "$expected" ]]; do
+		sleep 2
+		timeout=$((timeout + 2))
+		echo -n '.'
+		if [[ ${timeout} -gt 240 ]]; then
+			echo
+			echo "Waiting timeout has been reached. Annotation $key on service/$svc is \"$(get_annotation $svc $key)\", expected \"$expected\". Exiting..."
+			exit 1
+		fi
+	done
+	echo ".OK"
+}
+
+check_annotation_stays() {
+	local svc=$1
+	local key=$2
+	local expected=$3
+
+	sleep 30 # a few reconcile loops
+	local actual=$(get_annotation $svc $key)
+	if [[ $actual != "$expected" ]]; then
+		echo "Annotation $key on service/$svc is \"$actual\", expected it to stay \"$expected\". Exiting..."
+		exit 1
+	fi
+	echo "annotation $key=\"$expected\" on service/$svc preserved.OK"
+}
+
+main() {
+	create_infra $namespace
+
+	desc 'create secrets and start client'
+	kubectl_bin apply \
+		-f $conf_dir/client.yml \
+		-f $conf_dir/secrets.yml
+
+	desc 'create sharded PSMDB cluster with expose.externalDNS on rs0 and mongos'
+	local cluster="external-dns"
+	apply_cluster $test_dir/conf/$cluster.yml
+	wait_for_running $cluster-rs0 3
+	wait_for_running $cluster-cfg 3 "false"
+	wait_for_running $cluster-mongos 3
+
+	desc 'check external-dns annotations on replset per-pod services'
+	for i in 0 1 2; do
+		wait_annotation $cluster-rs0-$i $ANNOTATION_HOSTNAME "prod-rs0-$i.mongo.example.com"
+		wait_annotation $cluster-rs0-$i $ANNOTATION_TTL "300"
+		wait_annotation $cluster-rs0-$i $ANNOTATION_MANAGED "true"
+	done
+
+	desc 'check headless replset service has no external-dns annotations'
+	if [[ -n $(get_annotation $cluster-rs0 $ANNOTATION_HOSTNAME) ]]; then
+		echo "headless service $cluster-rs0 must not have $ANNOTATION_HOSTNAME annotation. Exiting..."
+		exit 1
+	fi
+
+	desc 'check single mongos service gets hostname without pod index'
+	wait_annotation $cluster-mongos $ANNOTATION_HOSTNAME "mongos-p-mongos.mongo.example.com"
+	wait_annotation $cluster-mongos $ANNOTATION_TTL "120"
+	wait_annotation $cluster-mongos $ANNOTATION_MANAGED "true"
+
+	desc 'remove ttl from rs0 externalDNS: stale ttl annotation must be removed'
+	kubectl_bin patch psmdb $cluster --type=json --patch '[
+		{
+			"op": "replace",
+			"path": "/spec/replsets/0/expose/externalDNS",
+			"value": {"prefix": "prod", "domain": "mongo.example.com"}
+		}]'
+	for i in 0 1 2; do
+		wait_annotation $cluster-rs0-$i $ANNOTATION_TTL ""
+		wait_annotation $cluster-rs0-$i $ANNOTATION_HOSTNAME "prod-rs0-$i.mongo.example.com"
+	done
+
+	desc 'remove externalDNS from rs0: all managed annotations must be removed'
+	kubectl_bin patch psmdb $cluster --type=json --patch '[
+		{
+			"op": "remove",
+			"path": "/spec/replsets/0/expose/externalDNS"
+		}]'
+	for i in 0 1 2; do
+		wait_annotation $cluster-rs0-$i $ANNOTATION_HOSTNAME ""
+		wait_annotation $cluster-rs0-$i $ANNOTATION_MANAGED ""
+	done
+
+	desc 'manually added external-dns annotations (no marker) must be preserved'
+	kubectl_bin annotate service/$cluster-rs0-0 "$ANNOTATION_HOSTNAME=manual.example.com" --overwrite
+	check_annotation_stays $cluster-rs0-0 $ANNOTATION_HOSTNAME "manual.example.com"
+
+	desc 'enable servicePerPod: per-pod mongos services get indexed hostnames'
+	kubectl_bin patch psmdb $cluster --type=merge -p '{"spec":{"sharding":{"mongos":{"expose":{"servicePerPod":true}}}}}'
+	wait_for_running $cluster-mongos 3
+	for i in 0 1 2; do
+		wait_annotation $cluster-mongos-$i $ANNOTATION_HOSTNAME "mongos-p-mongos-$i.mongo.example.com"
+	done
+
+	desc "delete PSMDB cluster $cluster"
+	kubectl_bin delete \
+		-f $test_dir/conf/$cluster.yml
+
+	destroy $namespace
+
+	desc 'test passed'
+}
+
+main

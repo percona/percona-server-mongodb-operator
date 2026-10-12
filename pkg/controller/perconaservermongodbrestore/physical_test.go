@@ -24,34 +24,58 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		crVersion     string
-		clusterInitSC *corev1.SecurityContext
-		wantPbmInitSC *corev1.SecurityContext
+		name                string
+		crVersion           string
+		backupVersion       string
+		storages            map[string]psmdbv1.BackupStorageSpec
+		clusterInitSC       *corev1.SecurityContext
+		wantPbmInitSC       *corev1.SecurityContext
+		wantAWSChecksumEnvs bool
 	}{
 		{
-			name:          "latest_version_with_InitContainerSecurityContext",
-			crVersion:     version.Version(),
-			clusterInitSC: initSC,
-			wantPbmInitSC: initSC,
+			name:                "latest_version_with_InitContainerSecurityContext",
+			crVersion:           version.Version(),
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
+			clusterInitSC:       initSC,
+			wantPbmInitSC:       initSC,
+			wantAWSChecksumEnvs: true,
 		},
 		{
-			name:          "latest_version_without_InitContainerSecurityContext",
-			crVersion:     version.Version(),
-			clusterInitSC: nil,
-			wantPbmInitSC: nil,
+			name:                "latest_version_without_InitContainerSecurityContext",
+			crVersion:           version.Version(),
+			backupVersion:       "2.12.0",
+			storages:            s3CompatibleOSSStorage(),
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 		{
-			name:          "1_22_with_InitContainerSecurityContext_ignored",
-			crVersion:     "1.22.0",
-			clusterInitSC: initSC,
-			wantPbmInitSC: nil,
+			name:                "latest_version_with_regular_s3",
+			crVersion:           version.Version(),
+			backupVersion:       "2.11.0",
+			storages:            regularS3Storage(),
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 		{
-			name:          "1_22_without_InitContainerSecurityContext",
-			crVersion:     "1.22.0",
-			clusterInitSC: nil,
-			wantPbmInitSC: nil,
+			name:                "1_22_with_InitContainerSecurityContext_ignored",
+			crVersion:           "1.22.0",
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
+			clusterInitSC:       initSC,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
+		},
+		{
+			name:                "1_22_without_InitContainerSecurityContext",
+			crVersion:           "1.22.0",
+			backupVersion:       "2.11.0",
+			storages:            s3CompatibleOSSStorage(),
+			clusterInitSC:       nil,
+			wantPbmInitSC:       nil,
+			wantAWSChecksumEnvs: false,
 		},
 	}
 
@@ -60,14 +84,13 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			ctx := t.Context()
 
 			cluster := &psmdbv1.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: "default",
-				},
+				Name:      "my-cluster",
+				Namespace: "default",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Backup: psmdbv1.BackupSpec{
-						Image: "percona/percona-backup-mongodb:latest",
+						Image:    "percona/percona-backup-mongodb:latest",
+						Storages: tt.storages,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "extra-volume",
@@ -82,13 +105,14 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 					},
 					InitContainerSecurityContext: tt.clusterInitSC,
 				},
+				Status: psmdbv1.PerconaServerMongoDBStatus{
+					BackupVersion: tt.backupVersion,
+				},
 			}
 
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster-rs0",
-					Namespace: "default",
-				},
+				Name:      "my-cluster-rs0",
+				Namespace: "default",
 				Spec: appsv1.StatefulSetSpec{
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{"app": "my-cluster"},
@@ -114,10 +138,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			}
 
 			secretTLS := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cluster.Spec.Secrets.SSL,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Spec.Secrets.SSL,
+				Namespace: cluster.Namespace,
 				Data: map[string][]byte{
 					"ca.crt":  {},
 					"tls.crt": {},
@@ -161,6 +183,15 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 					return c.MountPath == "/etc/pbm/"
 				}))
 
+			assert.Equal(t, tt.wantAWSChecksumEnvs,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+					return e.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && e.Value == "when_required"
+				}))
+			assert.Equal(t, tt.wantAWSChecksumEnvs,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+					return e.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && e.Value == "when_required"
+				}))
+
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
 			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
 
@@ -168,4 +199,135 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.Equal(t, expectedURI, lastEnvVar.Value)
 		})
 	}
+}
+
+func s3CompatibleOSSStorage() map[string]psmdbv1.BackupStorageSpec {
+	return map[string]psmdbv1.BackupStorageSpec{
+		"oss-s3": {
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+			},
+		},
+	}
+}
+
+func regularS3Storage() map[string]psmdbv1.BackupStorageSpec {
+	return map[string]psmdbv1.BackupStorageSpec{
+		"s3": {
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				EndpointURL: "https://s3.amazonaws.com",
+			},
+		},
+	}
+}
+
+func TestUpdateKnownFields(t *testing.T) {
+	tests := []struct {
+		name string
+		a    map[string]any
+		b    map[string]any
+		want map[string]any
+	}{
+		{
+			name: "updates value of existing field",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{"compression": "s2"},
+		},
+		{
+			name: "ignores field that does not exist in a",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{"compression": "s2", "newField": "value"},
+			want: map[string]any{"compression": "s2"},
+		},
+		{
+			name: "keeps field of a that is absent from b",
+			a:    map[string]any{"compression": "gzip", "level": 6},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{"compression": "s2", "level": 6},
+		},
+		{
+			name: "recurses into nested maps and ignores unknown nested fields",
+			a: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket": "old-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+			b: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket":         "new-bucket",
+						"region":         "us-east-1",
+						"maxUploadParts": 10000,
+					},
+				},
+			},
+			want: map[string]any{
+				"storage": map[string]any{
+					"type": "s3",
+					"s3": map[string]any{
+						"bucket": "new-bucket",
+						"region": "us-east-1",
+					},
+				},
+			},
+		},
+		{
+			name: "overrides when a value is a map but b value is scalar",
+			a:    map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+			b:    map[string]any{"restore": "scalar"},
+			want: map[string]any{"restore": "scalar"},
+		},
+		{
+			name: "overrides when a value is scalar but b value is a map",
+			a:    map[string]any{"restore": "scalar"},
+			b:    map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+			want: map[string]any{"restore": map[string]any{"numInsertionWorkers": 1}},
+		},
+		{
+			name: "empty b returns copy of a",
+			a:    map[string]any{"compression": "gzip"},
+			b:    map[string]any{},
+			want: map[string]any{"compression": "gzip"},
+		},
+		{
+			name: "empty a ignores everything in b",
+			a:    map[string]any{},
+			b:    map[string]any{"compression": "s2"},
+			want: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := updateKnownFields(tt.a, tt.b)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
+	a := map[string]any{
+		"storage": map[string]any{
+			"s3": map[string]any{"bucket": "old-bucket"},
+		},
+	}
+	b := map[string]any{
+		"storage": map[string]any{
+			"s3": map[string]any{"bucket": "new-bucket", "region": "us-east-1"},
+		},
+	}
+
+	_ = updateKnownFields(a, b)
+
+	assert.Equal(t, "old-bucket", a["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
+	assert.NotContains(t, a["storage"].(map[string]any)["s3"].(map[string]any), "region")
+	assert.Equal(t, "new-bucket", b["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
 }

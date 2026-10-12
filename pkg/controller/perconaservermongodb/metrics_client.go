@@ -28,9 +28,14 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	ctx context.Context,
 	pod *corev1.Pod,
 	pvcName string,
+	containerName string,
 ) (*PVCUsage, error) {
 	if pod == nil {
 		return nil, errors.New("pod is nil")
+	}
+
+	if containerName == "" {
+		containerName = naming.ContainerMongod
 	}
 
 	backoff := wait.Backoff{
@@ -39,7 +44,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		Factor:   2.0,
 	}
 
-	// Execute df command in the mongod container to get disk usage
+	// Execute df command in the pod's mongod container to get disk usage
 	// df -B1 /data/db outputs in bytes
 	// Example output:
 	// Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -51,9 +56,9 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		stdout.Reset()
 		stderr.Reset()
 
-		err := r.clientcmd.Exec(ctx, pod, naming.ComponentMongod, command, nil, &stdout, &stderr, false)
+		err := r.clientcmd.Exec(ctx, pod, containerName, command, nil, &stdout, &stderr, false)
 		if err != nil {
-			return errors.Wrapf(err, "failed to execute df in pod %s: %s", pod.Name, stderr.String())
+			return errors.Wrapf(err, "failed to execute df in pod %s container %s: %s", pod.Name, containerName, stderr.String())
 		}
 		return nil
 	})

@@ -55,7 +55,7 @@ spec:
             - --shardsvr
             - --enableEncryption
             - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
-            - --wiredTigerCacheSizeGB=0.25
+            - --wiredTigerCacheSizeGB=0.90
             - --wiredTigerIndexPrefixCompression=true
             - --config=/etc/mongodb-config/mongod.conf
             - --quiet
@@ -146,7 +146,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 1G
+              memory: 3G
             requests:
               cpu: 100m
               memory: 100M
@@ -158,9 +158,6 @@ spec:
           volumeMounts:
             - mountPath: /data/db
               name: mongod-data
-            - mountPath: /etc/mongodb-secrets
-              name: some-name-mongodb-keyfile
-              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true
@@ -191,15 +188,13 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 1G
+              memory: 3G
             requests:
               cpu: 100m
               memory: 100M
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
         - command:
@@ -212,8 +207,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /data/db
-              name: mongod-data
             - mountPath: /opt/percona
               name: bin
       restartPolicy: Always
@@ -224,11 +217,6 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-        - name: some-name-mongodb-keyfile
-          secret:
-            defaultMode: 288
-            optional: false
-            secretName: some-name-mongodb-keyfile
         - emptyDir: {}
           name: bin
         - emptyDir: {}

@@ -10,14 +10,14 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      minio:
+      local-s3:
         type: s3
         s3:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           prefix: pitr-prefix-1
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: http://minio-service:9000/
+          endpointUrl: http://s3-storage-all-in-one:8333/
           insecureSkipTLSVerify: false
     pitr:
       enabled: true

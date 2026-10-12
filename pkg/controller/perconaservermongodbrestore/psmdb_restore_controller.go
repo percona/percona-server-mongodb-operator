@@ -9,10 +9,10 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,10 +53,12 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBRestore{
-		client:     mgr.GetClient(),
-		scheme:     mgr.GetScheme(),
-		clientcmd:  cli,
-		newPBMFunc: backup.NewPBM,
+		client:      mgr.GetClient(),
+		scheme:      mgr.GetScheme(),
+		clientcmd:   cli,
+		newPBMFunc:  backup.NewPBM,
+		recorder:    mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbrestore-controller"), "RESTORE_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -84,9 +86,11 @@ type ReconcilePerconaServerMongoDBRestore struct {
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
 	scheme    *runtime.Scheme
-	clientcmd *clientcmd.Client
+	clientcmd clientcmd.Client
+	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBRestore object and makes changes based on the state read
@@ -98,7 +102,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	log := logf.FromContext(ctx)
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 
 	// Fetch the PerconaSMDBBackupRestore instance
@@ -159,7 +163,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.ClusterName)
 	}
 
-	if err = cluster.CanRestore(ctx); err != nil {
+	if err = cluster.CanRestore(ctx, cr); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "can cluster restore")
 	}
 
@@ -188,7 +192,23 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		return reconcile.Result{}, errors.New("backup is not ready")
 	}
 
-	if cr.Status.State == psmdbv1.RestoreStateNew {
+	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
+		// Check the clustersync lease before any cluster-mutating step.
+		if blocked, err := r.checkClusterSyncLease(ctx, cr, cluster); err != nil {
+			return rr, errors.Wrap(err, "check clustersync lease")
+		} else if blocked {
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+
+		// Check the restore locks before any cluster-mutating step.
+		if locked, err := r.checkRestoreLocks(ctx, cluster); err != nil {
+			return rr, errors.Wrap(err, "check restore locks")
+		} else if locked {
+			status.State = psmdbv1.RestoreStateWaiting
+			return rr, nil
+		}
+
 		err = r.validate(ctx, cr, cluster)
 		if err != nil {
 			if errors.Is(err, errWaitingPBM) {
@@ -251,18 +271,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		}
 	}
 
-	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
-		locked, err := r.checkRestoreLocks(ctx, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "check restore locks")
-		}
-
-		if locked {
-			status.State = psmdbv1.RestoreStateWaiting
-			return rr, nil
-		}
-	}
-
 	switch bcp.PBMBackupType() {
 	case "", defs.LogicalBackup:
 		status, err = r.reconcileLogicalRestore(ctx, cr, bcp, cluster)
@@ -285,7 +293,28 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	return rr, nil
 }
 
-// checkRestoreLocks returns true if a backup or restore is already in progress and the new restore should wait.
+// checkClusterSyncLease returns true if a ClusterSync CR owns the
+// target cluster and the new restore should wait.
+func (r *ReconcilePerconaServerMongoDBRestore) checkClusterSyncLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	csLeaseName := naming.ClusterSyncLeaseName(cluster.Name)
+	csActive, err := k8s.IsLeaseActive(ctx, r.client, csLeaseName, cluster.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "check clustersync lease")
+	}
+	if !csActive {
+		return false, nil
+	}
+	log.Info("Waiting for ClusterSync to release the cluster before starting restore.", "lease", csLeaseName)
+	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+		"Restore is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow restores.",
+		cluster.Name, csLeaseName)
+	return true, nil
+}
+
+// checkRestoreLocks returns true if a backup or another restore is
+// holding the cluster and the new restore should wait.
 func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
 	log := logf.FromContext(ctx)
 
@@ -340,6 +369,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 	var minio psmdbv1.BackupStorageMinioSpec
 	var gcs psmdbv1.BackupStorageGCSSpec
 	var fs psmdbv1.BackupStorageFilesystemSpec
+	var oss psmdbv1.BackupStorageOSSSpec
+	var oci psmdbv1.BackupStorageOCISpec
 	var storageType psmdbv1.BackupStorageType
 
 	switch {
@@ -358,6 +389,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 	case cr.Spec.BackupSource.Filesystem != nil:
 		fs = *cr.Spec.BackupSource.Filesystem
 		storageType = psmdbv1.BackupStorageFilesystem
+	case cr.Spec.BackupSource.OSS != nil:
+		oss = *cr.Spec.BackupSource.OSS
+		storageType = psmdbv1.BackupStorageOSS
+	case cr.Spec.BackupSource.OCI != nil:
+		oci = *cr.Spec.BackupSource.OCI
+		storageType = psmdbv1.BackupStorageOCI
 	}
 
 	return psmdbv1.BackupStorageSpec{
@@ -367,6 +404,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getStorage(
 		GCS:        gcs,
 		Azure:      azure,
 		Filesystem: fs,
+		OSS:        oss,
+		OCI:        oci,
 	}, nil
 }
 
@@ -376,10 +415,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 		backupName := s[len(s)-1]
 
 		return &psmdbv1.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name,
-				Namespace: cr.Namespace,
-			},
+			Name:      cr.Name,
+			Namespace: cr.Namespace,
 			Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
 				Type:        cr.Spec.BackupSource.Type,
 				ClusterName: cr.Spec.ClusterName,
@@ -394,7 +431,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) getBackup(ctx context.Context, cr
 				Minio:       cr.Spec.BackupSource.Minio,
 				GCS:         cr.Spec.BackupSource.GCS,
 				Azure:       cr.Spec.BackupSource.Azure,
+				OSS:         cr.Spec.BackupSource.OSS,
 				Filesystem:  cr.Spec.BackupSource.Filesystem,
+				OCI:         cr.Spec.BackupSource.OCI,
 				Snapshots:   cr.Spec.BackupSource.Snapshots,
 				PBMname:     backupName,
 			},

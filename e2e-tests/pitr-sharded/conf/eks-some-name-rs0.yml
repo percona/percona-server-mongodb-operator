@@ -32,7 +32,7 @@ spec:
             requests:
               storage: 3Gi
       sidecars:
-      - image: busybox
+      - image: docker.io/busybox:latest
         command: ["/bin/sh"]
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: cfg-sidecar-1
@@ -43,7 +43,7 @@ spec:
       expose:
         type: ClusterIP
       sidecars:
-      - image: busybox
+      - image: docker.io/busybox:latest
         command: ["/bin/sh"]
         args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
         name: mongos-sidecar-1
@@ -164,7 +164,7 @@ spec:
           indexConfig:
             prefixCompression: true
     sidecars:
-    - image: busybox
+    - image: docker.io/busybox:latest
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
       name: rs-sidecar-1

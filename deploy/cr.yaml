@@ -20,7 +20,7 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
-  crVersion: 1.23.0
+  crVersion: 1.24.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
 #  tls:
@@ -28,6 +28,7 @@ spec:
 #    # 90 days in hours
 #    certValidityDuration: 2160h
 #    allowInvalidCertificates: true
+#    certManagementPolicy: auto
 #    issuerConf:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
@@ -43,6 +44,7 @@ spec:
 #    terminationGracePeriod: false
 #    backupIfUnhealthy: false
   updateStrategy: SmartUpdate
+#  revisionHistoryLimit: 10
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -55,9 +57,16 @@ spec:
     apply: disabled
     schedule: "0 2 * * *"
     setFCV: false
+#  defaultRWConcern:
+#    readConcern: majority
+#    writeConcern:
+#      w: majority
+#      wtimeout: 0
 #  vault:
 #    endpointURL: https://vault-service:8200
 #    tlsSecret: my-tls-vault-secret
+#    reinitInterval: 30m
+#    requestInterval: 1m
 #    syncUsers:
 #      role: operator
 #      mountPath: secrets
@@ -76,10 +85,12 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     serverHost: monitoring-service
+#    authenticationMechanism: SCRAM-SHA-256
 #    containerSecurityContext: {}
 #    customClusterName: mongo-cluster
 #    mongodParams: --environment=ENVIRONMENT
 #    mongosParams: --environment=ENVIRONMENT
+#    querySource: profiler
 #    resources:
 #      requests:
 #        memory: 150M
@@ -87,6 +98,24 @@ spec:
 #      limits:
 #        memory: 256M
 #        cpu: 400m
+#    # Override the built-in liveness probe of the pmm-client container.
+#    # When not set, the Operator uses HTTP GET :7777/local/Status.
+#    livenessProbe:
+#      httpGet:
+#        path: /local/Status
+#        port: 7777
+#      initialDelaySeconds: 60
+#      timeoutSeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 5
+#    # Add a readiness probe for the pmm-client container.
+#    # When not set, the container has no readiness probe.
+#    readinessProbe:
+#      tcpSocket:
+#        port: 7777
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 3
 
   replsets:
   - name: rs0
@@ -263,6 +292,10 @@ spec:
 #        rack: rack-22
 #      internalTrafficPolicy: Local
 #      externalTrafficPolicy: Local
+#      externalDNS:
+#        prefix: "service-name"
+#        domain: "mongo.example.com"
+#        ttl: 300
     resources:
       limits:
         cpu: "600m"
@@ -471,6 +504,18 @@ spec:
 #    envFrom:
 #    - configMapRef:
 #       name: configmap-name
+#    search:
+#      resources:
+#        requests:
+#          cpu: "8"
+#          memory: 32Gi
+#      storage:
+#        persistentVolumeClaim:
+#          resources:
+#            requests:
+#              storage: 200Gi
+#      affinity:
+#        antiAffinityTopologyKey: "kubernetes.io/hostname"
   sharding:
     enabled: true
 #    balancer:
@@ -573,6 +618,10 @@ spec:
 #          rack: rack-22
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
       resources:
         limits:
           cpu: "600m"
@@ -698,11 +747,21 @@ spec:
 #        nodePort: 32017
 #        internalTrafficPolicy: Local
 #        externalTrafficPolicy: Local
+#        externalDNS:
+#          prefix: "service-name"
+#          domain: "mongo.example.com"
+#          ttl: 300
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
 #        - "host1"
 #        - "host2"
+#      logs:
+#        persistentVolumeClaim:
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 1Gi
 
 #  roles:
 #    - role: myClusterwideAdmin
@@ -778,6 +837,20 @@ spec:
 #        memory: "1Gi"
 #    containerSecurityContext:
 #      privileged: false
+#    livenessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#      failureThreshold: 5
+#    readinessProbe:
+#      exec:
+#        command:
+#          - /bin/true
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      failureThreshold: 3
 #    storages:
 #      s3-us-east:
 #        main: true
@@ -811,6 +884,45 @@ spec:
 #            backoffInitial: 1
 #            backoffMax: 30
 #            backoffMultiplier: 2
+#      oss-native:
+#        type: oss
+#        oss:
+#          bucket: OSS-BACKUP-BUCKET-NAME-HERE
+#          prefix: ""
+#          credentialsSecret: my-cluster-name-backup-oss
+#          endpointUrl: https://oss-eu-central-1.aliyuncs.com
+#          region: eu-central-1
+#          connectTimeout: 10s
+#          uploadPartSize: 10485760
+#          maxUploadParts: 10000
+#          retryer:
+#            maxAttempts: 3
+#            maxBackoff: 5m
+#            baseDelay: 1s
+#          serverSideEncryption:
+#            secretName: my-cluster-name-backup-oss-sse
+#            encryptionMethod: sse
+#            encryptionAlgorithm: KMS
+#            encryptionKeyId: OSS-KMS-KEY-ID-HERE
+#      oci:
+#        type: oci
+#        oci:
+#          bucket: OCI-BACKUP-BUCKET-NAME-HERE
+#          namespace: OCI-OBJECT-STORAGE-NAMESPACE-HERE
+#          region: us-ashburn-1
+#          prefix: ""
+#          credentials:
+#            type: userPrincipal
+#            secretName: my-cluster-name-backup-oci
+#          serverSideEncryption:
+#            kmsKeyID: OCI-KMS-KEY-OCID-HERE
+#            secretName: my-cluster-name-backup-oci-sse
+#          retryer:
+#            maxAttempts: 3
+#            maxBackoff: 5m
+#          uploadPartSize: 10485760
+#          maxObjSizeGB: 10
+#          uploadConcurrency: 1
 #      minio:
 #        type: minio
 #        minio:
@@ -935,6 +1047,20 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+#    # Add a liveness/readiness probe for the logs (fluent-bit) container.
+#    # When not set, the container has no probes.
+#    # NOTE: a tcpSocket/httpGet probe on port 2020 requires the fluent-bit
+#    # HTTP server to be enabled via `configuration` ([HTTP_SERVER] On).
+#    livenessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#    readinessProbe:
+#      tcpSocket:
+#        port: 2020
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
 #    logrotate:
 #      configuration: |
 #        /data/db/logs/mongod.full.log {
@@ -954,4 +1080,41 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 0 * * *"
+#      schedule: "0 0 * * *"
+#      # Add a liveness/readiness probe for the logrotate container.
+#      # When not set, the container has no probes.
+#      livenessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 30
+#        periodSeconds: 15
+#      readinessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 5
+#        periodSeconds: 10
+#  search:
+#    enabled: true
+#    image: perconalab/percona-server-mongodb-operator:main-mongot
+#    size: 1
+#    storage:
+#      persistentVolumeClaim:
+#        resources:
+#          requests:
+#            storage: 10Gi
+#    resources:
+#      requests:
+#        cpu: "2"
+#        memory: 2Gi
+#    livenessProbe:
+#      initialDelaySeconds: 60
+#      periodSeconds: 30
+#      timeoutSeconds: 5
+#      failureThreshold: 4
+#    readinessProbe:
+#      initialDelaySeconds: 10
+#      periodSeconds: 10
+#      timeoutSeconds: 2
+#      failureThreshold: 3

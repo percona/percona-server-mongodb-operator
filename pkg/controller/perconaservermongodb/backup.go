@@ -55,11 +55,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Data: map[string]string{
 			"hook.sh": cr.Spec.Backup.HookScript.Script,
 		},
@@ -135,7 +133,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateBackupTask(ctx context.Con
 func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB, ctasks map[string]api.BackupTaskSpec) error {
 	log := logf.FromContext(ctx)
 
-	r.crons.backupJobs.Range(func(k, v interface{}) bool {
+	r.crons.backupJobs.Range(func(k, v any) bool {
 		item := v.(BackupScheduleJob)
 
 		if item.ClusterName != "" && item.ClusterName != cr.NamespacedName().String() {
@@ -165,9 +163,10 @@ func (r *ReconcilePerconaServerMongoDB) deleteOldBackupTasks(ctx context.Context
 			}
 
 			for _, todel := range oldjobs {
+				log.Info("deleting backup exceeding retention", "job", item.Name, "backup", todel.Name)
 				err = r.client.Delete(ctx, &todel)
 				if err != nil {
-					log.Error(err, "failed to delete backup object")
+					log.Error(err, "failed to delete backup object", "backup", todel.Name)
 					return true
 				}
 			}
@@ -268,11 +267,11 @@ func (h minHeap) Less(i, j int) bool {
 
 func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h *minHeap) Push(x interface{}) {
+func (h *minHeap) Push(x any) {
 	*h = append(*h, x.(api.PerconaServerMongoDBBackup))
 }
 
-func (h *minHeap) Pop() interface{} {
+func (h *minHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -315,9 +314,13 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 	}
 
 	for _, bcp := range bcps.Items {
-		if bcp.Status.State != api.BackupStateReady &&
-			bcp.Status.State != api.BackupStateError &&
-			bcp.Spec.GetClusterName() == cr.Name {
+		if bcp.Spec.GetClusterName() != cr.Name {
+			continue
+		}
+		switch bcp.Status.State {
+		case api.BackupStateReady, api.BackupStateError, api.BackupStateWaiting:
+			continue
+		default:
 			return true, nil
 		}
 	}
@@ -354,7 +357,6 @@ func getLatestBackup(ctx context.Context, cl client.Client, cr *api.PerconaServe
 
 	var latest *api.PerconaServerMongoDBBackup
 	for _, b := range backups.Items {
-		b := b
 
 		if b.Status.State != api.BackupStateReady || b.Spec.GetClusterName() != cr.Name {
 			continue

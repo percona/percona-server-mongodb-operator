@@ -78,6 +78,10 @@ EOF
 		bound_service_account_namespaces="$sa_namespace" \
 		policies=operator \
 		ttl=1h
+
+	# enable a file audit device so we can observe how often the operator
+	# actually reads the users secret from Vault (used to verify requestInterval)
+	kubectl_bin exec $vault_name-0 -- vault audit enable file file_path=/tmp/audit.log || true
 }
 
 vault_append() {
@@ -159,6 +163,250 @@ EOF
 	rm -rf "$tmp_dir"
 }
 
+vault_accessor_count() {
+	local count
+	count=$(kubectl_bin exec $vault_name-0 -- vault list -format=json auth/token/accessors 2>/dev/null | jq 'length' 2>/dev/null) || true
+	echo "${count:-0}"
+}
+
+# waits (without hard-failing the script) until the accessor count grows past
+# $1, up to $2 seconds. Used to let a one-off, hash-triggered reinit (caused
+# by the spec patch itself) settle before starting a measurement window, so
+# it doesn't get confused with the periodic, interval-driven reinit we
+# actually want to measure.
+_wait_accessor_growth() {
+	local baseline=$1
+	local timeout=${2:-30}
+	local waited=0
+	while ((waited < timeout)); do
+		if (($(vault_accessor_count) > baseline)); then
+			return 0
+		fi
+		sleep 5
+		waited=$((waited + 5))
+	done
+	return 1
+}
+
+check_vault_reinit_interval() {
+	local reconcile_interval=5 # operator's default reconcile loop period
+	local window=60
+
+	if [ -n "$(kubectl_bin get psmdb $psmdb -o jsonpath='{.spec.vault.syncUsers.tokenSecret}')" ]; then
+		echo "check_vault_reinit_interval requires the kubernetes-auth path (tokenSecret must not be set on the CR)"
+		exit 1
+	fi
+
+	# baseline: a long reinitInterval must NOT cause frequent reinits. This
+	# guards against a bug where reinitInterval is ignored and the client is
+	# reinitialized on every reconcile regardless of configuration.
+	desc 'baseline: confirm a long reinitInterval does not cause frequent reinits'
+	local baseline_settle
+	baseline_settle=$(vault_accessor_count)
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p='{"spec":{"vault":{"reinitInterval":"10m"}}}'
+	_wait_accessor_growth "$baseline_settle" 30 || true
+
+	local base_before
+	base_before=$(vault_accessor_count)
+	sleep $window
+	local base_after
+	base_after=$(vault_accessor_count)
+	local base_growth=$((base_after - base_before))
+
+	if ((base_growth > 1)); then
+		echo "vault client was reinitialized too often with a long reinitInterval (10m)"
+		echo "expected at most 1 reinit (from unrelated activity) in ${window}s, got $base_growth"
+		echo "(reinitInterval may be getting ignored)"
+		exit 1
+	fi
+
+	local reinit_interval=15
+
+	desc "set spec.vault.reinitInterval to ${reinit_interval}s"
+	local settle_count
+	settle_count=$(vault_accessor_count)
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"reinitInterval\":\"${reinit_interval}s\"}}}"
+
+	# wait for the reconcile triggered by the spec change (hash-based reinit) to settle
+	_wait_accessor_growth "$settle_count" 30 || true
+
+	# reinitializing the vault client (kubernetes auth) performs a fresh Login(),
+	# which creates a brand-new Vault token. Count active token accessors before
+	# and after waiting a few reinit cycles to confirm the client is actually
+	# being reinitialized on the configured cadence, without relying on logs.
+	local count_before
+	count_before=$(vault_accessor_count)
+
+	# wait long enough for a few reinit cycles to happen with the configured
+	# interval, but well under the default 30m interval
+	sleep $window
+
+	local count_after
+	count_after=$(vault_accessor_count)
+	local growth=$((count_after - count_before))
+
+	# expect roughly window/reinit_interval reinits (4 for 60s/15s). Allow
+	# some slack on the low end for reconcile-loop jitter, but also cap the
+	# high end so a bug that reinitializes on every single reconcile
+	# (effectively ignoring reinitInterval) doesn't silently pass.
+	local max_expected=$(((window / reconcile_interval) + 2))
+
+	if ((growth < 2)); then
+		echo "vault client was not reinitialized according to the configured reinitInterval (${reinit_interval}s)"
+		echo "token accessor count before: $count_before, after: $count_after"
+		exit 1
+	fi
+
+	if ((growth > max_expected)); then
+		echo "vault client was reinitialized more often than reinitInterval (${reinit_interval}s) allows"
+		echo "expected at most $max_expected reinits in ${window}s, got $growth"
+		echo "(reinitInterval may be getting ignored, causing a reinit on every reconcile)"
+		exit 1
+	fi
+
+	desc 'restore default spec.vault.reinitInterval'
+	kubectl_bin patch psmdb $psmdb \
+		--type='json' \
+		-p='[{"op":"remove","path":"/spec/vault/reinitInterval"}]'
+}
+
+vault_audit_read_count() {
+	# Vault's file audit device logs a "request" AND a separate "response"
+	# entry for every operation. Counting raw grep matches would double-count
+	# each logical read, which could make a correctly-throttled single read
+	# look like 2 and fail the "at most 1" assertion below. Count only
+	# "request" type entries so one logical vault read is counted once.
+	local count
+	count=$(kubectl_bin exec $vault_name-0 -- sh -c \
+		"grep 'psmdb/operator/$namespace/$psmdb/users' /tmp/audit.log 2>/dev/null" \
+		| jq -r 'select(.type == "request") | .type' 2>/dev/null \
+		| wc -l | tr -d ' ') || true
+	echo "${count:-0}"
+}
+
+check_vault_request_interval() {
+	local window=30
+	local request_interval=60
+
+	# baseline: without requestInterval configured, vault is queried on every
+	# reconcile (every few seconds), so we should observe multiple reads
+	local count_before
+	count_before=$(vault_audit_read_count)
+	sleep $window
+	local count_after
+	count_after=$(vault_audit_read_count)
+	local baseline_reads=$((count_after - count_before))
+
+	if ((baseline_reads < 2)); then
+		echo "expected multiple vault reads within ${window}s without requestInterval configured, got $baseline_reads"
+		echo "(cannot validate throttling if the untouched baseline itself is this low)"
+		exit 1
+	fi
+
+	desc "set spec.vault.requestInterval to ${request_interval}s"
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"requestInterval\":\"${request_interval}s\"}}}"
+
+	# the first read after enabling requestInterval always happens immediately
+	# (VaultLastRequestedAt was never set before), so let it happen before
+	# starting the throttled measurement window, otherwise it inflates the count
+	local settle_count
+	settle_count=$(vault_audit_read_count)
+	local waited=0
+	while (($(vault_audit_read_count) <= settle_count)) && ((waited < 30)); do
+		sleep 5
+		waited=$((waited + 5))
+	done
+
+	local count_before_throttled
+	count_before_throttled=$(vault_audit_read_count)
+	sleep $window
+	local count_after_throttled
+	count_after_throttled=$(vault_audit_read_count)
+	local throttled_reads=$((count_after_throttled - count_before_throttled))
+
+	if ((throttled_reads >= baseline_reads)); then
+		echo "vault reads were not throttled by the configured requestInterval (${request_interval}s)"
+		echo "baseline reads in ${window}s: $baseline_reads, throttled reads in ${window}s: $throttled_reads"
+		exit 1
+	fi
+
+	if ((throttled_reads > 1)); then
+		echo "expected at most 1 read within ${window}s while requestInterval=${request_interval}s, got $throttled_reads"
+		exit 1
+	fi
+
+	# tighter check: a 30s window is inherently shorter than the 60s
+	# requestInterval, so it can only prove reads are spaced "more than 30s"
+	# apart, not that the spacing is actually ~60s. Measure a window that
+	# spans just over one full requestInterval cycle and require *exactly* one
+	# additional read, to catch a bug where the effective interval is shorter
+	# (or longer) than what's configured.
+	local precise_window=$((request_interval + 10))
+	local precise_before
+	precise_before=$(vault_audit_read_count)
+	sleep $precise_window
+	local precise_after
+	precise_after=$(vault_audit_read_count)
+	local precise_reads=$((precise_after - precise_before))
+
+	if ((precise_reads != 1)); then
+		echo "expected exactly 1 vault read over one requestInterval cycle (~${request_interval}s), got $precise_reads reads in ${precise_window}s"
+		exit 1
+	fi
+}
+
+check_vault_token_secret_rotation() {
+	local long_interval="1h"
+
+	desc "set a long spec.vault.reinitInterval (${long_interval}) to prove token secret rotation doesn't wait for it"
+	kubectl_bin patch psmdb $psmdb \
+		--type=merge \
+		-p="{\"spec\":{\"vault\":{\"reinitInterval\":\"${long_interval}\"}}}"
+	# let the reinit triggered by this spec change itself settle
+	sleep 10
+
+	desc 'revoke the currently used vault-sync-secret token and rotate it to a freshly created one'
+	local old_token
+	old_token=$(kubectl_bin get secret vault-sync-secret -o jsonpath='{.data.token}' | base64 -d)
+
+	local new_token
+	new_token=$(kubectl_bin exec $vault_name-0 -- vault token create -policy=operator -format=json | jq -r '.auth.client_token')
+
+	kubectl_bin exec $vault_name-0 -- vault token revoke "$old_token"
+	kubectl_bin delete secret vault-sync-secret
+	kubectl_bin create secret generic vault-sync-secret --from-literal=token="${new_token}"
+
+	# update the (global) expected password used by the rest of the script
+	newpass="rotated-token-password"
+	vault_append "MONGODB_USER_ADMIN_PASSWORD" "$newpass"
+
+	# with the old token revoked, the operator can only pick up this change if it
+	# reinitializes the vault client using the new token from the secret without
+	# waiting for reinitInterval (set to 1h above). The default wait_cluster_consistency
+	# timeout (~320s) is already far shorter than reinitInterval, which is
+	# sufficient to prove recovery doesn't wait for it.
+	sleep 25
+	wait_cluster_consistency $psmdb
+	sleep 15
+
+	local user
+	user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
+	check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
+	check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'restore default spec.vault.reinitInterval'
+	kubectl_bin patch psmdb $psmdb \
+		--type='json' \
+		-p='[{"op":"remove","path":"/spec/vault/reinitInterval"}]'
+}
+
 main() {
 	psmdb="some-name"
 	cluster="$psmdb-rs0"
@@ -191,6 +439,9 @@ main() {
 	check_mongo_auth "$newname:$newpass@$cluster-0.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-1.$cluster.$namespace"
 	check_mongo_auth "$newname:$newpass@$cluster-2.$cluster.$namespace"
+
+	desc 'check that rotating the vault-sync-secret token content triggers an immediate reinit'
+	check_vault_token_secret_rotation
 
 	desc 'removing tokenSecret to check kubernetes auth'
 	kubectl_bin patch psmdb $psmdb \
@@ -268,6 +519,12 @@ main() {
 		echo "Wrong password. Operator should get it from vault"
 		exit 1
 	fi
+
+	desc 'check configurable vault reinitInterval'
+	check_vault_reinit_interval
+
+	desc 'check configurable vault requestInterval'
+	check_vault_request_interval
 
 	destroy_vault $vault_name
 	destroy "$namespace"

@@ -32,6 +32,10 @@ func Labels() map[string]string {
 	}
 }
 
+func IsManagedByOperator(labels map[string]string) bool {
+	return labels[LabelKubernetesManagedBy] == Labels()[LabelKubernetesManagedBy]
+}
+
 func PVCLabels(
 	component string,
 	replsetName string,
@@ -124,5 +128,11 @@ func NewBackupCronJobLabels(cr *api.PerconaServerMongoDB, labels map[string]stri
 
 	ls = util.MapMerge(util.MapCopy(labels), ls)
 
+	return ls
+}
+
+func SearchLabels(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) map[string]string {
+	ls := RSLabels(cr, rs)
+	ls[LabelKubernetesComponent] = ComponentSearch
 	return ls
 }

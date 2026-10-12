@@ -7,10 +7,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -22,14 +20,14 @@ func TestMongosHost(t *testing.T) {
 	ctx := context.Background()
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mongos-0",
-			Namespace: "default",
-		},
+		Name:      "mongos-0",
+		Namespace: "default",
 	}
 
 	tests := map[string]struct {
 		init          func(cl client.Client)
+		useInternal   bool
+		exposeType    corev1.ServiceType
 		expectedHost  string
 		expectedError error
 	}{
@@ -40,10 +38,8 @@ func TestMongosHost(t *testing.T) {
 		"clusterip service type": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
@@ -62,13 +58,60 @@ func TestMongosHost(t *testing.T) {
 			},
 			expectedHost: "test-cluster-mongos.default.svc.cluster.local:27018",
 		},
+		"loadbalancer service type": {
+			init: func(cl client.Client) {
+				svc := &corev1.Service{
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeLoadBalancer,
+						Ports: []corev1.ServicePort{
+							{
+								Name: "mongos",
+								Port: 27018,
+							},
+						},
+					},
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
+								{Hostname: "mongos.example.com"},
+							},
+						},
+					},
+				}
+				assert.NoError(t, cl.Create(ctx, svc))
+			},
+			exposeType:   corev1.ServiceTypeLoadBalancer,
+			expectedHost: "mongos.example.com:27018",
+		},
+		"loadbalancer service type with internal address": {
+			init: func(cl client.Client) {
+				svc := &corev1.Service{
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeLoadBalancer,
+						ClusterIP: "10.0.0.20",
+						Ports: []corev1.ServicePort{
+							{
+								Name: "mongos",
+								Port: 27018,
+							},
+						},
+					},
+				}
+				assert.NoError(t, cl.Create(ctx, svc))
+			},
+			useInternal:  true,
+			exposeType:   corev1.ServiceTypeLoadBalancer,
+			expectedHost: "test-cluster-mongos.default.svc.cluster.local:27018",
+		},
 		"err: clusterip service type and port not found": {
 			init: func(cl client.Client) {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cluster-mongos",
-						Namespace: "default",
-					},
+					Name:      "test-cluster-mongos",
+					Namespace: "default",
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
@@ -92,23 +135,24 @@ func TestMongosHost(t *testing.T) {
 			tt.init(cl)
 
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: "default",
-				},
+				Name:      "test-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					ClusterServiceDNSSuffix: "svc.cluster.local",
 					Sharding: api.Sharding{
 						Mongos: &api.MongosSpec{
 							Expose: api.MongosExpose{
 								ServicePerPod: false,
+								Expose: api.Expose{
+									ExposeType: tt.exposeType,
+								},
 							},
 						},
 					},
 				},
 			}
 
-			host, err := MongosHost(ctx, cl, cr, pod, false)
+			host, err := MongosHost(ctx, cl, cr, pod, tt.useInternal)
 			if tt.expectedError != nil {
 				assert.Empty(t, host)
 				assert.EqualError(t, err, tt.expectedError.Error())
@@ -144,25 +188,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -171,7 +211,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector: map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -197,25 +237,21 @@ func TestExternalService(t *testing.T) {
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -224,7 +260,7 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
@@ -246,32 +282,28 @@ func TestExternalService(t *testing.T) {
 							"percona.com/test": "annotation",
 						},
 						ExposeType:               corev1.ServiceTypeLoadBalancer,
-						LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+						LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 						LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
 					},
 				},
 			},
 			podName: "test-cr-rs0-0",
 			expectedSvc: &corev1.Service{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Service",
-					APIVersion: "v1",
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+					"percona.com/test":             "label",
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr-rs0-0",
-					Namespace: "test-ns",
-					Labels: map[string]string{
-						"app.kubernetes.io/component":  "external-service",
-						"app.kubernetes.io/instance":   "test-cr",
-						"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
-						"app.kubernetes.io/name":       "percona-server-mongodb",
-						"app.kubernetes.io/part-of":    "percona-server-mongodb",
-						"app.kubernetes.io/replset":    "rs0",
-						"percona.com/test":             "label",
-					},
-					Annotations: map[string]string{
-						"percona.com/test": "annotation",
-					},
+				Annotations: map[string]string{
+					"percona.com/test": "annotation",
 				},
 				Spec: corev1.ServiceSpec{
 					PublishNotReadyAddresses: true,
@@ -280,14 +312,116 @@ func TestExternalService(t *testing.T) {
 							Name:        "mongodb",
 							Port:        27017,
 							TargetPort:  intstr.FromInt(27017),
-							AppProtocol: ptr.To("mongo"),
+							AppProtocol: new("mongo"),
 						},
 					},
 					Selector:                 map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
 					Type:                     corev1.ServiceTypeLoadBalancer,
 					ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyLocal,
-					LoadBalancerClass:        ptr.To("eks.amazonaws.com/nlb"),
+					LoadBalancerClass:        new("eks.amazonaws.com/nlb"),
 					LoadBalancerSourceRanges: []string{"10.0.0.0/16"},
+				},
+			},
+		},
+		"LoadBalancer with externalDNS": {
+			replset: &api.ReplsetSpec{
+				Name: "rs0",
+				Expose: api.ExposeTogglable{
+					Enabled: true,
+					Expose: api.Expose{
+						ServiceAnnotations: map[string]string{
+							"percona.com/test": "annotation",
+						},
+						ExposeType: corev1.ServiceTypeLoadBalancer,
+						ExternalDNS: &api.ExternalDNSConfig{
+							Prefix: "prod",
+							Domain: "mongo.example.com",
+							TTL:    300,
+						},
+					},
+				},
+			},
+			podName: "test-cr-rs0-0",
+			expectedSvc: &corev1.Service{
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-0",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+				},
+				Annotations: map[string]string{
+					"percona.com/test":                          "annotation",
+					"external-dns.alpha.kubernetes.io/hostname": "prod-rs0-0.mongo.example.com",
+					"external-dns.alpha.kubernetes.io/ttl":      "300",
+					"percona.com/external-dns-managed":          "true",
+				},
+				Spec: corev1.ServiceSpec{
+					PublishNotReadyAddresses: true,
+					Ports: []corev1.ServicePort{
+						{
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: new("mongo"),
+						},
+					},
+					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-0"},
+					Type:                  corev1.ServiceTypeLoadBalancer,
+					ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+				},
+			},
+		},
+		"LoadBalancer with externalDNS no TTL": {
+			replset: &api.ReplsetSpec{
+				Name: "rs0",
+				Expose: api.ExposeTogglable{
+					Enabled: true,
+					Expose: api.Expose{
+						ExposeType: corev1.ServiceTypeLoadBalancer,
+						ExternalDNS: &api.ExternalDNSConfig{
+							Prefix: "staging",
+							Domain: "db.example.com",
+						},
+					},
+				},
+			},
+			podName: "test-cr-rs0-2",
+			expectedSvc: &corev1.Service{
+				Kind:       "Service",
+				APIVersion: "v1",
+				Name:       "test-cr-rs0-2",
+				Namespace:  "test-ns",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":  "external-service",
+					"app.kubernetes.io/instance":   "test-cr",
+					"app.kubernetes.io/managed-by": "percona-server-mongodb-operator",
+					"app.kubernetes.io/name":       "percona-server-mongodb",
+					"app.kubernetes.io/part-of":    "percona-server-mongodb",
+					"app.kubernetes.io/replset":    "rs0",
+				},
+				Annotations: map[string]string{
+					"external-dns.alpha.kubernetes.io/hostname": "staging-rs0-2.db.example.com",
+					"percona.com/external-dns-managed":          "true",
+				},
+				Spec: corev1.ServiceSpec{
+					PublishNotReadyAddresses: true,
+					Ports: []corev1.ServicePort{
+						{
+							Name:        "mongodb",
+							Port:        27017,
+							TargetPort:  intstr.FromInt(27017),
+							AppProtocol: new("mongo"),
+						},
+					},
+					Selector:              map[string]string{"statefulset.kubernetes.io/pod-name": "test-cr-rs0-2"},
+					Type:                  corev1.ServiceTypeLoadBalancer,
+					ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
 				},
 			},
 		},
@@ -295,16 +429,68 @@ func TestExternalService(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cr",
-					Namespace: "test-ns",
-				},
+				Name:      "test-cr",
+				Namespace: "test-ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 				},
 			}
 			svc := ExternalService(cr, tt.replset, tt.podName)
 			assert.Equal(t, tt.expectedSvc, svc)
+		})
+	}
+}
+
+func TestBuildDNSHostname(t *testing.T) {
+	tests := map[string]struct {
+		dns       *api.ExternalDNSConfig
+		component string
+		podName   string
+		expected  string
+	}{
+		"replset pod 0": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "rs0",
+			podName:   "my-cluster-rs0-0",
+			expected:  "prod-rs0-0.mongo.example.com",
+		},
+		"replset pod 2": {
+			dns:       &api.ExternalDNSConfig{Prefix: "staging", Domain: "db.example.com"},
+			component: "rs0",
+			podName:   "my-cluster-rs0-2",
+			expected:  "staging-rs0-2.db.example.com",
+		},
+		"mongos pod": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "mongos",
+			podName:   "my-cluster-mongos-1",
+			expected:  "prod-mongos-1.mongo.example.com",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := BuildDNSHostname(tt.dns, tt.component, tt.podName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildDNSHostnameWithoutIndex(t *testing.T) {
+	tests := map[string]struct {
+		dns       *api.ExternalDNSConfig
+		component string
+		expected  string
+	}{
+		"mongos": {
+			dns:       &api.ExternalDNSConfig{Prefix: "prod", Domain: "mongo.example.com"},
+			component: "mongos",
+			expected:  "prod-mongos.mongo.example.com",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := BuildDNSHostnameWithoutIndex(tt.dns, tt.component)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

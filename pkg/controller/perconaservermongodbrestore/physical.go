@@ -5,17 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"gopkg.in/yaml.v2"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
 var anotherOpBackoff = wait.Backoff{
@@ -105,22 +106,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		return status, nil
 	}
 
-	if cr.Status.State == psmdbv1.RestoreStateWaiting && sfsReady && cr.Spec.PITR != nil {
-		rsReady, err := r.checkIfReplsetsAreReadyForPhysicalRestore(ctx, cluster)
-		if err != nil {
-			return status, errors.Wrap(err, "check if replsets are ready for physical restore")
-		}
-
-		if !rsReady {
-			if err := r.prepareReplsetsForPhysicalRestore(ctx, cluster); err != nil {
-				return status, errors.Wrap(err, "prepare replsets for physical restore")
-			}
-
-			log.Info("Waiting for replsets to be ready before restore", "ready", rsReady)
-			return status, nil
-		}
-	}
-
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 
@@ -156,6 +141,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				bcp.Status.PBMname,
 				"--out", "json",
 			}
+		}
+
+		if cmp, err := cluster.ComparePBMAgentVersion("2.14.0"); err == nil && cmp >= 0 {
+			restoreCommand = append(restoreCommand, "--yes")
 		}
 
 		if cr.Spec.RSMap != nil {
@@ -194,7 +183,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			Storage string `json:"storage"`
 		}
 		if err := json.Unmarshal(stdoutBuf.Bytes(), &out); err != nil {
-			return status, errors.Wrap(err, "unmarshal PBM restore output")
+			return status, errors.Wrapf(err, "unmarshal PBM restore output: %s", stdoutBuf.String())
 		}
 
 		status.State = psmdbv1.RestoreStateRequested
@@ -278,65 +267,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		for _, rs := range replsets {
-			stsName := naming.MongodStatefulSetName(cluster, rs)
-
-			log.Info("Deleting statefulset", "statefulset", stsName)
-
-			sts := appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stsName,
-					Namespace: cluster.Namespace,
-				},
-			}
-
-			if err := r.client.Delete(ctx, &sts); err != nil {
-				return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-			}
+			toDelete := []string{naming.MongodStatefulSetName(cluster, rs)}
 
 			if rs.NonVoting.Enabled {
-				stsName := naming.NonVotingStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
+				toDelete = append(toDelete, naming.NonVotingStatefulSetName(cluster, rs))
 			}
-
 			if rs.Hidden.Enabled {
-				stsName := naming.HiddenStatefulSetName(cluster, rs)
-
-				log.Info("Deleting statefulset", "statefulset", stsName)
-
-				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
-				}
-
-				if err := r.client.Delete(ctx, &sts); err != nil {
-					return status, errors.Wrapf(err, "delete statefulset %s", stsName)
-				}
+				toDelete = append(toDelete, naming.HiddenStatefulSetName(cluster, rs))
+			}
+			if rs.Arbiter.Enabled {
+				toDelete = append(toDelete, naming.ArbiterStatefulSetName(cluster, rs))
+			}
+			if cluster.IsSearchEnabled() && rs.ClusterRole != api.ClusterRoleConfigSvr {
+				toDelete = append(toDelete, naming.SearchStatefulSetName(cluster, rs))
 			}
 
-			if rs.Arbiter.Enabled {
-				stsName := naming.ArbiterStatefulSetName(cluster, rs)
-
+			for _, stsName := range toDelete {
 				log.Info("Deleting statefulset", "statefulset", stsName)
 
 				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
+					Name:      stsName,
+					Namespace: cluster.Namespace,
 				}
 
 				if err := r.client.Delete(ctx, &sts); err != nil {
@@ -379,7 +330,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
-	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32) error {
+	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32,
+) error {
 	log := logf.FromContext(ctx)
 
 	sts := appsv1.StatefulSet{}
@@ -402,7 +354,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			"install -D /usr/bin/pbm-agent-entrypoint /opt/percona/pbm-agent-entrypoint",
 		}, " && "),
 	}
-	pbmInit := psmdb.EntrypointInitContainer(
+	pbmInit := psmdbInit.EntrypointContainer(
 		cluster,
 		"pbm-init",
 		cluster.Spec.Backup.Image,
@@ -428,10 +380,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 
 	sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: "pbm-config",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: r.pbmConfigName(cluster),
-			},
+		Secret: &corev1.SecretVolumeSource{
+			SecretName: r.pbmConfigName(cluster),
 		},
 	})
 	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
@@ -448,10 +398,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cluster),
-					},
+					Key:      "MONGODB_BACKUP_USER_ESCAPED",
+					Name:     api.UserSecretName(cluster),
 					Optional: &f,
 				},
 			},
@@ -460,10 +408,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Name: "PBM_AGENT_MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cluster),
-					},
+					Key:      "MONGODB_BACKUP_PASSWORD_ESCAPED",
+					Name:     api.UserSecretName(cluster),
 					Optional: &f,
 				},
 			},
@@ -485,6 +431,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 	}
 	sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, pbmEnvVars...)
+
+	if cluster.CompareVersion("1.23.0") >= 0 && psmdb.ShouldSetAWSSDKChecksumEnvVars(cluster) {
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, psmdb.AWSSDKChecksumEnvVars()...)
+	}
+	if cluster.CompareVersion("1.23.0") >= 0 && psmdb.ShouldSetOCIResourcePrincipalEnvVars(cluster) {
+		sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, psmdb.OCIResourcePrincipalEnvVars(cluster)...)
+	}
 
 	sslSecret := new(corev1.Secret)
 	err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
@@ -619,10 +572,42 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
+					Name:      stsName,
+					Namespace: cluster.Namespace,
+				}
+
+				err := r.client.Get(ctx, nn, &sts)
+				if err != nil {
+					return err
+				}
+
+				orig := sts.DeepCopy()
+				zero := int32(0)
+
+				sts.Spec.Replicas = &zero
+
+				if sts.Annotations == nil {
+					sts.Annotations = make(map[string]string)
+				}
+				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
+			})
+			if err != nil {
+				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
+			}
+		}
+
+		if cluster.IsSearchEnabled() {
+			stsName := naming.SearchStatefulSetName(cluster, rs)
+			nn := types.NamespacedName{Namespace: cluster.Namespace, Name: stsName}
+
+			log.Info("Preparing statefulset for physical restore", "name", stsName)
+
+			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				sts := appsv1.StatefulSet{
+					Name:      stsName,
+					Namespace: cluster.Namespace,
 				}
 
 				err := r.client.Get(ctx, nn, &sts)
@@ -683,152 +668,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Co
 	return creds, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) runMongosh(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, eval string) (*bytes.Buffer, *bytes.Buffer, error) {
-	log := logf.FromContext(ctx)
-
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	creds, err := r.getUserCredentials(ctx, cluster, psmdbv1.RoleClusterAdmin)
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "get %s credentials", psmdbv1.RoleClusterAdmin)
-	}
-
-	mongo60, err := cluster.CompareMongoDBVersion("6.0")
-	if err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrap(err, "compare mongo version")
-	}
-
-	mongoClient := "mongo"
-	if mongo60 >= 0 {
-		mongoClient = "mongosh"
-	}
-
-	cmd := []string{mongoClient, "--quiet", "-u", creds.Username, "-p", creds.Password, "--eval", eval}
-
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, stdoutBuf, stderrBuf, false); err != nil {
-		return stdoutBuf, stderrBuf, errors.Wrapf(err, "'%s' failed in %s (stdout: %s, stderr: %s)", eval, pod.Name, stdoutBuf.String(), stderrBuf.String())
-	}
-	log.V(1).Info("Cmd succeeded", "stdout", stdoutBuf.String(), "stderr", stderrBuf.String(), "pod", pod.Name, "eval", eval)
-
-	return stdoutBuf, stderrBuf, nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) runIsMaster(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) (bool, error) {
-	stdoutBuf, _, err := r.runMongosh(ctx, cluster, pod, "db.hello().isWritablePrimary")
-	if err != nil {
-		return false, errors.Wrap(err, "run db.hello()")
-	}
-
-	return strings.TrimSuffix(stdoutBuf.String(), "\n") == "true", nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) stepDown(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod) error {
-	_, _, err := r.runMongosh(ctx, cluster, pod, "rs.stepDown()")
-	if err != nil {
-		return errors.Wrap(err, "run rs.stepDown()")
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) makePrimary(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, pod *corev1.Pod, targetPod string) error {
-	jsTempl := `cfg = rs.config(); podZero = cfg.members.find(member => member.tags.podName === "%s"); podZero.priority += 1; rs.reconfig(cfg)`
-
-	_, _, err := r.runMongosh(ctx, cluster, pod, fmt.Sprintf(jsTempl, targetPod))
-	if err != nil {
-		return errors.Wrapf(err, "reconfigure replset in %s", pod.Name)
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) prepareReplsetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) error {
-	log := logf.FromContext(ctx)
-
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
-	for _, rs := range replsets {
-		log.Info("Preparing replset for physical restore", "replset", rs.Name)
-
-		podList, err := psmdb.GetRSPods(ctx, r.client, cluster, rs.Name)
-		if err != nil {
-			return errors.Wrapf(err, "get pods of replset %s", rs.Name)
-		}
-
-		for _, pod := range podList.Items {
-			isMaster, err := r.runIsMaster(ctx, cluster, &pod)
-			if err != nil {
-				log.V(1).Error(err, "failed to run db.hello()", "pod", pod.Name, "replset", rs.Name)
-				continue
-			}
-
-			if !isMaster {
-				log.V(1).Info("Skipping secondary pod", "pod", pod.Name, "replset", rs.Name)
-				continue
-			}
-
-			podZero := rs.PodName(cluster, 0)
-
-			if pod.Name == podZero {
-				log.Info(fmt.Sprintf("%s is already primary", podZero), "replset", rs.Name)
-				continue
-			}
-
-			log.Info(fmt.Sprintf("Current primary is %s", pod.Name), "pod", pod.Name, "replset", rs.Name)
-			log.Info(fmt.Sprintf("Reconfiguring replset to make %s primary", podZero), "pod", pod.Name, "replset", rs.Name)
-
-			if err = r.makePrimary(ctx, cluster, &pod, podZero); err != nil {
-				return errors.Wrapf(err, "make %s primary", podZero)
-			}
-
-			log.Info("Stepping down the current primary", "primary", pod.Name, "pod", pod.Name, "replset", rs.Name)
-			if err = r.stepDown(ctx, cluster, &pod); err != nil {
-				return errors.Wrap(err, "step down")
-			}
-		}
-	}
-
-	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) checkIfReplsetsAreReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
-	log := logf.FromContext(ctx)
-
-	replsets := cluster.Spec.Replsets
-	if cluster.Spec.Sharding.Enabled {
-		replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
-	}
-
-	for _, rs := range replsets {
-		log.Info("Checking if replset is ready for physical restore", "replset", rs.Name)
-
-		podZero := rs.PodName(cluster, 0)
-
-		pod := corev1.Pod{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: podZero, Namespace: cluster.Namespace}, &pod); err != nil {
-			return false, errors.Wrapf(err, "get pod %s", podZero)
-		}
-
-		isMaster, err := r.runIsMaster(ctx, cluster, &pod)
-		if err != nil {
-			return false, errors.Wrap(err, "check if pod zero is primary")
-		}
-
-		if !isMaster {
-			log.Info(fmt.Sprintf("%s must be elected as primary before starting physical restore", pod.Name), "replset", rs.Name)
-			return false, nil
-		}
-
-		log.Info("Replset is ready for physical restore", "replset", rs.Name, "primary", pod.Name)
-	}
-
-	return true, nil
-}
-
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
 // PBM masks the storage credentials when masking to YAML/JSON, but they are preserved in BSON.
 func yamlMarshalUnsafe(in any) ([]byte, error) {
@@ -837,8 +676,15 @@ func yamlMarshalUnsafe(in any) ([]byte, error) {
 		return nil, errors.Wrap(err, "marshal to bson")
 	}
 
+	// DefaultDocumentM is required so that nested documents decode into bson.M as
+	// well. Without it, the mongo-driver v2 decoder decodes nested documents into
+	// bson.D, which yaml.Marshal then renders as a list of {key, value} pairs
+	// instead of a proper YAML map.
+	dec := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(bsonBytes)))
+	dec.DefaultDocumentM()
+
 	var tmp bson.M
-	if err := bson.Unmarshal(bsonBytes, &tmp); err != nil {
+	if err := dec.Decode(&tmp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal to bson.M")
 	}
 	delete(tmp, "epoch")
@@ -864,7 +710,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get PBM config secret")
 	}
 
-	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
+	currentConf, err := r.getPBMConfigFromPod(ctx, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get current pbm config from pod")
+	}
+
+	pbmC, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
@@ -881,25 +732,38 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 		return errors.Wrap(err, "get PBM config")
 	}
 
-	pbmConfig.PITR.Enabled = false
+	if pbmConfig.PITR != nil {
+		pbmConfig.PITR.Enabled = false
+	}
 
-	confBytes, err := yamlMarshalUnsafe(pbmConfig)
+	newConfBytes, err := yamlMarshalUnsafe(pbmConfig)
 	if err != nil {
 		return errors.Wrap(err, "marshal PBM config to yaml")
 	}
 
-	if bytes.Equal(confBytes, secret.Data["pbm_config.yaml"]) {
+	newConf := make(map[string]any)
+	if err := yaml.Unmarshal(newConfBytes, newConf); err != nil {
+		return errors.Wrap(err, "unmarshal new PBM config to map")
+	}
+
+	// we need to do this to not break physical restores if PBM go module version
+	// differs from pbm-agent version in the running cluster. only known pbm config
+	// fields will be updated.
+	desiredConfBytes, err := yaml.Marshal(updateKnownFields(currentConf, newConf))
+	if err != nil {
+		return errors.Wrap(err, "marshal desired conf")
+	}
+
+	if bytes.Equal(desiredConfBytes, secret.Data["pbm_config.yaml"]) {
 		return nil
 	}
 
 	secret = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.pbmConfigName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    naming.ClusterLabels(cluster),
-		},
+		Name:      r.pbmConfigName(cluster),
+		Namespace: cluster.Namespace,
+		Labels:    naming.ClusterLabels(cluster),
 		Data: map[string][]byte{
-			"pbm_config.yaml": confBytes,
+			"pbm_config.yaml": desiredConfBytes,
 		},
 	}
 	if cluster.CompareVersion("1.17.0") < 0 {
@@ -913,6 +777,56 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	return nil
 }
 
+func updateKnownFields(a, b map[string]any) map[string]any {
+	out := make(map[string]any, len(a))
+	maps.Copy(out, a)
+	for k, v := range b {
+		// Ignore any field in b that does not exist in a.
+		bv, ok := out[k]
+		if !ok {
+			continue
+		}
+		if v, ok := v.(map[string]any); ok {
+			if bv, ok := bv.(map[string]any); ok {
+				out[k] = updateKnownFields(bv, v)
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) getPBMConfigFromPod(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) (map[string]any, error) {
+	conf := make(map[string]any)
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+
+	pod := corev1.Pod{}
+	nn := types.NamespacedName{Name: cluster.Spec.Replsets[0].PodName(cluster, 0), Namespace: cluster.Namespace}
+	if err := r.client.Get(ctx, nn, &pod); err != nil {
+		return conf, errors.Wrap(err, "get pod")
+	}
+
+	container, pbmBinary := getPBMBinaryAndContainerForExec(&pod)
+
+	command := []string{pbmBinary, "config"}
+	err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
+	if err != nil {
+		return conf, errors.Wrap(err, "get pbm config")
+	}
+
+	if err := yaml.Unmarshal(stdoutBuf.Bytes(), &conf); err != nil {
+		return conf, errors.Wrap(err, "unmarshal pbm config output")
+	}
+
+	return conf, nil
+}
+
 func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
@@ -924,7 +838,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
 	set := naming.RSLabels(cluster, rs)
 	set[naming.LabelKubernetesComponent] = component
 
-	err := r.client.List(ctx,
+	err := r.client.List(
+		ctx,
 		&mongodPods,
 		&client.ListOptions{
 			Namespace:     cluster.Namespace,

@@ -132,9 +132,6 @@ spec:
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
-        - mountPath: /etc/mongodb-secrets
-          name: arbiter-clusterip-mongodb-keyfile
-          readOnly: true
         - mountPath: /etc/mongodb-ssl
           name: ssl
           readOnly: true
@@ -174,20 +171,15 @@ spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: arbiter-clusterip-mongodb-keyfile
-        secret:
-          defaultMode: 288
-          optional: false
-          secretName: arbiter-clusterip-mongodb-keyfile
       - emptyDir: {}
         name: bin
       - emptyDir: {}
         name: mongosh
-     - configMap:
+      - configMap:
          defaultMode: 420
          name: arbiter-clusterip-rs0-mongod
          optional: true
-       name: config
+        name: config
       - name: arbiter-clusterip-mongodb-encryption-key
         secret:
           defaultMode: 288

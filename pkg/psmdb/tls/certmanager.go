@@ -2,6 +2,7 @@ package tls
 
 import (
 	"context"
+	"os"
 	"regexp"
 	"time"
 
@@ -27,7 +28,6 @@ type CertManagerController interface {
 	ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error)
 	ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error)
-	DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error
 	WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificates ...Certificate) error
 	GetMergedCA(ctx context.Context, cr *api.PerconaServerMongoDB, secretNames []string) ([]byte, error)
 	Check(ctx context.Context, config *rest.Config, ns string) error
@@ -60,47 +60,110 @@ func (c *certManagerController) IsDryRun() bool {
 	return c.dryRun
 }
 
-func deprecatedIssuerName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-psmdb-ca"
+func IsExternalIssuer(cr *api.PerconaServerMongoDB) bool {
+	if cr.Spec.TLS == nil {
+		return false
+	}
+	switch cr.Spec.TLS.IssuerConf.Kind {
+	case "", cm.IssuerKind, cm.ClusterIssuerKind:
+		return false
+	default:
+		return true
+	}
 }
 
 func issuerName(cr *api.PerconaServerMongoDB) string {
-	if cr.CompareVersion("1.16.0") >= 0 && cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-		return cr.Spec.TLS.IssuerConf.Name
+	const suffix = "-psmdb-issuer"
+	tls := cr.Spec.TLS
+	switch {
+	case tls != nil && tls.IssuerConf.Name != "":
+		return tls.IssuerConf.Name
+	case tls != nil && cr.CompareVersion("1.23.0") >= 0 && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
+		return cr.Name + "-" + cr.Namespace + suffix
 	}
+	return cr.Name + suffix
+}
 
-	if cr.CompareVersion("1.15.0") < 0 {
-		return deprecatedIssuerName(cr)
-	}
-
-	return cr.Name + "-psmdb-issuer"
+func isSharedClusterIssuer(cr *api.PerconaServerMongoDB) bool {
+	tls := cr.Spec.TLS
+	return cr.CompareVersion("1.23.0") >= 0 &&
+		tls != nil &&
+		tls.IssuerConf.Kind == cm.ClusterIssuerKind &&
+		tls.IssuerConf.Name != ""
 }
 
 func caIssuerName(cr *api.PerconaServerMongoDB) string {
-	return cr.Name + "-psmdb-ca-issuer"
+	const suffix = "-psmdb-ca-issuer"
+	tls := cr.Spec.TLS
+	if cr.CompareVersion("1.23.0") >= 0 {
+		switch {
+		case isSharedClusterIssuer(cr):
+			return tls.IssuerConf.Name + suffix
+		case tls != nil && tls.IssuerConf.Kind == cm.ClusterIssuerKind:
+			return cr.Name + "-" + cr.Namespace + suffix
+		}
+	}
+	return cr.Name + suffix
 }
 
-func (c *certManagerController) DeleteDeprecatedIssuerIfExists(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	issuer := new(cm.Issuer)
-	err := c.cl.Get(ctx, types.NamespacedName{
-		Name:      deprecatedIssuerName(cr),
-		Namespace: cr.Namespace,
-	}, issuer)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return err
+// IsUserIssuer reports whether tls.issuerConf points to an issuer created by the user.
+// Such an issuer must be used as is: the operator neither reconfigures it nor issues its own CA.
+func IsUserIssuer(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB) (bool, error) {
+	tls := cr.Spec.TLS
+	if tls == nil || tls.IssuerConf.Name == "" {
+		return false, nil
 	}
-	return c.cl.Delete(ctx, issuer)
+
+	var issuer client.Object
+	nn := types.NamespacedName{Name: tls.IssuerConf.Name}
+
+	switch tls.IssuerConf.Kind {
+	case cm.ClusterIssuerKind:
+		// Before 1.23.0 the operator created namespaced Issuers only, so a configured ClusterIssuer is always the user's.
+		if cr.CompareVersion("1.23.0") < 0 {
+			return true, nil
+		}
+		issuer = new(cm.ClusterIssuer)
+	case cm.IssuerKind, "":
+		issuer = new(cm.Issuer)
+		nn.Namespace = cr.Namespace
+	default:
+		return false, nil
+	}
+
+	err := cl.Get(ctx, nn, issuer)
+	switch {
+	case err == nil:
+		return !naming.IsManagedByOperator(issuer.GetLabels()), nil
+	case k8serrors.IsForbidden(err):
+		// In namespaced installs we may not have cluster-scoped read permissions.
+		// Ignore only RBAC-denied errors and let cert-manager handle issuer resolution.
+		return true, nil
+	case k8serrors.IsNotFound(err):
+		return false, nil
+	}
+
+	return false, errors.Wrap(err, "get issuer")
+}
+
+// ownedByOperator reports whether an object already in the cluster can be written by the operator.
+// An issuer created by the user must never be reconfigured, even if it appeared after the reconcile started.
+func ownedByOperator(obj client.Object) bool {
+	return naming.IsManagedByOperator(obj.GetLabels())
 }
 
 func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object) (util.ApplyStatus, error) {
-	if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
-		return "", errors.Wrap(err, "set controller reference")
+	return c.createOrUpdateIf(ctx, cr, obj, nil)
+}
+
+func (c *certManagerController) createOrUpdateIf(ctx context.Context, cr *api.PerconaServerMongoDB, obj client.Object, canWrite func(client.Object) bool) (util.ApplyStatus, error) {
+	if cr.Namespace == obj.GetNamespace() {
+		if err := controllerutil.SetControllerReference(cr, obj, c.scheme); err != nil {
+			return "", errors.Wrap(err, "set controller reference")
+		}
 	}
 
-	status, err := util.Apply(ctx, c.cl, obj)
+	status, err := util.ApplyIf(ctx, c.cl, obj, canWrite)
 	if err != nil {
 		return "", errors.Wrap(err, "create or update")
 	}
@@ -108,55 +171,92 @@ func (c *certManagerController) createOrUpdate(ctx context.Context, cr *api.Perc
 }
 
 func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
-	issuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				CA: &cm.CAIssuer{
-					SecretName: CertificateCA(cr).SecretName(),
-				},
-			},
+	var issuer client.Object
+	var canWrite func(client.Object) bool
+	meta := metav1.ObjectMeta{
+		Name:   issuerName(cr),
+		Labels: naming.ClusterLabels(cr),
+	}
+	spec := cm.IssuerSpec{
+		CA: &cm.CAIssuer{
+			SecretName: CertificateCA(cr).SecretName(),
 		},
 	}
 
-	if cr.CompareVersion("1.15.0") < 0 {
-		issuer.Spec = cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
+	kind := cm.IssuerKind
+	if cr.CompareVersion("1.23.0") >= 0 {
+		kind = cr.Spec.TLS.IssuerConf.Kind
+	}
+	switch kind {
+	case cm.IssuerKind:
+		// A named issuer may be the user's, an operator-created one is always ours.
+		if cr.Spec.TLS.IssuerConf.Name != "" {
+			canWrite = ownedByOperator
 		}
+		issuer = &cm.Issuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+		issuer.SetNamespace(cr.Namespace)
+	case cm.ClusterIssuerKind:
+		canWrite = ownedByOperator
+		if isSharedClusterIssuer(cr) {
+			delete(meta.Labels, naming.LabelKubernetesInstance)
+		}
+		issuer = &cm.ClusterIssuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+	default:
+		return "", errors.Errorf("unknown issuer kind: %s", cr.Spec.TLS.IssuerConf.Kind)
 	}
 
 	if cr.CompareVersion("1.17.0") < 0 {
-		issuer.Labels = nil
+		issuer.SetLabels(nil)
 	}
 
-	return c.createOrUpdate(ctx, cr, issuer)
+	return c.createOrUpdateIf(ctx, cr, issuer, canWrite)
 }
 
 func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
-	issuer := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      caIssuerName(cr),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
-		},
+	var issuer client.Object
+	var canWrite func(client.Object) bool
+	meta := metav1.ObjectMeta{
+		Name:   caIssuerName(cr),
+		Labels: naming.ClusterLabels(cr),
+	}
+	spec := cm.IssuerSpec{
+		SelfSigned: &cm.SelfSignedIssuer{},
+	}
+	kind := cm.IssuerKind
+	if cr.CompareVersion("1.23.0") >= 0 {
+		kind = cr.Spec.TLS.IssuerConf.Kind
+	}
+	switch kind {
+	case cm.IssuerKind:
+		issuer = &cm.Issuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+		issuer.SetNamespace(cr.Namespace)
+	case cm.ClusterIssuerKind:
+		canWrite = ownedByOperator
+		if isSharedClusterIssuer(cr) {
+			delete(meta.Labels, naming.LabelKubernetesInstance)
+		}
+		issuer = &cm.ClusterIssuer{
+			ObjectMeta: meta,
+			Spec:       spec,
+		}
+	default:
+		return "", errors.Errorf("unknown issuer kind: %s", cr.Spec.TLS.IssuerConf.Kind)
 	}
 
 	if cr.CompareVersion("1.17.0") < 0 {
-		issuer.Labels = nil
+		issuer.SetLabels(nil)
 	}
 
-	return c.createOrUpdate(ctx, cr, issuer)
+	return c.createOrUpdateIf(ctx, cr, issuer, canWrite)
 }
 
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
@@ -218,7 +318,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 				secret := &corev1.Secret{}
 				err := c.cl.Get(ctx, types.NamespacedName{
 					Name:      cert.SecretName(),
-					Namespace: cr.Namespace,
+					Namespace: cert.Namespace(),
 				}, secret)
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
@@ -232,7 +332,7 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 					if err != nil {
 						return err
 					}
-					if metav1.IsControlledBy(secret, certificate) {
+					if metav1.IsControlledBy(secret, certificate) || secret.Namespace != cr.Namespace {
 						continue
 					}
 					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
@@ -281,4 +381,12 @@ func (c *certManagerController) GetMergedCA(ctx context.Context, cr *api.Percona
 
 func (c *certManagerController) GetClient() client.Client {
 	return c.cl
+}
+
+func certManagerNamespace() string {
+	ns := os.Getenv("CERTMANAGER_NAMESPACE")
+	if ns == "" {
+		return "cert-manager"
+	}
+	return ns
 }

@@ -4,15 +4,19 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/url"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -23,17 +27,94 @@ type Config struct {
 	ReplSetName string
 	Username    string
 	Password    string
+	AuthSource  string
 	TLSConf     *tls.Config
 	Direct      bool
 	Timeout     time.Duration
 }
 
+func (conf *Config) URI() string {
+	return conf.uri(connstring.SchemeMongoDB, "")
+}
+
+func (conf *Config) SRVURI(hostname string) string {
+	return conf.uri(connstring.SchemeMongoDBSRV, hostname)
+}
+
+func (conf *Config) uri(scheme, hostname string) string {
+	if len(conf.Hosts) == 0 {
+		return ""
+	}
+	u := url.URL{
+		Scheme: scheme,
+		Host:   strings.Join(conf.Hosts, ","),
+	}
+	if hostname != "" {
+		u.Host = hostname
+	}
+
+	if conf.Username != "" || conf.Password != "" {
+		u.User = url.UserPassword(conf.Username, conf.Password)
+	}
+
+	q := url.Values{}
+	if conf.ReplSetName != "" {
+		q.Set("replicaSet", conf.ReplSetName)
+	}
+	if conf.AuthSource != "" {
+		q.Set("authSource", conf.AuthSource)
+	}
+	if scheme != connstring.SchemeMongoDBSRV && conf.TLSConf != nil {
+		q.Set("tls", "true")
+	}
+	if conf.Direct {
+		q.Set("directConnection", "true")
+	}
+	u.RawQuery = q.Encode()
+	if u.RawQuery != "" {
+		u.Path = "/"
+	}
+
+	return u.String()
+}
+
+func (conf *Config) Options() *options.ClientOptions {
+	timeout := 10 * time.Second
+	if conf.Timeout != 0 {
+		timeout = conf.Timeout
+	}
+
+	journal := true
+	wc := writeconcern.Majority()
+	wc.Journal = &journal
+	opts := options.Client().
+		SetHosts(conf.Hosts).
+		SetWriteConcern(wc).
+		SetReadPreference(readpref.Primary()).
+		SetTLSConfig(conf.TLSConf).
+		SetDirect(conf.Direct).
+		SetConnectTimeout(timeout).
+		SetServerSelectionTimeout(timeout)
+
+	if conf.ReplSetName != "" {
+		opts.SetReplicaSet(conf.ReplSetName)
+	}
+	if conf.Username != "" || conf.Password != "" {
+		opts.SetAuth(options.Credential{
+			Password:   conf.Password,
+			Username:   conf.Username,
+			AuthSource: conf.AuthSource,
+		})
+	}
+	return opts
+}
+
 type Client interface {
 	Disconnect(ctx context.Context) error
-	Database(name string, opts ...*options.DatabaseOptions) ClientDatabase
+	Database(name string, opts ...options.Lister[options.DatabaseOptions]) ClientDatabase
 	Ping(ctx context.Context, rp *readpref.ReadPref) error
 
-	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error
+	SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error
 	ReadConfig(ctx context.Context) (RSConfig, error)
 	CreateRole(ctx context.Context, db string, role Role) error
 	UpdateRole(ctx context.Context, db string, role Role) error
@@ -61,14 +142,14 @@ type Client interface {
 }
 
 type ClientDatabase interface {
-	RunCommand(ctx context.Context, runCommand interface{}, opts ...*options.RunCmdOptions) *mongo.SingleResult
+	RunCommand(ctx context.Context, runCommand any, opts ...options.Lister[options.RunCmdOptions]) *mongo.SingleResult
 }
 
 type mongoClient struct {
 	*mongo.Client
 }
 
-func (c *mongoClient) Database(name string, opts ...*options.DatabaseOptions) ClientDatabase {
+func (c *mongoClient) Database(name string, opts ...options.Lister[options.DatabaseOptions]) ClientDatabase {
 	return c.Client.Database(name, opts...)
 }
 
@@ -77,50 +158,25 @@ func ToInterface(client *mongo.Client) Client {
 }
 
 func Dial(ctx context.Context, conf *Config) (Client, error) {
-	timeout := 10 * time.Second
-	if conf.Timeout != 0 {
-		timeout = conf.Timeout
-	}
+	opts := conf.Options()
 
-	journal := true
-	wc := writeconcern.Majority()
-	wc.Journal = &journal
-	opts := options.Client().
-		SetHosts(conf.Hosts).
-		SetWriteConcern(wc).
-		SetReadPreference(readpref.Primary()).
-		SetTLSConfig(conf.TLSConf).
-		SetDirect(conf.Direct).
-		SetConnectTimeout(timeout).
-		SetServerSelectionTimeout(timeout)
-
-	if conf.ReplSetName != "" {
-		opts.SetReplicaSet(conf.ReplSetName)
-	}
-	if conf.Username != "" || conf.Password != "" {
-		opts.SetAuth(options.Credential{
-			Password: conf.Password,
-			Username: conf.Username,
-		})
-	}
-
-	tCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	client, err := mongo.Connect(tCtx, opts)
+	client, err := mongo.Connect(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to mongo rs")
 	}
+
 	defer func() {
 		if err != nil {
-			derr := client.Disconnect(tCtx)
+			derr := client.Disconnect(ctx)
 			if derr != nil {
-				log.Error(err, "failed to disconnect")
+				log.Error(derr, "failed to disconnect")
 			}
 		}
 	}()
 
-	tCtx, cancel = context.WithTimeout(ctx, timeout)
+	tCtx, cancel := context.WithTimeout(ctx, *opts.ConnectTimeout)
 	defer cancel()
+
 	err = client.Ping(tCtx, readpref.Primary())
 	if err != nil {
 		return nil, errors.Wrap(err, "ping mongo")
@@ -129,11 +185,14 @@ func Dial(ctx context.Context, conf *Config) (Client, error) {
 	return ToInterface(client), nil
 }
 
-func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcern string) error {
+func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, writeConcernW string, writeConcernWTimeout int) error {
 	cmd := bson.D{
 		{Key: "setDefaultRWConcern", Value: 1},
 		{Key: "defaultReadConcern", Value: bson.D{{Key: "level", Value: readConcern}}},
-		{Key: "defaultWriteConcern", Value: bson.D{{Key: "w", Value: writeConcern}}},
+		{Key: "defaultWriteConcern", Value: bson.D{
+			{Key: "w", Value: parseWriteConcernW(writeConcernW)},
+			{Key: "wtimeout", Value: writeConcernWTimeout},
+		}},
 	}
 
 	res := client.Database("admin").RunCommand(ctx, cmd)
@@ -142,6 +201,17 @@ func (client *mongoClient) SetDefaultRWConcern(ctx context.Context, readConcern,
 	}
 
 	return nil
+}
+
+// parseWriteConcernW returns the value for defaultWriteConcern.w with the
+// correct BSON type. MongoDB rejects {w: "1"} as a missing custom tag, so any
+// non-negative integer string is sent as an int; everything else (including
+// "majority" and custom getLastErrorModes tags) stays a string.
+func parseWriteConcernW(w string) any {
+	if n, err := strconv.Atoi(w); err == nil && n >= 0 {
+		return n
+	}
+	return w
 }
 
 func (client *mongoClient) ReadConfig(ctx context.Context) (RSConfig, error) {
@@ -664,7 +734,7 @@ func (client *mongoClient) UpdateUserPass(ctx context.Context, db, name, pass st
 func (client *mongoClient) UpdateUser(ctx context.Context, currName, newName, pass string) error {
 	mu := struct {
 		Users []struct {
-			Roles interface{} `bson:"roles"`
+			Roles any `bson:"roles"`
 		} `bson:"users"`
 	}{}
 
@@ -824,7 +894,7 @@ func (m *ConfigMembers) FixMemberConfigs(ctx context.Context, compareWith Config
 	for i := 0; i < len(*m); i++ {
 		member := []ConfigMember(*m)[i]
 		c, ok := cm[member.Host]
-		if ok && c.Tags != nil && !reflect.DeepEqual(c.Tags, member.Tags) {
+		if ok && !member.ArbiterOnly && c.Tags != nil && !reflect.DeepEqual(c.Tags, member.Tags) {
 			changes = true
 			[]ConfigMember(*m)[i].Tags = c.Tags
 			log.Info("Tags changed", "host", member.Host, "old", member.Tags, "new", c.Tags)

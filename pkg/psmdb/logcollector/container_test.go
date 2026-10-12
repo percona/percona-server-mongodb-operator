@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -20,9 +20,7 @@ func TestContainers(t *testing.T) {
 	testEnvFrom := []corev1.EnvFromSource{
 		{
 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "test-configmap",
-				},
+				Name: "test-configmap",
 			},
 		},
 	}
@@ -99,10 +97,8 @@ func TestContainers(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: "default",
-				},
+				Name:      "my-cluster",
+				Namespace: "default",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion:    version.Version(),
 					LogCollector: logColl,
@@ -112,7 +108,7 @@ func TestContainers(t *testing.T) {
 				},
 			}
 
-			containers, err := Containers(cr, 27017)
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
 
 			if tt.expectedContainers != nil {
 				var gotNames []string
@@ -128,6 +124,106 @@ func TestContainers(t *testing.T) {
 				assert.EqualError(t, err, tt.expectedErr.Error())
 			}
 
+		})
+	}
+}
+
+func TestContainersProbes(t *testing.T) {
+	logsLiveness := &corev1.Probe{
+		InitialDelaySeconds: 15,
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
+	}
+	logsReadiness := &corev1.Probe{
+		InitialDelaySeconds: 5,
+		TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt(2020)},
+	}
+	rotateLiveness := &corev1.Probe{
+		InitialDelaySeconds: 20,
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
+	}
+	rotateReadiness := &corev1.Probe{
+		InitialDelaySeconds: 3,
+		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},
+	}
+
+	newCR := func() *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Name: "my-cluster", Namespace: "default",
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &api.SecretsSpec{Users: "users-secret"},
+				LogCollector: &api.LogCollectorSpec{
+					Enabled:   true,
+					Image:     "log-test-image",
+					LogRotate: &api.LogRotateSpec{},
+				},
+			},
+		}
+	}
+
+	getContainer := func(t *testing.T, containers []corev1.Container, name string) corev1.Container {
+		t.Helper()
+		for _, c := range containers {
+			if c.Name == name {
+				return c
+			}
+		}
+		t.Fatalf("container %q not found", name)
+		return corev1.Container{}
+	}
+
+	tests := []struct {
+		name            string
+		setup           func(cr *api.PerconaServerMongoDB)
+		wantLogsLive    *corev1.Probe
+		wantLogsReady   *corev1.Probe
+		wantRotateLive  *corev1.Probe
+		wantRotateReady *corev1.Probe
+	}{
+		{
+			name:  "no probes by default",
+			setup: func(*api.PerconaServerMongoDB) {},
+		},
+		{
+			name: "custom probes honored per container",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.LogCollector.LivenessProbe = logsLiveness
+				cr.Spec.LogCollector.ReadinessProbe = logsReadiness
+				cr.Spec.LogCollector.LogRotate.LivenessProbe = rotateLiveness
+				cr.Spec.LogCollector.LogRotate.ReadinessProbe = rotateReadiness
+			},
+			wantLogsLive:    logsLiveness,
+			wantLogsReady:   logsReadiness,
+			wantRotateLive:  rotateLiveness,
+			wantRotateReady: rotateReadiness,
+		},
+		{
+			name: "custom probes ignored on <1.23.0",
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.22.0"
+				cr.Spec.LogCollector.LivenessProbe = logsLiveness
+				cr.Spec.LogCollector.ReadinessProbe = logsReadiness
+				cr.Spec.LogCollector.LogRotate.LivenessProbe = rotateLiveness
+				cr.Spec.LogCollector.LogRotate.ReadinessProbe = rotateReadiness
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newCR()
+			tt.setup(cr)
+
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
+			assert.NoError(t, err)
+
+			logs := getContainer(t, containers, "logs")
+			assert.Equal(t, tt.wantLogsLive, logs.LivenessProbe)
+			assert.Equal(t, tt.wantLogsReady, logs.ReadinessProbe)
+
+			rotate := getContainer(t, containers, "logrotate")
+			assert.Equal(t, tt.wantRotateLive, rotate.LivenessProbe)
+			assert.Equal(t, tt.wantRotateReady, rotate.ReadinessProbe)
 		})
 	}
 }
@@ -194,9 +290,7 @@ func expectedContainers(
 				Name: "MONGODB_USER",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "internal-my-cluster-users",
-						},
+						Name:     "internal-my-cluster-users",
 						Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
 						Optional: &boolFalse,
 					},
@@ -206,9 +300,7 @@ func expectedContainers(
 				Name: "MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "internal-my-cluster-users",
-						},
+						Name:     "internal-my-cluster-users",
 						Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
 						Optional: &boolFalse,
 					},

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -12,10 +11,8 @@ import (
 
 func TestGetCertificateSans(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mydb",
-			Namespace: "myns",
-		},
+		Name:      "mydb",
+		Namespace: "myns",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion:               version.Version(),
 			ClusterServiceDNSSuffix: "cluster.service.dns.suffix",

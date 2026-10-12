@@ -245,11 +245,26 @@ _dbPath() {
 	echo "$dbPath"
 }
 
+# generate_pem_files concatenates the TLS key and cert into the .pem files
+generate_pem_files() {
+	MONGO_SSL_DIR=${MONGO_SSL_DIR:-/etc/mongodb-ssl}
+	if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
+		cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
+	fi
+	MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
+	if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
+		cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
+	fi
+}
+
 is_manual_recovery() {
 	recovery_file='/data/db/sleep-forever'
 	if [ -f "${recovery_file}" ]; then
 		echo "The $recovery_file file is detected, node is going to infinity loop"
 		echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+		# Generate the .pem files so a user who execs into the container during
+		# sleep-forever mode can start mongod manually without recreating them.
+		generate_pem_files
 		while [ -f "${recovery_file}" ]; do
 			sleep 1
 		done
@@ -440,16 +455,17 @@ if [[ $originalArgOne == mongo* ]]; then
 		if [ -f "${MONGO_SSL_DIR}/ca.crt" ]; then
 			CA="${MONGO_SSL_DIR}/ca.crt"
 		fi
+
+		generate_pem_files
+
+		MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
 		if [ -f "${MONGO_SSL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_DIR}/tls.crt" ]; then
-			cat "${MONGO_SSL_DIR}/tls.key" "${MONGO_SSL_DIR}/tls.crt" >/tmp/tls.pem
 			_mongod_hack_ensure_arg_val --sslPEMKeyFile /tmp/tls.pem "${mongodHackedArgs[@]}"
 			if [ -f "${CA}" ]; then
 				_mongod_hack_ensure_arg_val --sslCAFile "${CA}" "${mongodHackedArgs[@]}"
 			fi
 		fi
-		MONGO_SSL_INTERNAL_DIR=${MONGO_SSL_INTERNAL_DIR:-/etc/mongodb-ssl-internal}
 		if [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.key" ] && [ -f "${MONGO_SSL_INTERNAL_DIR}/tls.crt" ]; then
-			cat "${MONGO_SSL_INTERNAL_DIR}/tls.key" "${MONGO_SSL_INTERNAL_DIR}/tls.crt" >/tmp/tls-internal.pem
 			_mongod_hack_ensure_arg_val --sslClusterFile /tmp/tls-internal.pem "${mongodHackedArgs[@]}"
 			if [ -f "${MONGO_SSL_INTERNAL_DIR}/ca.crt" ]; then
 				_mongod_hack_ensure_arg_val --sslClusterCAFile "${MONGO_SSL_INTERNAL_DIR}/ca.crt" "${mongodHackedArgs[@]}"
@@ -480,9 +496,9 @@ if [[ $originalArgOne == mongo* ]]; then
 		_mongod_hack_rename_arg_save_val --sslDisabledProtocols --tlsDisabledProtocols "${mongodHackedArgs[@]}"
 	fi
 
-	if [[ $originalArgOne == "mongod" && ${LOGCOLLECTOR_ENABLED:-} == "true" ]]; then
+	if [[ ${LOGCOLLECTOR_ENABLED:-} == "true" ]] && [[ $originalArgOne == "mongod" || $originalArgOne == "mongos" ]]; then
 		mkdir -p /data/db/logs/
-		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/mongod.log" "${mongodHackedArgs[@]}"
+		_mongod_hack_ensure_arg_val --logpath "/data/db/logs/${originalArgOne}.log" "${mongodHackedArgs[@]}"
 		# https://www.mongodb.com/docs/manual/reference/program/mongod/#std-option-mongod.--logRotate
 		# the operator is using logrotate as part of the logcollector feature.
 		# using the rename option because logrotate performs db.adminCommand({ logRotate: 1 })

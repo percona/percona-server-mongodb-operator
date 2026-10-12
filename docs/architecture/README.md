@@ -1,9 +1,11 @@
 # Architecture
 
-## Architecture Decision Records
+## Design Documents
 
-We will record design decisions for the architecture to ensure we preserve the context of our
-choices. These will be written in the format proposed in the
-[blog post by Michael Nygard](http://thinkrelevance.com/blog/2011/11/15/documenting-architecture-decisions)
+We record design decisions using [Enhancement Design Documents](enhancements/TEMPLATE.md). New proposals should follow that template.
 
-Please see the [architectural decision log](decisions/index.md) for the list of all ADRs.
+## Architecture Decision Records (Deprecated)
+
+> The ADR process has been replaced by Enhancement Design Documents above.
+
+Historical ADRs are preserved in the [architectural decision log](decisions/index.md).

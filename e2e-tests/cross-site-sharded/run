@@ -166,6 +166,18 @@ kubectl_bin patch psmdb ${main_cluster} --type=merge --patch '{
 			  }
 		}'
 
+if arch_scheduling_enabled; then
+	arch_patch=$(jq -nc --argjson scheduling "$(arch_psmdb_scheduling_json)" '[
+		{op: "add", path: "/spec/replsets/0/nodeSelector", value: $scheduling.nodeSelector},
+		{op: "add", path: "/spec/replsets/0/tolerations", value: $scheduling.tolerations},
+		{op: "add", path: "/spec/replsets/1/nodeSelector", value: $scheduling.nodeSelector},
+		{op: "add", path: "/spec/replsets/1/tolerations", value: $scheduling.tolerations},
+		{op: "add", path: "/spec/sharding/configsvrReplSet/nodeSelector", value: $scheduling.nodeSelector},
+		{op: "add", path: "/spec/sharding/configsvrReplSet/tolerations", value: $scheduling.tolerations}
+	]')
+	kubectl_bin patch psmdb ${main_cluster} --type=json -p="${arch_patch}"
+fi
+
 wait_for_members $replica_cfg_0_endpoint cfg 6
 wait_for_members $replica_rs0_0_endpoint rs0 6
 wait_for_members $replica_rs1_0_endpoint rs1 6

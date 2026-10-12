@@ -7,7 +7,6 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -17,6 +16,7 @@ const (
 
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
+	MongosLogVolClaimName  = "mongos-logs"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir     = "/data/db"
 	MongodContainerDataLogsDir = "/data/db/logs"
@@ -81,9 +81,7 @@ func (s VolumeSourceType) VolumeSource(name string) corev1.VolumeSource {
 	case VolumeSourceConfigMap:
 		return corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: name,
-				},
+				Name:     name,
 				Optional: &t,
 			},
 		}
@@ -108,14 +106,14 @@ func (s VolumeSourceType) VolumeProjection(name string) corev1.VolumeProjection 
 		return corev1.VolumeProjection{
 			ConfigMap: &corev1.ConfigMapProjection{
 				LocalObjectReference: localObj,
-				Optional:             ptr.To(true),
+				Optional:             new(true),
 			},
 		}
 	case VolumeSourceSecret:
 		return corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
 				LocalObjectReference: localObj,
-				Optional:             ptr.To(true),
+				Optional:             new(true),
 			},
 		}
 	default:
@@ -163,6 +161,12 @@ func (s *hashableSecret) GetHashHex() (string, error) {
 	return getCustomConfigHashHex(s.StringData, s.Data)
 }
 
+// HashConfigMap returns a stable MD5 hex digest of the ConfigMap's data.
+// Use it as a pod-template annotation so a content change rolls the pods.
+func HashConfigMap(cm *corev1.ConfigMap) (string, error) {
+	return getCustomConfigHashHex(cm.Data, cm.BinaryData)
+}
+
 func getCustomConfigHashHex(strData map[string]string, binData map[string][]byte) (string, error) {
 	content := struct {
 		StrData map[string]string `json:"str_data,omitempty"`
@@ -180,4 +184,23 @@ func getCustomConfigHashHex(strData map[string]string, binData map[string][]byte
 	hashHex := fmt.Sprintf("%x", md5.Sum(allData))
 
 	return hashHex, nil
+}
+
+type LogVolume struct {
+	Name      string
+	MountPath string
+}
+
+func MongodLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongodDataVolClaimName,
+		MountPath: MongodContainerDataDir,
+	}
+}
+
+func MongosLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongosLogVolClaimName,
+		MountPath: MongodContainerDataLogsDir,
+	}
 }

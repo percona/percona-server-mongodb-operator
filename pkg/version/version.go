@@ -7,6 +7,7 @@ import (
 
 //go:generate sh -c "yq -i '.metadata.labels.\"app.kubernetes.io/version\" = \"v\" + load(\"version.txt\")' ../../config/crd/patches/versionlabel_in_psmdb.yaml"
 //go:generate sh -c "yq -i '.metadata.labels.\"app.kubernetes.io/version\" = \"v\" + load(\"version.txt\")' ../../config/crd/patches/versionlabel_in_psmdbbackup.yaml"
+//go:generate sh -c "yq -i '.metadata.labels.\"app.kubernetes.io/version\" = \"v\" + load(\"version.txt\")' ../../config/crd/patches/versionlabel_in_psmdbclustersync.yaml"
 //go:generate sh -c "yq -i '.metadata.labels.\"app.kubernetes.io/version\" = \"v\" + load(\"version.txt\")' ../../config/crd/patches/versionlabel_in_psmdbrestore.yaml"
 
 //go:embed version.txt

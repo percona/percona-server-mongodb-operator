@@ -56,26 +56,26 @@ function main() {
 	desc 'create secrets and start client'
 	kubectl_bin apply -f "${conf_dir}/client.yml" \
 		-f "${conf_dir}/secrets.yml" \
-		-f "${conf_dir}/minio-secret.yml"
+		-f "${conf_dir}/s3-secret.yml"
 
-	deploy_minio
+	deploy_s3_storage
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "3"
 	wait_cluster_consistency "$psmdb"
 
 	# PVC resize did not work for PSA deployment and it was fixed in 1.22
 	if default_sc_allows_expansion; then
 		desc 'resizing PVCs'
-		patch_pvc_request "$psmdb" "2G"
+		patch_pvc_request "$psmdb" "2Gi"
 		wait_cluster_consistency "$psmdb"
 		wait_all_pvc_resize "2Gi"
 	else
 		echo "Default storageclass does not allow volume expansion, skipping PVC resize"
 	fi
 
-	desc 'run backup on minio'
-	run_backup "minio"
-	wait_backup "backup-minio"
-	run_recovery_check "$cluster" "backup-minio"
+	desc 'run backup on local-s3'
+	run_backup "local-s3"
+	wait_backup "backup-local-s3"
+	run_recovery_check "$cluster" "backup-local-s3"
 
 	destroy "$namespace"
 

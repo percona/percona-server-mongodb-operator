@@ -51,7 +51,9 @@ type PerconaServerMongoDBBackupStatus struct {
 	Minio        *BackupStorageMinioSpec      `json:"minio,omitempty"`
 	GCS          *BackupStorageGCSSpec        `json:"gcs,omitempty"`
 	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
+	OSS          *BackupStorageOSSSpec        `json:"oss,omitempty"`
 	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	OCI          *BackupStorageOCISpec        `json:"oci,omitempty"`
 	ReplsetNames []string                     `json:"replsetNames,omitempty"`
 	PBMname      string                       `json:"pbmName,omitempty"`
 	Size         string                       `json:"size,omitempty"`
@@ -147,6 +149,9 @@ const (
 func (p *PerconaServerMongoDBBackup) PBMBackupType() defs.BackupType {
 	if p.Spec.Type == BackupTypeIncrementalBase {
 		return defs.IncrementalBackup
+	}
+	if p.Spec.Type == "" {
+		return defs.LogicalBackup
 	}
 	return p.Spec.Type
 }

@@ -15,13 +15,13 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:main-backup
     storages:
-      minio:
+      local-s3:
         type: s3
         s3:
-          credentialsSecret: minio-secret
+          credentialsSecret: s3-secret
           region: us-east-1
           bucket: operator-testing
-          endpointUrl: http://minio-service:9000/
+          endpointUrl: http://s3-storage-all-in-one:8333/
           insecureSkipTLSVerify: false
   replsets:
   - name: rs0
@@ -30,7 +30,7 @@ spec:
     resources:
       limits:
         cpu: 500m
-        memory: 1G
+        memory: 3G
       requests:
         cpu: 100m
         memory: 0.1G

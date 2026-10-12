@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -37,7 +36,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileExternalSnapshotRestore(
 
 	switch cr.Status.State {
 	case psmdbv1.RestoreStateNew:
-		return r.reconcileSnapshotNew(cr)
+		return r.reconcileSnapshotNew(ctx, cr, cluster)
 
 	case psmdbv1.RestoreStateWaiting:
 		return r.reconcileSnapshotWaiting(ctx, cr, cluster)
@@ -53,9 +52,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileExternalSnapshotRestore(
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotNew(
+	ctx context.Context,
 	restore *psmdbv1.PerconaServerMongoDBRestore,
+	cluster *psmdbv1.PerconaServerMongoDB,
 ) (psmdbv1.PerconaServerMongoDBRestoreStatus, error) {
 	status := restore.Status
+
+	if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
+		return status, errors.Wrap(err, "update PBM config secret")
+	}
+
 	status.State = psmdbv1.RestoreStateWaiting
 	return status, nil
 }
@@ -68,10 +74,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 	log := logf.FromContext(ctx)
 
 	status := restore.Status
-	if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
-		return status, errors.Wrap(err, "update PBM config secret")
-	}
-
 	if err := r.createOrUpdateDBConfigSecret(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "create db config secret")
 	}
@@ -101,6 +103,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 	restoreCmd := []string{
 		"/opt/percona/pbm", "restore",
 		"--external", "--out", "json",
+	}
+
+	if cmp, err := cluster.ComparePBMAgentVersion("2.14.0"); err == nil && cmp >= 0 {
+		restoreCmd = append(restoreCmd, "--yes")
 	}
 
 	// TODO: support replset remapping?
@@ -257,7 +263,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 	log.Info("Snapshot restore finished", "status", status.State)
 
 	status.State = psmdbv1.RestoreStateReady
-	status.CompletedAt = ptr.To(metav1.Now())
+	status.CompletedAt = new(metav1.Now())
 
 	return status, nil
 }
@@ -318,7 +324,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				orig := sfs.DeepCopy()
 
 				// Scale down the statefulset.
-				sfs.Spec.Replicas = ptr.To(int32(0))
+				sfs.Spec.Replicas = new(int32(0))
 
 				// When the pods come up, they should start pbm with the following command:
 				sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
@@ -339,10 +345,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
 					sfs.Spec.Template.Spec.Volumes = append(sfs.Spec.Template.Spec.Volumes, corev1.Volume{
 						Name: "pbm-db-config",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: r.dbConfigSecretName(cluster, rs),
-							},
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: r.dbConfigSecretName(cluster, rs),
 						},
 					})
 					sfs.Spec.Template.Spec.Containers[0].VolumeMounts = append(
@@ -416,6 +420,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		labels              map[string]string
 	}
 
+	type replsetInfo struct {
+		rsName string
+		pvcs   []pvcInfo
+	}
+
 	getVolumeClaimTemplate := func(sfsName string) (corev1.PersistentVolumeClaimSpec, error) {
 		sfs := appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: sfsName, Namespace: cluster.Namespace}, &sfs); err != nil {
@@ -433,8 +442,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	}
 
 	// Collect all PVCs that need to be reconciled.
-	pvcs := make([]pvcInfo, 0)
+	allInfos := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
+		pvcs := make([]pvcInfo, 0)
 		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
@@ -486,26 +496,33 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 				})
 			}
 		}
+		allInfos = append(allInfos, replsetInfo{rsName: rs.Name, pvcs: pvcs})
 	}
 
-	// Rollout PVCs one-by-one.
-	for _, info := range pvcs {
-		if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
-			info.volumeClaimTemplate, restore); err != nil {
-			return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
-		} else if !ready {
-			log.Info("Waiting for PVC to be restored", "pvc", info.pvcName)
-			return false, nil
+	// Each replset is restored in parallel, but the PVCs within a replset are restored sequentially.
+	done := true
+	for _, rsPVCs := range allInfos {
+		for _, info := range rsPVCs.pvcs {
+			if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
+				info.volumeClaimTemplate, restore); err != nil {
+				return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
+			} else if !ready {
+				log.Info("Waiting for PVC to be restored", "pvc", info.pvcName, "replset", rsPVCs.rsName)
+				done = false
+				break
+			}
 		}
 	}
 
-	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllPVCsRestoredFromSnapshot",
-		Message: "All pvcs have been restored from snapshot",
-	})
-	return true, nil
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllPVCsRestoredFromSnapshot",
+			Message: "All pvcs have been restored from snapshot",
+		})
+	}
+	return done, nil
 }
 
 func generatePVCFromSnapshot(
@@ -518,7 +535,7 @@ func generatePVCFromSnapshot(
 	pvc.SetLabels(labels)
 	pvc.Spec = spec
 	pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
-		APIGroup: ptr.To(volumesnapshotv1.SchemeGroupVersion.Group),
+		APIGroup: new(volumesnapshotv1.SchemeGroupVersion.Group),
 		Kind:     "VolumeSnapshot",
 		Name:     snapshotName,
 	}
@@ -536,10 +553,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) restorePVC(
 	restore *psmdbv1.PerconaServerMongoDBRestore,
 ) (bool, error) {
 	observedPVC := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pvcName,
-			Namespace: restore.GetNamespace(),
-		},
+		Name:      pvcName,
+		Namespace: restore.GetNamespace(),
 	}
 
 	log := logf.FromContext(ctx)
@@ -616,7 +631,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleUpStatefulSetsForSnapshotRes
 			orig := sfs.DeepCopy()
 
 			// Scale up the statefulset.
-			sfs.Spec.Replicas = ptr.To(replicas)
+			sfs.Spec.Replicas = new(replicas)
 			return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
 		}); err != nil {
 			return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
@@ -793,10 +808,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) deleteStatefulSetsForSnapshotRest
 
 	for _, nn := range toDelete {
 		if err := r.client.Delete(ctx, &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      nn.Name,
-				Namespace: nn.Namespace,
-			},
+			Name:      nn.Name,
+			Namespace: nn.Namespace,
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete statefulset %s", nn.Name)
 		}
@@ -859,7 +872,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 	log := logf.FromContext(ctx)
 
 	for _, rs := range cluster.GetAllReplsets() {
-		var securityConf interface{}
+		var securityConf any
 
 		if rs.Configuration.VaultEnabled() {
 			sec, err := rs.Configuration.GetOptions("security")
@@ -873,7 +886,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 				// Secret volumes mount files with 0444). Update tokenFile in the security
 				// config to point to the fixed path so the local mongod started by
 				// pbm-agent restore-finish can read it.
-				if vaultConf, ok := sec["vault"].(map[interface{}]interface{}); ok {
+				if vaultConf, ok := sec["vault"].(map[any]any); ok {
 					vaultConf["tokenFile"] = "/tmp/vault-token"
 				}
 				securityConf = sec
@@ -905,11 +918,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) createOrUpdateDBConfigSecret(
 		}
 
 		secret := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.dbConfigSecretName(cluster, rs),
-				Namespace: cluster.Namespace,
-				Labels:    naming.ClusterLabels(cluster),
-			},
+			Name:      r.dbConfigSecretName(cluster, rs),
+			Namespace: cluster.Namespace,
+			Labels:    naming.ClusterLabels(cluster),
 			Data: map[string][]byte{
 				"db_config.yaml": dataBytes,
 			},
