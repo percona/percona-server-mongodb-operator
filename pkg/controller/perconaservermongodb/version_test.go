@@ -894,11 +894,9 @@ func TestFetchVersionFromMongo_RetryOnConflict(t *testing.T) {
 	require.NoError(t, apis.AddToScheme(s))
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-cluster",
-			Namespace:  "default",
-			Generation: 1,
-		},
+		Name:       "test-cluster",
+		Namespace:  "default",
+		Generation: 1,
 		Spec: api.PerconaServerMongoDBSpec{
 			Image: "percona/percona-server-mongodb:7.0.5-3",
 		},
