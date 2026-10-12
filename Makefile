@@ -213,7 +213,6 @@ after-release-versions:
 		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
 		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
 		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
-		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=perconalab/percona-server-mongodb-operator:main-mongod6.0#" \
 		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
 		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
 		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
