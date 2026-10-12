@@ -52,11 +52,11 @@ func TestCheckClusterSyncLease(t *testing.T) {
 			wantBlocked: true,
 			wantEvent:   true,
 		},
-		"Waiting + clustersync lease active: blocked, event emitted": {
+		"Waiting + clustersync lease active: blocked, no repeated event": {
 			state:       psmdbv1.BackupStateWaiting,
 			seedLease:   true,
 			wantBlocked: true,
-			wantEvent:   true,
+			wantEvent:   false,
 		},
 		"Running + clustersync lease active: NOT blocked (in-flight backups keep going)": {
 			state:       psmdbv1.BackupStateRunning,

@@ -335,9 +335,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 		return false, nil
 	}
 	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
-	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
-		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
-		cluster.Name, csLeaseName)
+	if cr.Status.State != psmdbv1.BackupStateWaiting {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+			"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+			cluster.Name, csLeaseName)
+	}
 	return true, nil
 }
 
