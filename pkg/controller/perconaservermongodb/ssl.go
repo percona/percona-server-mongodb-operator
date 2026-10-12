@@ -118,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	}
 	if !ok {
 		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
+			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
 				return r.updateSSLManually(ctx, cr)
 			}
 			return nil

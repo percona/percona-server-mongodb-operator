@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,8 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 type sslCertManagerController struct {
@@ -91,7 +97,7 @@ func TestReconcileSSLCertManagerCheck(t *testing.T) {
 			}
 			require.Equal(t, tt.checks, c.checks)
 			require.Equal(t, tt.applies, c.applies)
-		}
+		})
 	}
 }
 
