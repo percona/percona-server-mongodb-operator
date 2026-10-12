@@ -445,7 +445,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
-		if memberC+i+1 >= mongo.MaxMembers {
+		if memberC+i+1 > mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
