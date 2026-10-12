@@ -41,6 +41,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -62,12 +63,13 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBBackup{
-		client:     mgr.GetClient(),
-		apiReader:  mgr.GetAPIReader(),
-		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
-		clientcmd:  cli,
-		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		client:      mgr.GetClient(),
+		apiReader:   mgr.GetAPIReader(),
+		scheme:      mgr.GetScheme(),
+		newPBMFunc:  backup.NewPBM,
+		clientcmd:   cli,
+		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -100,7 +102,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -115,7 +118,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	defer log.V(1).Info("Reconcile finished")
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
