@@ -664,7 +664,7 @@ func (r *ReconcilePerconaServerMongoDB) updateImageUpgradeCondition(ctx context.
 			Reason:  "ImageUpgrade",
 			Message: imageUpgradeMessage(containers),
 		})
-	case imageUpgradeConditionSet(cr) && cr.Status.State != api.AppStateReady:
+	case cr.Status.IsStatusConditionTrue(api.ConditionTypeImageUpgradeInProgress) && cr.Status.State != api.AppStateReady:
 		// keep the condition until the cluster is ready
 		cr.Status.AddCondition(api.ClusterCondition{
 			Type:    api.ConditionTypeImageUpgradeInProgress,
@@ -676,11 +676,6 @@ func (r *ReconcilePerconaServerMongoDB) updateImageUpgradeCondition(ctx context.
 		cr.Status.RemoveCondition(api.ConditionTypeImageUpgradeInProgress)
 	}
 	return nil
-}
-
-func imageUpgradeConditionSet(cr *api.PerconaServerMongoDB) bool {
-	cond := cr.Status.FindCondition(api.ConditionTypeImageUpgradeInProgress)
-	return cond != nil && cond.Status == api.ConditionTrue
 }
 
 func (r *ReconcilePerconaServerMongoDB) imageUpgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB) ([]string, error) {
