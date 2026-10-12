@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	coordv1 "k8s.io/api/coordination/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,6 +20,18 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 )
+
+type erroringGetClient struct {
+	client.Client
+	err error
+}
+
+func (e *erroringGetClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*psmdbv1.PerconaServerMongoDB); ok {
+		return e.err
+	}
+	return e.Client.Get(ctx, key, obj, opts...)
+}
 
 func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 	const (
@@ -92,4 +105,55 @@ func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 		return
 	}
 	require.NoError(t, client.IgnoreNotFound(err))
+}
+
+func TestReconcileDeleteRetriesOnTransientClusterFetchError(t *testing.T) {
+	const (
+		ns          = "ns"
+		clusterName = "restored-mongodb"
+		backupName  = "backup-transient"
+	)
+
+	now := metav1.NewTime(time.Now())
+	cr := &psmdbv1.PerconaServerMongoDBBackup{
+		Name:              backupName,
+		Namespace:         ns,
+		UID:               types.UID("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+		DeletionTimestamp: &now,
+		Finalizers: []string{
+			naming.FinalizerDeleteBackup,
+			naming.FinalizerReleaseLock,
+		},
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
+			ClusterName: clusterName,
+			StorageName: "s3-storage",
+		},
+		Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+			State: psmdbv1.BackupStateReady,
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(backupScheme(t)).
+		WithRuntimeObjects(cr.DeepCopy()).
+		WithStatusSubresource(cr).
+		Build()
+
+	transientErr := k8serrors.NewServiceUnavailable("etcd unavailable")
+	wrapped := &erroringGetClient{Client: cl, err: transientErr}
+
+	r := &ReconcilePerconaServerMongoDBBackup{
+		client:    wrapped,
+		apiReader: cl,
+	}
+
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		Name: backupName, Namespace: ns,
+	})
+	require.Error(t, err, "transient cluster fetch error must be propagated so the request is retried")
+
+	got := &psmdbv1.PerconaServerMongoDBBackup{}
+	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: backupName, Namespace: ns}, got))
+	assert.ElementsMatch(t, []string{naming.FinalizerDeleteBackup, naming.FinalizerReleaseLock}, got.GetFinalizers(),
+		"finalizers must not be touched when the cluster could not be inspected")
 }

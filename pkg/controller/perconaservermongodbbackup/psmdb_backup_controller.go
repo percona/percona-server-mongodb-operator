@@ -243,7 +243,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileDelete(ctx context.Contex
 	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.GetClusterName(), Namespace: cr.Namespace}, cluster)
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
-			log.Error(err, "failed to get cluster; continuing with finalizers")
+			return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
 		}
 		cluster = nil
 	}
