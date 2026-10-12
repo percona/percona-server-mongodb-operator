@@ -2,8 +2,6 @@
   image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_mongod8.0_SHA_value>
 - name: mongod7.0
   image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_mongod7.0_SHA_value>
-- name: mongod6.0
-  image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_mongod6.0_SHA_value>
 - name: backup
   image: registry.connect.redhat.com/percona/percona-server-mongodb-operator-containers@sha256:<update_backup_SHA_value>
 - name: pmm
