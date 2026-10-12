@@ -169,7 +169,7 @@ func (r *ReconcilePerconaServerMongoDB) getNewVersions(ctx context.Context, cr *
 	if versionservice.TelemetryEnabled() && (!versionservice.UpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != endpoint) {
 		_, err = vs.GetExactVersion(cr, endpoint, vm)
 		if err != nil {
-			log.Error(err, "send telemetry", "endpoint", api.GetDefaultVersionServiceEndpoint())
+			log.Error(err, "failed to send telemetry", "endpoint", api.GetDefaultVersionServiceEndpoint())
 		}
 		return versionservice.Dep{}, nil
 	}
@@ -282,13 +282,13 @@ func (r *ReconcilePerconaServerMongoDB) scheduleTelemetryRequests(ctx context.Co
 
 		operatorDepl, err := r.getOperatorDeployment(ctx)
 		if err != nil {
-			log.Error(err, "get operator deployment")
+			log.Error(err, "failed to get operator deployment")
 			return
 		}
 
 		_, err = r.getNewVersions(ctx, localCr, vs, operatorDepl)
 		if err != nil {
-			log.Error(err, "send telemetry")
+			log.Error(err, "failed to send telemetry")
 		}
 	})
 	if err != nil {
@@ -310,7 +310,7 @@ func (r *ReconcilePerconaServerMongoDB) scheduleTelemetryRequests(ctx context.Co
 	// send telemetry on startup
 	_, err = r.getNewVersions(ctx, cr, vs, operatorDepl)
 	if err != nil {
-		log.Error(err, "send telemetry")
+		log.Error(err, "failed to send telemetry")
 	}
 
 	return nil
