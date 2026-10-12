@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -206,9 +205,7 @@ func TestIssueBackwardCompat(t *testing.T) {
 
 func TestManualCASecretName(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-cluster",
-		},
+		Name: "my-cluster",
 	}
 	assert.Equal(t, "my-cluster-ca-cert", ManualCASecretName(cr))
 }

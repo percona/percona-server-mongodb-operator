@@ -1,6 +1,6 @@
 import groovy.transform.Field
 
-@Field def zone = 'us-central1-c'
+@Field def zone = 'us-central1-a'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
 @Field def reportHtml = 'e2e-test-report.html'
@@ -25,7 +25,6 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
                 gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
-                    --spot \
                     --zone=${zone} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
@@ -387,6 +386,76 @@ void clusterRunner(String cluster) {
     }
 }
 
+void collectDebugLogs(String testName, String clusterSuffix) {
+    try {
+        sh """
+            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+            export PYTEST_NAMESPACE_FILE=/tmp/pytest_current_namespace-${testName}-${clusterSuffix}
+            DEBUG_LOG=e2e-tests/logs/${testName}-debug.log
+
+            {
+                echo "=== DEBUG LOGS FOR ${testName} (collected at \$(date -u)) ==="
+
+                NAMESPACE=""
+                if [ -f "\$PYTEST_NAMESPACE_FILE" ]; then
+                    NAMESPACE=\$(cat "\$PYTEST_NAMESPACE_FILE" | tail -1)
+                fi
+                if [ -z "\$NAMESPACE" ]; then
+                    NAMESPACE=\$(kubectl get namespaces --no-headers 2>/dev/null | awk '{print \$1}' | grep -vE '^kube-|^default\$|^gke-|^gmp-' | head -1)
+                fi
+                echo "Namespace: \$NAMESPACE"
+
+                echo ""
+                echo "=== PSMDB Objects ==="
+                kubectl get psmdb --all-namespaces -o wide 2>&1 || true
+
+                if [ -n "\$NAMESPACE" ]; then
+                    echo ""
+                    echo "=== PSMDB Describe ==="
+                    for obj in \$(kubectl get psmdb -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== StatefulSets ==="
+                    kubectl get sts -n "\$NAMESPACE" -o wide 2>&1 || true
+                    for obj in \$(kubectl get sts -n "\$NAMESPACE" -o name 2>/dev/null); do
+                        echo "--- \$obj ---"
+                        kubectl describe -n "\$NAMESPACE" "\$obj" 2>&1 || true
+                    done
+
+                    echo ""
+                    echo "=== Pods ==="
+                    kubectl get pods -n "\$NAMESPACE" -o wide 2>&1 || true
+
+                    echo ""
+                    echo "=== Pod Events ==="
+                    kubectl get events -n "\$NAMESPACE" --sort-by='.lastTimestamp' 2>&1 || true
+
+                    echo ""
+                    echo "=== Operator Logs (last 100 lines) ==="
+                    OPERATOR_NS=\$(kubectl get deployments --all-namespaces 2>/dev/null | grep percona-server-mongodb-operator | awk '{print \$1}' | head -1)
+                    if [ -n "\$OPERATOR_NS" ]; then
+                        OPERATOR_POD=\$(kubectl get pods -n "\$OPERATOR_NS" -l name=percona-server-mongodb-operator -o name 2>/dev/null | head -1)
+                        if [ -n "\$OPERATOR_POD" ]; then
+                            kubectl logs -n "\$OPERATOR_NS" "\$OPERATOR_POD" --tail=100 2>&1 || true
+                        fi
+                    fi
+                fi
+
+                echo ""
+                echo "=== Cert-Manager Resources ==="
+                kubectl get crd 2>/dev/null | grep cert-manager || echo "No cert-manager CRDs"
+                kubectl get validatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager validating webhooks"
+                kubectl get mutatingwebhookconfiguration 2>/dev/null | grep cert-manager || echo "No cert-manager mutating webhooks"
+            } > "\$DEBUG_LOG" 2>&1
+        """
+    } catch (debugExc) {
+        echo "Failed to collect debug logs for $testName: ${debugExc.message}"
+    }
+}
+
 void runTest(Integer TEST_ID) {
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
@@ -424,7 +493,9 @@ BASH
         // so the build aborts cleanly.
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
-            echo "Test $testName timed out!"
+            long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
+            echo "Test $testName timed out after ${elapsedMin} minutes!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
             currentBuild.result = 'FAILURE'
         } else {
@@ -437,11 +508,14 @@ BASH
         // step can surface as a plain "exit code 143" error before the timeout's
         // FlowInterruptedException propagates. Treat 143 as a timeout/termination
         // (error), not a test assertion failure, so the report shows the right icon.
+        long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
         if (exc.message?.contains('exit code 143')) {
-            echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            echo "Test $testName was terminated (exit 143) after ${elapsedMin} minutes - treating as timeout/error!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
         } else {
-            echo "Test $testName has failed!"
+            echo "Test $testName has failed after ${elapsedMin} minutes!"
+            collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "failure"
         }
         currentBuild.result = 'FAILURE'
@@ -451,7 +525,11 @@ BASH
         def durationSec = (timeStop - timeStart) / 1000
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
-        echo "The $testName test was finished!"
+        pushLogFile("${testName}-debug")
+        long totalSec = ((long)(timeStop - timeStart)).intdiv(1000)
+        long mins = totalSec.intdiv(60)
+        long secs = totalSec % 60
+        echo "The $testName test was finished in ${totalSec}s (${mins}m ${secs}s)!"
     }
 }
 
@@ -518,6 +596,18 @@ boolean isManualBuild() {
     return !causes.isEmpty()
 }
 
+def skipRequested() {
+    try {
+        if (pullRequest.labels.contains('skip-e2e-tests')) {
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+            return true
+        }
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
+}
+
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild()) {
@@ -572,6 +662,10 @@ void checkE2EIgnoreFiles() {
     }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
+    if (skipRequested()) {
+        needToRunTests = false
+        return
+    }
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
@@ -695,7 +789,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c '
+                            golang:1.27 sh -c '
                                 go install github.com/google/go-licenses@v1.6.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -723,7 +817,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+                            golang:1.27 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 
@@ -747,7 +841,7 @@ pipeline {
                 }
             }
             options {
-                timeout(time: 5, unit: 'HOURS')
+                timeout(time: 7, unit: 'HOURS')
             }
             steps {
                 script {

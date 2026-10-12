@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,15 +26,11 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 	ls := naming.ServiceLabels(cr, replset)
 
 	svc := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        naming.ServiceName(cr, replset),
-			Namespace:   cr.Namespace,
-			Annotations: replset.Expose.ServiceAnnotations,
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        naming.ServiceName(cr, replset),
+		Namespace:   cr.Namespace,
+		Annotations: replset.Expose.ServiceAnnotations,
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
@@ -75,15 +70,11 @@ func ExternalService(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod
 	}
 
 	svc := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        podName,
-			Namespace:   cr.Namespace,
-			Annotations: annotations,
-		},
+		Kind:        "Service",
+		APIVersion:  "v1",
+		Name:        podName,
+		Namespace:   cr.Namespace,
+		Annotations: annotations,
 	}
 
 	svc.Labels = naming.ExternalServiceLabels(cr, replset)
