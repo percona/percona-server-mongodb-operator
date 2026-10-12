@@ -81,6 +81,8 @@ spec:
       type: ClusterIP
     size: 3
     configuration: |
+      systemLog:
+        quiet: false
       operationProfiling:
         mode: slowOp
         slowOpThresholdMs: 100
