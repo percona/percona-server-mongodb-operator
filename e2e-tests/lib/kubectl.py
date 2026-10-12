@@ -174,6 +174,17 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
+def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
+    """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""
+    _wait_for(
+        f"cluster {cluster_name} state={target_state}",
+        ["psmdb", cluster_name],
+        "{.status.state}",
+        target_state,
+        timeout,
+    )
+
+
 def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
     time.sleep(5)  # give the operator time to leave the "ready" state first

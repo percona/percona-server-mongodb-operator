@@ -93,7 +93,6 @@ export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
 export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
 export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
 export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod6.0
 perconalab/percona-server-mongodb-operator:main-mongod7.0
 perconalab/percona-server-mongodb-operator:main-mongod8.0'}
 export IMAGE_SEARCH=${IMAGE_SEARCH:-"perconalab/percona-server-mongodb-operator:main-mongot"}
