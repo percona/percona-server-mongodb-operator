@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import os
 import re
 import subprocess
 from collections.abc import Callable
@@ -38,6 +39,11 @@ class SplitHorizonConfig:
     def uri(self) -> str:
         hosts = ",".join(f"{self.replset}-{i}.{HORIZON_DOMAIN}" for i in range(3))
         return f"mongodb://clusterAdmin:clusterAdmin123456@{hosts}/admin?replicaSet=rs0"
+
+    @property
+    def internal_uri(self) -> str:
+        host = f"{self.replset}.{self.namespace}.svc.cluster.local"
+        return f"mongodb+srv://clusterAdmin:clusterAdmin123456@{host}/admin?replicaSet=rs0"
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -119,12 +125,17 @@ def _compare_horizons(config: SplitHorizonConfig, expected_file: str) -> None:
     )
     with open(expected_file) as f:
         expected = json.load(f)
-    assert json.loads(out) == expected
+    actual = json.loads(out)
+    assert actual == expected, (
+        f"rs.conf() horizons {actual} don't match {expected_file}: {expected}"
+    )
+    logger.info(f"rs.conf() horizons match {os.path.basename(expected_file)}: {actual}")
 
 
 def _assert_writable_primary(config: SplitHorizonConfig) -> None:
     out = _run_mongosh_tls("db.hello().isWritablePrimary", config.uri)
     assert out == "true", "mongo client should've redirected the connection to primary"
+    logger.info("Connected through horizon hostnames and landed on a writable primary")
 
 
 def _cert_sans(secret: str) -> list[str]:
@@ -140,6 +151,22 @@ def _cert_sans(secret: str) -> list[str]:
 def _assert_cert_san(secret: str, san: str) -> None:
     sans = _cert_sans(secret)
     assert san in sans, f"SAN {san} not found in secret {secret}: {sans}"
+    logger.info(f"Secret {secret} has SAN {san}")
+
+
+def _assert_no_horizon_sans(secret: str) -> None:
+    sans = [san for san in _cert_sans(secret) if san.endswith(f".{HORIZON_DOMAIN}")]
+    assert not sans, f"secret {secret} still has horizon SANs: {sans}"
+    logger.info(f"Secret {secret} has no horizon SANs")
+
+
+def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:
+    out = _run_mongosh_tls(
+        "EJSON.stringify(rs.conf().members.filter(m => m.horizons).map(m => m.host))",
+        config.internal_uri,
+    )
+    assert json.loads(out) == [], f"members still have horizons: {out}"
+    logger.info("No replset member has horizons in rs.conf()")
 
 
 def _scale(cluster: str, size: int) -> None:
@@ -176,6 +203,7 @@ class TestSplitHorizon:
             f"issuer/{cluster}-psmdb-issuer",
         ):
             compare_kubectl(test_paths["test_dir"], resource, config.namespace)
+            logger.info(f"{resource} matches expected spec")
 
     @pytest.mark.dependency(depends=["TestSplitHorizon::test_create_cluster"])
     def test_connect_via_horizons(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
@@ -190,6 +218,7 @@ class TestSplitHorizon:
         _assert_writable_primary(config)
 
         # step down so we know redirection isn't just because primary is pod-0
+        logger.info("Stepping down primary to check redirection follows the new primary")
         _run_mongosh_tls("rs.stepDown()", config.uri, check=False)
         retry(lambda: _assert_writable_primary(config), max_attempts=12, delay=5)
 
@@ -211,6 +240,7 @@ class TestSplitHorizon:
                 postfix="-5horizons",
                 skip_generation_check=True,
             )
+            logger.info(f"certificate/{secret} matches expected spec with 5 horizons")
             for i in (3, 4):
                 san = f"{config.replset}-{i}.{HORIZON_DOMAIN}"
                 retry(partial(_assert_cert_san, secret, san), max_attempts=30, delay=10)
@@ -220,6 +250,7 @@ class TestSplitHorizon:
         for secret in (f"{cluster}-ssl-old", f"{cluster}-ssl-internal-old"):
             out = kubectl_bin("get", "secret", secret, "--ignore-not-found", "-o", "name")
             assert not out.strip(), f"secret {secret} should be deleted after certificate update"
+            logger.info(f"Secret {secret} was deleted after certificate update")
 
     @pytest.mark.dependency(
         depends=["TestSplitHorizon::test_certificates_updated_with_new_horizons"]
@@ -239,6 +270,12 @@ class TestSplitHorizon:
 
     @pytest.mark.dependency(depends=["TestSplitHorizon::test_scale_down"])
     def test_remove_horizons(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
-        """Remove horizon configuration"""
+        """Remove horizon configuration and check it's gone from rs.conf() and certificates"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}.yml")
         _wait_cluster(config, 3)
+
+        retry(lambda: _assert_no_horizons_in_rs_conf(config), max_attempts=12, delay=5)
+
+        for secret in (f"{config.cluster}-ssl", f"{config.cluster}-ssl-internal"):
+            kubectl_bin("wait", "--for=condition=Ready", f"certificate/{secret}", "--timeout=300s")
+            retry(partial(_assert_no_horizon_sans, secret), max_attempts=30, delay=10)

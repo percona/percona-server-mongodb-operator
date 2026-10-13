@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import os
 import re
 import subprocess
 import tempfile
@@ -139,7 +140,11 @@ def _compare_horizons(config: SplitHorizonConfig, expected_file: str) -> None:
     )
     with open(expected_file) as f:
         expected = json.load(f)
-    assert json.loads(out) == expected
+    actual = json.loads(out)
+    assert actual == expected, (
+        f"rs.conf() horizons {actual} don't match {expected_file}: {expected}"
+    )
+    logger.info(f"rs.conf() horizons match {os.path.basename(expected_file)}: {actual}")
 
 
 def _tls_crt(secret: str) -> str:
@@ -163,11 +168,13 @@ def _cert_sans(secret: str) -> list[str]:
 def _assert_cert_san(secret: str, san: str) -> None:
     sans = _cert_sans(secret)
     assert san in sans, f"SAN {san} not found in secret {secret}: {sans}"
+    logger.info(f"Secret {secret} has SAN {san}")
 
 
 def _assert_no_horizon_sans(secret: str) -> None:
     sans = [san for san in _cert_sans(secret) if san.endswith(f".{HORIZON_DOMAIN}")]
     assert not sans, f"secret {secret} still has horizon SANs: {sans}"
+    logger.info(f"Secret {secret} has no horizon SANs")
 
 
 def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:
@@ -176,11 +183,13 @@ def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:
         config.internal_uri,
     )
     assert json.loads(out) == [], f"members still have horizons: {out}"
+    logger.info("No replset member has horizons in rs.conf()")
 
 
 def _assert_ca_secret(secret: str) -> None:
     for key in ("ca\\.crt", "ca\\.key"):
         assert get_secret_data(secret, key), f"secret {secret} has no {key}"
+    logger.info(f"Secret {secret} has ca.crt and ca.key")
 
 
 def _assert_signed_by_ca(tls_secret: str, ca_secret: str) -> None:
@@ -201,6 +210,7 @@ def _assert_signed_by_ca(tls_secret: str, ca_secret: str) -> None:
     assert result.returncode == 0, (
         f"{tls_secret} is not signed by CA in {ca_secret}: {result.stdout}{result.stderr}"
     )
+    logger.info(f"Secret {tls_secret} is signed by CA in {ca_secret}")
 
 
 def _scale(cluster: str, size: int) -> None:
@@ -264,6 +274,7 @@ class TestSplitHorizonManualTLS:
             assert _cert_fingerprint(secret) != cert_fingerprints[secret], (
                 f"certificate in {secret} was not re-signed after horizon update"
             )
+            logger.info(f"Certificate in {secret} was re-signed after horizon update")
             _assert_signed_by_ca(secret, config.ca_secret)
 
     @pytest.mark.dependency(
