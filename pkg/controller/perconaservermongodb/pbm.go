@@ -57,6 +57,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 	return nil
 }
 
+func isPBMUnreachable(err error) bool {
+	return errors.Is(err, backup.ErrNoReplsetAddrs) ||
+		mongo.IsTimeout(err) ||
+		mongo.IsNetworkError(err)
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
@@ -148,7 +154,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 
 	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
-		if mongo.IsTimeout(err) || mongo.IsNetworkError(err) {
+		if isPBMUnreachable(err) {
 			log.V(1).Info("mongod is not reachable yet, skipping PBM configuration", "error", err.Error())
 			return nil
 		}
