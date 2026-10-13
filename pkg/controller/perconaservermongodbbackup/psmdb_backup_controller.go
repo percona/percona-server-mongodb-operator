@@ -861,7 +861,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &psmdbv1.PerconaServerMongoDBBackup{}
 
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		// the cache may not have the finalizer patch made right before, which makes every retry conflict
+		err := r.apiReader.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
 			return err
 		}
