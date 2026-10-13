@@ -249,7 +249,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileDelete(ctx context.Contex
 	}
 
 	if cluster != nil && r.clientcmd != nil {
-		svr, err := version.Server(r.clientcmd)
+		svr, err := version.Server(ctx, r.clientcmd)
 		if err != nil {
 			log.Error(err, "failed to fetch server version; continuing with finalizers")
 		} else if err := cluster.CheckNSetDefaults(ctx, svr.Platform); err != nil {
