@@ -161,7 +161,7 @@ class K8sCollector:
             operator_ns,
             "-l",
             "app.kubernetes.io/name=percona-server-mongodb-operator",
-            "--tail=50",
+            "--tail=500",
         )
 
         events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
