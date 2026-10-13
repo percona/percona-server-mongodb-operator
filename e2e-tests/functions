@@ -2,13 +2,33 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
+# keep in sync with TRANSIENT_ERRORS in lib/kubectl.py
+KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request'
+
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+	local i
 	local args=("$@")
 	local transformed_files=()
+	local stdin_manifest
+
+	# stdin can be read only once, save it to a file so retries can send it again
+	for i in "${!args[@]}"; do
+		if [[ ${args[$i]} == "-" && $i -gt 0 && ${args[$((i - 1))]} =~ ^(-f|--filename)$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${stdin_manifest}"
+		elif [[ ${args[$i]} =~ ^(-f|--filename)=-$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${args[$i]%%=*}=${stdin_manifest}"
+		fi
+	done
 
 	if arch_scheduling_enabled && [[ ${args[0]} == "run" ]]; then
 		local has_overrides=0
@@ -85,18 +105,29 @@ kubectl_bin() {
 		args=("${apply_args[@]}")
 	fi
 
-	for i in $(seq 0 2); do
+	local attempt
+	local delay
+	for attempt in $(seq 0 9); do
 		set +e
 		kubectl "${args[@]}" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			sleep "$((timeout * i))"
+		if [[ ${exit_status} == 0 || ${attempt} == 9 ]]; then
+			break
+		fi
+
+		# API server overload can last for minutes, keep retrying it longer than other errors
+		if grep -qE "${KUBECTL_TRANSIENT_ERRORS}" "$LAST_ERR"; then
+			delay=$((5 * (attempt + 1) > 30 ? 30 : 5 * (attempt + 1)))
+		elif [[ -n ${DEBUG_TESTS} && ${attempt} -lt 2 ]]; then
+			delay=$((timeout * attempt))
 		else
 			break
 		fi
+
+		# output of a failed attempt must not end up in the caller's captured stdout
+		cat "$LAST_OUT" "$LAST_ERR" >&2
+		sleep "${delay}"
 	done
 
 	cat "$LAST_OUT"
