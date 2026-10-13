@@ -1720,7 +1720,9 @@ delete_crd() {
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' --ignore-not-found || :
+		if kubectl get crd "${crd_name}" >/dev/null 2>&1; then
+			kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' || :
+		fi
 	done
 
 	local rbac_yaml='rbac.yaml'
