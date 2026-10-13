@@ -27,6 +27,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -894,13 +895,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 		return false, nil
 	}
 
+	if sts.Status.ObservedGeneration != sts.Generation {
+		return false, nil
+	}
+
 	podList, err := r.getReplsetPods(ctx, cluster, rs, component)
 	if err != nil {
 		return false, errors.Wrapf(err, "get replset %s pods", rs.Name)
 	}
 
+	if sts.Spec.Replicas != nil && len(podList.Items) != int(*sts.Spec.Replicas) {
+		return false, nil
+	}
+
 	for _, pod := range podList.Items {
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+			return false, nil
+		}
+
+		if !k8s.IsPodReady(pod) {
 			return false, nil
 		}
 
