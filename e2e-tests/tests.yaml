@@ -84,7 +84,7 @@ tests:
     groups: [sharding]
 
   connection-retry:
-    suites: [pr, release]
+    suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core, networking]
 
