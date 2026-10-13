@@ -206,6 +206,8 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 
 type NewPBMFunc func(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error)
 
+var ErrNoReplsetAddrs = errors.New("no replset addresses")
+
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
 func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error) {
@@ -223,6 +225,10 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
+	}
+
+	if len(addrs) == 0 {
+		return nil, ErrNoReplsetAddrs
 	}
 
 	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
