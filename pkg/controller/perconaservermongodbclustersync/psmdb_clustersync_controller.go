@@ -39,7 +39,7 @@ const (
 )
 
 // Add wires the ClusterSync controller into the manager.
-func Add(mgr manager.Manager) error {
+func Add(ctx context.Context, mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 			naming.ClusterSyncLeaseName(cr.Spec.ClusterName), foreignHolder))
 	}
 
-	svr, err := version.Server(r.clientcmd)
+	svr, err := version.Server(ctx, r.clientcmd)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
 	}
@@ -367,12 +367,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx conte
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileURISecret(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, sourceURI, targetURI string) error {
 	s := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clustersync.URISecretName(cr),
-			Namespace: cr.Namespace,
-			Labels:    clustersync.Labels(cr),
-		},
-		Type: corev1.SecretTypeOpaque,
+		Name:      clustersync.URISecretName(cr),
+		Namespace: cr.Namespace,
+		Labels:    clustersync.Labels(cr),
+		Type:      corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
 			clustersync.URISecretSourceKey: []byte(sourceURI),
 			clustersync.URISecretTargetKey: []byte(targetURI),

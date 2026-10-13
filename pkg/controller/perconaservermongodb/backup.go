@@ -55,11 +55,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Data: map[string]string{
 			"hook.sh": cr.Spec.Backup.HookScript.Script,
 		},

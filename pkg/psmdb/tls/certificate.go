@@ -74,11 +74,9 @@ func (c *caCert) Object() *cm.Certificate {
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}
 	return &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.Name(),
-			Namespace: c.Namespace(),
-			Labels:    labels,
-		},
+		Name:      c.Name(),
+		Namespace: c.Namespace(),
+		Labels:    labels,
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
 			CommonName: c.namePrefix() + "-ca",
@@ -137,11 +135,9 @@ func (c *tlsCert) Object() *cm.Certificate {
 	}
 
 	return &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.Name(),
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      c.Name(),
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
 				Organizations: []string{"PSMDB"},

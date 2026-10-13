@@ -18,10 +18,8 @@ var _ = Describe("PerconaServerMongoDBRestore CEL validations", Ordered, func() 
 
 	const ns = "psmdb-restore"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {

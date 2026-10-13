@@ -28,14 +28,10 @@ import (
 // NewStatefulSet returns a StatefulSet object configured for a name
 func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		APIVersion: "apps/v1",
+		Kind:       "StatefulSet",
+		Name:       name,
+		Namespace:  namespace,
 	}
 }
 
@@ -171,10 +167,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	volumes := []corev1.Volume{
 		{
-			Name: config.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     config.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 
@@ -182,12 +176,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		volumes = append([]corev1.Volume{
 			{
 				Name: cr.Spec.Secrets.GetInternalKey(cr),
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &secretFileMode,
-						SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
-						Optional:    &fvar,
-					},
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &secretFileMode,
+					SecretName:  cr.Spec.Secrets.GetInternalKey(cr),
+					Optional:    &fvar,
 				},
 			},
 		}, volumes...)
@@ -195,10 +187,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	if cr.CompareVersion("1.21.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: config.MongoshHomeVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     config.MongoshHomeVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
@@ -207,10 +197,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	// volumeMounts are added to the respective containers below.
 	if needsTmpVolume(cr, containerSecurityContext) {
 		volumes = append(volumes, corev1.Volume{
-			Name: tmpVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
@@ -244,12 +232,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.Vault,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.Secrets.Vault,
-							Optional:    &fvar,
-						},
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.Vault,
+						Optional:    &fvar,
 					},
 				},
 			)
@@ -258,12 +244,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				volumes,
 				corev1.Volume{
 					Name: cr.Spec.Secrets.EncryptionKey,
-					VolumeSource: corev1.VolumeSource{
-						Secret: &corev1.SecretVolumeSource{
-							DefaultMode: &secretFileMode,
-							SecretName:  cr.Spec.Secrets.EncryptionKey,
-							Optional:    &fvar,
-						},
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &secretFileMode,
+						SecretName:  cr.Spec.Secrets.EncryptionKey,
+						Optional:    &fvar,
 					},
 				},
 			)
@@ -310,12 +294,10 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 	sslVolume := corev1.Volume{
 		Name: "ssl",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName:  api.SSLSecretName(cr),
-				Optional:    &cr.Spec.Unsafe.TLS,
-				DefaultMode: &secretFileMode,
-			},
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  api.SSLSecretName(cr),
+			Optional:    &cr.Spec.Unsafe.TLS,
+			DefaultMode: &secretFileMode,
 		},
 	}
 
@@ -326,20 +308,16 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		sslVolume,
 		corev1.Volume{
 			Name: "ssl-internal",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  api.SSLInternalSecretName(cr),
-					Optional:    &t,
-					DefaultMode: &secretFileMode,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  api.SSLInternalSecretName(cr),
+				Optional:    &t,
+				DefaultMode: &secretFileMode,
 			},
 		},
 		corev1.Volume{
 			Name: "users-secret-file",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: api.InternalUserSecretName(cr),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: api.InternalUserSecretName(cr),
 			},
 		},
 	)
@@ -348,19 +326,15 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			volumes,
 			corev1.Volume{
 				Name: config.LDAPTLSVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName:  cr.Spec.Secrets.LDAPSecret,
-						Optional:    &t,
-						DefaultMode: &secretFileMode,
-					},
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  cr.Spec.Secrets.LDAPSecret,
+					Optional:    &t,
+					DefaultMode: &secretFileMode,
 				},
 			},
 			corev1.Volume{
-				Name: config.LDAPConfVolClaimName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
+				Name:     config.LDAPConfVolClaimName,
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		)
 	}
@@ -370,10 +344,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			volumes,
 			[]corev1.Volume{
 				{
-					Name: config.MongodDataVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
+					Name:     config.MongodDataVolClaimName,
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			}...,
 		)
@@ -386,11 +358,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			volumes = append(
 				volumes,
 				corev1.Volume{
-					Name: config.MongodDataVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						HostPath: volumeSpec.HostPath,
-						EmptyDir: volumeSpec.EmptyDir,
-					},
+					Name:     config.MongodDataVolClaimName,
+					HostPath: volumeSpec.HostPath,
+					EmptyDir: volumeSpec.EmptyDir,
 				},
 			)
 		}
@@ -409,13 +379,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				}
 				volumes = append(volumes, corev1.Volume{
 					Name: config.PBMHookscriptVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: name,
-							},
-							Optional: new(true),
-						},
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						Name:     name,
+						Optional: new(true),
 					},
 				})
 			}
@@ -442,13 +408,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 		volumes = append(volumes, corev1.Volume{
 			Name: config.HookscriptVolClaimName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
-					},
-					Optional: new(true),
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name:     name,
+				Optional: new(true),
 			},
 		})
 	}
@@ -531,10 +493,8 @@ func logRotateConfigVolume(configs StatefulConfigParams, cr *api.PerconaServerMo
 	if len(logrotateConfigVolumeProjections) > 0 {
 		return &corev1.Volume{
 			Name: logrotate.VolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: logrotateConfigVolumeProjections,
-				},
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: logrotateConfigVolumeProjections,
 			},
 		}
 	}
@@ -591,10 +551,8 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name: "PBM_AGENT_MONGODB_USERNAME",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_USER_ESCAPED",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: usersSecretName,
-						},
+						Key:      "MONGODB_BACKUP_USER_ESCAPED",
+						Name:     usersSecretName,
 						Optional: &fvar,
 					},
 				},
@@ -603,10 +561,8 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 				Name: "PBM_AGENT_MONGODB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: usersSecretName,
-						},
+						Key:      "MONGODB_BACKUP_PASSWORD_ESCAPED",
+						Name:     usersSecretName,
 						Optional: &fvar,
 					},
 				},
@@ -806,14 +762,10 @@ func sslSecretDataExist(ctx context.Context, secret *corev1.Secret) bool {
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
 func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PersistentVolumeClaim",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Kind:       "PersistentVolumeClaim",
+		APIVersion: "v1",
+		Name:       name,
+		Namespace:  namespace,
 	}
 
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
@@ -921,9 +873,7 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 	for i, ca := range cas {
 		sources = append(sources, corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: ca.Name,
-				},
+				Name: ca.Name,
 				Items: []corev1.KeyToPath{
 					// Items field ensures only the specified key is mounted.
 					// This prevents mounting server certificates (tls.crt) or
@@ -940,17 +890,13 @@ func getCAVolumes(cas []api.SecretKeySelector) []corev1.Volume {
 	return []corev1.Volume{
 		{
 			Name: naming.BackupStorageCAInputVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: sources,
-				},
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: sources,
 			},
 		},
 		{
-			Name: naming.BackupStorageCAFileVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     naming.BackupStorageCAFileVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 }

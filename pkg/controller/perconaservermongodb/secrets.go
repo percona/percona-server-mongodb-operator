@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -60,10 +59,8 @@ func ensureConnectionStringSecret(
 	includeReplsets bool,
 ) error {
 	connStrSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: cr.Namespace,
-		},
+		Name:      secretName,
+		Namespace: cr.Namespace,
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
@@ -103,10 +100,8 @@ func ensureCustomUsersConnectionStringSecrets(
 		}
 
 		connStrSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
-				Namespace: cr.Namespace,
-			},
+			Name:      naming.SecretCustomUserConnStrName(cr, &users[0]),
+			Namespace: cr.Namespace,
 		}
 
 		if _, err := controllerutil.CreateOrUpdate(ctx, cl, connStrSecret, func() error {
@@ -236,13 +231,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsersSecret(ctx context.Context
 		return errors.Wrap(err, "fill users secret")
 	}
 	secretObj = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Secrets.Users,
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
-		Data: data,
-		Type: corev1.SecretTypeOpaque,
+		Name:      cr.Spec.Secrets.Users,
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
+		Data:      data,
+		Type:      corev1.SecretTypeOpaque,
 	}
 	if cr.CompareVersion("1.17.0") < 0 {
 		secretObj.Labels = nil

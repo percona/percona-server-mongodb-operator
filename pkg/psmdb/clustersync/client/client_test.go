@@ -41,13 +41,11 @@ func (s *stubExec) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []string
 
 func pod(name string, instance string, ready bool) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance:  instance,
-				naming.LabelKubernetesComponent: clustersync.ComponentPCSM,
-			},
+		Name:      name,
+		Namespace: "ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance:  instance,
+			naming.LabelKubernetesComponent: clustersync.ComponentPCSM,
 		},
 		Status: corev1.PodStatus{
 			ContainerStatuses: []corev1.ContainerStatus{{Name: clustersync.ContainerName, Ready: ready}},
@@ -67,7 +65,7 @@ func newClient(exec podExecer, pods ...*corev1.Pod) *Client {
 	return &Client{
 		k8s:  fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build(),
 		exec: exec,
-		cr:   &psmdbv1.PerconaServerMongoDBClusterSync{ObjectMeta: metav1.ObjectMeta{Name: "cr", Namespace: "ns"}},
+		cr:   &psmdbv1.PerconaServerMongoDBClusterSync{Name: "cr", Namespace: "ns"},
 	}
 }
 
@@ -250,7 +248,7 @@ func TestClient_FindReadyPod(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	cr := &psmdbv1.PerconaServerMongoDBClusterSync{ObjectMeta: metav1.ObjectMeta{Name: "cr", Namespace: "ns"}}
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "cr", Namespace: "ns"}
 	c := New(fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(), nil, cr)
 	require.NotNil(t, c)
 	assert.Same(t, cr, c.cr)

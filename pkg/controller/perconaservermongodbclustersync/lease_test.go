@@ -29,22 +29,18 @@ func clusterSyncScheme(t *testing.T) *runtime.Scheme {
 
 func newClusterSyncCR(name, ns, cluster string, finalizers ...string) *psmdbv1.PerconaServerMongoDBClusterSync {
 	return &psmdbv1.PerconaServerMongoDBClusterSync{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  ns,
-			UID:        types.UID(name + "-uid"),
-			Finalizers: finalizers,
-		},
-		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: cluster},
+		Name:       name,
+		Namespace:  ns,
+		UID:        types.UID(name + "-uid"),
+		Finalizers: finalizers,
+		Spec:       psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: cluster},
 	}
 }
 
 func leaseFor(cr *psmdbv1.PerconaServerMongoDBClusterSync, holder string) *coordv1.Lease {
 	return &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
-			Namespace: cr.Namespace,
-		},
+		Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
+		Namespace: cr.Namespace,
 		Spec: coordv1.LeaseSpec{
 			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 			HolderIdentity: &holder,
@@ -213,7 +209,7 @@ func TestClusterBusyByBackupOrRestore(t *testing.T) {
 	backupLease := func() *coordv1.Lease {
 		h := "backup-uid"
 		return &coordv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{Name: naming.BackupLeaseName(clusterName), Namespace: ns},
+			Name: naming.BackupLeaseName(clusterName), Namespace: ns,
 			Spec: coordv1.LeaseSpec{
 				AcquireTime:    &metav1.MicroTime{Time: time.Now()},
 				HolderIdentity: &h,
@@ -222,9 +218,9 @@ func TestClusterBusyByBackupOrRestore(t *testing.T) {
 	}
 	restoreOn := func(name, cluster string, state psmdbv1.RestoreState) *psmdbv1.PerconaServerMongoDBRestore {
 		return &psmdbv1.PerconaServerMongoDBRestore{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec:       psmdbv1.PerconaServerMongoDBRestoreSpec{ClusterName: cluster},
-			Status:     psmdbv1.PerconaServerMongoDBRestoreStatus{State: state},
+			Name: name, Namespace: ns,
+			Spec:   psmdbv1.PerconaServerMongoDBRestoreSpec{ClusterName: cluster},
+			Status: psmdbv1.PerconaServerMongoDBRestoreStatus{State: state},
 		}
 	}
 
