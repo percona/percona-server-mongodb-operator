@@ -39,31 +39,31 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
 
 const (
-	MinPBMVersionOSS                 = "2.12.0"
-	KMSKeyID                         = "KMS_KEY_ID"
-	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
-	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
-	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
-	AWSSessionTokenSecretKey         = "AWS_SESSION_TOKEN"
-	OSSAccessKeySecretKey            = "ALIBABA_ACCESS_KEY_ID"
-	OSSSecretAccessKeySecretKey      = "ALIBABA_ACCESS_KEY_SECRET"
-	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
-	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
-	GCSClientEmailSecretKey          = "GCS_CLIENT_EMAIL"
-	GCSPrivateKeySecretKey           = "GCS_PRIVATE_KEY"
-	OCITenancySecretKey              = "OCI_TENANCY"
-	OCIUserSecretKey                 = "OCI_USER"
-	OCIFingerprintSecretKey          = "OCI_FINGERPRINT"
-	OCIPrivateKeySecretKey           = "OCI_PRIVATE_KEY"
-	OCIPrivateKeyPassphraseSecretKey = "OCI_PRIVATE_KEY_PASSPHRASE"
-	OCISSECustomerKeySecretKey       = "OCI_SSE_CUSTOMER_KEY"
+	MinPBMVersionOSS                      = "2.12.0"
+	KMSKeyID                              = "KMS_KEY_ID"
+	SSECustomerKey                        = "SSE_CUSTOMER_KEY"
+	AWSAccessKeySecretKey                 = "AWS_ACCESS_KEY_ID"
+	AWSSecretAccessKeySecretKey           = "AWS_SECRET_ACCESS_KEY"
+	AWSSessionTokenSecretKey              = "AWS_SESSION_TOKEN"
+	OSSAccessKeySecretKey                 = "ALIBABA_ACCESS_KEY_ID"
+	OSSSecretAccessKeySecretKey           = "ALIBABA_ACCESS_KEY_SECRET"
+	AzureStorageAccountNameSecretKey      = "AZURE_STORAGE_ACCOUNT_NAME"
+	AzureStorageAccountKeySecretKey       = "AZURE_STORAGE_ACCOUNT_KEY"
+	AzureStorageConnectionStringSecretKey = "AZURE_STORAGE_CONNECTION_STRING"
+	GCSClientEmailSecretKey               = "GCS_CLIENT_EMAIL"
+	GCSPrivateKeySecretKey                = "GCS_PRIVATE_KEY"
+	OCITenancySecretKey                   = "OCI_TENANCY"
+	OCIUserSecretKey                      = "OCI_USER"
+	OCIFingerprintSecretKey               = "OCI_FINGERPRINT"
+	OCIPrivateKeySecretKey                = "OCI_PRIVATE_KEY"
+	OCIPrivateKeyPassphraseSecretKey      = "OCI_PRIVATE_KEY_PASSPHRASE"
+	OCISSECustomerKeySecretKey            = "OCI_SSE_CUSTOMER_KEY"
 )
 
 type pbmC struct {
@@ -206,6 +206,8 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 
 type NewPBMFunc func(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error)
 
+var ErrNoReplsetAddrs = errors.New("no replset addresses")
+
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
 func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error) {
@@ -223,6 +225,10 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
+	}
+
+	if len(addrs) == 0 {
+		return nil, ErrNoReplsetAddrs
 	}
 
 	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
@@ -584,20 +590,55 @@ func GetPBMStorageAzureConfig(
 		return config.StorageConf{}, errors.Wrap(err, "get azure credentials secret")
 	}
 
+	account := string(azureSecret.Data[AzureStorageAccountNameSecretKey])
+	key := string(azureSecret.Data[AzureStorageAccountKeySecretKey])
+
+	if connStr := string(azureSecret.Data[AzureStorageConnectionStringSecretKey]); connStr != "" {
+		account, key, err = parseAzureConnectionString(connStr)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "parse azure connection string")
+		}
+	}
+
 	storageConf := config.StorageConf{
 		Type: storage.Azure,
 		Azure: &azure.Config{
-			Account:     string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
+			Account:     account,
 			Container:   stg.Azure.Container,
 			EndpointURL: stg.Azure.EndpointURL,
 			Prefix:      stg.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(azureSecret.Data[AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString(key),
 			},
 		},
 	}
 
 	return storageConf, nil
+}
+
+// parseAzureConnectionString extracts AccountName and AccountKey from an Azure
+// storage connection string of the form:
+//
+//	DefaultEndpointsProtocol=https;AccountName=<name>;AccountKey=<key>;EndpointSuffix=core.windows.net
+func parseAzureConnectionString(connStr string) (account, key string, err error) {
+	for part := range strings.SplitSeq(strings.TrimRight(connStr, ";"), ";") {
+		// Use approach (strings.SplitN per segment with limit 2) so that
+		// base64-padded AccountKey values containing '=' are handled correctly.
+		parts := strings.SplitN(part, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		switch parts[0] {
+		case "AccountName":
+			account = parts[1]
+		case "AccountKey":
+			key = parts[1]
+		}
+	}
+	if account == "" || key == "" {
+		return "", "", errors.New("AccountName or AccountKey not found in connection string")
+	}
+	return account, key, nil
 }
 
 func GetPBMStorageOSSConfig(
@@ -1511,24 +1552,6 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
 	}
-	return nil
-}
-
-func ResyncConfigExec(ctx context.Context, cl clientcmd.Client, pod *corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	command := []string{"pbm", "config", "--force-resync"}
-
-	log.Info("starting config resync", "pod", pod.Name, "command", command)
-
-	err := cl.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		return errors.Wrapf(err, "start resync: run %v stderr: %s stdout: %s", command, stderrBuffer.String(), stdoutBuffer.String())
-	}
-
 	return nil
 }
 
