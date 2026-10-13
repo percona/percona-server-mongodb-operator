@@ -949,15 +949,15 @@ type buildInfoMongoProvider struct {
 	version string
 }
 
-func (p *buildInfoMongoProvider) Mongo(_ context.Context, _ *api.PerconaServerMongoDB, _ *api.ReplsetSpec, _ api.SystemUserRole) (mongo.Client, error) {
+func (p *buildInfoMongoProvider) Mongo(_ context.Context, _ *api.PerconaServerMongoDB, _ *api.ReplsetSpec, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
 	return &buildInfoMongoClient{Client: mongoFake.NewClient(), version: p.version}, nil
 }
 
-func (p *buildInfoMongoProvider) Mongos(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole) (mongo.Client, error) {
+func (p *buildInfoMongoProvider) Mongos(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
 	return mongoFake.NewClient(), nil
 }
 
-func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ string, _ bool) (mongo.Client, error) {
+func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ string, _ bool, _ ...mongo.ConfigOption) (mongo.Client, error) {
 	return mongoFake.NewClient(), nil
 }
 
