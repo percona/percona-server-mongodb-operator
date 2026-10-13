@@ -110,15 +110,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
-		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
-				return r.updateSSLManually(ctx, cr)
+		if errSecret != nil || errInternalSecret != nil {
+			if err := r.createSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "create ssl manually")
 			}
-			return nil
 		}
-		err = r.createSSLManually(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "create ssl manually")
+		if errSecret == nil && r.needsManualSSLUpdate(ctx, cr, &secretObj) {
+			return r.updateSSLManually(ctx, cr)
 		}
 		return nil
 	}
@@ -323,7 +321,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			newSecret.Labels = nil
 		}
 
-		if err := r.client.Create(ctx, newSecret); err != nil {
+		if err := r.client.Create(ctx, newSecret); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create secret")
 		}
 	}
