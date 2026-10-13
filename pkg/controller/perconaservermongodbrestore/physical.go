@@ -16,7 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -796,27 +795,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) getPBMConfigFromPod(
 	return conf, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
-	ctx context.Context,
-	cluster *psmdbv1.PerconaServerMongoDB,
-	rs *psmdbv1.ReplsetSpec,
-	component string,
-) (corev1.PodList, error) {
-	mongodPods := corev1.PodList{}
-
-	set := naming.RSLabels(cluster, rs)
-	set[naming.LabelKubernetesComponent] = component
+func (r *ReconcilePerconaServerMongoDBRestore) getStatefulSetPods(ctx context.Context, sts *appsv1.StatefulSet) (corev1.PodList, error) {
+	pods := corev1.PodList{}
 
 	err := r.client.List(
 		ctx,
-		&mongodPods,
-		&client.ListOptions{
-			Namespace:     cluster.Namespace,
-			LabelSelector: labels.SelectorFromSet(set),
-		},
+		&pods,
+		client.InNamespace(sts.Namespace),
+		client.MatchingLabels(sts.Spec.Selector.MatchLabels),
 	)
 
-	return mongodPods, err
+	return pods, err
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
@@ -899,9 +888,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 		return false, nil
 	}
 
-	podList, err := r.getReplsetPods(ctx, cluster, rs, component)
+	podList, err := r.getStatefulSetPods(ctx, &sts)
 	if err != nil {
-		return false, errors.Wrapf(err, "get replset %s pods", rs.Name)
+		return false, errors.Wrapf(err, "get statefulset %s pods", sts.Name)
 	}
 
 	if sts.Spec.Replicas != nil && len(podList.Items) != int(*sts.Spec.Replicas) {
