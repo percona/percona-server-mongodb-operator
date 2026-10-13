@@ -28,6 +28,17 @@ class K8sCollector:
         """Run kubectl command with namespace flag"""
         return kubectl_bin(*args, "-n", self.namespace, check=False, return_stderr=True)
 
+    def seconds_since_created(self, namespace: str) -> int:
+        """Seconds elapsed since the namespace was created, i.e. since the test started"""
+        created = self.kubectl(
+            "get", "namespace", namespace, "-o", "jsonpath={.metadata.creationTimestamp}"
+        ).strip()
+        try:
+            started = datetime.fromisoformat(created)
+        except ValueError:
+            return 3600
+        return int((datetime.now(tz=UTC) - started).total_seconds()) + 60
+
     def get_names(self, resource_type: str) -> list[str]:
         """Get list of resource names"""
         output = self.kubectl_ns("get", resource_type, "-o", "name")
@@ -165,7 +176,8 @@ class K8sCollector:
             operator_ns,
             "-l",
             "app.kubernetes.io/name=percona-server-mongodb-operator",
-            "--tail=500",
+            "--tail=-1",
+            f"--since={self.seconds_since_created(operator_ns)}s",
         )
 
         events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
