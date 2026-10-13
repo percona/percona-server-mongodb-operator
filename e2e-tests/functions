@@ -3,7 +3,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
 # keep in sync with TRANSIENT_ERRORS in lib/kubectl.py
-KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request'
+KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request|Unable to connect to the server'
 
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"
@@ -1489,7 +1489,7 @@ get_service_ip() {
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
+	until [[ -n "$(kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}{.status.loadBalancer.ingress[].hostname}')" ]]; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
