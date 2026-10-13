@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -80,6 +81,7 @@ func TestBuildMeta(t *testing.T) {
 	ctx := t.Context()
 	tests := map[string]struct {
 		cr              api.PerconaServerMongoDB
+		serverVersion   *version.ServerVersion
 		want            Meta
 		wantErrMsg      string
 		fcv             string
@@ -111,6 +113,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "disabled",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				EncryptionEnabled: true,
 				TLSMode:           string(api.TLSModePrefer),
@@ -177,6 +180,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:                   "disabled",
 				Version:                 "1.13.0",
+				Platform:                "kubernetes",
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
 				PMMEnabled:              true,
@@ -223,6 +227,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "disabled",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				BackupsEnabled:    false,
 				EncryptionEnabled: true,
@@ -252,6 +257,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -285,6 +291,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -319,6 +326,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "disabled",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				EncryptionEnabled: false,
 				TLSMode:           string(api.TLSModePrefer),
@@ -348,6 +356,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "disabled",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				EncryptionEnabled: true,
 				TLSMode:           string(api.TLSModePrefer),
@@ -381,6 +390,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "recommended",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				MongoVersion:      "6.0",
 				EncryptionEnabled: true,
@@ -496,6 +506,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:                "disabled",
 				Version:              version.Version(),
+				Platform:             "kubernetes",
 				ClusterSize:          5,
 				BackupsEnabled:       true,
 				EncryptionEnabled:    true,
@@ -539,6 +550,7 @@ func TestBuildMeta(t *testing.T) {
 			want: Meta{
 				Apply:             "disabled",
 				Version:           version.Version(),
+				Platform:          "kubernetes",
 				ClusterSize:       3,
 				EncryptionEnabled: true,
 				TLSMode:           string(api.TLSModePrefer),
@@ -552,6 +564,73 @@ func TestBuildMeta(t *testing.T) {
 					},
 				},
 			},
+		},
+		"Detected cloud provider": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderGKE,
+			},
+			want: Meta{
+				Apply:             "disabled",
+				Version:           version.Version(),
+				Platform:          "kubernetes-gke",
+				ClusterSize:       3,
+				EncryptionEnabled: true,
+				TLSMode:           string(api.TLSModePrefer),
+			},
+			namespace: "test-namespace",
+		},
+		"Platform from CR overrides detected platform": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image:    "percona/percona-server-mongodb:5.0.11-10",
+					Platform: ptr.To(version.PlatformOpenshift),
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderEKS,
+			},
+			want: Meta{
+				Apply:             "disabled",
+				Version:           version.Version(),
+				Platform:          "openshift-eks",
+				ClusterSize:       3,
+				EncryptionEnabled: true,
+				TLSMode:           string(api.TLSModePrefer),
+			},
+			namespace: "test-namespace",
 		},
 	}
 	for name, tc := range tests {
@@ -575,7 +654,12 @@ func TestBuildMeta(t *testing.T) {
 			}
 			require.NoError(t, tc.cr.CheckNSetDefaults(ctx, version.PlatformKubernetes), "set CR defaults")
 
-			vm, err := BuildMeta(ctx, cl, &tc.cr, operatorDepl, "", tc.fcv)
+			sv := tc.serverVersion
+			if sv == nil {
+				sv = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			}
+
+			vm, err := BuildMeta(ctx, cl, &tc.cr, operatorDepl, sv, tc.fcv)
 			if tc.wantErrMsg != "" {
 				require.ErrorContains(t, err, tc.wantErrMsg)
 				return

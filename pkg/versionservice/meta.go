@@ -13,9 +13,10 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, operatorDepl *appsv1.Deployment, kubeVersion, fcv string) (Meta, error) {
+func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, operatorDepl *appsv1.Deployment, serverVersion *version.ServerVersion, fcv string) (Meta, error) {
 	watchNs, err := k8s.GetWatchNamespace()
 	if err != nil {
 		return Meta{}, errors.Wrap(err, "get WATCH_NAMESPACE env variable")
@@ -27,7 +28,7 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 		PMMEnabled:             cr.Spec.PMM.Enabled,
 		PMMVersion:             cr.Status.PMMVersion,
 		MCSEnabled:             cr.Spec.MultiCluster.Enabled,
-		KubeVersion:            kubeVersion,
+		KubeVersion:            serverVersion.Info.GitVersion,
 		PITREnabled:            cr.Spec.Backup.PITR.Enabled,
 		ClusterSize:            cr.Status.Size,
 		MongoVersion:           cr.Status.MongoVersion,
@@ -47,9 +48,11 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 		vm.MongosSize = cr.Spec.Sharding.Mongos.Size
 	}
 
+	sv := *serverVersion
 	if cr.Spec.Platform != nil {
-		vm.Platform = string(*cr.Spec.Platform)
+		sv.Platform = *cr.Spec.Platform
 	}
+	vm.Platform = sv.String()
 
 	for _, rs := range cr.GetAllReplsets() {
 		if len(rs.Sidecars) > 0 {
