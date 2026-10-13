@@ -88,6 +88,13 @@ func (c *caCert) Object() *cm.Certificate {
 			},
 			Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
+			PrivateKey: &cm.CertificatePrivateKey{
+				// The default was changed from Never to Always in cert-manager >= 1.18.0
+				// We pin this to preserve the same functionality but this also means that
+				// we do not have a safe way to rotate the private key.
+				// TODO: make this configurable and provide a way to rotate the CA Certificate private key.
+				RotationPolicy: cm.RotationPolicyNever,
+			},
 		},
 	}
 }
