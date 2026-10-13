@@ -99,7 +99,7 @@ func closingListener(t *testing.T) string {
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { ln.Close() }) //nolint:errcheck
 
 	go func() {
 		for {
@@ -107,7 +107,7 @@ func closingListener(t *testing.T) string {
 			if err != nil {
 				return
 			}
-			conn.Close()
+			conn.Close() //nolint:errcheck
 		}
 	}()
 
