@@ -77,7 +77,7 @@ func TestCatchUpMissedScheduledBackup(t *testing.T) {
 	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "db"},
+		Name: "cluster1", Namespace: "db",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.23.0",
 			Backup: api.BackupSpec{
@@ -93,12 +93,10 @@ func TestCatchUpMissedScheduledBackup(t *testing.T) {
 	}
 
 	old := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "cron-old",
-			Namespace:         "db",
-			CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
-			Labels:            naming.ScheduledBackupLabels(cr, &task),
-		},
+		Name:              "cron-old",
+		Namespace:         "db",
+		CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
+		Labels:            naming.ScheduledBackupLabels(cr, &task),
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			ClusterName: cr.Name,
 			StorageName: task.StorageName,
@@ -129,7 +127,7 @@ func TestCatchUpMissedScheduledBackupSkipsFirstInstall(t *testing.T) {
 	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "db"},
+		Name: "cluster1", Namespace: "db",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.23.0",
 			Backup:    api.BackupSpec{Enabled: true},
@@ -165,7 +163,7 @@ func TestCatchUpMissedScheduledBackupRetriesCreateError(t *testing.T) {
 	require.NoError(t, api.SchemeBuilder.AddToScheme(scheme))
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Namespace: "db"},
+		Name: "cluster1", Namespace: "db",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: "1.23.0",
 			Backup:    api.BackupSpec{Enabled: true},
@@ -178,12 +176,10 @@ func TestCatchUpMissedScheduledBackupRetriesCreateError(t *testing.T) {
 		StorageName: "s3-us-west",
 	}
 	old := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "cron-old",
-			Namespace:         "db",
-			CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
-			Labels:            naming.ScheduledBackupLabels(cr, &task),
-		},
+		Name:              "cron-old",
+		Namespace:         "db",
+		CreationTimestamp: metav1.NewTime(time.Date(2026, 7, 12, 1, 0, 0, 0, time.UTC)),
+		Labels:            naming.ScheduledBackupLabels(cr, &task),
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			ClusterName: cr.Name,
 			StorageName: task.StorageName,
