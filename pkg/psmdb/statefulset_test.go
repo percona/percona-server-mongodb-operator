@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -775,10 +774,8 @@ func TestBuildMongoDBURI(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster",
-					Namespace: "ns",
-				},
+				Name:      "cluster",
+				Namespace: "ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},

@@ -950,10 +950,8 @@ func TestGetMongoUri(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster",
-					Namespace: "ns",
-				},
+				Name:      "cluster",
+				Namespace: "ns",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Secrets:   &api.SecretsSpec{SSL: "cluster-ssl"},
@@ -962,10 +960,8 @@ func TestGetMongoUri(t *testing.T) {
 				},
 			}
 			usersSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      api.UserSecretName(cr),
-					Namespace: cr.Namespace,
-				},
+				Name:      api.UserSecretName(cr),
+				Namespace: cr.Namespace,
 				Data: map[string][]byte{
 					"MONGODB_BACKUP_USER":     []byte("backup"),
 					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
@@ -976,10 +972,8 @@ func TestGetMongoUri(t *testing.T) {
 			require.NoError(t, err)
 
 			sslSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster-ssl",
-					Namespace: cr.Namespace,
-				},
+				Name:      "cluster-ssl",
+				Namespace: cr.Namespace,
 				Data: map[string][]byte{
 					"ca.crt":  caCert,
 					"tls.crt": tlsCert,
