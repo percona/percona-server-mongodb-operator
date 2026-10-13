@@ -146,12 +146,16 @@ class K8sCollector:
         )
         sections.append("")
 
+        errors_jsonpath = 'jsonpath={range .items[?(@.status.error)]}{.metadata.name}: {.status.error}{"\\n"}{end}'
+
         sections.append("=== PSMDB Backup ===")
         sections.append(self.kubectl_ns("get", "psmdb-backup") or "(no output)")
+        sections.append(self.kubectl_ns("get", "psmdb-backup", "-o", errors_jsonpath))
         sections.append("")
 
         sections.append("=== PSMDB Restore ===")
         sections.append(self.kubectl_ns("get", "psmdb-restore") or "(no output)")
+        sections.append(self.kubectl_ns("get", "psmdb-restore", "-o", errors_jsonpath))
 
         # In cluster-wide mode the operator runs in OPERATOR_NS, not the test namespace.
         operator_ns = os.environ.get("OPERATOR_NS") or self.namespace
@@ -170,7 +174,36 @@ class K8sCollector:
             "resources": "\n".join(sections),
             "logs": f"=== PSMDB Operator Logs (namespace {operator_ns}) ===\n{logs or '(no output)'}",
             "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
+            "pbm": self.capture_pbm(),
         }
+
+    def capture_pbm(self) -> str:
+        """Capture PBM status and logs from one backup-agent per cluster"""
+        pods = self.kubectl_ns(
+            "get",
+            "pods",
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.labels.app\\.kubernetes\\.io/instance}{" "}'
+            '{.metadata.name}{" "}{.spec.containers[*].name}{"\\n"}{end}',
+        )
+
+        agents: dict[str, str] = {}
+        for line in pods.splitlines():
+            instance, pod, *containers = line.split()
+            if "backup-agent" in containers:
+                agents.setdefault(instance, pod)
+
+        sections = []
+        for instance, pod in agents.items():
+            for cmd in (["pbm", "status"], ["pbm", "logs", "-s", "D", "-t", "200"]):
+                sections.append(f"=== {instance}: {' '.join(cmd)} ({pod}) ===")
+                sections.append(
+                    self.kubectl_ns("exec", pod, "-c", "backup-agent", "--", "timeout", "60", *cmd)
+                    or "(no output)"
+                )
+                sections.append("")
+
+        return "\n".join(sections) or "(no backup-agent pods)"
 
     def collect_all(self) -> None:
         """Main collection method"""
