@@ -82,7 +82,7 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 			pvcName:        "mongod-data-test-rs0-4",
 			dfOutput:       "",
 			dfError:        errors.New("connection refused"),
-			expectedErrMsg: "wait for df execution: failed to execute df in pod test-pod-0 container mongod: error executing df command: connection refused",
+			expectedErrMsg: "wait for df execution: failed to execute df on /data/db in pod test-pod-0 container mongod: error executing df command: connection refused",
 		},
 		"invalid df output - less than 2 lines": {
 			pvcName:        "mongod-data-test-rs0-5",
