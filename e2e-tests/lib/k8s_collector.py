@@ -196,14 +196,18 @@ class K8sCollector:
             "pods",
             "-o",
             'jsonpath={range .items[*]}{.metadata.labels.app\\.kubernetes\\.io/instance}{" "}'
-            '{.metadata.name}{" "}{.spec.containers[*].name}{"\\n"}{end}',
+            '{.metadata.name}{" "}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{"\\n"}{end}',
         )
 
         agents: dict[str, str] = {}
+        restoring: list[str] = []
         for line in pods.splitlines():
             instance, pod, *containers = line.split()
             if "backup-agent" in containers:
                 agents.setdefault(instance, pod)
+            elif "pbm-init" in containers:
+                # during physical restore pbm-agent runs in the mongod container
+                restoring.append(pod)
 
         sections = []
         for instance, pod in agents.items():
@@ -214,6 +218,16 @@ class K8sCollector:
                     or "(no output)"
                 )
                 sections.append("")
+
+        for pod in restoring:
+            sections.append(f"=== {pod}: /tmp/pbm-agent.log (physical restore) ===")
+            sections.append(
+                self.kubectl_ns(
+                    "exec", pod, "-c", "mongod", "--", "tail", "-n", "200", "/tmp/pbm-agent.log"
+                )
+                or "(no output)"
+            )
+            sections.append("")
 
         return "\n".join(sections) or "(no backup-agent pods)"
 
