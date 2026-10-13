@@ -86,6 +86,7 @@ type PerconaServerMongoDBRestoreStatus struct {
 }
 
 const (
+	ConditionClusterSyncActive               string = "ClusterSyncActive"
 	ConditionPBMAgentConfiguredForSnapshot   string = "PBMAgentConfiguredForSnapshot"
 	ConditionReplsetPVCsRestoredFromSnapshot string = "ReplsetPVCsRestoredFromSnapshot"
 	ConditionPBMAgentAwaitingRestoreFinish   string = "PBMAgentAwaitingRestoreFinish"

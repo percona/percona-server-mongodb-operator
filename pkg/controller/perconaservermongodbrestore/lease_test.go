@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	coordv1 "k8s.io/api/coordination/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -47,14 +48,20 @@ func TestCheckClusterSyncLease(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		seedLease   bool
-		wantBlocked bool
-		wantEvent   bool
+		seedLease                bool
+		clusterSyncAlreadyActive bool
+		wantBlocked              bool
+		wantEvent                bool
 	}{
 		"clustersync lease active: blocked, event emitted": {
 			seedLease:   true,
 			wantBlocked: true,
 			wantEvent:   true,
+		},
+		"clustersync lease active: blocked, no repeated event": {
+			seedLease:                true,
+			clusterSyncAlreadyActive: true,
+			wantBlocked:              true,
 		},
 		"no clustersync lease: not blocked, no event": {
 			seedLease:   false,
@@ -65,6 +72,13 @@ func TestCheckClusterSyncLease(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			restore := cr.DeepCopy()
+			if tc.clusterSyncAlreadyActive {
+				meta.SetStatusCondition(&restore.Status.Conditions, metav1.Condition{
+					Type:   psmdbv1.ConditionClusterSyncActive,
+					Status: metav1.ConditionTrue,
+				})
+			}
 			objs := []runtime.Object{}
 			if tc.seedLease {
 				objs = append(objs, csLease)
@@ -73,7 +87,7 @@ func TestCheckClusterSyncLease(t *testing.T) {
 			recorder := record.NewFakeRecorder(4)
 			r := &ReconcilePerconaServerMongoDBRestore{client: cl, recorder: recorder}
 
-			blocked, err := r.checkClusterSyncLease(context.Background(), cr, cluster)
+			blocked, err := r.checkClusterSyncLease(context.Background(), restore, cluster)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantBlocked, blocked)
 

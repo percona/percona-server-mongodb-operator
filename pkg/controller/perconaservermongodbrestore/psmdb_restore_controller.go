@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -120,12 +122,30 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	status := cr.Status
+	clusterSyncChecked := false
+	clusterSyncActive := false
 
 	defer func() {
 		if err != nil {
 			status.State = psmdbv1.RestoreStateError
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
+		}
+		if clusterSyncChecked {
+			conditionStatus := metav1.ConditionFalse
+			reason := "LeaseReleased"
+			message := "ClusterSync is not blocking this restore."
+			if clusterSyncActive {
+				conditionStatus = metav1.ConditionTrue
+				reason = "LeaseActive"
+				message = "ClusterSync is blocking this restore."
+			}
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    psmdbv1.ConditionClusterSyncActive,
+				Status:  conditionStatus,
+				Reason:  reason,
+				Message: message,
+			})
 		}
 		if cr.Status.State != status.State || cr.Status.Error != status.Error || !cr.Status.ConditionsEqual(&status) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
@@ -194,9 +214,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
 		// Check the clustersync lease before any cluster-mutating step.
-		if blocked, err := r.checkClusterSyncLease(ctx, cr, cluster); err != nil {
+		blocked, err := r.checkClusterSyncLease(ctx, cr, cluster)
+		if err != nil {
 			return rr, errors.Wrap(err, "check clustersync lease")
-		} else if blocked {
+		}
+		clusterSyncChecked = true
+		clusterSyncActive = blocked
+		if blocked {
 			status.State = psmdbv1.RestoreStateWaiting
 			return rr, nil
 		}
@@ -307,9 +331,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkClusterSyncLease(ctx context
 		return false, nil
 	}
 	log.Info("Waiting for ClusterSync to release the cluster before starting restore.", "lease", csLeaseName)
-	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
-		"Restore is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow restores.",
-		cluster.Name, csLeaseName)
+	if !meta.IsStatusConditionTrue(cr.Status.Conditions, psmdbv1.ConditionClusterSyncActive) {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+			"Restore is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow restores.",
+			cluster.Name, csLeaseName)
+	}
 	return true, nil
 }
 
