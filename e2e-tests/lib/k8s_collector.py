@@ -26,7 +26,7 @@ class K8sCollector:
 
     def kubectl_ns(self, *args: str) -> str:
         """Run kubectl command with namespace flag"""
-        return kubectl_bin(*args, "-n", self.namespace, check=False, return_stderr=True)
+        return kubectl_bin("-n", self.namespace, *args, check=False, return_stderr=True)
 
     def seconds_since_created(self, namespace: str) -> int:
         """Seconds elapsed since the namespace was created, i.e. since the test started"""
