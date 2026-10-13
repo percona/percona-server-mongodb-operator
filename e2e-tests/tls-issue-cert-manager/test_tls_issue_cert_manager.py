@@ -5,6 +5,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -84,7 +85,7 @@ class TestUserManagedCertManager:
         test_dir = test_paths["test_dir"]
         for resource in ("some-name-psmdb-ca-issuer", "some-name-psmdb-issuer", "some-name-ca-cert"):
             retry(
-                lambda r=resource: kubectl_bin("apply", "-f", f"{test_dir}/conf/{r}.yml"),
+                partial(kubectl_bin, "apply", "-f", f"{test_dir}/conf/{resource}.yml"),
                 max_attempts=10,
                 delay=10,
             )
