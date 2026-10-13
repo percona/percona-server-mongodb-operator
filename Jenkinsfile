@@ -22,7 +22,7 @@ void createCluster(String CLUSTER_SUFFIX) {
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
+                gcloud container clusters list --filter="name=${CLUSTER_NAME}-${CLUSTER_SUFFIX}" --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
                 gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
                     --zone=${zone} \
@@ -46,7 +46,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
+                gcloud container clusters list --filter="name=${CLUSTER_NAME}-${CLUSTER_SUFFIX}" --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
                 exit 1
             fi
         """
@@ -81,12 +81,12 @@ void deleteOldClusters(String FILTER) {
                 gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
                 gcloud config set project "\$GCP_PROJECT"
                 for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
-                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="name=\$GKE_CLUSTER")
                     retry=0
                     while [ "\$GKE_CLUSTER_STATUS" == "PROVISIONING" ]; do
                         echo "Cluster \$GKE_CLUSTER is being provisioned, waiting before delete."
                         sleep 10
-                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="name=\$GKE_CLUSTER")
                         let retry+=1
                         if [ \$retry -ge 60 ]; then
                             echo "Cluster \$GKE_CLUSTER to delete is being provisioned for too long. Skipping..."
@@ -364,6 +364,13 @@ void formatReportDuration(String htmlFile) {
     writeFile file: htmlFile, text: html.substring(0, valueStart) + formatted + html.substring(valueEnd + suffix.length())
 }
 
+boolean isClusterReachable(String clusterSuffix) {
+    return sh(returnStatus: true, script: """
+        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
+        kubectl get nodes --request-timeout=60s
+    """) == 0
+}
+
 void clusterRunner(String cluster) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         def clusterCreated=0
@@ -375,6 +382,9 @@ void clusterRunner(String cluster) {
                 if (clusterCreated == 0) {
                     createCluster(cluster)
                     clusterCreated++
+                } else if (!isClusterReachable(cluster)) {
+                    echo "Cluster ${CLUSTER_NAME}-${cluster} is unreachable, recreating it"
+                    createCluster(cluster)
                 }
                 runTest(i)
             }
