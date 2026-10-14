@@ -280,24 +280,22 @@ func TestExceedsReplsetMemberLimit(t *testing.T) {
 		expected    bool
 	}{
 		"below limit": {
-			memberCount: mongo.MaxMembers - 1,
+			memberCount: 49,
 			expected:    false,
 		},
 		"at limit": {
-			memberCount: mongo.MaxMembers,
+			memberCount: 50,
 			expected:    false,
 		},
 		"above limit": {
-			memberCount: mongo.MaxMembers + 1,
+			memberCount: 51,
 			expected:    true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := tc.memberCount > mongo.MaxMembers; got != tc.expected {
-				t.Fatalf("memberCount=%d got %v want %v", tc.memberCount, got, tc.expected)
-			}
+			assert.Equal(t, tc.expected, tc.memberCount > mongo.MaxMembers)
 		})
 	}
 }
