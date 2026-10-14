@@ -5,8 +5,6 @@ platformSkips:
     - name: demand-backup-eks-credentials-irsa
       reason: requires EKS IRSA
   gke-arm64:
-    - name: monitoring-2-0
-      reason: PMM 2 images are unavailable for ARM64
     - name: monitoring-pmm3
       reason: PMM 3 images are unavailable for ARM64
     - name: upgrade
@@ -395,11 +393,6 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade, sharding]
 
-  monitoring-2-0:
-    suites: [pr, release]
-    operatorModes: [cluster-wide, namespaced]
-    groups: [monitoring]
-
   monitoring-pmm3:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
@@ -461,6 +454,11 @@ tests:
     groups: [core]
 
   pvc-auto-resize:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage]
+
+  pvc-auto-resize-mongos:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
@@ -559,6 +557,16 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
+
+  tls-issue-cert-manager-renew:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [tls]
+
+  tls-service-per-pod:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, tls]
 
   unsafe-psa:
     suites: [pr, release]

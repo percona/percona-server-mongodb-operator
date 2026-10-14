@@ -61,9 +61,7 @@ func (r *ReconcilePerconaServerMongoDB) checkFinalizers(ctx context.Context, cr 
 				*/
 				continue
 			}
-			switch err {
-			case errWaitingTermination:
-			default:
+			if !errors.Is(err, errWaitingTermination) {
 				log.Error(err, "failed to run finalizer", "finalizer", f)
 			}
 			finalizers = append(finalizers, orderedFinalizers[i:]...)
@@ -122,14 +120,12 @@ func (r *ReconcilePerconaServerMongoDB) deletePSMDBPods(ctx context.Context, cr 
 	for _, rs := range cr.Spec.Replsets {
 		if err := r.deleteReplset(ctx, cr, rs); err != nil {
 			rsDeleted = false
-			switch err {
-			case errWaitingTermination:
+			if errors.Is(err, errWaitingTermination) {
 				log.Info("deleting rs pods", "rs", rs.Name, "status", err.Error())
 				continue
-			default:
-				log.Error(err, "failed to delete rs pods", "rs", rs.Name)
-				return err
 			}
+			log.Error(err, "failed to delete rs pods", "rs", rs.Name)
+			return err
 		}
 	}
 	if !rsDeleted {

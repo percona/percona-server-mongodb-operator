@@ -43,7 +43,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, group); err != nil {
+	if err := r.reconcileGroupStorageAutoscaling(ctx, cr, sfs, group); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 

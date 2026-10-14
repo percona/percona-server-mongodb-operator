@@ -11,6 +11,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -41,8 +42,6 @@ func instanceCR(t *testing.T, name, ns string, instances []api.InstanceSpec, mut
 
 // unsafeSize relaxes the replica-set size checks. Pass it to instanceCR for a
 // topology that is deliberately not production-safe.
-//
-//nolint:unused // see instanceCR
 func unsafeSize(cr *api.PerconaServerMongoDB) { cr.Spec.Unsafe.ReplsetSize = true }
 
 // resolveGroup resolves rs and returns the named group, failing the test if the
@@ -146,6 +145,13 @@ func groupSTS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, g membergroup.G
 					Containers: []corev1.Container{{
 						Name:  g.ContainerName,
 						Ports: []corev1.ContainerPort{{ContainerPort: rs.GetPort()}},
+						// Autoscaling reads the container to exec into and the
+						// path to probe off this mount, so a fixture without it
+						// skips for the wrong reason.
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      config.MongodDataVolClaimName,
+							MountPath: config.MongodContainerDataDir,
+						}},
 					}},
 				},
 			},

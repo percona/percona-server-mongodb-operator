@@ -3,6 +3,7 @@ package mongo_test
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1773,6 +1774,56 @@ func TestApplyMemberConfig(t *testing.T) {
 			}
 
 			assert.Equal(t, c.want, live, "live config after the call")
+		})
+	}
+}
+
+func TestConfigAuthSource(t *testing.T) {
+	cases := []struct {
+		name       string
+		conf       mongo.Config
+		authSource string
+	}{
+		{
+			name: "auth source set",
+			conf: mongo.Config{
+				Hosts:      []string{"localhost:27017"},
+				Username:   "clusterMonitor",
+				Password:   "pass",
+				AuthSource: "admin",
+			},
+			authSource: "admin",
+		},
+		{
+			name: "custom auth source",
+			conf: mongo.Config{
+				Hosts:      []string{"localhost:27017"},
+				Username:   "app",
+				Password:   "pass",
+				AuthSource: "application",
+			},
+			authSource: "application",
+		},
+		{
+			name: "auth source unset",
+			conf: mongo.Config{
+				Hosts:    []string{"localhost:27017"},
+				Username: "clusterMonitor",
+				Password: "pass",
+			},
+			authSource: "",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opts := c.conf.Options()
+			require.NotNil(t, opts.Auth)
+			assert.Equal(t, c.authSource, opts.Auth.AuthSource)
+
+			uri, err := url.Parse(c.conf.URI())
+			require.NoError(t, err)
+			assert.Equal(t, c.authSource, uri.Query().Get("authSource"))
 		})
 	}
 }
