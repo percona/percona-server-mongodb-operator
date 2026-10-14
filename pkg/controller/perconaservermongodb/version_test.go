@@ -45,10 +45,10 @@ func Test_majorUpgradeRequested(t *testing.T) {
 		fcv string
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    UpgradeRequest
-		wantErr bool
+		name       string
+		args       args
+		want       UpgradeRequest
+		wantErrMsg string
 	}{
 		{
 			name: "TestWithEmptyMongoVersionInStatus",
@@ -146,7 +146,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "3.6",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 4.2 with FCV set to 3.6",
 		},
 
 		{
@@ -164,7 +164,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "faied to make semver: malformed version: 4.0.-4.0-recommended",
 		},
 
 		{
@@ -260,7 +260,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 3.6 with FCV set to 4.0",
 		},
 
 		{
@@ -278,7 +278,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 3.6 with FCV set to 4.0",
 		},
 
 		{
@@ -387,13 +387,13 @@ func Test_majorUpgradeRequested(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := majorUpgradeRequested(tt.args.cr, tt.args.fcv)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("majorUpgradeRequested() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
+				assert.Equal(t, UpgradeRequest{}, got)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("majorUpgradeRequested() = %v, want %v", got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
