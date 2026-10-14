@@ -55,11 +55,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cr.Namespace,
-			Labels:    naming.ClusterLabels(cr),
-		},
+		Name:      name,
+		Namespace: cr.Namespace,
+		Labels:    naming.ClusterLabels(cr),
 		Data: map[string]string{
 			"hook.sh": cr.Spec.Backup.HookScript.Script,
 		},
@@ -381,7 +379,7 @@ func updateLatestRestorableTime(ctx context.Context, cl client.Client, pbm backu
 
 	tl, err := pbm.GetLatestTimelinePITR(ctx, nil)
 	if err != nil {
-		if err == backup.ErrNoOplogsForPITR {
+		if errors.Is(err, backup.ErrNoOplogsForPITR) {
 			return nil
 		}
 		return errors.Wrap(err, "get latest PITR timeline")
