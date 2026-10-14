@@ -75,10 +75,9 @@ func TestReconcileSSLCertManagerCheck(t *testing.T) {
 				if !exists {
 					continue
 				}
-				secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				secret := &corev1.Secret{
 					Name: name, Namespace: cr.Namespace,
-					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}},
-				}}
+					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}}}
 				if tt.certManager {
 					secret.Labels = map[string]string{cm.PartOfCertManagerControllerLabelKey: "true"}
 				}
