@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -76,8 +75,8 @@ func TestRevisionTemplateReadsFromAPIReader(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"spec": map[string]any{"template": tmpl}})
 	require.NoError(t, err)
 	rev := &appsv1.ControllerRevision{
-		ObjectMeta: metav1.ObjectMeta{Name: "rs0-abc", Namespace: "ns"},
-		Data:       runtime.RawExtension{Raw: raw},
+		Name: "rs0-abc", Namespace: "ns",
+		Data: runtime.RawExtension{Raw: raw},
 	}
 
 	// The cached client has not seen the new revision yet.

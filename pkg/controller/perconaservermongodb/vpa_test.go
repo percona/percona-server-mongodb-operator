@@ -355,7 +355,7 @@ func vpaTestClient(t *testing.T, crdInstalled bool) client.Client {
 // exercises only the CRD guard and never reads a VPA object.
 func vpaTestCR(enabled bool) *api.PerconaServerMongoDB {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "some-name", Namespace: "ns"},
+		Name: "some-name", Namespace: "ns",
 	}
 	if enabled {
 		cr.Spec.VPA = &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeOff}
