@@ -202,7 +202,7 @@ func TestCollectStorageCABundles(t *testing.T) {
 	}
 }
 
-func TestPersistentVolumeClaimMetadata(t *testing.T) {
+func TestPersistentVolumeClaimDoesNotSetMutableMetadata(t *testing.T) {
 	spec := &api.VolumeSpec{
 		PersistentVolumeClaim: api.PVCSpec{
 			Labels: map[string]string{
@@ -216,8 +216,8 @@ func TestPersistentVolumeClaimMetadata(t *testing.T) {
 
 	pvc := PersistentVolumeClaim("mongod-data-cluster-rs0-0", "mongodb", spec)
 
-	assert.Equal(t, spec.PersistentVolumeClaim.Labels, pvc.Labels)
-	assert.Equal(t, spec.PersistentVolumeClaim.Annotations, pvc.Annotations)
+	assert.Empty(t, pvc.Labels)
+	assert.Empty(t, pvc.Annotations)
 }
 
 func TestGetCAVolumeMounts(t *testing.T) {

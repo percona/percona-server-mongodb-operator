@@ -761,12 +761,10 @@ func sslSecretDataExist(ctx context.Context, secret *corev1.Secret) bool {
 // PersistentVolumeClaim returns a Persistent Volume Claims for Mongod pod
 func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
-		Kind:        "PersistentVolumeClaim",
-		APIVersion:  "v1",
-		Name:        name,
-		Namespace:   namespace,
-		Labels:      spec.PersistentVolumeClaim.Labels,
-		Annotations: spec.PersistentVolumeClaim.Annotations,
+		Kind:       "PersistentVolumeClaim",
+		APIVersion: "v1",
+		Name:       name,
+		Namespace:  namespace,
 	}
 
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {

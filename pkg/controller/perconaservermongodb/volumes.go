@@ -27,7 +27,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
+	if err := r.fixVolumeLabels(ctx, sts, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
@@ -395,17 +395,21 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, pvcSpec psmdbv1.PVCSpec) error {
+	// PVC labels may not match the desired selector labels yet; identify claims by their stable name instead.
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
+		Namespace: sts.Namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "list PVCs")
 	}
 
 	for _, pvc := range pvcList.Items {
+		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
+			continue
+		}
+
 		orig := pvc.DeepCopy()
 
 		if pvc.Labels == nil {

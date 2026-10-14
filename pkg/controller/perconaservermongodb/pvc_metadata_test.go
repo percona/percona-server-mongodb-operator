@@ -41,7 +41,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 
 		selectorLabels := naming.MongodLabels(cr, replset)
 		sts := newStatefulSet(namespaceName, naming.MongodStatefulSetName(cr, replset), selectorLabels, resource.MustParse("1Gi"))
-		pvc := existingPVC(namespaceName, config.MongodDataVolClaimName+"-"+sts.Name+"-0", selectorLabels)
+		pvc := existingPVC(namespaceName, config.MongodDataVolClaimName+"-"+sts.Name+"-0", nil)
 		pvc.Labels["custom.percona.com/existing-label"] = "kept"
 		pvc.Annotations = map[string]string{
 			"custom.percona.com/existing-annotation": "kept",
