@@ -122,6 +122,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	status := cr.Status
+	status.WaitingReason = ""
 	clusterSyncChecked := false
 	clusterSyncActive := false
 
@@ -130,6 +131,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			status.State = psmdbv1.RestoreStateError
 			status.Error = err.Error()
 			log.Error(err, "failed to make restore", "restore", cr.Name, "backup", cr.Spec.BackupName)
+		}
+		if status.State != psmdbv1.RestoreStateWaiting {
+			status.WaitingReason = ""
 		}
 		if clusterSyncChecked {
 			conditionStatus := metav1.ConditionFalse
@@ -147,7 +151,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				Message: message,
 			})
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error || !cr.Status.ConditionsEqual(&status) {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error ||
+			cr.Status.WaitingReason != status.WaitingReason || !cr.Status.ConditionsEqual(&status) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -189,6 +194,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	if cluster.PBMResyncNeeded() || cluster.PBMResyncInProgress() {
 		log.V(1).Info("waiting for resync operation to finish")
+		if status.State == psmdbv1.RestoreStateWaiting {
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMResync
+		}
 
 		return rr, nil
 	}
@@ -222,14 +230,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 		clusterSyncActive = blocked
 		if blocked {
 			status.State = psmdbv1.RestoreStateWaiting
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonClusterSync
 			return rr, nil
 		}
 
 		// Check the restore locks before any cluster-mutating step.
-		if locked, err := r.checkRestoreLocks(ctx, cluster); err != nil {
+		if waitingReason, err := r.checkRestoreLocks(ctx, cluster); err != nil {
 			return rr, errors.Wrap(err, "check restore locks")
-		} else if locked {
+		} else if waitingReason != "" {
 			status.State = psmdbv1.RestoreStateWaiting
+			status.WaitingReason = waitingReason
 			return rr, nil
 		}
 
@@ -238,6 +248,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 			if errors.Is(err, errWaitingPBM) {
 				err = nil
 				log.Info("waiting for pbm-agent")
+				if status.State == psmdbv1.RestoreStateWaiting {
+					status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMAgent
+				}
 				return rr, nil
 			}
 
@@ -249,6 +262,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 				if err := r.resyncStorage(ctx, cluster, cr); err != nil {
 					return reconcile.Result{}, errors.Wrap(err, "resync storage")
+				}
+				if status.State == psmdbv1.RestoreStateWaiting {
+					status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMResync
 				}
 
 				backoff := wait.Backoff{
@@ -280,6 +296,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 					return rr, errors.Wrap(err, "failed to delete mongos statefulset")
 				}
 
+				if status.State == psmdbv1.RestoreStateWaiting {
+					status.WaitingReason = psmdbv1.RestoreWaitingReasonMongosPods
+				}
 				return rr, nil
 			}
 
@@ -290,6 +309,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 			if len(mongosPods.Items) > 0 {
 				log.Info("Waiting for mongos pods to terminate")
+				if status.State == psmdbv1.RestoreStateWaiting {
+					status.WaitingReason = psmdbv1.RestoreWaitingReasonMongosPods
+				}
 				return rr, nil
 			}
 		}
@@ -341,24 +363,24 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkClusterSyncLease(ctx context
 
 // checkRestoreLocks returns true if a backup or another restore is
 // holding the cluster and the new restore should wait.
-func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (psmdbv1.RestoreWaitingReason, error) {
 	log := logf.FromContext(ctx)
 
 	leaseName := naming.BackupLeaseName(cluster.Name)
 	leaseActive, err := k8s.IsLeaseActive(ctx, r.client, leaseName, cluster.Namespace)
 	if err != nil {
-		return false, errors.Wrap(err, "check backup lease")
+		return "", errors.Wrap(err, "check backup lease")
 	}
 
 	if leaseActive {
 		log.Info("Waiting for active backup to complete before starting restore.", "lease", leaseName)
-		return true, nil
+		return psmdbv1.RestoreWaitingReasonBackupLease, nil
 	}
 
 	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
-		return true, nil
+		return psmdbv1.RestoreWaitingReasonPBMAgent, nil
 	}
 
 	hasBackupOrRestoreLock, err := pbmc.HasLocks(ctx, backup.IsBackupOrRestoreLock)
@@ -367,15 +389,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Con
 	}
 
 	if err != nil {
-		return false, errors.Wrap(err, "checking pbm locks")
+		return "", errors.Wrap(err, "checking pbm locks")
 	}
 
 	if hasBackupOrRestoreLock {
 		log.Info("Waiting for active backup or restore to complete.")
-		return true, nil
+		return psmdbv1.RestoreWaitingReasonRestoreLock, nil
 	}
 
-	return false, nil
+	return "", nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) getStorage(

@@ -109,3 +109,25 @@ func TestCheckClusterSyncLease(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckRestoreLocksBackupLease(t *testing.T) {
+	const (
+		ns          = "ns"
+		clusterName = "tgt"
+	)
+	holder := "backup-uid"
+	lease := &coordv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.BackupLeaseName(clusterName),
+			Namespace: ns,
+		},
+		Spec: coordv1.LeaseSpec{HolderIdentity: &holder},
+	}
+	cl := fake.NewClientBuilder().WithScheme(restoreScheme(t)).WithRuntimeObjects(lease).Build()
+	r := &ReconcilePerconaServerMongoDBRestore{client: cl}
+	cluster := &psmdbv1.PerconaServerMongoDB{Name: clusterName, Namespace: ns}
+
+	waitingReason, err := r.checkRestoreLocks(context.Background(), cluster)
+	require.NoError(t, err)
+	assert.Equal(t, psmdbv1.RestoreWaitingReasonBackupLease, waitingReason)
+}
