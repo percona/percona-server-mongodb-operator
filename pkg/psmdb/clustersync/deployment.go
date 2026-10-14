@@ -45,15 +45,11 @@ func Labels(cr *api.PerconaServerMongoDBClusterSync) map[string]string {
 
 func Deployment(cr *api.PerconaServerMongoDBClusterSync) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DeploymentName(cr),
-			Namespace: cr.Namespace,
-			Labels:    Labels(cr),
-		},
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       DeploymentName(cr),
+		Namespace:  cr.Namespace,
+		Labels:     Labels(cr),
 	}
 }
 
@@ -76,10 +72,8 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 	}
 
 	return corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:      ls,
-			Annotations: cr.Spec.Annotations,
-		},
+		Labels:      ls,
+		Annotations: cr.Spec.Annotations,
 		Spec: corev1.PodSpec{
 			Containers:       []corev1.Container{Container(cr)},
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,

@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -120,12 +119,10 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) ensureTargetUserSecret(
 	username := syncTargetUsername(cr)
 
 	newSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      nn.Name,
-			Namespace: nn.Namespace,
-			Labels:    clustersync.Labels(cr),
-		},
-		Type: corev1.SecretTypeOpaque,
+		Name:      nn.Name,
+		Namespace: nn.Namespace,
+		Labels:    clustersync.Labels(cr),
+		Type:      corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
 			targetUserSecretUsernameKey: []byte(username),
 			targetUserSecretPasswordKey: password,

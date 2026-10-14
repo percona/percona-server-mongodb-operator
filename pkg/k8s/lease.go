@@ -30,10 +30,8 @@ func GetLease(ctx context.Context, c client.Client, name, namespace string) (*co
 
 func AcquireLease(ctx context.Context, c client.Client, name, namespace, holder string, checkStale IsHolderStaleFunc) (*coordv1.Lease, error) {
 	lease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, c, lease, func() error {

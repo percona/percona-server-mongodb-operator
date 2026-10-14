@@ -17,7 +17,6 @@ import (
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -288,10 +287,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 				log.Info("Deleting statefulset", "statefulset", stsName)
 
 				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
+					Name:      stsName,
+					Namespace: cluster.Namespace,
 				}
 
 				if err := r.client.Delete(ctx, &sts); err != nil {
@@ -384,10 +381,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 
 	sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 		Name: "pbm-config",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: r.pbmConfigName(cluster),
-			},
+		Secret: &corev1.SecretVolumeSource{
+			SecretName: r.pbmConfigName(cluster),
 		},
 	})
 	sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
@@ -415,10 +410,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Name: "PBM_AGENT_MONGODB_USERNAME",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_USER_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cluster),
-					},
+					Key:      "MONGODB_BACKUP_USER_ESCAPED",
+					Name:     api.UserSecretName(cluster),
 					Optional: &f,
 				},
 			},
@@ -427,10 +420,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			Name: "PBM_AGENT_MONGODB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					Key: "MONGODB_BACKUP_PASSWORD_ESCAPED",
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: api.UserSecretName(cluster),
-					},
+					Key:      "MONGODB_BACKUP_PASSWORD_ESCAPED",
+					Name:     api.UserSecretName(cluster),
 					Optional: &f,
 				},
 			},
@@ -593,10 +584,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
+					Name:      stsName,
+					Namespace: cluster.Namespace,
 				}
 
 				err := r.client.Get(ctx, nn, &sts)
@@ -629,10 +618,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				sts := appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stsName,
-						Namespace: cluster.Namespace,
-					},
+					Name:      stsName,
+					Namespace: cluster.Namespace,
 				}
 
 				err := r.client.Get(ctx, nn, &sts)
@@ -659,38 +646,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 	}
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDBRestore) getUserCredentials(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, role psmdbv1.SystemUserRole) (psmdb.Credentials, error) {
-	creds := psmdb.Credentials{}
-
-	usersSecret := corev1.Secret{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: psmdbv1.UserSecretName(cluster), Namespace: cluster.Namespace}, &usersSecret)
-	if err != nil {
-		return creds, errors.Wrap(err, "get secret")
-	}
-
-	switch role {
-	case psmdbv1.RoleDatabaseAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBDatabaseAdminPassword])
-	case psmdbv1.RoleClusterAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterAdminPassword])
-	case psmdbv1.RoleUserAdmin:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBUserAdminPassword])
-	case psmdbv1.RoleClusterMonitor:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBClusterMonitorPassword])
-	case psmdbv1.RoleBackup:
-		creds.Username = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupUser])
-		creds.Password = string(usersSecret.Data[psmdbv1.EnvMongoDBBackupPassword])
-	default:
-		return creds, errors.Errorf("not implemented for role: %s", role)
-	}
-
-	return creds, nil
 }
 
 // workaround: marshalUnsafe is used to marshal PBM config to yaml when the storage credentials are needed.
@@ -784,11 +739,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) updatePBMConfigSecret(
 	}
 
 	secret = corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.pbmConfigName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    naming.ClusterLabels(cluster),
-		},
+		Name:      r.pbmConfigName(cluster),
+		Namespace: cluster.Namespace,
+		Labels:    naming.ClusterLabels(cluster),
 		Data: map[string][]byte{
 			"pbm_config.yaml": desiredConfBytes,
 		},

@@ -89,10 +89,8 @@ func (b *snapshotBackups) reconcileSnapshot(
 	bcp *api.PerconaServerMongoDBBackup,
 ) (*volumesnapshotv1.VolumeSnapshot, error) {
 	volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.VolumeSnapshotName(bcp, rsName),
-			Namespace: bcp.GetNamespace(),
-		},
+		Name:      naming.VolumeSnapshotName(bcp, rsName),
+		Namespace: bcp.GetNamespace(),
 	}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(volumeSnapshot), volumeSnapshot); err == nil {
 		return volumeSnapshot, nil
