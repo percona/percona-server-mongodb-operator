@@ -2834,16 +2834,21 @@ compare_latest_restorable_time() {
 	local retry=0
 
 	# PITR keeps advancing the timeline and the operator refreshes the backup status
-	# only on reconcile, so both values have to be re-read until they converge
-	until [[ -n $latest_restorable_time && $latest_restorable_time == "$backup_time" ]]; do
-		if [[ $retry -ge 12 ]]; then
-			echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
-			exit 1
-		fi
-		let retry+=1
+	# only on reconcile, so re-read both values every five seconds until they converge.
+	while [[ $retry -lt 12 ]]; do
+		((retry += 1))
 		latest_restorable_time=$(get_latest_restorable_time "$cluster")
 		backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
+		if [[ -n $latest_restorable_time && $latest_restorable_time == "$backup_time" ]]; then
+			return 0
+		fi
+		if [[ $retry -lt 12 ]]; then
+			sleep 5
+		fi
 	done
+
+	echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
+	exit 1
 }
 
 pause_cluster() {

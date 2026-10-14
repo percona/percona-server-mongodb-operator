@@ -10,8 +10,9 @@ import groovy.transform.Field
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+            export CLOUDSDK_CONFIG=/tmp/gcloud-\$GKE_CLUSTER_NAME
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
@@ -19,12 +20,35 @@ void createCluster(String CLUSTER_SUFFIX) {
                 echo "Failed to detect the minimum Kubernetes version from the GKE stable release channel"
                 exit 1
             fi
+
+            cluster_exists() {
+                gcloud container clusters describe "\${GKE_CLUSTER_NAME}" --zone ${zone} >/dev/null 2>&1
+            }
+
+            delete_cluster() {
+                for attempt in 1 2; do
+                    if gcloud container clusters delete "\${GKE_CLUSTER_NAME}" --zone ${zone} --quiet; then
+                        return 0
+                    fi
+                    if ! cluster_exists; then
+                        return 0
+                    fi
+                    if [ \${attempt} -eq 1 ]; then
+                        echo "Failed to delete GKE cluster \${GKE_CLUSTER_NAME}; retrying in 10 seconds"
+                        sleep 10
+                    fi
+                done
+                return 1
+            }
+
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter="name=${CLUSTER_NAME}-${CLUSTER_SUFFIX}" --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
-                echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
-                gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
+                if cluster_exists; then
+                    delete_cluster || echo "Unable to remove existing GKE cluster \${GKE_CLUSTER_NAME}; continuing with cluster creation"
+                fi
+                echo "Creating GKE cluster \${GKE_CLUSTER_NAME} with Kubernetes version \${GKE_VERSION} from the stable release channel"
+                gcloud container clusters create "\${GKE_CLUSTER_NAME}" \
                     --zone=${zone} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
@@ -46,7 +70,9 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter="name=${CLUSTER_NAME}-${CLUSTER_SUFFIX}" --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
+                if cluster_exists; then
+                    delete_cluster || true
+                fi
                 exit 1
             fi
         """
@@ -56,8 +82,9 @@ void createCluster(String CLUSTER_SUFFIX) {
 void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+            export CLOUDSDK_CONFIG=/tmp/gcloud-\$GKE_CLUSTER_NAME
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
@@ -69,7 +96,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone ${zone} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${zone} "\$GKE_CLUSTER_NAME"
         """
    }
 }
@@ -366,8 +393,18 @@ void formatReportDuration(String htmlFile) {
 
 boolean isClusterReachable(String clusterSuffix) {
     return sh(returnStatus: true, script: """
-        export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
-        kubectl get nodes --request-timeout=60s
+        export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${clusterSuffix}
+        export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+        for attempt in 1 2; do
+            if kubectl get nodes --request-timeout=60s; then
+                exit 0
+            fi
+            if [ \${attempt} -eq 1 ]; then
+                echo "Cluster \$GKE_CLUSTER_NAME is unreachable; retrying in 10 seconds"
+                sleep 10
+            fi
+        done
+        exit 1
     """) == 0
 }
 
