@@ -75,10 +75,8 @@ func AddPMMTmpVolume(cr *api.PerconaServerMongoDB, pmmC *corev1.Container, volum
 	})
 	if !hasVolume(volumes, tmpVolumeName) {
 		volumes = append(volumes, corev1.Volume{
-			Name: tmpVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 	return volumes

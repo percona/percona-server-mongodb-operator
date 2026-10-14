@@ -748,8 +748,8 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 func TestAddPMMTmpVolume(t *testing.T) {
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 	tmpVolume := corev1.Volume{
-		Name:         tmpVolumeName,
-		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		Name:     tmpVolumeName,
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
 
 	newCR := func(crVersion string, sc *corev1.SecurityContext) *api.PerconaServerMongoDB {
