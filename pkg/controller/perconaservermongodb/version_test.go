@@ -379,8 +379,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "7.0",
 			},
-			want:    UpgradeRequest{},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 8.3 with FCV set to 7.0",
 		},
 	}
 
