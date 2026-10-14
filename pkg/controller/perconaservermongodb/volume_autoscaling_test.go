@@ -756,7 +756,7 @@ func TestTriggerResize(t *testing.T) {
 				Source:      membergroup.SourceRef{ReplsetName: rsName},
 			}
 
-			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize,
+			err = r.triggerResize(t.Context(), tt.pvc, tt.newSize,
 				&volumeSpec.PersistentVolumeClaim, r.groupStorageWriter(tt.cr, group))
 			require.NoError(t, err)
 
@@ -806,7 +806,7 @@ func TestTriggerResizeInstanceGroup(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, r.triggerResize(ctx, cr, pvc, resource.MustParse("25Gi"),
+	require.NoError(t, r.triggerResize(ctx, pvc, resource.MustParse("25Gi"),
 		&group.VolumeSpec.PersistentVolumeClaim, r.groupStorageWriter(cr, group)))
 
 	fresh := new(api.PerconaServerMongoDB)
@@ -1416,7 +1416,7 @@ func TestTriggerResizeKeepsSizeOnWriteFailure(t *testing.T) {
 	rs := cr.Spec.Replsets[0]
 	group := resolveGroup(t, cr, rs, naming.GroupMongod)
 
-	err := r.triggerResize(ctx, cr, pvc, resource.MustParse("12Gi"), pvcSpec,
+	err := r.triggerResize(ctx, pvc, resource.MustParse("12Gi"), pvcSpec,
 		r.groupStorageWriter(cr, group))
 	require.ErrorIs(t, err, errUpdateRejected, "the API server error has to reach the caller")
 
