@@ -180,6 +180,8 @@ spec:
               value: "true"
             - name: PBM_AGENT_SIDECAR_SLEEP
               value: "5"
+            - name: PBM_AGENT_TLS_DIR
+              value: /etc/mongodb-pbm
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -205,6 +207,9 @@ spec:
               readOnly: true
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /etc/mongodb-pbm
+              name: pbm-tls
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -253,6 +258,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-tls
+          secret:
+            defaultMode: 288
+            secretName: some-name-pbm
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
