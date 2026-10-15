@@ -1,6 +1,7 @@
 package perconaservermongodbrestore
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -330,4 +331,30 @@ func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
 	assert.Equal(t, "old-bucket", a["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
 	assert.NotContains(t, a["storage"].(map[string]any)["s3"].(map[string]any), "region")
 	assert.Equal(t, "new-bucket", b["storage"].(map[string]any)["s3"].(map[string]any)["bucket"])
+}
+
+func TestIsTransientNetworkError(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"api server dial timeout": {
+			err:  errors.New(`describe restore stderr:  stdout: : error sending request: Post "https://34.118.224.1:443/api/v1/namespaces/ns/pods/some-name-rs0-0/exec": dial tcp 34.118.224.1:443: connect: connection timed out`),
+			want: true,
+		},
+		"connection reset": {
+			err:  errors.New("read tcp 10.0.0.1:1234->10.0.0.2:443: read: connection reset by peer"),
+			want: true,
+		},
+		"pbm error": {
+			err:  errors.New("describe restore stderr: Error: get restore meta: not found stdout: "),
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isTransientNetworkError(tt.err))
+		})
+	}
 }

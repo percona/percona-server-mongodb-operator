@@ -223,6 +223,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		return nil
 	})
 	if err != nil {
+		// The restore keeps running in PBM; a failed status check must not mark it as failed.
+		if isTransientNetworkError(err) {
+			log.Info("Failed to check restore status, will retry", "error", err.Error())
+			return status, nil
+		}
 		return status, err
 	}
 
@@ -1035,4 +1040,21 @@ func getPBMBinaryAndContainerForExec(pod *corev1.Pod) (string, string) {
 	}
 
 	return container, pbmBinary
+}
+
+func isTransientNetworkError(err error) bool {
+	for _, s := range []string{
+		"connection timed out",
+		"connection refused",
+		"connection reset by peer",
+		"i/o timeout",
+		"TLS handshake timeout",
+		"error dialing backend",
+		"unable to upgrade connection",
+	} {
+		if strings.Contains(err.Error(), s) {
+			return true
+		}
+	}
+	return false
 }
