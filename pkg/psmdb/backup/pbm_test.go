@@ -102,6 +102,16 @@ func TestGetMongoURIClientCertificate(t *testing.T) {
 		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
 		require.Equal(t, []byte("server-ca\n"), ca)
 	})
+	t.Run("custom client secret name", func(t *testing.T) {
+		cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+		t.Cleanup(func() { cr.Spec.Secrets.SSLPBM = "" })
+		custom := clientTLS.DeepCopy()
+		custom.Name = cr.Spec.Secrets.SSLPBM
+		pem, ca, err := readTLSFiles(t, custom)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
 	t.Run("rotated client certificate refreshes local identity", func(t *testing.T) {
 		_, _, err := readTLSFiles(t, clientTLS)
 		require.NoError(t, err)

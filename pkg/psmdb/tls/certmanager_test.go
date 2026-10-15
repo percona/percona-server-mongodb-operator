@@ -461,6 +461,11 @@ func TestPBMClientCertificate(t *testing.T) {
 			issued := &cm.Certificate{}
 			require.NoError(t, r.GetClient().Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cert.Name()}, issued))
 			assert.Equal(t, obj.Spec, issued.Spec)
+
+			cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+			assert.Equal(t, "psmdb-mock-pbm", cert.Name())
+			assert.Equal(t, "custom-pbm-tls", cert.SecretName())
+			assert.Equal(t, "custom-pbm-tls", cert.Object().Spec.SecretName)
 		})
 	}
 }

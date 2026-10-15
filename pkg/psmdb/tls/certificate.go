@@ -115,6 +115,9 @@ func (c *pbmClientCert) Namespace() string {
 }
 
 func (c *pbmClientCert) SecretName() string {
+	if c.cr.Spec.Secrets != nil && c.cr.Spec.Secrets.SSLPBM != "" {
+		return c.cr.Spec.Secrets.SSLPBM
+	}
 	return c.Name()
 }
 
