@@ -359,6 +359,11 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 			return err
 		}
 
+		// The CR might be deleted and recreated with the same name while we were reconciling the old one.
+		if c.UID != cr.UID {
+			return nil
+		}
+
 		c.Status = cr.Status
 
 		return r.client.Status().Update(ctx, c)
