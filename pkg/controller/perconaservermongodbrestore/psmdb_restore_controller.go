@@ -36,6 +36,13 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+func shouldUpdateStatus(current, desired psmdbv1.PerconaServerMongoDBRestoreStatus) bool {
+	return current.State != desired.State ||
+		current.Error != desired.Error ||
+		current.WaitingReason != desired.WaitingReason ||
+		!current.ConditionsEqual(&desired)
+}
+
 // Add creates a new PerconaServerMongoDBRestore Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(ctx context.Context, mgr manager.Manager) error {
@@ -151,8 +158,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				Message: message,
 			})
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error ||
-			cr.Status.WaitingReason != status.WaitingReason || !cr.Status.ConditionsEqual(&status) {
+		if shouldUpdateStatus(cr.Status, status) {
 			log.Info("Restore state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
