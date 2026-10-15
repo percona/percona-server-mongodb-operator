@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1016,8 +1017,8 @@ func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
 	(*m)[i].Priority = priority
 }
 
-// SetVotes sets voting parameters for members list
-func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
+// setVotes sets voting parameters for members list
+func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool) {
 	cm := make(map[string]int, len(compareWith))
 
 	for _, member := range compareWith {
@@ -1110,6 +1111,77 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 			break
 		}
 	}
+}
+
+// limitVotingChanges ensures reconfig adds or remove exactly 1 voting member by
+// reverting all voting changes of the members in prev except one.
+func (m *ConfigMembers) limitVotingChanges(ctx context.Context, prev ConfigMembers, primary string) bool {
+	prevMembers := make(map[string]ConfigMember, len(prev))
+	prevVoters := 0
+	for _, member := range prev {
+		prevMembers[member.Host] = member
+		if member.Votes > 0 {
+			prevVoters++
+		}
+	}
+
+	var added, removed []int
+	for i, member := range *m {
+		p, ok := prevMembers[member.Host]
+		if !ok {
+			continue
+		}
+
+		switch {
+		case p.Votes > 0 && member.Votes == 0:
+			removed = append(removed, i)
+		case p.Votes == 0 && member.Votes > 0:
+			added = append(added, i)
+		}
+	}
+
+	if len(added)+len(removed) <= 1 {
+		return false
+	}
+
+	// Adding a vote first keeps the fault tolerance of the replset during a vote swap,
+	// unless it would exceed the max number of voting members.
+	changed := slices.Concat(added, removed)
+	candidates := changed
+	if prevVoters >= MaxVotingMembers && len(removed) > 0 {
+		candidates = removed
+	}
+
+	// mongod rejects removing the vote of the primary, it shouldn't block the other changes.
+	apply := candidates[0]
+	for _, i := range candidates {
+		if (*m)[i].Host != primary {
+			apply = i
+			break
+		}
+	}
+
+	var deferred []string
+	for _, i := range changed {
+		if i == apply {
+			continue
+		}
+		p := prevMembers[(*m)[i].Host]
+		m.setMemberVoteAndPriority(i, p.Votes, p.Priority)
+		deferred = append(deferred, p.Host)
+	}
+
+	logf.FromContext(ctx).Info("Deferring voting changes to the next reconciles", "applied", (*m)[apply].Host, "deferred", deferred)
+	return true
+}
+
+// UpdateVotes sets voting parameters for members list, limited to one voting change compared to the current members.
+// It reports whether the members changed and whether some voting changes are deferred to the next reconciles.
+func (m *ConfigMembers) UpdateVotes(ctx context.Context, compareWith ConfigMembers, unsafePSA bool, primary string) (changed, pending bool) {
+	prev := append(ConfigMembers(nil), *m...)
+	m.setVotes(compareWith, unsafePSA)
+	pending = m.limitVotingChanges(ctx, prev, primary)
+	return !reflect.DeepEqual(prev, *m), pending
 }
 
 func (m ConfigMember) String() string {
