@@ -396,7 +396,8 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, pvcSpec psmdbv1.PVCSpec) error {
-	// PVC labels may not match the desired selector labels yet; identify claims by their stable name instead.
+	// PVCs inherit labels from volumeClaimTemplates, not from the StatefulSet selector. The template
+	// intentionally omits mutable metadata, so identify claims by name before applying the labels.
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
 		Namespace: sts.Namespace,
@@ -429,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
+			return errors.Wrapf(err, "patch PVC %s", pvc.Name)
 		}
 	}
 
