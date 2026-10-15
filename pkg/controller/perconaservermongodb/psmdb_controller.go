@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -528,6 +529,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplset(ctx context.Context, cr
 		if _, err := r.reconcileStatefulSet(ctx, cr, replset, group); err != nil {
 			return errors.Errorf("reconcile StatefulSet %s for %s: %v", group.STSName, replset.Name, err)
 		}
+	}
+
+	if err := r.cleanupStalePDBs(ctx, cr, replset); err != nil {
+		return errors.Wrapf(err, "cleanup stale PDBs")
+	}
+
+	if err := r.reconcilePDB(ctx, cr, replset.PodDisruptionBudget, naming.RSLabels(cr, replset), replset.Name, cr.GetNamespace()); err != nil {
+		return errors.Wrapf(err, "reconcile PDB for replset %s", replset.Name)
 	}
 
 	if err := r.cleanupRemovedInstances(ctx, cr, replset, set); err != nil {
@@ -1671,7 +1680,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "update or create mongos %s", sts)
 	}
 
-	err = r.reconcilePDB(ctx, cr, cr.Spec.Sharding.Mongos.PodDisruptionBudget, templateSpec.Labels, cr.Namespace, sts)
+	err = r.reconcilePDB(ctx, cr, cr.Spec.Sharding.Mongos.PodDisruptionBudget, naming.MongosLabels(cr), naming.ComponentMongos, cr.GetNamespace())
 	if err != nil {
 		return errors.Wrap(err, "reconcile PodDisruptionBudget for mongos")
 	}
@@ -1838,34 +1847,25 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	return annotation, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *api.PerconaServerMongoDB, spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePDB(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	spec *api.PodDisruptionBudgetSpec,
+	labels map[string]string,
+	nameSuffix string,
+	namespace string,
+) error {
 	if spec == nil {
 		return nil
 	}
 
-	metaAccessor, ok := owner.(metav1.ObjectMetaAccessor)
-	if !ok {
-		return errors.New("can't convert object to ObjectMetaAccessor")
-	}
-
-	ownerMeta := metaAccessor.GetObjectMeta()
-
-	if ownerMeta.GetUID() == "" {
-		err := r.client.Get(ctx, types.NamespacedName{
-			Name:      ownerMeta.GetName(),
-			Namespace: ownerMeta.GetNamespace(),
-		}, owner)
-		if err != nil {
-			return errors.Wrap(err, "failed to get owner uid for pdb")
-		}
-	}
-
-	pdb := psmdb.PodDisruptionBudget(spec, labels, namespace)
+	name := fmt.Sprintf("%s-%s", cr.GetName(), nameSuffix)
+	pdb := psmdb.PodDisruptionBudget(spec, name, namespace, labels)
 	if cr.CompareVersion("1.17.0") < 0 {
 		pdb.Labels = nil
 	}
-	err := setControllerReference(owner, pdb, r.scheme)
-	if err != nil {
+
+	if err := controllerutil.SetOwnerReference(cr, pdb, r.scheme); err != nil {
 		return errors.Wrap(err, "set owner reference")
 	}
 

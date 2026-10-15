@@ -109,7 +109,6 @@ func TestInstanceSetDefaultsKeepsDeclaredValues(t *testing.T) {
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
 		},
-		PodDisruptionBudget:           &PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt(3))},
 		TerminationGracePeriodSeconds: new(int64(90)),
 		Env:                           []corev1.EnvVar{{Name: "FROM_INSTANCE", Value: "1"}},
 		EnvFrom:                       []corev1.EnvFromSource{{Prefix: "inst_"}},
@@ -122,7 +121,6 @@ func TestInstanceSetDefaultsKeepsDeclaredValues(t *testing.T) {
 
 	assert.Equal(t, "hot-sa", inst.ServiceAccountName)
 	assert.Equal(t, "4", inst.Resources.Requests.Cpu().String())
-	assert.Equal(t, 3, inst.PodDisruptionBudget.MaxUnavailable.IntValue())
 	assert.Equal(t, int64(90), *inst.TerminationGracePeriodSeconds)
 	assert.Equal(t, "FROM_INSTANCE", inst.Env[0].Name)
 	assert.Len(t, inst.Env, 1, "the replica set's env is not appended")

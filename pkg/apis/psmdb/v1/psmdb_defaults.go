@@ -346,6 +346,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			return errors.Wrap(err, "failed to set configuration defaults")
 		}
 
+		if cr.Spec.Sharding.Mongos.PodDisruptionBudget == nil {
+			cr.Spec.Sharding.Mongos.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt(int(1)))}
+		}
+
 		if cr.Spec.Sharding.Mongos.Expose.ExposeType == "" {
 			cr.Spec.Sharding.Mongos.Expose.ExposeType = corev1.ServiceTypeClusterIP
 
@@ -706,6 +710,11 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 
 	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
 		return errors.Wrapf(err, "reconcile multiAZ options for replset %s", rs.Name)
+	}
+
+	if rs.PodDisruptionBudget == nil {
+		maxUnavailable := rs.maxUnavailablePods()
+		rs.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt32(maxUnavailable))}
 	}
 
 	if rs.Arbiter.Enabled {
@@ -1154,11 +1163,6 @@ func (m *MultiAZ) reconcileOpts(cr *PerconaServerMongoDB) error {
 			return errors.New("terminationGracePeriodSeconds must be at least 30 seconds for safe configuration. Set spec.unsafeFlags.terminationGracePeriod to true to disable this check")
 		}
 	}
-	if m.PodDisruptionBudget == nil {
-		defaultMaxUnavailable := intstr.FromInt(1)
-		m.PodDisruptionBudget = &PodDisruptionBudgetSpec{MaxUnavailable: &defaultMaxUnavailable}
-	}
-
 	return nil
 }
 

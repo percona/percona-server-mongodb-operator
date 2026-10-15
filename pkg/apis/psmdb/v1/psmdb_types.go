@@ -518,7 +518,6 @@ type MultiAZ struct {
 	ServiceAccountName            string                            `json:"serviceAccountName,omitempty"`
 	Annotations                   map[string]string                 `json:"annotations,omitempty"`
 	Labels                        map[string]string                 `json:"labels,omitempty"`
-	PodDisruptionBudget           *PodDisruptionBudgetSpec          `json:"podDisruptionBudget,omitempty"`
 	TerminationGracePeriodSeconds *int64                            `json:"terminationGracePeriodSeconds,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 	HookScript                    HookScriptSpec                    `json:"hookScript,omitempty"`
@@ -647,6 +646,9 @@ type NonVotingSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ `json:",inline"`
+
+	// Deprecated: setting this does nothing, only preserved for backward compatibility of the API
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 }
 
 func (nv *NonVotingSpec) GetSize() int32 {
@@ -667,6 +669,9 @@ type HiddenSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 
 	MultiAZ `json:",inline"`
+
+	// Deprecated: setting this does nothing, only preserved for backward compatibility of the API
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 }
 
 func (h *HiddenSpec) GetSize() int32 {
@@ -914,6 +919,7 @@ type ReplsetSpec struct {
 	ReplsetOverrides         ReplsetOverrides             `json:"replsetOverrides,omitempty"`
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+	PodDisruptionBudget      *PodDisruptionBudgetSpec     `json:"podDisruptionBudget,omitempty"`
 
 	// The following fields may be overridden per-instance.
 
@@ -1195,6 +1201,7 @@ type MongosSpec struct {
 	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
 	Logs                     *MongosLogsSpec            `json:"logs,omitempty"`
+	PodDisruptionBudget      *PodDisruptionBudgetSpec   `json:"podDisruptionBudget,omitempty"`
 }
 
 type MongosLogsSpec struct {
@@ -1630,6 +1637,9 @@ type Arbiter struct {
 
 	Enabled bool  `json:"enabled"`
 	Size    int32 `json:"size"`
+
+	// Deprecated: setting this does nothing, only preserved for backward compatibility of the API
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 }
 
 func (a *Arbiter) GetSize() int32 {

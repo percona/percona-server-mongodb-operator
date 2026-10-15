@@ -288,6 +288,228 @@ func TestInstanceCounts(t *testing.T) {
 	}
 }
 
+func TestMaxUnavailablePods(t *testing.T) {
+	tests := map[string]struct {
+		rs   *ReplsetSpec
+		want int32
+	}{
+		"one voter can lose nobody": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 1, nil)}},
+			want: 0,
+		},
+		"two voters can lose nobody": {
+			// A majority of two is two, so the second pod is already load-bearing.
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 2, nil)}},
+			want: 0,
+		},
+		"three voters can lose one": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 3, nil)}},
+			want: 1,
+		},
+		"four voters can still only lose one": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 4, nil)}},
+			want: 1,
+		},
+		"five voters can lose two": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 5, nil)}},
+			want: 2,
+		},
+		"seven voters can lose three": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{declared("hot", 7, nil)}},
+			want: 3,
+		},
+
+		"an implicit arbiter votes": {
+			// mongod 3 + arbiter 1 is four voters.
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				bare(ReservedGroupMongod, 3),
+				bare(ReservedGroupArbiter, 1),
+			}},
+			want: 1,
+		},
+		"an implicit nonVoting group does not vote": {
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				bare(ReservedGroupMongod, 3),
+				bare(ReservedGroupNonVoting, 2),
+			}},
+			want: 1,
+		},
+		"an implicit hidden group votes": {
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				bare(ReservedGroupMongod, 3),
+				bare(ReservedGroupHidden, 1),
+			}},
+			want: 1,
+		},
+		"an explicitly non-voting group is excluded": {
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				declared("hot", 3, nil),
+				declared("an", 2, &MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))}),
+			}},
+			want: 1,
+		},
+		"a group scaled to zero contributes no voters": {
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				declared("hot", 3, nil),
+				declared("cold", 0, nil),
+			}},
+			want: 1,
+		},
+		"external voters do not raise the budget": {
+			rs: &ReplsetSpec{Name: "rs0",
+				Instances: []InstanceSpec{declared("hot", 3, nil)},
+				ExternalNodes: []*ExternalNode{
+					{Host: "ext1", Votes: 1, Priority: 2},
+					{Host: "ext2", Votes: 1, Priority: 2},
+				},
+			},
+			want: 1,
+		},
+		"an external arbiter does not raise the budget": {
+			rs: &ReplsetSpec{Name: "rs0",
+				Instances:     []InstanceSpec{declared("hot", 3, nil)},
+				ExternalNodes: []*ExternalNode{{Host: "ext1", Votes: 1, ArbiterOnly: true}},
+			},
+			want: 1,
+		},
+		"a non-voting external node is in neither count": {
+			rs: &ReplsetSpec{Name: "rs0",
+				Instances:     []InstanceSpec{declared("hot", 3, nil)},
+				ExternalNodes: []*ExternalNode{{Host: "ext1", Votes: 0}},
+			},
+			want: 1,
+		},
+		"a nil external entry is skipped": {
+			rs: &ReplsetSpec{Name: "rs0",
+				Instances:     []InstanceSpec{declared("hot", 3, nil)},
+				ExternalNodes: []*ExternalNode{nil},
+			},
+			want: 1,
+		},
+		"no voting pods at all": {
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				declared("an", 3, &MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))}),
+			}},
+			want: 0,
+		},
+		"every voter is external": {
+			rs: &ReplsetSpec{Name: "rs0",
+				Instances: []InstanceSpec{
+					declared("an", 1, &MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))}),
+				},
+				ExternalNodes: []*ExternalNode{
+					{Host: "ext1", Votes: 1}, {Host: "ext2", Votes: 1}, {Host: "ext3", Votes: 1},
+				},
+			},
+			want: 0,
+		},
+		"an empty instance list": {
+			rs:   &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{}},
+			want: 0,
+		},
+		"at least one electeable primary must be available": {
+			// 4+3 voters, 4 is majority so 3 can be unavailable, but the 3 unavailable could be all electable primaries.
+			// So the maximum unavailable is limited to 2.
+			rs: &ReplsetSpec{Name: "rs0", Instances: []InstanceSpec{
+				declared("hot", 3, &MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(1))}),
+				declared("cold", 4, &MemberConfigSpec{Votes: new(int32(1)), Priority: new(int32(0))}),
+			}},
+			want: 2,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.rs.maxUnavailablePods()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMaxUnavailablePodsLegacyReplset(t *testing.T) {
+	tests := map[string]struct {
+		rs   *ReplsetSpec
+		want int32
+	}{
+		"the stock three-node replica set can lose one": {
+			rs:   &ReplsetSpec{Name: "rs0", Size: new(int32(3))},
+			want: 1,
+		},
+		"five mongods can lose two": {
+			rs:   &ReplsetSpec{Name: "rs0", Size: new(int32(5))},
+			want: 2,
+		},
+		"a single mongod can lose nobody": {
+			rs:   &ReplsetSpec{Name: "rs0", Size: new(int32(1))},
+			want: 0,
+		},
+		"nine mongods still only lose three": {
+			// SetVotes seats at most maxVotingMembers, so the four members past
+			// the seventh carry no vote and buy no extra room.
+			rs:   &ReplsetSpec{Name: "rs0", Size: new(int32(9))},
+			want: 3,
+		},
+
+		"an arbiter votes": {
+			// Four mongods and an arbiter is five voters, so two may go. The
+			// arbiter holds no data and cannot be elected, but it does vote.
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(4)),
+				Arbiter: Arbiter{Enabled: true, Size: 1}},
+			want: 2,
+		},
+		"hidden members vote": {
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(3)),
+				Hidden: HiddenSpec{Enabled: true, Size: 2}},
+			want: 2,
+		},
+		"nonVoting members do not vote": {
+			// Five pods, but only the three mongods vote, so the budget is the
+			// three-node one. The two nonVoting pods are still covered by the
+			// budget -- a PDB counts pods, not votes.
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(3)),
+				NonVoting: NonVotingSpec{Enabled: true, Size: 2}},
+			want: 1,
+		},
+		"every legacy role at once": {
+			// Three mongods and an arbiter vote, the two nonVoting pods do not:
+			// four voters, majority three.
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(3)),
+				Arbiter:   Arbiter{Enabled: true, Size: 1},
+				NonVoting: NonVotingSpec{Enabled: true, Size: 2}},
+			want: 1,
+		},
+		"a disabled section contributes nothing": {
+			// Size survives a round trip through the API even when enabled is
+			// false, so the budget has to read GetSize(), not Size.
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(3)),
+				Arbiter:   Arbiter{Enabled: false, Size: 1},
+				Hidden:    HiddenSpec{Enabled: false, Size: 4},
+				NonVoting: NonVotingSpec{Enabled: false, Size: 4}},
+			want: 1,
+		},
+
+		"a majority of hidden members cannot elect": {
+			// Five voters would allow two, but only the one mongod can take the
+			// primary. Evicting it leaves a quorum that cannot hold an election.
+			rs: &ReplsetSpec{Name: "rs0", Size: new(int32(1)),
+				Hidden: HiddenSpec{Enabled: true, Size: 4}},
+			want: 0,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.False(t, tt.rs.InstanceMode(),
+				"the counts below come from the legacy fields, so pin the mode first")
+
+			got := tt.rs.maxUnavailablePods()
+			assert.Equal(t, tt.want, got)
+			assert.GreaterOrEqual(t, got, int32(0),
+				"maxUnavailable feeds intstr.FromInt32 and must never go negative")
+		})
+	}
+}
+
 func TestCheckSafeInstanceDefaults(t *testing.T) {
 	tlsModeConf := MongoConfiguration("net:\n  tls:\n    mode: requireTLS")
 

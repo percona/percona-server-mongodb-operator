@@ -117,10 +117,8 @@ spec:
 
   replsets:
   - name: rs0
-    # size is omitted: a replica set declares either size (legacy layout) or
-    # instances[], and each instance carries its own replicas. volumeSpec,
-    # arbiter, nonvoting and hidden must be absent here too -- an instance owns
-    # its storage, and the legacy roles become instances with reserved names.
+#    podDisruptionBudget:
+#      maxUnavailable: 1
     instances:
     # "mongod", "nonVoting", "arbiter" and "hidden" are reserved names that
     # reproduce the Kubernetes objects the legacy blocks produced: same
@@ -139,8 +137,6 @@ spec:
 #          workload: general
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
-      podDisruptionBudget:
-        maxUnavailable: 1
       resources:
         limits:
           cpu: "600m"
@@ -165,8 +161,6 @@ spec:
 #          workload: general
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
-      podDisruptionBudget:
-        maxUnavailable: 1
       resources:
         limits:
           cpu: "600m"
@@ -422,8 +416,8 @@ spec:
 #        command: ["/bin/sh"]
 #        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #        name: rs-sidecar-1
-      podDisruptionBudget:
-        maxUnavailable: 1
+#      podDisruptionBudget:
+#        maxUnavailable: 1
       expose:
         enabled: false
         type: ClusterIP
@@ -543,8 +537,8 @@ spec:
 #        command: ["/bin/sh"]
 #        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #        name: rs-sidecar-1
-      podDisruptionBudget:
-        maxUnavailable: 1
+#      podDisruptionBudget:
+#        maxUnavailable: 1
       resources:
         limits:
           cpu: "600m"

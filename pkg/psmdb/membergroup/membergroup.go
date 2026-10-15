@@ -83,11 +83,6 @@ type Group struct {
 	Source SourceRef
 }
 
-// PDB returns the pod disruption budget spec for the group, or nil.
-func (g *Group) PDB() *api.PodDisruptionBudgetSpec {
-	return g.MultiAZ.PodDisruptionBudget
-}
-
 // DesiredPodNames returns the pod names for ordinals [0, Replicas).
 func (g *Group) DesiredPodNames(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []string {
 	names := make([]string, 0, g.Replicas)

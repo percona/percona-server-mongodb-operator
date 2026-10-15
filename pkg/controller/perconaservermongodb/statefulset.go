@@ -2,16 +2,19 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -67,16 +70,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
 
-	err = r.reconcilePDB(ctx, cr, group.PDB(), group.Labels, cr.Namespace, sfs)
-	if err != nil {
-		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
-	}
-
 	if err := r.smartUpdate(ctx, cr, sfs, rs, group); err != nil {
 		return nil, errors.Wrap(err, "failed to run smartUpdate")
 	}
 
 	return sfs, nil
+}
+
+// cleanupStalePDBs deletes any per-component PDBs that the operator used to create (this was a bug).
+// The operator instead creates per-replset PDBs, however we need the old ones deleted first.
+func (r *ReconcilePerconaServerMongoDB) cleanupStalePDBs(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+) error {
+	toDelete := []string{
+		fmt.Sprintf("%s-%s-%s", cr.Name, naming.ComponentArbiter, rs.Name),
+		fmt.Sprintf("%s-%s-%s", cr.Name, naming.ComponentHidden, rs.Name),
+		fmt.Sprintf("%s-%s-%s", cr.Name, naming.ComponentMongod, rs.Name),
+		fmt.Sprintf("%s-%s-%s", cr.Name, naming.ComponentNonVoting, rs.Name),
+		fmt.Sprintf("%s-%s-%s", cr.Name, naming.ComponentConfigSrv, naming.ComponentConfigSrv),
+		fmt.Sprintf("%s-%s-", cr.Name, naming.ComponentMongos),
+	}
+
+	for _, pdbName := range toDelete {
+		pdb := &policyv1.PodDisruptionBudget{
+			Name:      pdbName,
+			Namespace: cr.Namespace,
+		}
+
+		if err := k8s.DeleteIfExists(ctx, r.client, pdb); err != nil {
+			return errors.Wrapf(err, "delete stale PDB %s", pdbName)
+		}
+	}
+	return nil
+
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(

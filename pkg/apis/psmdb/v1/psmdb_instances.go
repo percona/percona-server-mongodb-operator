@@ -272,9 +272,6 @@ func (i *InstanceSpec) inheritMultiAZ(rs *ReplsetSpec) {
 	if i.Labels == nil && rs.Labels != nil {
 		i.Labels = maps.Clone(rs.Labels)
 	}
-	if i.PodDisruptionBudget == nil && rs.PodDisruptionBudget != nil {
-		i.PodDisruptionBudget = rs.PodDisruptionBudget.DeepCopy()
-	}
 	if i.TerminationGracePeriodSeconds == nil && rs.TerminationGracePeriodSeconds != nil {
 		i.TerminationGracePeriodSeconds = new(int64(*rs.TerminationGracePeriodSeconds))
 	}
@@ -372,6 +369,15 @@ func (r *ReplsetSpec) instanceCounts() (members, voters, dataBearingVoters, prim
 		}
 	}
 
+	extMembers, extVoters, extDataBearingVoters := r.externalInstanceCounts()
+	members += extMembers
+	voters += extVoters
+	dataBearingVoters += extDataBearingVoters
+
+	return members, voters, dataBearingVoters, primaryEligible
+}
+
+func (r *ReplsetSpec) externalInstanceCounts() (members, voters, dataBearingVoters int32) {
 	for _, ext := range r.ExternalNodes {
 		if ext == nil {
 			continue
@@ -384,8 +390,31 @@ func (r *ReplsetSpec) instanceCounts() (members, voters, dataBearingVoters, prim
 			}
 		}
 	}
+	return members, voters, dataBearingVoters
+}
 
-	return members, voters, dataBearingVoters, primaryEligible
+func (r *ReplsetSpec) countVotingPods() int32 {
+	if r.InstanceMode() {
+		_, voters, _, _ := r.instanceCounts()
+		_, extVoters, _ := r.externalInstanceCounts() // exclude external nodes, they're not pods here
+		return voters - extVoters
+	}
+	return r.GetMongodSize() + r.Arbiter.GetSize() + r.Hidden.GetSize()
+}
+
+func (r *ReplsetSpec) maxUnavailablePods() int32 {
+	voters := min(r.countVotingPods(), maxVotingMembers)
+	byQuorum := voters - (voters/2 + 1)
+	byElectability := r.countElectablePods() - 1 // leave one electable pod at least
+	return max(min(byQuorum, byElectability), 0)
+}
+
+func (r *ReplsetSpec) countElectablePods() int32 {
+	if r.InstanceMode() {
+		_, _, _, electable := r.instanceCounts()
+		return electable
+	}
+	return r.GetMongodSize()
 }
 
 func DerivedStatefulSetName(clusterName, rsName, groupName string) string {
