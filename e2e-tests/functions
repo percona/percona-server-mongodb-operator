@@ -112,7 +112,7 @@ kubectl_bin() {
 		kubectl "${args[@]}" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [[ ${exit_status} == 0 || ${attempt} == 9 ]]; then
+		if [[ ${exit_status} == 0 || ${attempt} == 9 ]] || grep -q 'Error from server (NotFound)' "$LAST_ERR"; then
 			break
 		fi
 
