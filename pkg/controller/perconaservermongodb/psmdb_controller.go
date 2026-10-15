@@ -449,6 +449,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	err = r.updateMongosFirstIfTLSOutdated(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "update mongos first if TLS is outdated")
+	}
+
 	err = r.ensureSecurityKeys(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
