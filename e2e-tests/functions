@@ -3,7 +3,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
 # keep in sync with TRANSIENT_ERRORS in lib/kubectl.py
-KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request|Unable to connect to the server'
+KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request|Unable to connect to the server|connection reset by peer'
 
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"

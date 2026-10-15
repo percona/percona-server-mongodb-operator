@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 TRANSIENT_ERRORS = re.compile(
     r"ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout"
     r"|etcdserver: request timed out|the server is currently unable to handle the request"
-    r"|Unable to connect to the server"
+    r"|Unable to connect to the server|connection reset by peer"
 )
 
 
