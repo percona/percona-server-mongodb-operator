@@ -11,8 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -331,6 +332,15 @@ func TestRatioScaledLimitsDoesNotMutateInput(t *testing.T) {
 // VerticalPodAutoscaler kind or does not, modelling a cluster with or without the
 // VPA CRD installed. The rest.Config points nowhere: these tests only exercise the
 // mapping stage, which happens before any request is sent.
+// vpaScheme knows the VerticalPodAutoscaler kind, which the read decodes into.
+func vpaScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(s))
+	require.NoError(t, vpav1.AddToScheme(s))
+	return s
+}
+
 func vpaTestClient(t *testing.T, crdInstalled bool) client.Client {
 	t.Helper()
 
@@ -344,11 +354,18 @@ func vpaTestClient(t *testing.T, crdInstalled bool) client.Client {
 	}
 
 	c, err := client.New(&rest.Config{Host: "http://127.0.0.1:1"}, client.Options{
-		Scheme: scheme.Scheme,
+		Scheme: vpaScheme(t),
 		Mapper: mapper,
 	})
 	require.NoError(t, err)
 	return c
+}
+
+// vpaReconciler wires one client as both the kind resolver and the reader.
+func vpaReconciler(t *testing.T, crdInstalled bool) *ReconcilePerconaServerMongoDB {
+	t.Helper()
+	c := vpaTestClient(t, crdInstalled)
+	return &ReconcilePerconaServerMongoDB{client: c, apiReader: c}
 }
 
 // vpaTestCR returns a CR with VPA enabled and no components, so reconcileVPARecommendations
@@ -364,7 +381,7 @@ func vpaTestCR(enabled bool) *api.PerconaServerMongoDB {
 }
 
 func TestReconcileVPACRDNotInstalled(t *testing.T) {
-	r := &ReconcilePerconaServerMongoDB{client: vpaTestClient(t, false)}
+	r := vpaReconciler(t, false)
 	cr := vpaTestCR(true)
 
 	// A missing CRD must not fail the reconcile: VPA is an optional integration.
@@ -381,7 +398,7 @@ func TestReconcileVPACRDNotInstalled(t *testing.T) {
 }
 
 func TestReconcileVPACRDInstalled(t *testing.T) {
-	r := &ReconcilePerconaServerMongoDB{client: vpaTestClient(t, true)}
+	r := vpaReconciler(t, true)
 	cr := vpaTestCR(true)
 
 	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
@@ -393,7 +410,7 @@ func TestReconcileVPACRDInstalled(t *testing.T) {
 }
 
 func TestReconcileVPADisabledClearsCondition(t *testing.T) {
-	r := &ReconcilePerconaServerMongoDB{client: vpaTestClient(t, false)}
+	r := vpaReconciler(t, false)
 
 	// Start from a cluster that previously reported the missing CRD.
 	cr := vpaTestCR(true)
@@ -407,7 +424,7 @@ func TestReconcileVPADisabledClearsCondition(t *testing.T) {
 }
 
 func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
-	r := &ReconcilePerconaServerMongoDB{client: vpaTestClient(t, false)}
+	r := vpaReconciler(t, false)
 
 	// A CRD uninstalled between the reconcile-level check and this read surfaces as
 	// NoKindMatchError, which carries no NotFound status reason and so is not covered
@@ -421,28 +438,20 @@ func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
 
 // vpaObject builds a VerticalPodAutoscaler with the given container recommendations.
 // A nil map omits status.recommendation entirely.
-func vpaObject(name string, recs map[string]corev1.ResourceList) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(vpaGVK)
-	obj.SetName(name)
-	obj.SetNamespace("ns")
+func vpaObject(name string, recs map[string]corev1.ResourceList) *vpav1.VerticalPodAutoscaler {
+	obj := &vpav1.VerticalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+	}
 	if recs == nil {
 		return obj
 	}
-	items := make([]any, 0, len(recs))
+	obj.Status.Recommendation = &vpav1.RecommendedPodResources{}
 	for container, rl := range recs {
-		target := map[string]any{}
-		for res, q := range rl {
-			target[string(res)] = q.String()
-		}
-		items = append(items, map[string]any{
-			"containerName": container,
-			"target":        target,
-		})
+		obj.Status.Recommendation.ContainerRecommendations = append(
+			obj.Status.Recommendation.ContainerRecommendations,
+			vpav1.RecommendedContainerResources{ContainerName: container, Target: rl},
+		)
 	}
-	_ = unstructured.SetNestedSlice(
-		obj.Object, items, "status", "recommendation", "containerRecommendations",
-	)
 	return obj
 }
 
@@ -450,8 +459,10 @@ func vpaReaderWith(t *testing.T, objs ...client.Object) *ReconcilePerconaServerM
 	t.Helper()
 	m := meta.NewDefaultRESTMapper([]schema.GroupVersion{vpaGVK.GroupVersion()})
 	m.Add(vpaGVK, meta.RESTScopeNamespace)
-	c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRESTMapper(m).WithObjects(objs...).Build()
-	return &ReconcilePerconaServerMongoDB{client: c}
+	c := fake.NewClientBuilder().WithScheme(vpaScheme(t)).WithRESTMapper(m).WithObjects(objs...).Build()
+
+	// client resolves the kind, apiReader serves the reads.
+	return &ReconcilePerconaServerMongoDB{client: c, apiReader: c}
 }
 
 func TestReadVPARecommendationStates(t *testing.T) {

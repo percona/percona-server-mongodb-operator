@@ -8,13 +8,12 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -24,11 +23,7 @@ import (
 
 // vpaGVK is the GroupVersionKind for VerticalPodAutoscaler objects.
 // The operator never creates these — it only reads them.
-var vpaGVK = schema.GroupVersionKind{
-	Group:   "autoscaling.k8s.io",
-	Version: "v1",
-	Kind:    "VerticalPodAutoscaler",
-}
+var vpaGVK = vpav1.SchemeGroupVersion.WithKind("VerticalPodAutoscaler")
 
 // reconcileVPARecommendations reads VPA recommendations for all replsets and mongos, records them in
 // status, and (when updateMode=Auto) patches CR resources and triggers SmartUpdate.
@@ -247,8 +242,8 @@ const (
 	// vpaStateOK — a recommendation for the requested container was read.
 	vpaStateOK vpaReadState = "OK"
 
-	// vpaStateObjectNotFound — the VPA object does not exist. Normal while an
-	// external tool has yet to create it; otherwise usually a wrong objectName.
+	// vpaStateObjectNotFound — the VPA object does not exist. Either nobody has
+	// written one for this component, or objectName names one that is not there.
 	vpaStateObjectNotFound vpaReadState = "ObjectNotFound"
 
 	// vpaStateNoRecommendation — the object exists but carries no recommendation.
@@ -301,73 +296,38 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 ) (vpaReadResult, error) {
 	res := vpaReadResult{vpaName: vpaName}
 
-	vpa := &unstructured.Unstructured{}
-	vpa.SetGroupVersionKind(vpaGVK)
+	vpa := new(vpav1.VerticalPodAutoscaler)
 
 	err := r.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: vpaName}, vpa)
 	if err != nil {
-		// VPA object not yet created by the external tool — normal during initial setup.
-		if client.IgnoreNotFound(err) == nil {
-			res.state = vpaStateObjectNotFound
-			return res, nil
-		}
-		// The CRD can be uninstalled between the check in reconcileVPARecommendations and this read.
-		// IgnoreNotFound does not cover that: a missing kind surfaces as NoKindMatchError,
-		// which carries no NotFound status reason.
-		if meta.IsNoMatchError(err) {
+		if k8serrors.IsNotFound(err) || meta.IsNoMatchError(err) {
 			res.state = vpaStateObjectNotFound
 			return res, nil
 		}
 		return res, errors.Wrap(err, "get VPA object")
 	}
 
-	// Navigate: .status.recommendation.containerRecommendations[]
-	recs, found, err := unstructured.NestedSlice(vpa.Object,
-		"status", "recommendation", "containerRecommendations")
-	if err != nil || !found || len(recs) == 0 {
+	if vpa.Status.Recommendation == nil || len(vpa.Status.Recommendation.ContainerRecommendations) == 0 {
 		res.state = vpaStateNoRecommendation
 		return res, nil
 	}
 
-	for _, item := range recs {
-		rec, ok := item.(map[string]any)
-		if !ok {
+	for _, rec := range vpa.Status.Recommendation.ContainerRecommendations {
+		res.containers = append(res.containers, rec.ContainerName)
+		if rec.ContainerName != containerName {
 			continue
 		}
-		name, _, _ := unstructured.NestedString(rec, "containerName")
-		res.containers = append(res.containers, name)
-		if name != containerName {
-			continue
-		}
-		target, found, _ := unstructured.NestedMap(rec, "target")
-		if !found {
+		if len(rec.Target) == 0 {
 			res.state = vpaStateNoRecommendation
 			return res, nil
 		}
-		res.rec = parseResourceList(target)
+		res.rec = rec.Target.DeepCopy()
 		res.state = vpaStateOK
 		return res, nil
 	}
 
 	res.state = vpaStateContainerNotFound
 	return res, nil
-}
-
-// parseResourceList converts an unstructured map (from VPA status) to corev1.ResourceList.
-func parseResourceList(m map[string]any) corev1.ResourceList {
-	rl := make(corev1.ResourceList, len(m))
-	for k, v := range m {
-		str, ok := v.(string)
-		if !ok {
-			continue
-		}
-		q, err := resource.ParseQuantity(str)
-		if err != nil {
-			continue
-		}
-		rl[corev1.ResourceName(k)] = q
-	}
-	return rl
 }
 
 // clampRecommendation enforces minAllowed/maxAllowed on a recommendation.
