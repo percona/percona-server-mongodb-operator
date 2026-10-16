@@ -33,6 +33,7 @@ var vpaGVK = vpav1.SchemeGroupVersion.WithKind("VerticalPodAutoscaler")
 func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled {
 		cr.Status.RemoveCondition(api.ConditionTypeVPAReady)
+		cr.Status.VPAStatus = nil
 		return nil
 	}
 
@@ -92,7 +93,44 @@ func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.
 		}
 	}
 
+	cleanupStaleVPAStatus(cr)
+
 	return nil
+}
+
+func cleanupStaleVPAStatus(cr *api.PerconaServerMongoDB) {
+	live := map[string]struct{}{}
+	keep := func(rsName, component string) {
+		live[naming.VPAStatusKey(rsName, component)] = struct{}{}
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if rs == nil {
+			continue
+		}
+
+		keep(rs.Name, naming.ComponentMongod)
+		if rs.NonVoting.Enabled {
+			keep(rs.Name, naming.ComponentNonVoting)
+		}
+		if rs.Hidden.Enabled {
+			keep(rs.Name, naming.ComponentHidden)
+		}
+	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		keep(cr.Spec.Sharding.ConfigsvrReplSet.Name, naming.ComponentConfigSrv)
+	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
+		keep("", naming.ComponentMongos)
+	}
+
+	for key := range cr.Status.VPAStatus {
+		if _, ok := live[key]; !ok {
+			delete(cr.Status.VPAStatus, key)
+		}
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
