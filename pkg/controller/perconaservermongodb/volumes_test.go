@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -291,6 +292,22 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 		Namespace: namespace,
 		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "mongod",
+							Image: "percona/percona-server-mongodb",
+						},
+					},
+				},
+			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					Name: config.MongodDataVolClaimName,
