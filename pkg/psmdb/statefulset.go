@@ -662,10 +662,10 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 func PBMClientTLSVolume(cr *api.PerconaServerMongoDB) corev1.Volume {
 	return corev1.Volume{
 		Name: naming.PBMClientTLSVolumeName,
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+		Secret: &corev1.SecretVolumeSource{
 			SecretName:  tls.CertificatePBMClient(cr).SecretName(),
 			DefaultMode: &secretFileMode,
-		}},
+		},
 	}
 }
 

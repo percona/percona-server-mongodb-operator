@@ -434,7 +434,7 @@ func TestPBMClientCertificate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			cr := &api.PerconaServerMongoDB{
-				ObjectMeta: metav1.ObjectMeta{Name: "psmdb-mock", Namespace: "psmdb"},
+				Name: "psmdb-mock", Namespace: "psmdb",
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: version.Version(),
 					Secrets:   &api.SecretsSpec{SSL: "server-tls"},

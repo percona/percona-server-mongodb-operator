@@ -132,11 +132,9 @@ func (c *pbmClientCert) Object() *cm.Certificate {
 	labels := naming.ClusterLabels(cr)
 
 	return &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.Name(),
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
+		Name:      c.Name(),
+		Namespace: cr.Namespace,
+		Labels:    labels,
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
 			Subject: &cm.X509Subject{

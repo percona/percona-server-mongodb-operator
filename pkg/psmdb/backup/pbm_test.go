@@ -12,7 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
 	"sigs.k8s.io/yaml"
@@ -35,7 +34,7 @@ import (
 
 func TestGetMongoURIClientCertificate(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "pbm-uri-test", Namespace: "pbm-uri-test"},
+		Name: "pbm-uri-test", Namespace: "pbm-uri-test",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets:   &api.SecretsSpec{SSL: "server-tls"},
@@ -45,14 +44,14 @@ func TestGetMongoURIClientCertificate(t *testing.T) {
 	require.NoError(t, err)
 
 	users := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: api.UserSecretName(cr), Namespace: cr.Namespace},
+		Name: api.UserSecretName(cr), Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"MONGODB_BACKUP_USER":     []byte("backup"),
 			"MONGODB_BACKUP_PASSWORD": []byte("password"),
 		},
 	}
 	server := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.Secrets.SSL, Namespace: cr.Namespace},
+		Name: cr.Spec.Secrets.SSL, Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"tls.key": []byte("server-key\n"),
 			"tls.crt": []byte("server-cert\n"),
@@ -61,12 +60,10 @@ func TestGetMongoURIClientCertificate(t *testing.T) {
 	}
 	clientCertName := psmdbtls.CertificatePBMClient(cr).Name()
 	clientTLS := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        clientCertName,
-			Namespace:   cr.Namespace,
-			Annotations: map[string]string{cm.CertificateNameKey: clientCertName},
-		},
-		Data: map[string][]byte{"tls.key": clientKey, "tls.crt": clientCert},
+		Name:        clientCertName,
+		Namespace:   cr.Namespace,
+		Annotations: map[string]string{cm.CertificateNameKey: clientCertName},
+		Data:        map[string][]byte{"tls.key": clientKey, "tls.crt": clientCert},
 	}
 
 	readTLSFiles := func(t *testing.T, secrets ...client.Object) ([]byte, []byte, error) {
@@ -136,7 +133,7 @@ func TestGetMongoURIClientCertificate(t *testing.T) {
 		manual := clientTLS.DeepCopy()
 		manual.Annotations = nil
 		cr.UID = "cluster-uid"
-		manual.OwnerReferences = []metav1.OwnerReference{{APIVersion: api.SchemeGroupVersion.String(), Kind: "PerconaServerMongoDB", Name: cr.Name, UID: cr.UID, Controller: ptr.To(true)}}
+		manual.OwnerReferences = []metav1.OwnerReference{{APIVersion: api.SchemeGroupVersion.String(), Kind: "PerconaServerMongoDB", Name: cr.Name, UID: cr.UID, Controller: new(true)}}
 		pem, ca, err := readTLSFiles(t, manual)
 		require.NoError(t, err)
 		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
