@@ -2,14 +2,18 @@ package perconaservermongodbrestore
 
 import (
 	"errors"
+	"fmt"
+	"maps"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -346,6 +350,26 @@ func TestIsTransientNetworkError(t *testing.T) {
 			err:  errors.New("read tcp 10.0.0.1:1234->10.0.0.2:443: read: connection reset by peer"),
 			want: true,
 		},
+		"connection refused": {
+			err:  errors.New("dial tcp 10.0.0.2:443: connect: connection refused"),
+			want: true,
+		},
+		"i/o timeout": {
+			err:  errors.New("dial tcp 10.0.0.2:443: i/o timeout"),
+			want: true,
+		},
+		"tls handshake timeout": {
+			err:  errors.New("net/http: TLS handshake timeout"),
+			want: true,
+		},
+		"kubelet unreachable": {
+			err:  errors.New("error dialing backend: dial tcp 10.0.0.3:10250: connect: no route to host"),
+			want: true,
+		},
+		"exec upgrade failure": {
+			err:  errors.New("unable to upgrade connection: container not found"),
+			want: true,
+		},
 		"pbm error": {
 			err:  errors.New("describe restore stderr: Error: get restore meta: not found stdout: "),
 			want: false,
@@ -355,6 +379,138 @@ func TestIsTransientNetworkError(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tt.want, isTransientNetworkError(tt.err))
+		})
+	}
+}
+
+func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
+	const ns = "some-ns"
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "some-name",
+		Namespace: ns,
+	}
+	rs := &psmdbv1.ReplsetSpec{Name: "rs0"}
+	ls := naming.RSLabels(cluster, rs)
+	ls[naming.LabelKubernetesComponent] = naming.ComponentMongod
+
+	newSts := func() *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Name:       naming.MongodStatefulSetName(cluster, rs),
+			Namespace:  ns,
+			Generation: 2,
+			Annotations: map[string]string{
+				psmdbv1.AnnotationRestoreInProgress: "true",
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: new(int32(3)),
+				Selector: &metav1.LabelSelector{MatchLabels: ls},
+			},
+			Status: appsv1.StatefulSetStatus{
+				ObservedGeneration: 2,
+				Replicas:           3,
+				ReadyReplicas:      3,
+				UpdateRevision:     "rev-2",
+			},
+		}
+	}
+	newPod := func(i int) *corev1.Pod {
+		labels := maps.Clone(ls)
+		labels["controller-revision-hash"] = "rev-2"
+		return &corev1.Pod{
+			Name:      fmt.Sprintf("%s-%d", naming.MongodStatefulSetName(cluster, rs), i),
+			Namespace: ns,
+			Labels:    labels,
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: naming.ComponentMongod}},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		modify    func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod
+		wantReady bool
+	}{
+		"ready": {
+			wantReady: true,
+		},
+		"restore annotation missing": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				sts.Annotations = nil
+				return pods
+			},
+		},
+		"not all replicas ready": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				sts.Status.ReadyReplicas = 2
+				return pods
+			},
+		},
+		"statefulset spec change not observed yet": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				sts.Status.ObservedGeneration = 1
+				return pods
+			},
+		},
+		"pod not created yet": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				return pods[:2]
+			},
+		},
+		"pod has old revision": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				pods[1].Labels["controller-revision-hash"] = "rev-1"
+				return pods
+			},
+		},
+		"pod is not ready": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				pods[2].Status.Conditions = nil
+				return pods
+			},
+		},
+		"pod still has backup-agent container": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				pods[0].Spec.Containers = append(pods[0].Spec.Containers, corev1.Container{Name: naming.ContainerBackupAgent})
+				return pods
+			},
+		},
+		"pods of other statefulsets are ignored": {
+			modify: func(sts *appsv1.StatefulSet, pods []*corev1.Pod) []*corev1.Pod {
+				other := newPod(0)
+				other.Name = naming.NonVotingStatefulSetName(cluster, rs) + "-0"
+				other.Labels[naming.LabelKubernetesComponent] = naming.ComponentNonVoting
+				other.Labels["controller-revision-hash"] = "other-rev"
+				other.Status.Conditions = nil
+				return append(pods, other)
+			},
+			wantReady: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			sts := newSts()
+			pods := []*corev1.Pod{newPod(0), newPod(1), newPod(2)}
+			if tt.modify != nil {
+				pods = tt.modify(sts, pods)
+			}
+
+			objs := []client.Object{cluster, sts}
+			for _, pod := range pods {
+				objs = append(objs, pod)
+			}
+			r := fakeReconciler(objs...)
+
+			ready, err := r.checkStatefulSetForPhysicalRestore(t.Context(), cluster, rs, naming.ComponentMongod)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantReady, ready)
 		})
 	}
 }
