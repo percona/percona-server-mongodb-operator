@@ -1,7 +1,6 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -246,7 +245,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 					return errors.Wrap(err, "get secret")
 				}
 
-				if bytes.Equal(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
+				if tls.EqualPEM(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
 					continue
 				}
 
@@ -389,7 +388,7 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 		}
 
 		// If secret was already updated, we should delete the old one
-		if bytes.Equal(mergedCA, secret.Data["ca.crt"]) {
+		if tls.EqualPEM(mergedCA, secret.Data["ca.crt"]) {
 			if err := r.client.Delete(ctx, oldSecret); err != nil {
 				return err
 			}
