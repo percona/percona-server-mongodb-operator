@@ -3,6 +3,7 @@ package perconaservermongodbclustersync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,13 +11,22 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 )
 
 func TestApplyObservedStatus(t *testing.T) {
@@ -98,7 +108,8 @@ func TestApplyObservedStatus(t *testing.T) {
 			s := tc.initial.DeepCopy()
 			before := s.StartedAt
 
-			applyObservedStatus(s, tc.observed)
+			const generation = 7
+			applyObservedStatus(s, tc.observed, generation)
 
 			assert.Equal(t, tc.wantState, s.State)
 			assert.Equal(t, tc.wantLag, s.LagTimeSeconds)
@@ -117,6 +128,8 @@ func TestApplyObservedStatus(t *testing.T) {
 				got := meta.FindStatusCondition(s.Conditions, ct)
 				require.NotNil(t, got, "expected condition %s to be set", ct)
 				assert.Equal(t, want, got.Status, "condition %s status mismatch", ct)
+				assert.Equal(t, int64(generation), got.ObservedGeneration,
+					"condition %s must say which spec generation it describes", ct)
 			}
 		})
 	}
@@ -132,7 +145,10 @@ type fakePCSM struct {
 	statusResp client.Status
 	statusErr  error
 	actionErr  error
+	active     string
 }
+
+func (f *fakePCSM) ActiveInstance() string { return f.active }
 
 func (f *fakePCSM) Status(_ context.Context) (client.Status, error) {
 	return f.statusResp, f.statusErr
@@ -282,7 +298,7 @@ func TestReconcileModeInheritedFinalized(t *testing.T) {
 
 			f := &fakePCSM{statusResp: tc.observed}
 
-			err := r.reconcileMode(context.Background(), cr, f)
+			err := r.reconcileMode(context.Background(), cr, f, 1)
 			require.NoError(t, err)
 
 			if tc.wantStarted {
@@ -290,6 +306,367 @@ func TestReconcileModeInheritedFinalized(t *testing.T) {
 			} else {
 				assert.Nil(t, f.started, "did not expect /start")
 			}
+		})
+	}
+}
+
+// TestReadyReplicas pins the readiness gate for an HA group.
+//
+// The pre-HA gate required every replica to be Ready before the operator
+// would talk to PCSM at all. Under HA that is actively harmful: with three
+// instances, one standby stuck Pending or crash-looping would freeze mode
+// transitions and status updates for a group that is replicating
+// perfectly through its active instance. One Ready instance is enough to
+// drive PCSM, so the gate drops to "at least one" and the shortfall is
+// reported in status.readyReplicas instead of blocking.
+//
+// The observedGeneration check stays: a deployment whose controller has
+// not yet seen the latest spec reports replica counts for the *previous*
+// spec, and acting on those would race the rollout.
+func TestReadyReplicas(t *testing.T) {
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns"}
+
+	tests := map[string]struct {
+		deployment *appsv1.Deployment
+		want       int32
+	}{
+		"missing deployment is not ready": {
+			want: 0,
+		},
+		"stale observedGeneration is treated as not ready": {
+			deployment: deploymentWith(cr, 2, 1, 3),
+			want:       0,
+		},
+		"no ready replicas": {
+			deployment: deploymentWith(cr, 1, 1, 0),
+			want:       0,
+		},
+		"single instance ready": {
+			deployment: deploymentWith(cr, 1, 1, 1),
+			want:       1,
+		},
+		"degraded HA group still reports its ready instances": {
+			deployment: deploymentWith(cr, 4, 4, 1),
+			want:       1,
+		},
+		"fully ready HA group": {
+			deployment: deploymentWith(cr, 4, 4, 3),
+			want:       3,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			b := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t))
+			if tc.deployment != nil {
+				b = b.WithObjects(tc.deployment)
+			}
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build()}
+
+			got, err := r.readyReplicas(t.Context(), cr)
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func deploymentWith(cr *psmdbv1.PerconaServerMongoDBClusterSync, generation, observed, ready int64) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		Name:       clustersync.DeploymentName(cr),
+		Namespace:  cr.Namespace,
+		Generation: generation,
+		Status: appsv1.DeploymentStatus{
+			ObservedGeneration: observed,
+			ReadyReplicas:      int32(ready),
+		},
+	}
+}
+
+// TestReconcilePDB covers the full lifecycle of the disruption budget,
+// including the part that is easy to get wrong: removal.
+//
+// A PDB is only meaningful above one instance. If the group is scaled back
+// to a single instance and the budget is left behind, it keeps asserting
+// "at most one pod may be unavailable" over a one-pod deployment, which
+// blocks every node drain on that node indefinitely. So scaling down must
+// delete it, and deleting something that is already gone must not fail the
+// reconcile — a reconcile runs many times and only the first one finds
+// anything to delete.
+func TestReconcilePDB(t *testing.T) {
+	tests := map[string]struct {
+		size        int32
+		existing    bool
+		wantPDB     bool
+		wantDeletes int
+	}{
+		"HA group creates the budget":                    {size: 3, wantPDB: true},
+		"HA group is idempotent over an existing budget": {size: 3, existing: true, wantPDB: true},
+		"single instance creates no budget":              {size: 1},
+		"scale down to one deletes the existing budget":  {size: 1, existing: true, wantDeletes: 1},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				Name: "sync", Namespace: "ns", UID: "u",
+				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: tc.size},
+			}
+			scheme := clusterSyncScheme(t)
+			deletes := 0
+			b := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Delete: func(ctx context.Context, c k8sclient.WithWatch, obj k8sclient.Object, opts ...k8sclient.DeleteOption) error {
+						deletes++
+						return c.Delete(ctx, obj, opts...)
+					},
+				})
+			if tc.existing {
+				haCR := cr.DeepCopy()
+				haCR.Spec.Size = 3
+				b = b.WithObjects(clustersync.PodDisruptionBudget(haCR))
+			}
+			cl := b.Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+
+			require.NoError(t, r.reconcilePDB(t.Context(), cr))
+			require.NoError(t, r.reconcilePDB(t.Context(), cr), "reconcile must be idempotent")
+			assert.Equal(t, tc.wantDeletes, deletes,
+				"reconcile runs every few seconds; it must not issue a write call when there is nothing to remove")
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			err := cl.Get(t.Context(), types.NamespacedName{
+				Name:      clustersync.DeploymentName(cr),
+				Namespace: cr.Namespace,
+			}, pdb)
+
+			if !tc.wantPDB {
+				assert.True(t, k8serrors.IsNotFound(err), "budget must not outlive a scale-down, got %v", err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, pdb.OwnerReferences, 1, "budget must be garbage-collected with the CR")
+			assert.Equal(t, cr.Name, pdb.OwnerReferences[0].Name)
+			assert.Equal(t, clustersync.Labels(cr), pdb.Spec.Selector.MatchLabels)
+		})
+	}
+}
+
+// TestReconcileModeReportsHAGroup covers what the CR tells a user about
+// the PCSM group: how many instances are ready, and which one currently
+// holds the lease.
+//
+// status.activeInstance is not just cosmetic — the next reconcile seeds
+// the PCSM client with it so commands go straight to the writer instead
+// of probing every standby. A handover between reconciles is the only
+// externally visible sign that a failover happened, so it also emits an
+// event; emitting one per reconcile instead of per handover would bury
+// that signal in noise.
+func TestReconcileModeReportsHAGroup(t *testing.T) {
+	tests := map[string]struct {
+		prevActive string
+		active     string
+		ready      int32
+		wantActive string
+		wantEvent  string
+	}{
+		"first observation records the active instance without an event": {
+			active:     "sync-pcsm-0",
+			ready:      3,
+			wantActive: "sync-pcsm-0",
+		},
+		"unchanged active instance emits no event": {
+			prevActive: "sync-pcsm-0",
+			active:     "sync-pcsm-0",
+			ready:      3,
+			wantActive: "sync-pcsm-0",
+		},
+		"handover to another instance is reported as a failover": {
+			prevActive: "sync-pcsm-0",
+			active:     "sync-pcsm-2",
+			ready:      3,
+			wantActive: "sync-pcsm-2",
+			wantEvent:  "PCSMFailover",
+		},
+		"degraded group keeps the last known active instance": {
+			prevActive: "sync-pcsm-1",
+			active:     "",
+			ready:      1,
+			wantActive: "sync-pcsm-1",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				Name: "sync", Namespace: "ns", UID: "u",
+				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+					ClusterName: "tgt",
+					Mode:        psmdbv1.ClusterSyncModeRunning,
+					Size:        3,
+				},
+				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+					Mode:           psmdbv1.ClusterSyncModeRunning,
+					ActiveInstance: tc.prevActive,
+				},
+			}
+			cl := fake.NewClientBuilder().
+				WithScheme(clusterSyncScheme(t)).
+				WithStatusSubresource(cr).
+				WithObjects(cr).
+				Build()
+			rec := record.NewFakeRecorder(4)
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+
+			err := r.reconcileMode(t.Context(), cr, &fakePCSM{
+				statusResp: client.Status{State: "running"},
+				active:     tc.active,
+			}, tc.ready)
+			require.NoError(t, err)
+
+			stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, stored))
+			assert.Equal(t, tc.wantActive, stored.Status.ActiveInstance)
+			assert.Equal(t, tc.ready, stored.Status.ReadyReplicas)
+			assert.Equal(t, int32(3), stored.Status.Size)
+
+			if tc.wantEvent == "" {
+				assert.Empty(t, rec.Events, "no event expected")
+				return
+			}
+			require.Len(t, rec.Events, 1)
+			assert.Contains(t, <-rec.Events, tc.wantEvent)
+		})
+	}
+}
+
+// TestReconcileModeReportsClusterBusyOnce guards against event and log
+// spam on a path that can stay true for hours.
+//
+// A backup holds the target cluster for as long as it runs, and reconcile
+// re-runs every few seconds, so an ungated Eventf here would attach
+// hundreds of ClusterBusy events to the CR and bury everything else in the
+// operator log. The hold is reported once per distinct reason; the
+// standing condition lives in status.error, which is where a user looks
+// anyway and which is deduplicated by definition.
+func TestReconcileModeReportsClusterBusyOnce(t *testing.T) {
+	const ns, clusterName = "ns", "tgt"
+
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name: "sync", Namespace: ns, UID: "u",
+		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+			ClusterName: clusterName,
+			Mode:        psmdbv1.ClusterSyncModeRunning,
+		},
+	}
+	holder := "backup-uid"
+	lease := &coordv1.Lease{
+		Name: naming.BackupLeaseName(clusterName), Namespace: ns,
+		Spec: coordv1.LeaseSpec{
+			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
+			HolderIdentity: &holder,
+		},
+	}
+	cl := fake.NewClientBuilder().
+		WithScheme(clusterSyncScheme(t)).
+		WithStatusSubresource(cr).
+		WithObjects(cr, lease).
+		Build()
+	rec := record.NewFakeRecorder(16)
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+
+	// Three passes of the same hold, re-reading the CR in between exactly
+	// as the real reconcile loop does.
+	for range 3 {
+		stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+		require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: ns}, stored))
+		require.NoError(t, r.reconcileMode(t.Context(), stored, &fakePCSM{
+			statusResp: client.Status{State: "idle"},
+		}, 1))
+	}
+
+	stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: ns}, stored))
+	assert.Contains(t, stored.Status.Error, "backup is in progress")
+	assert.Nil(t, stored.Status.StartedAt, "PCSM must not be started while the cluster is busy")
+
+	require.Len(t, rec.Events, 1, "ClusterBusy must be reported once per distinct reason, not once per reconcile")
+	assert.Contains(t, <-rec.Events, "ClusterBusy")
+}
+
+// TestWriteStatus covers the write path every reconcile ends in.
+//
+// Reconcile requeues every few seconds for the lifetime of the CR, so an
+// unconditional status Update is one API write per CR per requeue forever,
+// plus a watch event that wakes this controller up again. Identical status
+// must therefore be a no-op. The missing-CR case matters because the user
+// can delete the CR while a reconcile is mid-flight, and losing a race
+// with deletion is not a reconcile failure.
+func TestWriteStatus(t *testing.T) {
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name: "sync", Namespace: "ns",
+		Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{State: psmdbv1.ClusterSyncStateRunning},
+	}
+	cl := fake.NewClientBuilder().
+		WithScheme(clusterSyncScheme(t)).
+		WithStatusSubresource(cr).
+		WithObjects(cr).
+		Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+
+	read := func(t *testing.T) *psmdbv1.PerconaServerMongoDBClusterSync {
+		t.Helper()
+		got := &psmdbv1.PerconaServerMongoDBClusterSync{}
+		require.NoError(t, cl.Get(t.Context(), nn, got))
+		return got
+	}
+
+	t.Run("a changed status is persisted", func(t *testing.T) {
+		require.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+			State:         psmdbv1.ClusterSyncStateRunning,
+			ReadyReplicas: 3,
+		}))
+		assert.Equal(t, int32(3), read(t).Status.ReadyReplicas)
+	})
+
+	t.Run("an identical status is not written again", func(t *testing.T) {
+		before := read(t).ResourceVersion
+		require.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+			State:         psmdbv1.ClusterSyncStateRunning,
+			ReadyReplicas: 3,
+		}))
+		assert.Equal(t, before, read(t).ResourceVersion,
+			"a steady-state reconcile must not write status, or it wakes itself up every requeue")
+	})
+
+	t.Run("a CR deleted mid-reconcile is not an error", func(t *testing.T) {
+		require.NoError(t, cl.Delete(t.Context(), cr.DeepCopy()))
+		assert.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+			State: psmdbv1.ClusterSyncStateFinalized,
+		}))
+	})
+}
+
+// TestIsPCSMUnreachable documents which failures are transient. Both
+// sentinels mean "nobody to talk to right now" — no ready pod, or a group
+// mid-election with no lease holder — and must requeue quietly rather than
+// being logged as reconcile errors every 5 seconds.
+func TestIsPCSMUnreachable(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"no ready pod":                    {err: client.ErrPCSMNotReady, want: true},
+		"no active instance":              {err: client.ErrNoActivePCSM, want: true},
+		"wrapped no active instance":      {err: fmt.Errorf("reconcile mode: %w", client.ErrNoActivePCSM), want: true},
+		"genuine command failure":         {err: errors.New("exit status 1"), want: false},
+		"nil error is not unreachability": {err: nil, want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isPCSMUnreachable(tc.err))
 		})
 	}
 }

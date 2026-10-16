@@ -22,6 +22,31 @@ mongosh_on_mongos() {
 		mongosh "mongodb://${user}:${pass}@%2Ftmp%2Fmongodb-27017.sock/admin" --quiet --eval "${script}"
 }
 
+pcsm_pods() {
+	kubectl_bin get pods \
+		-l "app.kubernetes.io/instance=${sync_cr},app.kubernetes.io/component=pcsm" \
+		-o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true
+}
+
+pcsm_status() {
+	local pod
+	local out
+	for pod in $(pcsm_pods); do
+		out=$(kubectl_bin exec "${pod}" -c pcsm -- pcsm status 2>/dev/null || true)
+		if [[ $(echo "${out}" | jq -r '.error // empty' 2>/dev/null) == "not_active" ]]; then
+			continue
+		fi
+		if [[ -n $(echo "${out}" | jq -r '.state // empty' 2>/dev/null) ]]; then
+			echo "${out}"
+			return 0
+		fi
+	done
+}
+
+active_instance() {
+	kubectl_bin get psmdb-clustersync "${sync_cr}" -o jsonpath='{.status.activeInstance}' 2>/dev/null || true
+}
+
 wait_pcsm_state() {
 	local expected="$1"
 	local timeout="${2:-300}"
@@ -32,7 +57,7 @@ wait_pcsm_state() {
 	local elapsed=0
 	local state=""
 	while true; do
-		state=$(kubectl_bin exec "${deploy}" -c pcsm -- pcsm status 2>/dev/null | jq -r '.state // empty' 2>/dev/null || true)
+		state=$(pcsm_status | jq -r '.state // empty' 2>/dev/null || true)
 		if [[ ${state} == "${expected}" ]]; then
 			echo " ok (state=${state})"
 			set_debug
@@ -191,6 +216,111 @@ assert_event_present() {
 	set_debug
 }
 
+wait_deployment_ready_replicas() {
+	local name="$1"
+	local expected="$2"
+	local timeout="${3:-300}"
+
+	set +o xtrace
+	echo -n "waiting for deployment/${name} readyReplicas=${expected}"
+	local elapsed=0
+	local ready=""
+	while true; do
+		ready=$(kubectl_bin get deployment "${name}" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+		if [[ ${ready:-0} -eq ${expected} ]]; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for deployment/${name} readyReplicas=${expected}; last=${ready:-<none>}"
+			kubectl_bin describe deployment "${name}" || true
+			exit 1
+		fi
+	done
+}
+
+wait_active_instance_present() {
+	local timeout="${1:-300}"
+
+	set +o xtrace
+	echo -n "waiting for ${sync_cr} status.activeInstance"
+	local elapsed=0
+	local active=""
+	while true; do
+		active=$(active_instance)
+		if [[ -n ${active} ]]; then
+			echo " ok (${active})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for status.activeInstance"
+			kubectl_bin get psmdb-clustersync "${sync_cr}" -o yaml || true
+			exit 1
+		fi
+	done
+}
+
+wait_active_instance_changed() {
+	local previous="$1"
+	local timeout="${2:-300}"
+
+	set +o xtrace
+	echo -n "waiting for active instance to move away from ${previous}"
+	local elapsed=0
+	local active=""
+	while true; do
+		active=$(active_instance)
+		if [[ -n ${active} ]] && [[ ${active} != "${previous}" ]]; then
+			echo " ok (${active})"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for failover; active instance is still ${active:-<none>}"
+			kubectl_bin get pods -l "app.kubernetes.io/instance=${sync_cr}" || true
+			exit 1
+		fi
+	done
+}
+
+wait_pdb_absent() {
+	local name="$1"
+	local timeout="${2:-120}"
+
+	set +o xtrace
+	echo -n "waiting for pdb/${name} to be removed"
+	local elapsed=0
+	while true; do
+		if ! kubectl_bin get pdb "${name}" >/dev/null 2>&1; then
+			echo " ok"
+			set_debug
+			return 0
+		fi
+		echo -n "."
+		sleep 5
+		elapsed=$((elapsed + 5))
+		if [[ ${elapsed} -ge ${timeout} ]]; then
+			echo
+			echo "timed out waiting for pdb/${name} removal"
+			exit 1
+		fi
+	done
+}
+
 apply_backup_named() {
 	local name="$1"
 	yq eval ".metadata.name = \"${name}\"" "${test_dir}/conf/backup-local-s3.yml" \
@@ -313,6 +443,36 @@ mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 	'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
 wait_target_doc_count 5 180
 
+desc 'HA: scale PCSM to 3 instances'
+kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p '{"spec":{"size":3}}'
+wait_deployment_ready_replicas "${sync_cr}-pcsm" 3 300
+kubectl_bin get pdb "${sync_cr}-pcsm"
+
+desc 'HA: standby instances must become Ready and the CR must report an active instance'
+wait_active_instance_present 300
+wait_cr_status_state "running" 120
+previous_active=$(active_instance)
+echo "active instance: ${previous_active}"
+
+desc 'HA: delete the active instance and verify the group fails over'
+kubectl_bin delete pod "${previous_active}" --wait=false
+wait_active_instance_changed "${previous_active}" 300
+wait_deployment_ready_replicas "${sync_cr}-pcsm" 3 300
+wait_pcsm_state "running" 300
+wait_cr_status_state "running" 120
+assert_event_present "${sync_cr}" "PCSMFailover"
+
+desc 'HA: writes keep replicating across the failover'
+mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
+	'db.getSiblingDB("myApp").test.insertOne({x: 100506})'
+wait_target_doc_count 6 300
+
+desc 'HA: scale back to a single instance and verify the budget is removed'
+kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p '{"spec":{"size":1}}'
+wait_deployment_ready_replicas "${sync_cr}-pcsm" 1 300
+wait_pdb_absent "${sync_cr}-pcsm" 120
+wait_pcsm_state "running" 300
+
 desc 'lease test: backup CR applied while clustersync is running should stay in waiting'
 apply_backup_named "backup-during-sync"
 wait_kind_state "psmdb-backup" "backup-during-sync" "waiting" 120
@@ -330,7 +490,7 @@ wait_cr_status_state "finalized" 120
 desc 'write data after finalize, verify target count does not increase'
 mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 	'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
-wait_target_doc_count 5 10
+wait_target_doc_count 6 10
 
 desc 'lease test: backup CR applied after finalize should complete (clustersync lease released)'
 apply_backup_named "backup-after-finalize"
