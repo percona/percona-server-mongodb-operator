@@ -135,3 +135,31 @@ func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) type
 func MongosNamespacedName(cr *psmdbv1.PerconaServerMongoDB) types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + "mongos", Namespace: cr.Namespace}
 }
+
+func VPAName(cr *psmdbv1.PerconaServerMongoDB, component string, spec *psmdbv1.ComponentVPASpec) string {
+	if spec != nil && spec.ObjectName != "" {
+		return spec.ObjectName
+	}
+	return cr.Name + "-" + component + "-vpa"
+}
+
+// VPAStatusKey returns the key a component's VPA recommendation is recorded under
+// in status.vpaStatus. The VPA reconciler writes that key and the StatefulSet
+// builder reads it back, so both derive it here and stay in step.
+//
+// rsName is the owning replset, empty for mongos, which belongs to none. Components
+// VPA does not manage return "", so a caller cannot key an arbiter on the replset
+// name and silently overwrite that replset's own recommendation.
+func VPAStatusKey(rsName, component string) string {
+	switch component {
+	case ComponentMongod, ComponentConfigSrv:
+		return rsName
+	case ComponentNonVoting:
+		return rsName + "-" + ComponentNonVotingShort
+	case ComponentHidden:
+		return rsName + "-" + ComponentHidden
+	case ComponentMongos:
+		return ComponentMongos
+	}
+	return ""
+}

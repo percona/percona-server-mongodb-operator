@@ -139,7 +139,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		size = replset.NonVoting.Size
 		multiAZ = replset.NonVoting.MultiAZ
 		resources = replset.NonVoting.Resources
-		vpaKey = replset.Name + "-nv"
+		vpaKey = naming.VPAStatusKey(replset.Name, naming.ComponentNonVoting)
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
 		configName = naming.NonVotingConfigMapName(cr, replset)
@@ -151,7 +151,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		size = replset.Hidden.Size
 		multiAZ = replset.Hidden.MultiAZ
 		resources = replset.Hidden.Resources
-		vpaKey = replset.Name + "-hidden"
+		vpaKey = naming.VPAStatusKey(replset.Name, naming.ComponentHidden)
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
 		configName = naming.HiddenConfigMapName(cr, replset)

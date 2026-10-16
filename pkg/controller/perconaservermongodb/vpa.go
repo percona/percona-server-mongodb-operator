@@ -19,6 +19,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 // vpaGVK is the GroupVersionKind for VerticalPodAutoscaler objects.
@@ -29,43 +30,34 @@ var vpaGVK = schema.GroupVersionKind{
 	Kind:    "VerticalPodAutoscaler",
 }
 
-// reconcileVPA reads VPA recommendations for all replsets and mongos, records them in
+// reconcileVPARecommendations reads VPA recommendations for all replsets and mongos, records them in
 // status, and (when updateMode=Auto) patches CR resources and triggers SmartUpdate.
 //
 // The operator is recommendation-agnostic: any external tool (VPA Recommender, Goldilocks,
 // etc.) that writes to a VerticalPodAutoscaler object is a valid recommendation source.
-func (r *ReconcilePerconaServerMongoDB) reconcileVPA(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled {
 		cr.Status.RemoveCondition(api.ConditionTypeVPAReady)
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("VPA")
-
-	// The operator only reads VerticalPodAutoscaler objects; it never installs the CRD.
-	// Resolve the kind once per reconcile: without the CRD every per-component Get below
-	// would fail with the same NoKindMatchError, which client.IgnoreNotFound does not
-	// swallow, producing one logged error per component on every reconcile and a
-	// rediscovery round trip per miss.
-	if _, err := r.client.RESTMapper().RESTMapping(vpaGVK.GroupKind(), vpaGVK.Version); err != nil {
-		if meta.IsNoMatchError(err) {
-			log.Info("spec.vpa.enabled is set but the VerticalPodAutoscaler CRD is not installed, skipping VPA reconciliation")
-			cr.Status.AddCondition(api.ClusterCondition{
-				Status:  api.ConditionFalse,
-				Type:    api.ConditionTypeVPAReady,
-				Reason:  "VPACRDNotInstalled",
-				Message: "spec.vpa.enabled is set but the VerticalPodAutoscaler CRD (autoscaling.k8s.io/v1) is not installed in the cluster",
-			})
-			return nil
-		}
-		return errors.Wrap(err, "resolve VerticalPodAutoscaler kind")
+	if ok, err := util.GroupVersionKindExists(r.client, vpaGVK); err != nil {
+		return errors.Wrap(err, "check autoscaling API discovery")
+	} else if !ok {
+		cr.Status.AddCondition(api.ClusterCondition{
+			Status:  api.ConditionFalse,
+			Type:    api.ConditionTypeVPAReady,
+			Reason:  "APINotInstalled",
+			Message: "spec.vpa.enabled is set but the autoscaling.k8s.io/v1.VerticalPodAutoscaler is not installed in the cluster",
+		})
+		return nil
 	}
 
 	cr.Status.AddCondition(api.ClusterCondition{
 		Status:  api.ConditionTrue,
 		Type:    api.ConditionTypeVPAReady,
-		Reason:  "VPACRDInstalled",
-		Message: "operator is reading VerticalPodAutoscaler recommendations",
+		Reason:  "CRDInstalled",
+		Message: "reading VerticalPodAutoscaler recommendations",
 	})
 
 	for _, rs := range cr.Spec.Replsets {
@@ -73,68 +65,70 @@ func (r *ReconcilePerconaServerMongoDB) reconcileVPA(ctx context.Context, cr *ap
 			continue
 		}
 
-		// Main replset members.
-		if rec := r.vpaRecommendationFor(ctx, cr, rs.Name, vpaObjectName(cr, rs.Name, rs.VPA),
-			naming.ContainerMongod, effectiveWindow(cr.Spec.VPA, rs.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, rs.Name, rs.Resources, rec, effectiveBounds(cr.Spec.VPA, rs.VPA))
-		}
+		r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentMongod, rs.Resources, rs.VPA)
 
-		// Non-voting members — separate StatefulSet with container "mongod-nv".
 		if rs.NonVoting.Enabled {
-			if rec := r.vpaRecommendationFor(ctx, cr, rs.Name+"-nv",
-				vpaObjectName(cr, rs.Name+"-nv", rs.NonVoting.VPA),
-				naming.ContainerNonVoting, effectiveWindow(cr.Spec.VPA, rs.NonVoting.VPA)); rec != nil {
-				r.commitVPAResources(ctx, cr, rs.Name+"-nv", rs.NonVoting.Resources, rec,
-					effectiveBounds(cr.Spec.VPA, rs.NonVoting.VPA))
-			}
+			r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentNonVoting,
+				rs.NonVoting.Resources, rs.NonVoting.VPA)
 		}
 
-		// Hidden members — separate StatefulSet with container "mongod-hidden".
 		if rs.Hidden.Enabled {
-			if rec := r.vpaRecommendationFor(ctx, cr, rs.Name+"-hidden",
-				vpaObjectName(cr, rs.Name+"-hidden", rs.Hidden.VPA),
-				naming.ContainerHidden, effectiveWindow(cr.Spec.VPA, rs.Hidden.VPA)); rec != nil {
-				r.commitVPAResources(ctx, cr, rs.Name+"-hidden", rs.Hidden.Resources, rec,
-					effectiveBounds(cr.Spec.VPA, rs.Hidden.VPA))
-			}
+			r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentHidden,
+				rs.Hidden.Resources, rs.Hidden.VPA)
 		}
 	}
 
-	// Config server replset — only when sharding is enabled.
-	// spec.Replset("cfg") already resolves to spec.Sharding.ConfigsvrReplSet, so
-	// applyVPAToReplset works without modification.
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cfg := cr.Spec.Sharding.ConfigsvrReplSet
-		if rec := r.vpaRecommendationFor(ctx, cr, cfg.Name, vpaObjectName(cr, cfg.Name, cfg.VPA),
-			naming.ContainerMongod, effectiveWindow(cr.Spec.VPA, cfg.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, cfg.Name, cfg.Resources, rec, effectiveBounds(cr.Spec.VPA, cfg.VPA))
-		}
+		r.reconcileComponentVPA(ctx, cr, cfg.Name, naming.ComponentConfigSrv, cfg.Resources, cfg.VPA)
 	}
 
-	// Mongos — only when sharding is enabled.
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
 		mongos := cr.Spec.Sharding.Mongos
-		if rec := r.vpaRecommendationFor(ctx, cr, "mongos", vpaObjectName(cr, "mongos", mongos.VPA),
-			naming.ContainerMongos, effectiveWindow(cr.Spec.VPA, mongos.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, "mongos", mongos.Resources, rec,
-				effectiveBounds(cr.Spec.VPA, mongos.VPA))
-		}
+		r.reconcileComponentVPA(ctx, cr, "", naming.ComponentMongos, mongos.Resources, mongos.VPA)
 	}
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rsName, component string,
+	declared corev1.ResourceRequirements,
+	vpa *api.ComponentVPASpec,
+) {
+	container := managedContainer(component)
+	if container == "" {
+		return
+	}
+
+	statusKey := naming.VPAStatusKey(rsName, component)
+	rec := r.vpaRecommendationFor(ctx, cr, statusKey, container, vpa)
+	if rec == nil {
+		return
+	}
+	r.commitVPAResources(ctx, cr, statusKey, declared, rec, effectiveBounds(cr.Spec.VPA, vpa))
 }
 
 // vpaRecommendationFor reads one component's recommendation, always records the
 // outcome in status, and returns the recommendation only when it should be applied
 // now. It returns nil when there is nothing to apply: no recommendation was
 // available, updateMode is Off, or the stabilization window has not yet passed.
+//
+// vpa is the component's own VPA block, which together with statusKey is all that
+// the object name and the stabilization window are derived from, so callers pass
+// the block rather than deriving both themselves.
 func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
-	statusKey, vpaName, container string,
-	window time.Duration,
+	statusKey, container string,
+	vpa *api.ComponentVPASpec,
 ) corev1.ResourceList {
 	log := logf.FromContext(ctx).WithName("VPA")
+
+	vpaName := naming.VPAName(cr, statusKey, vpa)
+	window := effectiveWindow(cr.Spec.VPA, vpa)
 
 	res, err := r.readVPARecommendation(ctx, cr.Namespace, vpaName, container)
 	if err != nil {
@@ -209,15 +203,6 @@ func stabilizationMessage(
 		"recommendation recorded, next apply allowed after %s (stabilizationWindow %s)",
 		s.LastAppliedAt.Add(window).UTC().Format(time.RFC3339), window,
 	)
-}
-
-// vpaObjectName returns the VPA object name for a component.
-// Uses the explicit objectName if configured; falls back to "<cluster>-<component>-vpa".
-func vpaObjectName(cr *api.PerconaServerMongoDB, component string, spec *api.ComponentVPASpec) string {
-	if spec != nil && spec.ObjectName != "" {
-		return spec.ObjectName
-	}
-	return cr.Name + "-" + component + "-vpa"
 }
 
 // vpaBounds holds the effective min/max resource bounds for one component.
@@ -326,7 +311,7 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 			res.state = vpaStateObjectNotFound
 			return res, nil
 		}
-		// The CRD can be uninstalled between the check in reconcileVPA and this read.
+		// The CRD can be uninstalled between the check in reconcileVPARecommendations and this read.
 		// IgnoreNotFound does not cover that: a missing kind surfaces as NoKindMatchError,
 		// which carries no NotFound status reason.
 		if meta.IsNoMatchError(err) {

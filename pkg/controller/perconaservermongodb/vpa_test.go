@@ -351,7 +351,7 @@ func vpaTestClient(t *testing.T, crdInstalled bool) client.Client {
 	return c
 }
 
-// vpaTestCR returns a CR with VPA enabled and no components, so reconcileVPA
+// vpaTestCR returns a CR with VPA enabled and no components, so reconcileVPARecommendations
 // exercises only the CRD guard and never reads a VPA object.
 func vpaTestCR(enabled bool) *api.PerconaServerMongoDB {
 	cr := &api.PerconaServerMongoDB{
@@ -368,7 +368,7 @@ func TestReconcileVPACRDNotInstalled(t *testing.T) {
 	cr := vpaTestCR(true)
 
 	// A missing CRD must not fail the reconcile: VPA is an optional integration.
-	require.NoError(t, r.reconcileVPA(t.Context(), cr))
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 
 	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
 	require.NotNil(t, cond, "expected a VPAReady condition explaining why VPA is inert")
@@ -384,7 +384,7 @@ func TestReconcileVPACRDInstalled(t *testing.T) {
 	r := &ReconcilePerconaServerMongoDB{client: vpaTestClient(t, true)}
 	cr := vpaTestCR(true)
 
-	require.NoError(t, r.reconcileVPA(t.Context(), cr))
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 
 	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
 	require.NotNil(t, cond)
@@ -397,12 +397,12 @@ func TestReconcileVPADisabledClearsCondition(t *testing.T) {
 
 	// Start from a cluster that previously reported the missing CRD.
 	cr := vpaTestCR(true)
-	require.NoError(t, r.reconcileVPA(t.Context(), cr))
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 	require.NotNil(t, cr.Status.FindCondition(api.ConditionTypeVPAReady))
 
 	// Disabling VPA must retract the condition rather than leave it stale.
 	cr.Spec.VPA.Enabled = false
-	require.NoError(t, r.reconcileVPA(t.Context(), cr))
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 	assert.Nil(t, cr.Status.FindCondition(api.ConditionTypeVPAReady))
 }
 
@@ -530,7 +530,7 @@ func TestVPAStatusRecordsWhyNoRecommendation(t *testing.T) {
 	cr := vpaTestCR(true)
 	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
 
-	require.NoError(t, r.reconcileVPA(t.Context(), cr))
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 
 	s, ok := cr.Status.VPAStatus["rs0"]
 	require.True(t, ok, "expected a status entry for rs0 even with no recommendation")
@@ -543,7 +543,7 @@ func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
 	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
 
 	// No VPA object yet, so the component says the object is missing.
-	require.NoError(t, vpaReaderWith(t).reconcileVPA(t.Context(), cr))
+	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
 	require.Contains(t, cr.Status.VPAStatus["rs0"].Message, "not found")
 
 	// The object now carries a recommendation. It is read, but updateMode is Off,
@@ -552,7 +552,7 @@ func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
 	withRec := vpaReaderWith(t, vpaObject("some-name-rs0-vpa", map[string]corev1.ResourceList{
 		"mongod": rl("350m", "350Mi"),
 	}))
-	require.NoError(t, withRec.reconcileVPA(t.Context(), cr))
+	require.NoError(t, withRec.reconcileVPARecommendations(t.Context(), cr))
 
 	s := cr.Status.VPAStatus["rs0"]
 	assert.Equal(t, "350m", s.CPU, "the recommendation should still be recorded in Off mode")
@@ -566,7 +566,7 @@ func TestVPAStatusMessageClearsWhenApplying(t *testing.T) {
 	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
 
 	// First pass: no object, so the component records why.
-	require.NoError(t, vpaReaderWith(t).reconcileVPA(t.Context(), cr))
+	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
 	require.Contains(t, cr.Status.VPAStatus["rs0"].Message, "not found")
 
 	// Second pass: a recommendation arrives and Auto applies it, so there is
@@ -574,7 +574,7 @@ func TestVPAStatusMessageClearsWhenApplying(t *testing.T) {
 	withRec := vpaReaderWith(t, vpaObject("some-name-rs0-vpa", map[string]corev1.ResourceList{
 		"mongod": rl("350m", "350Mi"),
 	}))
-	require.NoError(t, withRec.reconcileVPA(t.Context(), cr))
+	require.NoError(t, withRec.reconcileVPARecommendations(t.Context(), cr))
 
 	s := cr.Status.VPAStatus["rs0"]
 	assert.Empty(t, s.Message, "message must clear once the recommendation is being applied")
