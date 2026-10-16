@@ -134,7 +134,7 @@ func TestReconcileStopsAfterFinalizersRemoved(t *testing.T) {
 	r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
 	r.crons = NewCronRegistry()
 
-	res, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: types.NamespacedName{Name: crName, Namespace: ns}})
+	res, err := r.Reconcile(t.Context(), reconcile.Request{Name: crName, Namespace: ns})
 	require.NoError(t, err)
 	assert.Equal(t, reconcile.Result{}, res)
 
