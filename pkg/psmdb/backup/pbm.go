@@ -42,6 +42,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	psmdbtls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 const (
@@ -179,6 +180,16 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
+
+	if cr.CompareVersion("1.24.0") >= 0 {
+		pbmCert := psmdbtls.CertificatePBMClient(cr)
+		pbmSecret, err := getSecret(ctx, k8sclient, cr.Namespace, pbmCert.SecretName())
+		if err != nil {
+			return "", errors.Wrap(err, "get PBM client TLS secret")
+		}
+		tlsKey = pbmSecret.Data["tls.key"]
+		tlsCert = pbmSecret.Data["tls.crt"]
+	}
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	tlsPem := append(tlsKey, tlsCert...)
 

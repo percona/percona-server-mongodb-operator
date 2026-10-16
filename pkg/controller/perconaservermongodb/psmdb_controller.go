@@ -1709,6 +1709,9 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLInternalHash]; ok {
 			annotation[naming.AnnotationSSLInternalHash] = v
 		}
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationPBMTLSHash]; ok {
+			annotation[naming.AnnotationPBMTLSHash] = v
+		}
 	}
 
 	return annotation, nil
@@ -1767,6 +1770,17 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
 	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
+	if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() && cr.Spec.Backup.Enabled {
+		name := tls.CertificatePBMClient(cr).SecretName()
+		secret, err := getSecret(name)
+		if k8serrors.IsNotFound(err) {
+			return nil, errTLSNotReady
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get secret/%s", name)
+		}
+		annotation[naming.AnnotationPBMTLSHash] = getHash(secret)
+	}
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {

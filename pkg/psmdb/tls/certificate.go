@@ -98,6 +98,63 @@ type tlsCert struct {
 	internal bool
 }
 
+type pbmClientCert struct {
+	cr *api.PerconaServerMongoDB
+}
+
+func CertificatePBMClient(cr *api.PerconaServerMongoDB) Certificate {
+	return &pbmClientCert{cr: cr}
+}
+
+func (c *pbmClientCert) Name() string {
+	return c.cr.Name + "-pbm"
+}
+
+func (c *pbmClientCert) Namespace() string {
+	return c.cr.Namespace
+}
+
+func (c *pbmClientCert) SecretName() string {
+	if c.cr.Spec.Secrets != nil && c.cr.Spec.Secrets.SSLPBM != "" {
+		return c.cr.Spec.Secrets.SSLPBM
+	}
+	return c.Name()
+}
+
+func (c *pbmClientCert) Object() *cm.Certificate {
+	cr := c.cr
+	issuerKind := cr.Spec.TLS.IssuerConf.Kind
+	issuerGroup := cr.Spec.TLS.IssuerConf.Group
+	if cr.Spec.TLS.IssuerConf.Name == "" {
+		issuerKind, issuerGroup = cm.IssuerKind, ""
+	}
+
+	labels := naming.ClusterLabels(cr)
+
+	return &cm.Certificate{
+		Name:      c.Name(),
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: cm.CertificateSpec{
+			SecretName: c.SecretName(),
+			Subject: &cm.X509Subject{
+				Organizations: []string{naming.CertificateOrganizationPBM},
+			},
+			Usages: []cm.KeyUsage{
+				cm.UsageDigitalSignature,
+				cm.UsageKeyEncipherment,
+				cm.UsageClientAuth,
+			},
+			Duration: &cr.Spec.TLS.CertValidityDuration,
+			IssuerRef: cmmeta.IssuerReference{
+				Name:  issuerName(cr),
+				Kind:  issuerKind,
+				Group: issuerGroup,
+			},
+		},
+	}
+}
+
 func CertificateTLS(cr *api.PerconaServerMongoDB, internal bool) Certificate {
 	return &tlsCert{
 		cr:       cr,
@@ -140,7 +197,7 @@ func (c *tlsCert) Object() *cm.Certificate {
 		Labels:    naming.ClusterLabels(cr),
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
-				Organizations: []string{"PSMDB"},
+				Organizations: []string{naming.CertificateOrganizationPSMDB},
 			},
 			CommonName: cr.Name,
 			SecretName: c.SecretName(),

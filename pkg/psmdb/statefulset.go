@@ -22,6 +22,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -365,6 +366,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 
 		if cr.Spec.Backup.Enabled {
+			if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() {
+				volumes = append(volumes, PBMClientTLSVolume(cr))
+			}
 			rsName := replset.Name
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
@@ -603,6 +607,10 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
+	if cr.CompareVersion("1.24.0") >= 0 && tlsEnabled {
+		c.VolumeMounts = append(c.VolumeMounts, PBMClientTLSVolumeMount())
+		c.Env = append(c.Env, corev1.EnvVar{Name: "PBM_AGENT_TLS_DIR", Value: naming.PBMClientTLSDirectory})
+	}
 
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cr.CompareVersion("1.20.0") >= 0 {
@@ -649,6 +657,20 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}
 
 	return c
+}
+
+func PBMClientTLSVolume(cr *api.PerconaServerMongoDB) corev1.Volume {
+	return corev1.Volume{
+		Name: naming.PBMClientTLSVolumeName,
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  tls.CertificatePBMClient(cr).SecretName(),
+			DefaultMode: &secretFileMode,
+		},
+	}
+}
+
+func PBMClientTLSVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{Name: naming.PBMClientTLSVolumeName, MountPath: naming.PBMClientTLSDirectory, ReadOnly: true}
 }
 
 func AWSSDKChecksumEnvVars() []corev1.EnvVar {

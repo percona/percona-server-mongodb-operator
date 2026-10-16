@@ -112,7 +112,7 @@ func IssueCA() (caCertPEM []byte, caKeyPEM []byte, err error) {
 	caTemplate := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Root CA"},
+			Organization: []string{naming.CertificateOrganizationRootCA},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              validityNotAfter,
@@ -142,6 +142,15 @@ func IssueCA() (caCertPEM []byte, caKeyPEM []byte, err error) {
 
 // IssueWithCA generates a TLS certificate signed by the given CA and returns the TLS cert and TLS private key in PEM format.
 func IssueWithCA(hosts []string, caCertPEM, caKeyPEM []byte) (tlsCert []byte, tlsKey []byte, err error) {
+	return issueWithCA(hosts, caCertPEM, caKeyPEM, pkix.Name{Organization: []string{naming.CertificateOrganizationPSMDB}}, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
+}
+
+// IssuePBMClientWithCA issues a client-only certificate with a distinct PBM subject.
+func IssuePBMClientWithCA(caCertPEM, caKeyPEM []byte) ([]byte, []byte, error) {
+	return issueWithCA(nil, caCertPEM, caKeyPEM, pkix.Name{Organization: []string{naming.CertificateOrganizationPBM}}, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+}
+
+func issueWithCA(hosts []string, caCertPEM, caKeyPEM []byte, subject pkix.Name, usages []x509.ExtKeyUsage) (tlsCert []byte, tlsKey []byte, err error) {
 	caBlock, _ := pem.Decode(caCertPEM)
 	if caBlock == nil {
 		return nil, nil, fmt.Errorf("failed to decode CA certificate PEM")
@@ -168,17 +177,15 @@ func IssueWithCA(hosts []string, caCertPEM, caKeyPEM []byte) (tlsCert []byte, tl
 
 	tlsTemplate := x509.Certificate{
 		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"PSMDB"},
-		},
+		Subject:      subject,
 		Issuer: pkix.Name{
-			Organization: []string{"Root CA"},
+			Organization: []string{naming.CertificateOrganizationRootCA},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              validityNotAfter,
 		DNSNames:              hosts,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		ExtKeyUsage:           usages,
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 	}

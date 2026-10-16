@@ -14811,6 +14811,8 @@ spec:
                     type: string
                   sslInternal:
                     type: string
+                  sslPBM:
+                    type: string
                   users:
                     type: string
                   vault:

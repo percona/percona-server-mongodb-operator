@@ -1136,6 +1136,7 @@ compare_kubectl() {
 			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
 			del(.. | select(has("percona.com/ssl-hash"))."percona.com/ssl-hash") |
 			del(.. | select(has("percona.com/ssl-internal-hash"))."percona.com/ssl-internal-hash") |
+			del(.. | select(has("percona.com/pbm-tls-hash"))."percona.com/pbm-tls-hash") |
 			del(.spec.volumeClaimTemplates[].spec.volumeMode | select(. == "Filesystem")) |
 			del(.. | select(has("healthCheckNodePort")).healthCheckNodePort) |
 			del(.. | select(has("nodePort")).nodePort) |
