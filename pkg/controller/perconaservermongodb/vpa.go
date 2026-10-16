@@ -60,27 +60,36 @@ func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.
 			continue
 		}
 
-		r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentMongod, rs.Resources, rs.VPA)
+		if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentMongod, rs.Resources, rs.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentMongod, rs.Name)
+		}
 
 		if rs.NonVoting.Enabled {
-			r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentNonVoting,
-				rs.NonVoting.Resources, rs.NonVoting.VPA)
+			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentNonVoting, rs.NonVoting.Resources, rs.NonVoting.VPA); err != nil {
+				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentNonVoting, rs.Name)
+			}
 		}
 
 		if rs.Hidden.Enabled {
-			r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentHidden,
-				rs.Hidden.Resources, rs.Hidden.VPA)
+			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentHidden,
+				rs.Hidden.Resources, rs.Hidden.VPA); err != nil {
+				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentHidden, rs.Name)
+			}
 		}
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cfg := cr.Spec.Sharding.ConfigsvrReplSet
-		r.reconcileComponentVPA(ctx, cr, cfg.Name, naming.ComponentConfigSrv, cfg.Resources, cfg.VPA)
+		if err := r.reconcileComponentVPA(ctx, cr, cfg.Name, naming.ComponentConfigSrv, cfg.Resources, cfg.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentConfigSrv, cfg.Name)
+		}
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
 		mongos := cr.Spec.Sharding.Mongos
-		r.reconcileComponentVPA(ctx, cr, "", naming.ComponentMongos, mongos.Resources, mongos.VPA)
+		if err := r.reconcileComponentVPA(ctx, cr, "", naming.ComponentMongos, mongos.Resources, mongos.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s'", naming.ComponentMongos)
+		}
 	}
 
 	return nil
@@ -92,18 +101,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
 	rsName, component string,
 	declared corev1.ResourceRequirements,
 	vpa *api.ComponentVPASpec,
-) {
+) error {
 	container := managedContainer(component)
 	if container == "" {
-		return
+		return nil
 	}
 
 	statusKey := naming.VPAStatusKey(rsName, component)
-	rec := r.vpaRecommendationFor(ctx, cr, statusKey, container, vpa)
+	rec, err := r.vpaRecommendationFor(ctx, cr, statusKey, container, vpa)
+	if err != nil {
+		return err
+	}
 	if rec == nil {
-		return
+		return nil
 	}
 	r.commitVPAResources(ctx, cr, statusKey, declared, rec, effectiveBounds(cr.Spec.VPA, vpa))
+	return nil
 }
 
 // vpaRecommendationFor reads one component's recommendation, always records the
@@ -119,7 +132,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	cr *api.PerconaServerMongoDB,
 	statusKey, container string,
 	vpa *api.ComponentVPASpec,
-) corev1.ResourceList {
+) (corev1.ResourceList, error) {
 	log := logf.FromContext(ctx).WithName("VPA")
 
 	vpaName := naming.VPAName(cr, statusKey, vpa)
@@ -129,12 +142,18 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	if err != nil {
 		log.Error(err, "failed to read VPA recommendation", "vpa", vpaName, "component", statusKey)
 		r.setVPAMessage(cr, statusKey, err.Error())
-		return nil
+		return nil, nil
+	}
+
+	// If we're already reconciling the VPA's recommendation and if it cannot be found anymore, this is an error for
+	// the user to handle.
+	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil && res.state == vpaStateObjectNotFound {
+		return nil, fmt.Errorf("vpa not found")
 	}
 
 	if res.state != vpaStateOK {
 		r.setVPAMessage(cr, statusKey, res.message(container))
-		return nil
+		return nil, nil
 	}
 
 	r.recordVPAStatus(cr, statusKey, res.rec)
@@ -142,15 +161,15 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	if cr.Spec.VPA.UpdateMode != api.VPAUpdateModeAuto {
 		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
 			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
-		return nil
+		return nil, nil
 	}
 	if !stabilizationWindowPassed(cr, statusKey, window) {
 		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, window))
-		return nil
+		return nil, nil
 	}
 
 	r.setVPAMessage(cr, statusKey, "")
-	return res.rec
+	return res.rec, nil
 }
 
 // setVPAMessage records why a component is or is not applying recommendations,
