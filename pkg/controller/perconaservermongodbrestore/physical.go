@@ -16,7 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -27,6 +26,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -39,6 +39,13 @@ var anotherOpBackoff = wait.Backoff{
 	Factor:   2.0,
 	Jitter:   0.1,
 	Cap:      15 * time.Minute,
+}
+
+var transientErrorBackoff = wait.Backoff{
+	Steps:    6,
+	Duration: 5 * time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
 }
 
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
@@ -194,10 +201,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	meta := backup.BackupMeta{}
 
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
-			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
-			strings.Contains(err.Error(), "unable to upgrade connection") ||
+	err = retry.OnError(transientErrorBackoff, func(err error) bool {
+		return isTransientNetworkError(err) ||
+			strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
@@ -795,27 +801,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) getPBMConfigFromPod(
 	return conf, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBRestore) getReplsetPods(
-	ctx context.Context,
-	cluster *psmdbv1.PerconaServerMongoDB,
-	rs *psmdbv1.ReplsetSpec,
-	component string,
-) (corev1.PodList, error) {
-	mongodPods := corev1.PodList{}
-
-	set := naming.RSLabels(cluster, rs)
-	set[naming.LabelKubernetesComponent] = component
+func (r *ReconcilePerconaServerMongoDBRestore) getStatefulSetPods(ctx context.Context, sts *appsv1.StatefulSet) (corev1.PodList, error) {
+	pods := corev1.PodList{}
 
 	err := r.client.List(
 		ctx,
-		&mongodPods,
-		&client.ListOptions{
-			Namespace:     cluster.Namespace,
-			LabelSelector: labels.SelectorFromSet(set),
-		},
+		&pods,
+		client.InNamespace(sts.Namespace),
+		client.MatchingLabels(sts.Spec.Selector.MatchLabels),
 	)
 
-	return mongodPods, err
+	return pods, err
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) checkIfStatefulSetsAreReadyForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
@@ -894,13 +890,25 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 		return false, nil
 	}
 
-	podList, err := r.getReplsetPods(ctx, cluster, rs, component)
+	if sts.Status.ObservedGeneration != sts.Generation {
+		return false, nil
+	}
+
+	podList, err := r.getStatefulSetPods(ctx, &sts)
 	if err != nil {
-		return false, errors.Wrapf(err, "get replset %s pods", rs.Name)
+		return false, errors.Wrapf(err, "get statefulset %s pods", sts.Name)
+	}
+
+	if sts.Spec.Replicas != nil && len(podList.Items) != int(*sts.Spec.Replicas) {
+		return false, nil
 	}
 
 	for _, pod := range podList.Items {
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+			return false, nil
+		}
+
+		if !k8s.IsPodReady(pod) {
 			return false, nil
 		}
 
@@ -1033,4 +1041,21 @@ func getPBMBinaryAndContainerForExec(pod *corev1.Pod) (string, string) {
 	}
 
 	return container, pbmBinary
+}
+
+func isTransientNetworkError(err error) bool {
+	for _, s := range []string{
+		"connection timed out",
+		"connection refused",
+		"connection reset by peer",
+		"i/o timeout",
+		"TLS handshake timeout",
+		"error dialing backend",
+		"unable to upgrade connection",
+	} {
+		if strings.Contains(err.Error(), s) {
+			return true
+		}
+	}
+	return false
 }
