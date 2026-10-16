@@ -20,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -187,6 +188,10 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl-internal",
 					Namespace: tt.cr.Namespace,
 				},
+				&corev1.Secret{
+					Name:      tls.CertificatePBMClient(tt.cr).SecretName(),
+					Namespace: tt.cr.Namespace,
+				},
 
 				&corev1.ConfigMap{
 					Name:      logcollector.ConfigMapName(tt.cr.Name),
@@ -280,6 +285,7 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	compareSpec := func(got, want appsv1.StatefulSetSpec) {
 		delete(got.Template.Annotations, naming.AnnotationSSLHash)
 		delete(got.Template.Annotations, naming.AnnotationSSLInternalHash)
+		delete(got.Template.Annotations, naming.AnnotationPBMTLSHash)
 		gotBytes, err := yaml.Marshal(got)
 		if err != nil {
 			t.Fatalf("error marshaling got: %v", err)
