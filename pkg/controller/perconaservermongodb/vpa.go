@@ -150,9 +150,17 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 		return nil, nil
 	}
 
-	// If we're already reconciling the VPA's recommendation and if it cannot be found anymore, this is an error for
-	// the user to handle.
-	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil && res.state == vpaStateObjectNotFound {
+	// Under UpdateModeAuto, if a recommendation was previously applied but the VPA is now missing,
+	// we should return an error here for the user to handle. The operator cannot assume anything about
+	// what the new resources must be.
+	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil &&
+		res.state == vpaStateObjectNotFound &&
+		cr.Spec.VPA.UpdateMode == api.VPAUpdateModeAuto {
+		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+			"VerticalPodAutoscaler %q not found; this component is still sized from the last "+
+				"applied recommendation and reconciliation is stopped. Recreate the object, or set "+
+				"spec.vpa.updateMode to Off to return to the declared resources",
+			vpaName))
 		return nil, errors.Errorf("VerticalPodAutoscaler %q not found", vpaName)
 	}
 
