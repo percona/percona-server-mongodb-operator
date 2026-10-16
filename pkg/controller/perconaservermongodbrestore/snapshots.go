@@ -63,6 +63,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotNew(
 	}
 
 	status.State = psmdbv1.RestoreStateWaiting
+	status.WaitingReason = psmdbv1.RestoreWaitingReasonPreparation
 	return status, nil
 }
 
@@ -89,6 +90,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 
 	if !sfsReady {
 		log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
+		status.WaitingReason = psmdbv1.RestoreWaitingReasonStatefulSets
 		return status, nil
 	}
 
