@@ -1,6 +1,8 @@
 package perconaservermongodb
 
 import (
+	"fmt"
+	"maps"
 	"slices"
 	"testing"
 
@@ -508,6 +510,92 @@ func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
 			r := &ReconcilePerconaServerMongoDB{}
 
 			assert.Equal(t, tt.expected, r.needsManualSSLUpdate(t.Context(), cr, sslSecret(t, cr, sans)))
+		})
+	}
+}
+
+func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
+	newCR := func(allowInvalidCerts bool) *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.UpdateStrategy = api.SmartUpdateStatefulSetStrategyType
+		cr.Spec.TLS = &api.TLSSpec{
+			Mode:                     api.TLSModeRequire,
+			AllowInvalidCertificates: new(allowInvalidCerts),
+		}
+		cr.Spec.Sharding = api.Sharding{
+			Enabled: true,
+			Mongos:  &api.MongosSpec{Size: 2},
+		}
+		return cr
+	}
+	secrets := []client.Object{
+		&corev1.Secret{
+			Name:      "test-cluster-ssl",
+			Namespace: "test-ns",
+			Data:      map[string][]byte{"tls.crt": []byte("cert-data")},
+		},
+		&corev1.Secret{
+			Name:      "test-cluster-ssl-internal",
+			Namespace: "test-ns",
+			Data:      map[string][]byte{"tls.crt": []byte("internal-cert-data")},
+		},
+	}
+
+	tests := []struct {
+		name              string
+		allowInvalidCerts bool
+		podHashes         []string
+		wantMongosFirst   bool
+	}{
+		{
+			name:            "mongos runs an outdated certificate",
+			podHashes:       []string{"current", "outdated"},
+			wantMongosFirst: true,
+		},
+		{
+			name:            "mongos runs the current certificate",
+			podHashes:       []string{"current", "current"},
+			wantMongosFirst: false,
+		},
+		{
+			name:            "no mongos pods",
+			wantMongosFirst: false,
+		},
+		{
+			name:              "hostname verification is disabled",
+			allowInvalidCerts: true,
+			podHashes:         []string{"outdated", "outdated"},
+			wantMongosFirst:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newCR(tt.allowInvalidCerts)
+			r := buildFakeClient(append([]client.Object{cr}, secrets...)...)
+
+			current, err := r.sslAnnotation(t.Context(), cr)
+			require.NoError(t, err)
+
+			for i, hash := range tt.podHashes {
+				ann := maps.Clone(current)
+				if hash == "outdated" {
+					ann[naming.AnnotationSSLHash] = "outdated-hash"
+				}
+				pod := &corev1.Pod{
+					Name:        fmt.Sprintf("test-cluster-mongos-%d", i),
+					Namespace:   "test-ns",
+					Labels:      naming.MongosLabels(cr),
+					Annotations: ann,
+				}
+				require.NoError(t, r.client.Create(t.Context(), pod))
+			}
+
+			require.NoError(t, r.updateMongosFirstIfTLSOutdated(t.Context(), cr))
+
+			mongosFirst, err := r.shouldUpdateMongosFirst(t.Context(), cr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantMongosFirst, mongosFirst)
 		})
 	}
 }

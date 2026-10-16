@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -173,6 +174,45 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		}
 	}
 	return true, nil
+}
+
+// updateMongosFirstIfTLSOutdated makes the next smart update roll mongos before mongod if mongos
+// pods still run an outdated certificate. With hostname verification on, the operator can't reach
+// mongos through hostnames missing from that certificate (e.g. per-pod services right after
+// servicePerPod is enabled), while the smart update of the cfg replset needs mongos to stop the balancer.
+func (r *ReconcilePerconaServerMongoDB) updateMongosFirstIfTLSOutdated(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !cr.Spec.Sharding.Enabled ||
+		!cr.TLSEnabled() ||
+		cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType ||
+		ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+		return nil
+	}
+
+	sslAnn, err := r.sslAnnotation(ctx, cr)
+	if err != nil {
+		if errors.Is(err, errTLSNotReady) {
+			return nil
+		}
+		return errors.Wrap(err, "get ssl annotations")
+	}
+
+	pods, err := r.getMongosPods(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get mongos pods")
+	}
+
+	for _, pod := range pods.Items {
+		for k, v := range sslAnn {
+			if pod.Annotations[k] == v {
+				continue
+			}
+
+			logf.FromContext(ctx).Info("mongos runs an outdated TLS certificate, updating mongos first", "pod", pod.Name)
+			return r.setUpdateMongosFirst(ctx, cr)
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {

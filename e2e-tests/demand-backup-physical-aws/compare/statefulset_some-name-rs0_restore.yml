@@ -49,7 +49,6 @@ spec:
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
-            - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
             - --enableEncryption
@@ -93,7 +92,7 @@ spec:
                   apiVersion: v1
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt
           envFrom:
             - secretRef:
                 name: internal-some-name-users
