@@ -112,7 +112,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			updateRevision = arbiterSfs.Status.UpdateRevision
 		}
 
-		if err := r.applyNWait(ctx, cr, updateRevision, pod, waitLimit); err != nil {
+		if err := r.applyNWait(ctx, cr, replset, updateRevision, pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
 		return nil
@@ -204,35 +204,52 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
 	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
-		forceStepDown := replset.Size == 1
-		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
-		if err != nil {
-			return fmt.Errorf("failed to get mongo client: %v", err)
-		}
+		updateRevision := sfs.Status.UpdateRevision
 
-		defer func() {
-			err := client.Disconnect(ctx)
+		resized := primaryPod.Labels["controller-revision-hash"] == updateRevision
+		if !resized {
+			resized, err = r.tryInPlaceResize(ctx, cr, replset, updateRevision, &primaryPod)
 			if err != nil {
-				log.Error(err, "failed to close connection")
-			}
-		}()
-
-		err = client.StepDown(ctx, 60, forceStepDown)
-		if err != nil {
-			if strings.Contains(err.Error(), "No electable secondaries caught up") {
-				err = client.StepDown(ctx, 60, true)
-				if err != nil {
-					return errors.Wrap(err, "failed to do forced step down")
-				}
-			} else {
-				return errors.Wrap(err, "failed to do step down")
+				return errors.Wrap(err, "in-place resize primary")
 			}
 		}
 
-		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
-		if err := updatePod(&primaryPod); err != nil {
-			return err
+		if resized {
+			log.Info("primary pod is up to date, no step down needed", "pod", primaryPod.Name)
+			if err := r.waitPodRestart(ctx, cr, updateRevision, &primaryPod, waitLimit); err != nil {
+				return errors.Wrap(err, "wait primary pod ready")
+			}
+		} else {
+			forceStepDown := replset.Size == 1
+			log.Info("doing step down...", "force", forceStepDown)
+			client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+			if err != nil {
+				return fmt.Errorf("failed to get mongo client: %v", err)
+			}
+
+			defer func() {
+				err := client.Disconnect(ctx)
+				if err != nil {
+					log.Error(err, "failed to close connection")
+				}
+			}()
+
+			err = client.StepDown(ctx, 60, forceStepDown)
+			if err != nil {
+				if strings.Contains(err.Error(), "No electable secondaries caught up") {
+					err = client.StepDown(ctx, 60, true)
+					if err != nil {
+						return errors.Wrap(err, "failed to do forced step down")
+					}
+				} else {
+					return errors.Wrap(err, "failed to do step down")
+				}
+			}
+
+			log.Info("apply changes to primary pod", "pod", primaryPod.Name)
+			if err := r.recreateNWait(ctx, cr, updateRevision, &primaryPod, waitLimit); err != nil {
+				return errors.Wrap(err, "failed to apply changes")
+			}
 		}
 	}
 
@@ -469,7 +486,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 
 	for _, pod := range list.Items {
-		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
+		if err := r.applyNWait(ctx, cr, nil, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
 	}
@@ -534,7 +551,21 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 	return r.isStsListUpToDate(ctx, cr, &sfsList)
 }
 
-func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+	if pod.ObjectMeta.Labels["controller-revision-hash"] != updateRevision {
+		resized, err := r.tryInPlaceResize(ctx, cr, replset, updateRevision, pod)
+		if err != nil {
+			return errors.Wrap(err, "in-place resize")
+		}
+		if resized {
+			return errors.Wrap(r.waitPodRestart(ctx, cr, updateRevision, pod, waitLimit), "wait pod ready")
+		}
+	}
+
+	return r.recreateNWait(ctx, cr, updateRevision, pod, waitLimit)
+}
+
+func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
 		logf.FromContext(ctx).Info("Pod already updated", "pod", pod.Name)
 	} else {

@@ -1,0 +1,456 @@
+#!/bin/bash
+# e2e test for VPA recommendation reading and application.
+#
+# This test validates the operator's VPA integration without requiring a real
+# VPA controller. It installs the VPA CRD, creates VPA objects manually, and
+# patches their status to simulate what VPA Recommender / Goldilocks would write.
+#
+# Scenarios covered:
+#   1. Off mode  — recommendation recorded in status, CR resources not changed
+#   2. Auto mode — recommendation applied to CR, SmartUpdate converges cluster
+#   3. Bounds    — minAllowed/maxAllowed clamp applied before patching
+#   4. Stabilization window — second apply blocked until window passes
+#   5. Two clusters in same namespace — no cross-contamination between clusters
+#   6. Two clusters in different namespaces — operator isolates recommendations per namespace
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+# Use cluster-wide operator mode so we can test multi-namespace isolation (scenario 6).
+# The framework automatically deploys cw-rbac + cw-operator when OPERATOR_NS is set.
+OPERATOR_NS=${OPERATOR_NS:-psmdb-operator}
+
+cluster="some-name"
+cluster2="another-name"
+
+# ---------------------------------------------------------------------------
+# helpers  (all accept optional trailing cluster_name and namespace args)
+# ---------------------------------------------------------------------------
+
+function install_vpa_crd() {
+	desc 'install minimal VPA CRD (no controller needed — operator only reads)'
+	kubectl_bin apply -f "${test_dir}/conf/vpa-crd.yml"
+	kubectl_bin wait crd/verticalpodautoscalers.autoscaling.k8s.io \
+		--for=condition=Established --timeout=60s
+}
+
+# create_vpa_object <vpa_name> [cluster_name] [ns]
+function create_vpa_object() {
+	local vpa_name=$1
+	local c=${2:-${cluster}}
+	local ns=${3:-${namespace}}
+	desc "create VPA object ${vpa_name} (cluster=${c}, ns=${ns})"
+	cat <<EOF | kubectl_bin apply -n "${ns}" -f -
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: ${vpa_name}
+  namespace: ${ns}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: ${c}-rs0
+  updatePolicy:
+    updateMode: "Off"
+EOF
+}
+
+# set_vpa_recommendation <vpa_name> <cpu> <memory> [container] [ns]
+function set_vpa_recommendation() {
+	local vpa_name=$1
+	local cpu=$2
+	local memory=$3
+	local container=${4:-mongod}
+	local ns=${5:-${namespace}}
+
+	desc "set VPA recommendation on ${vpa_name} (ns=${ns}): cpu=${cpu} memory=${memory}"
+	kubectl_bin patch -n "${ns}" "vpa/${vpa_name}" \
+		--type=merge \
+		--subresource=status \
+		-p "{
+			\"status\": {
+				\"recommendation\": {
+					\"containerRecommendations\": [{
+						\"containerName\": \"${container}\",
+						\"target\": {
+							\"cpu\": \"${cpu}\",
+							\"memory\": \"${memory}\"
+						},
+						\"lowerBound\": {\"cpu\": \"${cpu}\", \"memory\": \"${memory}\"},
+						\"upperBound\": {\"cpu\": \"${cpu}\", \"memory\": \"${memory}\"}
+					}]
+				}
+			}
+		}"
+}
+
+# wait_for_vpa_status <field> <expected> [max_retry] [sleep] [cluster_name] [ns]
+function wait_for_vpa_status() {
+	local field=$1
+	local expected=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local c=${5:-${cluster}}
+	local ns=${6:-${namespace}}
+
+	echo "Waiting for ${c}.status.vpaStatus.${field} == ${expected} (ns=${ns})"
+	local retry=0
+	until [[ "$(kubectl_bin -n "${ns}" get psmdb "${c}" \
+		-o jsonpath="{.status.vpaStatus.${field}}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: ${c}.status.vpaStatus.${field} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${c}" \
+				-o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${c}.status.vpaStatus.${field} == ${expected}"
+}
+
+# get_cr_requests <resource> [cluster_name] [ns]
+function get_cr_requests() {
+	local resource=$1
+	local c=${2:-${cluster}}
+	local ns=${3:-${namespace}}
+	kubectl_bin -n "${ns}" get psmdb "${c}" \
+		-o jsonpath="{.spec.replsets[0].resources.requests.${resource}}"
+}
+
+# assert_cr_requests <resource> <expected> [cluster_name] [ns]
+function assert_cr_requests() {
+	local resource=$1
+	local expected=$2
+	local c=${3:-${cluster}}
+	local ns=${4:-${namespace}}
+	local actual
+	actual=$(get_cr_requests "${resource}" "${c}" "${ns}")
+	if [[ "${actual}" != "${expected}" ]]; then
+		echo "ERROR: ${c}.spec.replsets[0].resources.requests.${resource} = '${actual}', expected '${expected}'"
+		exit 1
+	fi
+	echo "OK: ${c}.spec.replsets[0].resources.requests.${resource} == ${expected}"
+}
+
+# wait_for_last_applied_at <status_key> [max_retry] [sleep] [cluster_name] [ns]
+function wait_for_last_applied_at() {
+	local status_key=$1
+	local max_retry=${2:-30}
+	local sleep_time=${3:-5}
+	local c=${4:-${cluster}}
+	local ns=${5:-${namespace}}
+
+	echo "Waiting for ${c}.status.vpaStatus.${status_key}.lastAppliedAt to be set (ns=${ns})"
+	local retry=0
+	until kubectl_bin -n "${ns}" get psmdb "${c}" \
+		-o jsonpath="{.status.vpaStatus.${status_key}.lastAppliedAt}" \
+		| grep -q .; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: lastAppliedAt for ${c}/${status_key} was never set"
+			kubectl_bin -n "${ns}" get psmdb "${c}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: lastAppliedAt set for ${c}/${status_key}"
+}
+
+# wait_for_new_apply <status_key> <after_time> [max_retry] [sleep] [cluster_name] [ns]
+function wait_for_new_apply() {
+	local status_key=$1
+	local after_time=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local c=${5:-${cluster}}
+	local ns=${6:-${namespace}}
+
+	echo "Waiting for ${c}.status.vpaStatus.${status_key}.lastAppliedAt > ${after_time} (ns=${ns})"
+	local retry=0
+	while true; do
+		local ts
+		ts=$(kubectl_bin -n "${ns}" get psmdb "${c}" \
+			-o jsonpath="{.status.vpaStatus.${status_key}.lastAppliedAt}" 2>/dev/null || true)
+		if [[ -n "${ts}" && "${ts}" > "${after_time}" ]]; then
+			echo
+			echo "OK: new lastAppliedAt=${ts} for ${c}/${status_key}"
+			return 0
+		fi
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: no new apply for ${c}/${status_key} after ${after_time}"
+			kubectl_bin -n "${ns}" get psmdb "${c}" -o jsonpath='{.status.vpaStatus}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+}
+
+# wait_for_cr_requests <resource> <expected> [max_retry] [sleep] [cluster_name] [ns]
+function wait_for_cr_requests() {
+	local resource=$1
+	local expected=$2
+	local max_retry=${3:-30}
+	local sleep_time=${4:-5}
+	local c=${5:-${cluster}}
+	local ns=${6:-${namespace}}
+
+	echo "Waiting for ${c}.spec.replsets[0].resources.requests.${resource} == ${expected} (ns=${ns})"
+	local retry=0
+	until [[ "$(get_cr_requests "${resource}" "${c}" "${ns}")" == "${expected}" ]]; do
+		if [[ $retry -ge $max_retry ]]; then
+			echo
+			echo "ERROR: ${c}.spec.replsets[0].resources.requests.${resource} did not reach '${expected}'"
+			kubectl_bin -n "${ns}" get psmdb "${c}" -o jsonpath='{.spec.replsets[0].resources}' | jq . || true
+			exit 1
+		fi
+		echo -n "."
+		sleep $sleep_time
+		retry=$((retry + 1))
+	done
+	echo
+	echo "OK: ${c}.spec.replsets[0].resources.requests.${resource} == ${expected}"
+}
+
+# ---------------------------------------------------------------------------
+# setup
+# ---------------------------------------------------------------------------
+
+create_infra "${namespace}"
+
+desc 'create secrets and psmdb client'
+kubectl_bin apply \
+	-f "${conf_dir}/secrets.yml" \
+	-f "${conf_dir}/client.yml"
+
+install_vpa_crd
+
+desc "deploy PSMDB cluster ${cluster} with vpa.updateMode=Off"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}" 64
+# Extra settle time: the operator may still be running initial replSetReconfig
+# (vote/priority updates) when cluster first shows as ready.  Give it a moment
+# so reconcileVPA is not skipped by a transient reconcile error.
+sleep 15
+
+vpa_name="${cluster}-rs0-vpa"
+create_vpa_object "${vpa_name}" "${cluster}" "${namespace}"
+
+# ---------------------------------------------------------------------------
+# scenario 1: Off mode — recommendation recorded in status, CR not changed
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 1: Off mode ==='
+
+set_vpa_recommendation "${vpa_name}" "350m" "350Mi"
+
+desc 'wait for operator to record recommendation in status'
+# Use 60 retries (5 min) — first reconcileVPA may be delayed if operator is
+# still stabilizing the replicaset configuration on startup.
+wait_for_vpa_status "rs0.cpu" "350m" 60 5
+wait_for_vpa_status "rs0.memory" "350Mi" 60 5
+
+desc 'verify CR resources were NOT changed (updateMode=Off)'
+assert_cr_requests "cpu" "100m"
+assert_cr_requests "memory" "100M"
+
+desc 'verify lastAppliedAt is not set in Off mode'
+last_applied=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}')
+if [[ -n "${last_applied}" ]]; then
+	echo "ERROR: lastAppliedAt should be empty in Off mode, got '${last_applied}'"
+	exit 1
+fi
+echo "OK: lastAppliedAt is empty in Off mode"
+
+# ---------------------------------------------------------------------------
+# scenario 2: Auto mode — recommendation applied, SmartUpdate converges
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 2: Auto mode ==='
+
+desc 'switch to updateMode=Auto'
+kubectl_bin patch psmdb "${cluster}" \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/vpa/updateMode", "value": "Auto"}]'
+
+desc 'wait for operator to apply recommendation and set lastAppliedAt'
+wait_for_last_applied_at "rs0"
+apply_ts_after_s2=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}')
+
+desc 'verify CR requests updated to VPA recommendation'
+wait_for_cr_requests "cpu" "350m"
+wait_for_cr_requests "memory" "350Mi"
+
+desc 'wait for cluster to converge after SmartUpdate'
+wait_cluster_consistency "${cluster}" 64
+kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}' | grep -q "ready"
+echo "OK: cluster ready after VPA apply"
+
+# ---------------------------------------------------------------------------
+# scenario 3: Bounds enforcement — recommendation clamped to maxAllowed
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 3: Bounds enforcement ==='
+
+desc 'wait for stabilization window (30s), then set recommendation above maxAllowed'
+sleep 35
+
+set_vpa_recommendation "${vpa_name}" "8000m" "8Gi"
+
+desc 'wait for operator to apply clamped recommendation (lastAppliedAt must advance)'
+wait_for_new_apply "rs0" "${apply_ts_after_s2}"
+apply_ts_after_s3=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}')
+
+desc 'verify recommendation was clamped to maxAllowed'
+wait_for_cr_requests "cpu" "2"
+wait_for_cr_requests "memory" "2Gi"
+
+desc 'wait for cluster to converge'
+wait_cluster_consistency "${cluster}" 64
+
+# ---------------------------------------------------------------------------
+# scenario 4: Stabilization window — second apply blocked
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 4: Stabilization window ==='
+
+desc 'set a new recommendation immediately after last apply'
+set_vpa_recommendation "${vpa_name}" "500m" "500Mi"
+
+desc 'verify CR resources are NOT changed yet (stabilization window=30s not passed)'
+sleep 5
+assert_cr_requests "cpu" "2"
+assert_cr_requests "memory" "2Gi"
+
+desc 'wait for stabilization window to pass and recommendation to be applied'
+sleep 30
+wait_for_new_apply "rs0" "${apply_ts_after_s3}"
+
+wait_for_cr_requests "cpu" "500m"
+wait_for_cr_requests "memory" "500Mi"
+
+desc 'wait for cluster to converge'
+wait_cluster_consistency "${cluster}" 64
+
+# ---------------------------------------------------------------------------
+# scenario 5: Two clusters in SAME namespace — no cross-contamination
+# Verify that VPA recommendations for cluster-A are not applied to cluster-B
+# and vice versa, even when both are Auto mode and share a namespace.
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 5: Two clusters in same namespace — no cross-contamination ==='
+
+desc "deploy second cluster ${cluster2} in the same namespace (updateMode=Auto)"
+apply_cluster "${test_dir}/conf/${cluster2}.yml"
+wait_for_running "${cluster2}-rs0" 3
+wait_cluster_consistency "${cluster2}" 64
+
+vpa_name2="${cluster2}-rs0-vpa"
+create_vpa_object "${vpa_name2}" "${cluster2}" "${namespace}"
+
+desc 'wait for stabilization window on first cluster before new recommendation'
+sleep 35
+
+desc "set distinct recommendations: ${cluster}=450m/450Mi  ${cluster2}=600m/600Mi"
+set_vpa_recommendation "${vpa_name}"  "450m" "450Mi"
+set_vpa_recommendation "${vpa_name2}" "600m" "600Mi"
+
+apply_ts_s5_c1=$(kubectl_bin get psmdb "${cluster}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}')
+apply_ts_s5_c2=$(kubectl_bin get psmdb "${cluster2}" \
+	-o jsonpath='{.status.vpaStatus.rs0.lastAppliedAt}' 2>/dev/null || true)
+
+desc "wait for ${cluster} to apply its recommendation (450m)"
+wait_for_new_apply "rs0" "${apply_ts_s5_c1}" 30 5 "${cluster}" "${namespace}"
+wait_for_cr_requests "cpu" "450m" 30 5 "${cluster}" "${namespace}"
+wait_for_cr_requests "memory" "450Mi" 30 5 "${cluster}" "${namespace}"
+
+desc "wait for ${cluster2} to apply its recommendation (600m)"
+wait_for_last_applied_at "rs0" 30 5 "${cluster2}" "${namespace}"
+wait_for_cr_requests "cpu" "600m" 30 5 "${cluster2}" "${namespace}"
+wait_for_cr_requests "memory" "600Mi" 30 5 "${cluster2}" "${namespace}"
+
+desc 'verify no cross-contamination: each cluster has ONLY its own recommendation'
+assert_cr_requests "cpu"    "450m" "${cluster}"  "${namespace}"
+assert_cr_requests "memory" "450Mi" "${cluster}" "${namespace}"
+assert_cr_requests "cpu"    "600m" "${cluster2}" "${namespace}"
+assert_cr_requests "memory" "600Mi" "${cluster2}" "${namespace}"
+echo "OK: no cross-contamination between clusters in the same namespace"
+
+desc 'wait for both clusters to converge'
+wait_cluster_consistency "${cluster}"  64
+wait_cluster_consistency "${cluster2}" 64
+
+# ---------------------------------------------------------------------------
+# scenario 6: Two clusters in DIFFERENT namespaces — namespace isolation
+# Same cluster name and VPA object name in two namespaces must not interfere.
+# The cluster-wide operator (OPERATOR_NS) watches both namespaces.
+# ---------------------------------------------------------------------------
+
+desc '=== SCENARIO 6: Two clusters in different namespaces — namespace isolation ==='
+
+ns2="${namespace}-2"
+desc "create second namespace ${ns2}"
+kubectl_bin create namespace "${ns2}"
+
+desc "apply secrets in ${ns2}"
+kubectl_bin apply -n "${ns2}" -f "${conf_dir}/secrets.yml"
+
+desc "deploy cluster '${cluster}' in ${ns2}"
+# Temporarily switch context so apply_cluster targets ns2, then switch back.
+set_kube_ctx "${ns2}"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}" 64
+set_kube_ctx "${namespace}"
+
+desc "switch cluster in ${ns2} to Auto mode"
+kubectl_bin -n "${ns2}" patch psmdb "${cluster}" \
+	--type='json' \
+	-p='[{"op": "replace", "path": "/spec/vpa/updateMode", "value": "Auto"}]'
+
+desc "create VPA object '${cluster}-rs0-vpa' in ${ns2} (same name as in ${namespace})"
+create_vpa_object "${cluster}-rs0-vpa" "${cluster}" "${ns2}"
+
+desc "set recommendation in ${ns2}: 700m/700Mi"
+set_vpa_recommendation "${cluster}-rs0-vpa" "700m" "700Mi" "mongod" "${ns2}"
+
+desc "wait for stabilization window to pass (30s)"
+sleep 35
+
+desc "wait for cluster in ${ns2} to apply its recommendation"
+wait_for_last_applied_at "rs0" 30 5 "${cluster}" "${ns2}"
+wait_for_cr_requests "cpu"    "700m"  30 5 "${cluster}" "${ns2}"
+wait_for_cr_requests "memory" "700Mi" 30 5 "${cluster}" "${ns2}"
+
+desc "verify cluster in original namespace (${namespace}) was NOT affected by ${ns2} recommendation"
+assert_cr_requests "cpu"    "450m"  "${cluster}" "${namespace}"
+assert_cr_requests "memory" "450Mi" "${cluster}" "${namespace}"
+echo "OK: namespace isolation confirmed — cross-namespace recommendations do not bleed"
+
+desc "clean up second namespace ${ns2}"
+kubectl_bin delete namespace "${ns2}" --grace-period=0 --force=true --ignore-not-found || true
+
+# ---------------------------------------------------------------------------
+# cleanup
+# ---------------------------------------------------------------------------
+
+destroy "${namespace}"
+desc 'test passed'

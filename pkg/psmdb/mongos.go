@@ -266,7 +266,7 @@ func mongosContainer(cr *api.PerconaServerMongoDB, useConfigFile bool, cfgInstan
 		LivenessProbe:   &cr.Spec.Sharding.Mongos.LivenessProbe.Probe,
 		ReadinessProbe:  cr.Spec.Sharding.Mongos.ReadinessProbe,
 		SecurityContext: cr.Spec.Sharding.Mongos.ContainerSecurityContext,
-		Resources:       cr.Spec.Sharding.Mongos.Resources,
+		Resources:       cr.VPAResources("mongos", cr.Spec.Sharding.Mongos.Resources),
 		VolumeMounts:    volumes,
 		Command:         []string{config.BinMountPath + "/ps-entry.sh"},
 	}
