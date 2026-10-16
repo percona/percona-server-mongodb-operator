@@ -22,7 +22,7 @@ spec:
     group: cert-manager.io
     kind: Issuer
     name: some-name-psmdb-ca-issuer
-  renewBefore: 730h0m0s
-  secretName: some-name-ca-cert
   privateKey:
     rotationPolicy: Never
+  renewBefore: 730h0m0s
+  secretName: some-name-ca-cert
