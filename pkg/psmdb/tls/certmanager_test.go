@@ -548,7 +548,7 @@ func TestApplyCertificateSansVersionGate(t *testing.T) {
 			Spec: api.PerconaServerMongoDBSpec{
 				CRVersion: crVersion,
 				Secrets:   &api.SecretsSpec{SSL: "ssl"},
-				Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}},
+				Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(3))}},
 				TLS:       new(api.TLSSpec),
 			},
 		}

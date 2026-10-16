@@ -22,7 +22,7 @@ func searchTestCR() *api.PerconaServerMongoDB {
 		Namespace: "default",
 		Spec: api.PerconaServerMongoDBSpec{
 			Replsets: []*api.ReplsetSpec{
-				{Name: "rs0", Size: 3},
+				{Name: "rs0", Size: new(int32(3))},
 			},
 		},
 	}

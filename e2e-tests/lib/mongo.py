@@ -26,10 +26,26 @@ class MongoManager:
         mongo_flag: str = "",
         timeout: int = 30,
         check: bool = True,
+        direct: bool = False,
     ) -> str:
-        """Execute mongosh command in PSMDB client container."""
-        replica_set = "cfg" if "cfg" in uri else "rs0"
-        connection_string = f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
+        """Execute mongosh command in PSMDB client container.
+
+        With direct, the connection is pinned to the host in the URI instead of
+        being handed to replica set discovery. Discovery routes reads by the
+        topology the seed reports, so it is the wrong tool for asserting what a
+        particular member holds -- and for a hidden member, which never appears
+        in that topology, it does not reach it at all.
+        """
+        if direct:
+            connection_string = (
+                f"mongodb://{uri}{suffix}/admin"
+                "?ssl=false&directConnection=true&readPreference=secondaryPreferred"
+            )
+        else:
+            replica_set = "cfg" if "cfg" in uri else "rs0"
+            connection_string = (
+                f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
+            )
 
         result = kubectl_bin(
             "exec",
@@ -127,8 +143,13 @@ class MongoManager:
         test_file: str = "",
         retries: int = 3,
         retry_delay: int = 10,
+        direct: bool = False,
     ) -> None:
-        """Compare MongoDB command output"""
+        """Compare MongoDB command output.
+
+        With direct, the read is served by the host in the URI rather than by
+        whichever member replica set discovery picks.
+        """
         full_cmd = f"{collection}.{command}"
         if sort:
             full_cmd = f"{collection}.{command}.{sort}"
@@ -141,7 +162,7 @@ class MongoManager:
         mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
 
         def _compare() -> None:
-            result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
+            result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb", direct=direct))
             logger.info(f"MongoDB output: {result}")
             diff = DeepDiff(expected, result)
             assert not diff, (

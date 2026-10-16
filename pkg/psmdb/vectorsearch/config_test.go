@@ -30,7 +30,7 @@ func newTestCRSharded() *api.PerconaServerMongoDB {
 	}
 	cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
 		Name: "cfg",
-		Size: 3,
+		Size: new(int32(3)),
 	}
 
 	return cr
@@ -39,7 +39,7 @@ func newTestCRSharded() *api.PerconaServerMongoDB {
 func newTestRS() *api.ReplsetSpec {
 	return &api.ReplsetSpec{
 		Name: "rs0",
-		Size: 3,
+		Size: new(int32(3)),
 	}
 }
 
@@ -284,9 +284,9 @@ func TestInjectMongosConfig_ShardedSetsHostsPerShard(t *testing.T) {
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
 	cr.Spec.Replsets = []*api.ReplsetSpec{
-		{Name: "rs0", Size: 3},
-		{Name: "rs1", Size: 3},
-		{Name: "cfg", Size: 3, ClusterRole: api.ClusterRoleConfigSvr},
+		{Name: "rs0", Size: new(int32(3))},
+		{Name: "rs1", Size: new(int32(3))},
+		{Name: "cfg", Size: new(int32(3)), ClusterRole: api.ClusterRoleConfigSvr},
 	}
 
 	out, err := InjectMongosConfig("", cr)
@@ -308,7 +308,7 @@ func TestInjectMongosConfig_PreservesUnrelatedSetParameterKeys(t *testing.T) {
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
 	cr.Spec.Replsets = []*api.ReplsetSpec{
-		{Name: "rs0", Size: 3},
+		{Name: "rs0", Size: new(int32(3))},
 	}
 
 	in := `
@@ -329,7 +329,7 @@ setParameter:
 func TestInjectMongosConfig_InvalidYAMLReturnsError(t *testing.T) {
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
-	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(3))}}
 
 	_, err := InjectMongosConfig("net: [unterminated\n", cr)
 	require.Error(t, err)
@@ -391,7 +391,7 @@ func TestDefaultConfig(t *testing.T) {
 			expected: newDefaultExpectedConfig(),
 		},
 		"non-sharded replset with size 1": {
-			mutateRS: func(rs *api.ReplsetSpec) { rs.Size = 1 },
+			mutateRS: func(rs *api.ReplsetSpec) { rs.Size = new(int32(1)) },
 			expected: func() mongot.Config {
 				cfg := newDefaultExpectedConfig()
 				cfg.SyncSource.ReplicaSet.HostAndPort = []string{
@@ -425,7 +425,7 @@ net:
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
 					Name: "cfg",
-					Size: 3,
+					Size: new(int32(3)),
 				}
 			},
 			expected: func() mongot.Config {
@@ -471,7 +471,8 @@ net:
 				tt.mutateRS(rs)
 			}
 
-			got := defaultMongotConfig(cr, rs)
+			got, err := defaultMongotConfig(cr, rs)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
 	}

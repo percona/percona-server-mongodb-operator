@@ -123,12 +123,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	}
 
 	if len(containerNames) > 0 {
-		rsPodList, err := r.getMongodPods(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to get mongos pods")
-		}
+		var pods []corev1.Pod
+		for _, rs := range repls {
+			rsPods, err := psmdb.GetOutdatedRSPods(ctx, r.client, cr, rs.Name)
+			if err != nil {
+				return errors.Wrapf(err, "failed to get pods of replset %s", rs.Name)
+			}
 
-		pods := rsPodList.Items
+			pods = append(pods, rsPods.Items...)
+		}
 
 		if cr.Spec.Sharding.Enabled {
 			mongosList, err := r.getMongosPods(ctx, cr)
@@ -137,13 +140,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 			}
 
 			pods = append(pods, mongosList.Items...)
-
-			cfgPodlist, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
-			if err != nil {
-				return errors.Wrap(err, "failed to get mongos pods")
-			}
-
-			pods = append(pods, cfgPodlist.Items...)
 		}
 
 		for _, name := range containerNames {

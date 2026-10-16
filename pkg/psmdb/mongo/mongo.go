@@ -1115,3 +1115,283 @@ func (m *ConfigMembers) SetVotes(compareWith ConfigMembers, unsafePSA bool) {
 func (m ConfigMember) String() string {
 	return fmt.Sprintf("{votes: %d, priority: %d}", m.Votes, m.Priority)
 }
+
+// electableUnder reports whether a member could win an election with that configuration.
+func electableUnder(m ConfigMember) bool {
+	return m.Votes > 0 && m.Priority > 0 && !m.ArbiterOnly
+}
+
+// hasOtherElectable reports whether any member other than host could take the primary over under the live configuration.
+func (m ConfigMembers) hasOtherElectable(host string) bool {
+	for i := range m {
+		if m[i].Host == host {
+			continue
+		}
+		if electableUnder(m[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// primaryNeedsHandover reports whether the primary's desired configuration
+// cannot be applied while it holds the primary, and another member could take
+// over. MongoDB rejects a reconfiguration that leaves the node running it
+// unelectable, so such a member has to wait until it is no longer the primary.
+func (m ConfigMembers) primaryNeedsHandover(desired map[string]ConfigMember, primaryHost string) bool {
+	if primaryHost == "" {
+		return false
+	}
+
+	want, ok := desired[primaryHost]
+	if !ok || electableUnder(want) {
+		return false
+	}
+
+	// If no one else is electable, attempt the change anyway and let MongoDB reject it,
+	// there is nothing we can do.
+	return m.hasOtherElectable(primaryHost)
+}
+
+func countVoters(m ConfigMembers) int {
+	voters := 0
+	for _, member := range m {
+		if member.Votes > 0 {
+			voters++
+		}
+	}
+	return voters
+}
+
+// checkImmutable returns an error on the first member whose desired configuration asks for
+// a change MongoDB cannot make in place.
+func (m ConfigMembers) checkImmutable(desired map[string]ConfigMember) error {
+	for i := range m {
+		cur := &m[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok {
+			continue
+		}
+
+		if want.ArbiterOnly != cur.ArbiterOnly {
+			return errors.Errorf(
+				"member %s: arbiterOnly cannot be changed on an existing member "+
+					"(live %t, desired %t). Remove the instance and declare a new one",
+				cur.Host, cur.ArbiterOnly, want.ArbiterOnly)
+		}
+	}
+
+	return nil
+}
+
+// nextVoteChange picks which outstanding votes change ApplyMemberConfig should
+// apply in a given pass, and reports whether one is outstanding that cannot be
+// applied at all.
+//
+// MongoDB accepts a single voting-member change per ordinary reconfiguration,
+// and the resulting config has to be legal on its own: at least one voting
+// member, at most MaxVotingMembers of them. Which change is safe therefore
+// depends on the live voter count, not on the order members happen to sit in
+// the config. A swap - one member gaining a vote while another loses one --
+// is the case that bites: at the ceiling the removal has to go first, and at a
+// single voter the addition does.
+//
+// Growing is preferred while there is headroom, because the intermediate
+// config then tolerates at least as many failures as the one it replaces.
+// Shrinking first would pass through a smaller set: a three-voter set dropped
+// to two tolerates no failure at all, where four tolerates one.
+//
+// External members are never candidates; ExternalNodesChanged owns those.
+// They are still counted, because MongoDB's limit is over the whole config.
+func (m ConfigMembers) nextVoteChange(desired map[string]ConfigMember, skipHost string) (int, bool) {
+	voters := countVoters(m)
+
+	add, remove := -1, -1
+	for i := range m {
+		cur := &m[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		if skipHost != "" && cur.Host == skipHost {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok || want.Votes == cur.Votes {
+			continue
+		}
+
+		if want.Votes > cur.Votes {
+			if add < 0 {
+				add = i
+			}
+			continue
+		}
+		if remove < 0 {
+			remove = i
+		}
+	}
+
+	switch {
+	case add >= 0 && voters+1 <= MaxVotingMembers:
+		return add, false
+	case remove >= 0 && voters-1 >= 1:
+		return remove, false
+	case add < 0 && remove < 0:
+		return -1, false
+	default:
+		// Something is outstanding, but neither direction leaves a legal
+		// config. Retrying cannot help.
+		return -1, true
+	}
+}
+
+// ApplyMemberConfig reconciles the mutable member settings of the live config
+// against the desired list, matching members by host.
+//
+// It reports:
+//   - changed:             the caller must bump the version and write the config
+//   - votingChangePending: at least one more votes change is outstanding, so the
+//     caller must re-read the live config and call again on the next pass
+//   - stepDownPrimary:     if the provided primaryHost needs to step down in a given pass
+//
+// Contract:
+//   - Mutable in place: priority, hidden, tags, horizons. Removing a desired
+//     value clears the applied one. Priority and hidden move together with the
+//     member's votes, because MongoDB validates all three against each other.
+//   - At most one votes change per call. MongoDB permits only one voting-member
+//     change in an ordinary reconfiguration, and routine convergence must not
+//     use a forced reconfiguration to bypass that.
+//   - arbiterOnly is creation-only. A requested change is returned as an error
+//     and the live config is left untouched: the operator must not silently
+//     convert a data-bearing member into an arbiter.
+//   - buildIndexes and secondaryDelaySecs/slaveDelay are not compared at all.
+//     Neither is exposed on the CRD, so the desired value is always
+//     the same, and a member somebody changed by hand outside the operator must
+//     not make every reconciliation fail or be silently reverted.
+//   - External members (tag external=true) and hosts absent from the desired
+//     list are skipped; ExternalNodesChanged and RemoveOld own those.
+//   - Member IDs are never modified; AddNew and RemoveOld own ID assignment.
+//   - If a vote change requires the existing primary to step down, it will be done when no
+//     more vote changes are pending.
+//
+// This is the PolicyExplicit counterpart of SetVotes. SetVotes must not be
+// called for an explicit topology: it derives votes from role tags, caps voting
+// membership and removes a vote for parity, all of which would overwrite what
+// the user asked for.
+func (m *ConfigMembers) ApplyMemberConfig(
+	ctx context.Context,
+	compareWith ConfigMembers,
+	primaryHost string,
+) (bool, bool, bool, error) {
+	log := logf.FromContext(ctx)
+
+	desired := make(map[string]ConfigMember, len(compareWith))
+	for _, member := range compareWith {
+		desired[member.Host] = member
+	}
+
+	// Check if any immutable fields are being changed
+	if err := m.checkImmutable(desired); err != nil {
+		return false, false, false, err
+	}
+
+	stepDownPrimary := m.primaryNeedsHandover(desired, primaryHost)
+
+	// The host to leave untouched this pass. Empty unless the primary is
+	// blocked, and no real member has an empty host, so the comparisons on it
+	// match nothing in the ordinary case.
+	skipHost := ""
+	if stepDownPrimary {
+		skipHost = primaryHost
+	}
+
+	voteIdx, voteBlocked := m.nextVoteChange(desired, skipHost)
+	if voteBlocked {
+		return false, false, false, errors.Errorf(
+			"replset config has %d voting members and the requested votes changes "+
+				"cannot be applied one at a time without leaving between 1 and %d. "+
+				"Adjust the declared votes so the total stays in range",
+			countVoters(*m), MaxVotingMembers)
+	}
+
+	changed := false
+	votePending := false
+
+	for i := range *m {
+		cur := &(*m)[i]
+
+		if _, isExternal := cur.Tags["external"]; isExternal {
+			continue
+		}
+
+		want, ok := desired[cur.Host]
+		if !ok {
+			continue
+		}
+
+		// Nothing about the primary may change while its desired configuration
+		// would leave it unelectable: MongoDB validates the whole member
+		// document, so even a priority-only change is refused. The caller hands
+		// the primary over and this member converges on a later pass.
+		if skipHost != "" && cur.Host == skipHost {
+			votePending = true
+			continue
+		}
+
+		voteDeferred := want.Votes != cur.Votes && i != voteIdx
+
+		// Votes, priority and hidden move as one: MongoDB rejects a member
+		// that has a priority above zero and no vote, and a hidden member whose
+		// priority is not zero. A member whose vote change is deferred
+		// therefore keeps all three as they are.
+		if voteDeferred {
+			// Another member's votes change is going out in this pass. Leave
+			// this one for the next reconciliation, after the live config has
+			// been re-read and this one has committed.
+			votePending = true
+		} else {
+			if want.Priority != cur.Priority {
+				log.Info("Priority changed", "host", cur.Host, "old", cur.Priority, "new", want.Priority)
+				cur.Priority = want.Priority
+				changed = true
+			}
+
+			if want.Hidden != cur.Hidden {
+				log.Info("Hidden changed", "host", cur.Host, "old", cur.Hidden, "new", want.Hidden)
+				cur.Hidden = want.Hidden
+				changed = true
+			}
+
+			if want.Votes != cur.Votes {
+				log.Info("Votes changed", "host", cur.Host, "old", cur.Votes, "new", want.Votes)
+				cur.Votes = want.Votes
+				changed = true
+			}
+		}
+
+		// Arbiters carry no tags in MongoDB, so only compare them for
+		// data-bearing members. A removed key must disappear, which is why this
+		// is an equality check and not a merge.
+		if !cur.ArbiterOnly && !reflect.DeepEqual(want.Tags, cur.Tags) {
+			log.Info("Tags changed", "host", cur.Host, "old", cur.Tags, "new", want.Tags)
+			cur.Tags = want.Tags
+			changed = true
+		}
+
+		if !reflect.DeepEqual(want.Horizons, cur.Horizons) {
+			log.Info("Horizons changed", "host", cur.Host, "old", cur.Horizons, "new", want.Horizons)
+			cur.Horizons = want.Horizons
+			changed = true
+		}
+	}
+
+	return changed, votePending, stepDownPrimary, nil
+}

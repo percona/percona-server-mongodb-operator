@@ -31,7 +31,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 						Namespace: cr.Namespace,
 						Data:      map[string][]byte{"stale": []byte("value")},
 					},
-					fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
+					fakeStatefulset(cr, rs, rs.GetMongodSize(), "", "mongod"),
 					fakePodsForRS(cr, rs)[0],
 				}
 			},
@@ -63,7 +63,7 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 				rs.Expose.Enabled = true
 				pod := fakePodsForRS(cr, rs)[0]
 				return []client.Object{
-					fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
+					fakeStatefulset(cr, rs, rs.GetMongodSize(), "", "mongod"),
 					pod,
 					&corev1.Service{
 						Name:      pod.GetName(),
@@ -242,7 +242,7 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 	r := buildFakeClient(
 		users,
 		internal,
-		fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
+		fakeStatefulset(cr, rs, rs.GetMongodSize(), "", "mongod"),
 		fakePodsForRS(cr, rs)[0],
 	)
 
@@ -284,7 +284,7 @@ func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t 
 			Namespace: cr.Namespace,
 			Data:      map[string][]byte{"stale": []byte("value")},
 		},
-		fakeStatefulset(cr, rs, rs.Size, "", "mongod"),
+		fakeStatefulset(cr, rs, rs.GetMongodSize(), "", "mongod"),
 		fakePodsForRS(cr, rs)[0],
 	)
 
@@ -317,7 +317,7 @@ func connectionStringTestCluster() *api.PerconaServerMongoDB {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name: "rs0",
-					Size: 1,
+					Size: new(int32(1)),
 				},
 			},
 		},

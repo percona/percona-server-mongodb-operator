@@ -362,7 +362,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},
@@ -394,7 +394,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 							Sidecars: []corev1.Container{
 								{
@@ -467,7 +467,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},
@@ -502,7 +502,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},
@@ -535,7 +535,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},
@@ -568,7 +568,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},
@@ -601,7 +601,7 @@ func TestVersionMeta(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name:       "rs0",
-							Size:       3,
+							Size:       new(int32(3)),
 							VolumeSpec: fakeVolumeSpec(t),
 						},
 					},

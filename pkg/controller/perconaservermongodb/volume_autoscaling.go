@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -15,7 +14,15 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
+
+// storageWriter persists a new requested size for the volume being autoscaled.
+// A member group's size lives under its own entry in the CR and the mongos log
+// size under sharding.mongos, so each caller brings the write that knows where
+// its own size belongs.
+type storageWriter func(ctx context.Context, size resource.Quantity) error
 
 // volumeMount returns the container that mounts claimName and where it mounts
 // it. Sidecars mount these volumes too — fluentbit with log collection on, and
@@ -33,6 +40,49 @@ func volumeMount(sts *appsv1.StatefulSet, claimName string) (container, mountPat
 	return "", "", false
 }
 
+// reconcileGroupStorageAutoscaling autoscales the data volume of one member
+// group. Every group owns a separate claim spec in the CR, so the size has to
+// be written back through the group's source rather than to the replset.
+func (r *ReconcilePerconaServerMongoDB) reconcileGroupStorageAutoscaling(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	group membergroup.Group,
+) error {
+	if !group.DataBearing {
+		return nil
+	}
+
+	var pvcSpec *api.PVCSpec
+	if group.VolumeSpec != nil {
+		pvcSpec = &group.VolumeSpec.PersistentVolumeClaim
+	}
+
+	ctx = logf.IntoContext(ctx, logf.FromContext(ctx).WithValues("group", group.Name))
+
+	return r.reconcileStorageAutoscaling(ctx, cr, sts, config.MongodDataVolClaimName, pvcSpec,
+		group.Labels, r.groupStorageWriter(cr, group))
+}
+
+func (r *ReconcilePerconaServerMongoDB) groupStorageWriter(
+	cr *api.PerconaServerMongoDB,
+	group membergroup.Group,
+) storageWriter {
+	return func(ctx context.Context, size resource.Quantity) error {
+		return r.writeGroupStorageRequest(ctx, cr, group.Source, size)
+	}
+}
+
+// mongosLogStorageWriter writes the mongos log volume's requested size. mongos
+// is not a member group, so its size lives under sharding.mongos instead.
+func (r *ReconcilePerconaServerMongoDB) mongosLogStorageWriter(
+	cr *api.PerconaServerMongoDB,
+) storageWriter {
+	return func(ctx context.Context, size resource.Quantity) error {
+		return r.writeMongosLogStorageRequest(ctx, cr, size)
+	}
+}
+
 // reconcileStorageAutoscaling checks PVC disk usage and triggers resize if needed
 func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	ctx context.Context,
@@ -41,8 +91,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	claimName string,
 	pvcSpec *api.PVCSpec,
 	ls map[string]string,
+	write storageWriter,
 ) error {
-	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("statefulset", sts.Name)
+	log := logf.FromContext(ctx).WithName("StorageAutoscaling").
+		WithValues("statefulset", sts.Name)
 
 	autoscalingSpec := cr.Spec.StorageAutoscaling()
 	if autoscalingSpec == nil || !autoscalingSpec.Enabled {
@@ -95,18 +147,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	}
 
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(claimName, pvc, sts) {
+		podName, ok := pvcPodName(claimName, pvc.Name, sts)
+		if !ok {
 			continue
 		}
 
-		podName := extractPodNameFromPVC(pvc.Name, claimName)
 		pod := findPodByName(podList, podName)
 		if pod == nil {
 			log.V(1).Info("pod not found for PVC", "pvc", pvc.Name, "pod", podName)
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, pvcSpec, container, mountPath); err != nil {
+		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, pvcSpec, container, mountPath, write); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
@@ -124,6 +176,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	pvcSpec *api.PVCSpec,
 	container string,
 	mountPath string,
+	write storageWriter,
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
@@ -161,7 +214,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 		"usagePercent", usage.UsagePercent,
 		"threshold", cr.Spec.StorageAutoscaling().TriggerThresholdPercent)
 
-	return r.triggerResize(ctx, cr, pvc, newSize, pvcSpec)
+	return r.triggerResize(ctx, pvc, newSize, pvcSpec, write)
 }
 
 // shouldTriggerResize determines if a PVC should be resized
@@ -218,37 +271,29 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	return newSize
 }
 
-// triggerResize updates the CR pvcSpec to trigger a resize operation
+// triggerResize records the new requested size, in the CR and in the working
+// copy the rest of the reconcile is holding.
 func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	ctx context.Context,
-	cr *api.PerconaServerMongoDB,
 	pvc *corev1.PersistentVolumeClaim,
 	newSize resource.Quantity,
 	pvcSpec *api.PVCSpec,
+	write storageWriter,
 ) error {
-	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
-
-	orig := cr.DeepCopy()
-
-	requests := pvcSpec.Resources.Requests
-	previous, hadPrevious := requests[corev1.ResourceStorage]
-	requests[corev1.ResourceStorage] = newSize
-
-	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
-		// callers keep reconciling with this spec, so a size the API server never
-		// accepted would grow the PVC past what the CR requests, and the next
-		// reconcile would read that as a shrink
-		if hadPrevious {
-			requests[corev1.ResourceStorage] = previous
-		} else {
-			delete(requests, corev1.ResourceStorage)
-		}
-		return errors.Wrap(err, "patch CR with new storage size")
+	if err := write(ctx, newSize); err != nil {
+		return err
 	}
 
-	log.Info("storage autoscaling initiated",
-		"oldSize", pvc.Status.Capacity.Storage().String(),
-		"newSize", newSize.String())
+	// Everything after this pass -- reconcilePVCs, resizeVolumesIfNeeded -- acts
+	// on the spec it was handed, and a member group's spec is a copy that no CR
+	// write reaches. Mirroring only once the write has landed means there is no
+	// size to roll back when the API server rejects one.
+	setStorageRequest(pvcSpec, newSize)
+
+	logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name).
+		Info("storage autoscaling initiated",
+			"oldSize", pvc.Status.Capacity.Storage().String(),
+			"newSize", newSize.String())
 
 	return nil
 }
@@ -292,17 +337,6 @@ func (r *ReconcilePerconaServerMongoDB) updateAutoscalingStatus(
 	}
 
 	cr.Status.StorageAutoscaling[pvcName] = status
-}
-
-// extractPodNameFromPVC extracts the pod name from a PVC name
-// PVC format: "<claim-name>-<statefulset-name>-<index>"
-// Pod format: "<statefulset-name>-<index>"
-func extractPodNameFromPVC(pvcName string, claimName string) string {
-	prefix := claimName + "-"
-	if after, ok := strings.CutPrefix(pvcName, prefix); ok {
-		return after
-	}
-	return ""
 }
 
 // findPodByName finds a pod in a list by name

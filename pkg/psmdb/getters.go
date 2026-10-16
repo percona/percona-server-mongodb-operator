@@ -16,7 +16,9 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/mcs"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 // GetRSPods returns truncated list of replicaset pods to the size of `rs.Size`.
@@ -37,7 +39,7 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 		naming.LabelKubernetesReplset:  rsName,
 	})
 
-	// All statefulsets related to replset `rsName` expect component=search
+	// All statefulsets related to replset `rsName` except component=search
 	req, err := labels.NewRequirement(naming.LabelKubernetesComponent, selection.NotEquals, []string{naming.ComponentSearch})
 	if err != nil {
 		return rsPods, errors.Wrap(err, "get selector requirement")
@@ -45,70 +47,88 @@ func getRSPods(ctx context.Context, k8sclient client.Client, cr *api.PerconaServ
 	selectors = selectors.Add(*req)
 
 	stsList := appsv1.StatefulSetList{}
-	if err := k8sclient.List(ctx, &stsList,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: selectors,
-		},
-	); err != nil {
+	if err := k8sclient.List(ctx, &stsList, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: selectors,
+	}); err != nil {
 		return rsPods, errors.Wrapf(err, "failed to get statefulset list related to replset %s", rsName)
 	}
 
-	// `client.List` doesn't guarantee ordering (the cache-backed client returns items
-	// in map iteration order). Sort StatefulSets by name so iteration order is deterministic.
+	// `client.List` doesn't guarantee ordering (the cache-backed client returns
+	// items in map iteration order). Sort StatefulSets by name so iteration
+	// order is deterministic.
 	sort.Slice(stsList.Items, func(i, j int) bool {
 		return stsList.Items[i].Name < stsList.Items[j].Name
 	})
 
-	for _, sts := range stsList.Items {
-		rs := cr.Spec.Replset(rsName)
+	rs := cr.Spec.Replset(rsName)
+
+	// A desired-group view. A StatefulSet whose group is no longer declared
+	// resolves to nothing: its pods are still returned in the untruncated view
+	// so cleanup, connectivity and termination checks can see them, but they
+	// never enter the desired membership.
+	var set *membergroup.Set
+	if rs != nil {
+		set, err = membergroup.Resolve(cr, rs)
+		if err != nil {
+			return rsPods, errors.Wrapf(err, "resolve member groups for replset %s", rsName)
+		}
+	}
+
+	for i := range stsList.Items {
+		sts := &stsList.Items[i]
 
 		lbls := naming.RSLabels(cr, rs)
 		lbls[naming.LabelKubernetesComponent] = sts.Labels[naming.LabelKubernetesComponent]
+
 		pods := corev1.PodList{}
-		err := k8sclient.List(ctx,
-			&pods,
-			&client.ListOptions{
-				Namespace:     cr.Namespace,
-				LabelSelector: labels.SelectorFromSet(lbls),
-			},
-		)
-		if err != nil {
+		if err := k8sclient.List(ctx, &pods, &client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(lbls),
+		}); err != nil {
 			return rsPods, errors.Wrap(err, "failed to list pods")
 		}
 
-		if trimOutdated && rs != nil {
-			// `k8sclient.List` returns unsorted list of pods
-			// We should sort pods to truncate pods that are going to be deleted during resize
-			// More info: https://github.com/percona/percona-server-mongodb-operator/pull/1323#issue-1904904799
-			sort.Slice(pods.Items, func(i, j int) bool {
-				return pods.Items[i].Name < pods.Items[j].Name
-			})
+		util.SortPodsByOrdinalAsc(pods.Items)
 
-			// We can't use `sts.Spec.Replicas` because it can be different from `rs.Size`.
-			// This will lead to inserting pods, which are going to be deleted, to the
-			// `replSetReconfig` call in the `updateConfigMembers` function.
-			rsSize := 0
-
-			switch lbls[naming.LabelKubernetesComponent] {
-			case naming.ComponentArbiter:
-				rsSize = int(rs.Arbiter.Size)
-			case naming.ComponentNonVoting:
-				rsSize = int(rs.NonVoting.Size)
-			case naming.ComponentHidden:
-				rsSize = int(rs.Hidden.Size)
-			default:
-				rsSize = int(rs.Size)
+		if trimOutdated {
+			group, ok := groupForSTS(set, sts)
+			if !ok {
+				// Retiring or unknown workload: it contributes no desired
+				// members. Never fall back to the main group.
+				continue
 			}
-			if len(pods.Items) >= rsSize {
-				pods.Items = pods.Items[:rsSize]
-			}
+			pods.Items = selectDesiredOrdinals(pods.Items, group.Replicas)
 		}
 
 		rsPods.Items = append(rsPods.Items, pods.Items...)
 	}
 
 	return rsPods, nil
+}
+
+func groupForSTS(set *membergroup.Set, sts *appsv1.StatefulSet) (membergroup.Group, bool) {
+	if set == nil {
+		return membergroup.Group{}, false
+	}
+	return set.GetByLabels(sts.Labels)
+}
+
+// selectDesiredOrdinals keeps the pods whose ordinal is inside [0, replicas).
+//
+// We can't use sts.Spec.Replicas because it can differ from the desired count
+// during a resize. Including a pod that is about to be deleted would insert it
+// into the replSetReconfig call in updateConfigMembers.
+func selectDesiredOrdinals(pods []corev1.Pod, replicas int32) []corev1.Pod {
+	kept := make([]corev1.Pod, 0, len(pods))
+	for i := range pods {
+		ordinal, ok := naming.PodOrdinal(pods[i].Name)
+		if !ok || ordinal >= int(replicas) {
+			continue
+		}
+		kept = append(kept, pods[i])
+	}
+	return kept
 }
 
 func GetPrimaryPod(ctx context.Context, mgoClient mongo.Client) (string, error) {
@@ -185,4 +205,24 @@ func GetNodeLabels(ctx context.Context, cl client.Client, cr *api.PerconaServerM
 	}
 
 	return node.Labels, nil
+}
+
+// GetGroupPods returns the observed pods of one group, sorted by ordinal and
+// not truncated.
+func GetGroupPods(
+	ctx context.Context,
+	cl client.Client,
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	group membergroup.Group,
+) (corev1.PodList, error) {
+	pods := corev1.PodList{}
+	if err := cl.List(ctx, &pods, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(group.Labels),
+	}); err != nil {
+		return pods, errors.Wrapf(err, "list pods for group %s", group.Name)
+	}
+	util.SortPodsByOrdinalAsc(pods.Items)
+	return pods, nil
 }
