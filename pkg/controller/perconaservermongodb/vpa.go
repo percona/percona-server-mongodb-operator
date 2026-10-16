@@ -120,9 +120,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
 }
 
 // vpaRecommendationFor reads one component's recommendation, always records the
-// outcome in status, and returns the recommendation only when it should be applied
-// now. It returns nil when there is nothing to apply: no recommendation was
-// available, updateMode is Off, or the stabilization window has not yet passed.
+// outcome in status, and returns the recommendation the component should be sized
+// from, or nil when there is none: no recommendation was available, or updateMode
+// is Off.
+//
+// The stabilization window gates only whether a new recommendation is adopted.
+// While it is open this returns the one already in status, so the caller still
+// recomputes the effective resources from the current spec on every reconcile and
+// an edit to spec.<component>.resources is never held back by the window.
 //
 // vpa is the component's own VPA block, which together with statusKey is all that
 // the object name and the stabilization window are derived from, so callers pass
@@ -148,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	// If we're already reconciling the VPA's recommendation and if it cannot be found anymore, this is an error for
 	// the user to handle.
 	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil && res.state == vpaStateObjectNotFound {
-		return nil, fmt.Errorf("vpa not found")
+		return nil, errors.Errorf("VerticalPodAutoscaler %q not found", vpaName)
 	}
 
 	if res.state != vpaStateOK {
@@ -156,18 +161,29 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 		return nil, nil
 	}
 
-	r.recordVPAStatus(cr, statusKey, res.rec)
-
-	if cr.Spec.VPA.UpdateMode != api.VPAUpdateModeAuto {
+	// Off observes without applying, so every observation is recorded: there
+	// is no adoption to rate-limit and status is the only output.
+	if cr.Spec.VPA.UpdateMode == api.VPAUpdateModeOff {
+		r.recordVPAStatus(cr, statusKey, res.rec)
 		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
 			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
 		return nil, nil
 	}
-	if !stabilizationWindowPassed(cr, statusKey, window) {
-		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, window))
-		return nil, nil
+
+	// A recommendation that has not moved needs no decision regarding the window
+	accepted := cr.Status.VPAStatus[statusKey].Recommended
+	if quantitiesEqual(accepted, res.rec) {
+		r.setVPAMessage(cr, statusKey, "")
+		return accepted, nil
 	}
 
+	// New recommendations to be accepted only after the stabilization window has passed.
+	if !stabilizationWindowPassed(cr, statusKey, window) {
+		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, res.rec, window))
+		return accepted, nil
+	}
+
+	r.recordVPAStatus(cr, statusKey, res.rec)
 	r.setVPAMessage(cr, statusKey, "")
 	return res.rec, nil
 }
@@ -201,21 +217,24 @@ func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	cr.Status.VPAStatus[statusKey] = s
 }
 
-// stabilizationMessage says when the next apply becomes possible, so that a
-// component sitting still inside its window explains itself rather than looking
-// stalled.
+// stabilizationMessage names the recommendation waiting to be adopted and when
+// that becomes possible, so that a component sitting still inside its window
+// explains itself rather than looking stalled. Naming the pending value is what
+// makes the deferred change visible in status rather than only the fact of it.
 func stabilizationMessage(
 	cr *api.PerconaServerMongoDB,
 	statusKey string,
+	pending corev1.ResourceList,
 	window time.Duration,
 ) string {
 	s, ok := cr.Status.VPAStatus[statusKey]
-	if !ok || s.LastAppliedAt == nil {
+	if !ok || s.LastObservedAt == nil {
 		return ""
 	}
 	return fmt.Sprintf(
-		"recommendation recorded, next apply allowed after %s (stabilizationWindow %s)",
-		s.LastAppliedAt.Add(window).UTC().Format(time.RFC3339), window,
+		"new recommendation cpu=%s memory=%s, next adoption allowed after %s (stabilizationWindow %s)",
+		pending.Cpu().String(), pending.Memory().String(),
+		s.LastObservedAt.Add(window).UTC().Format(time.RFC3339), window,
 	)
 }
 
@@ -371,7 +390,11 @@ func clampRecommendation(rec corev1.ResourceList, bounds vpaBounds) corev1.Resou
 	return result
 }
 
-// recordVPAStatus writes the observed recommendation into cr.Status.VPAStatus.
+// recordVPAStatus writes a recommendation into cr.Status.VPAStatus together with
+// the time it was read. Under Auto the caller only reaches this once the
+// stabilization window allows adoption, so Recommended holds the recommendation
+// currently in force and lastObservedAt doubles as the clock the window is
+// measured from. Under Off nothing is applied, so every observation is recorded.
 func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	cr *api.PerconaServerMongoDB,
 	statusKey string,
@@ -394,8 +417,14 @@ func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	cr.Status.VPAStatus[statusKey] = s
 }
 
-// stabilizationWindowPassed returns true if enough time has elapsed since the last apply,
-// or if no apply has occurred yet. A zero window always returns true.
+// stabilizationWindowPassed returns true if enough time has elapsed since the
+// recommendation in status was adopted, or if none has been adopted yet. A zero
+// window always returns true.
+//
+// It measures from lastObservedAt, not lastAppliedAt: the window limits how often
+// a new recommendation may be adopted, and lastObservedAt is when the one in force
+// was taken. Measuring from the last apply would also block applies caused by the
+// user editing spec.<component>.resources, which the window has no business over.
 func stabilizationWindowPassed(cr *api.PerconaServerMongoDB, statusKey string, window time.Duration) bool {
 	if window == 0 {
 		return true
@@ -404,10 +433,10 @@ func stabilizationWindowPassed(cr *api.PerconaServerMongoDB, statusKey string, w
 		return true
 	}
 	s, ok := cr.Status.VPAStatus[statusKey]
-	if !ok || s.LastAppliedAt == nil {
+	if !ok || s.LastObservedAt == nil {
 		return true
 	}
-	return time.Since(s.LastAppliedAt.Time) >= window
+	return time.Since(s.LastObservedAt.Time) >= window
 }
 
 // commitVPAResources turns a recommendation into the component's effective

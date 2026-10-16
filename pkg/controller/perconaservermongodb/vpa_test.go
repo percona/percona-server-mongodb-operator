@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 // rl builds a ResourceList from cpu/memory quantity strings.
@@ -390,7 +391,7 @@ func TestReconcileVPACRDNotInstalled(t *testing.T) {
 	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
 	require.NotNil(t, cond, "expected a VPAReady condition explaining why VPA is inert")
 	assert.Equal(t, api.ConditionFalse, cond.Status)
-	assert.Equal(t, "VPACRDNotInstalled", cond.Reason)
+	assert.Equal(t, "APINotInstalled", cond.Reason)
 	assert.Contains(t, cond.Message, "autoscaling.k8s.io/v1")
 
 	// Nothing was read, so no per-component status was recorded.
@@ -406,7 +407,7 @@ func TestReconcileVPACRDInstalled(t *testing.T) {
 	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
 	require.NotNil(t, cond)
 	assert.Equal(t, api.ConditionTrue, cond.Status)
-	assert.Equal(t, "VPACRDInstalled", cond.Reason)
+	assert.Equal(t, "CRDInstalled", cond.Reason)
 }
 
 func TestReconcileVPADisabledClearsCondition(t *testing.T) {
@@ -592,27 +593,144 @@ func TestVPAStatusMessageClearsWhenApplying(t *testing.T) {
 	assert.NotNil(t, s.LastAppliedAt)
 }
 
-func TestStabilizationMessageNamesTheNextApply(t *testing.T) {
-	applied := metav1.NewTime(time.Date(2026, 10, 1, 13, 40, 12, 0, time.UTC))
+// windowedCR returns a cluster with one replset, VPA in the given mode and a
+// stabilization window wide enough that no window can lapse during a test.
+func windowedCR(mode api.VPAUpdateMode) *api.PerconaServerMongoDB {
+	cr := vpaTestCR(true)
+	cr.Spec.VPA.UpdateMode = mode
+	cr.Spec.VPA.StabilizationWindow = metav1.Duration{Duration: time.Hour}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{
+		Name: "rs0", Size: 3,
+		Resources: corev1.ResourceRequirements{Requests: rl("", "1Gi"), Limits: rl("", "4Gi")},
+	}}
+	return cr
+}
+
+func vpaReaderWithRec(t *testing.T, memory string) *ReconcilePerconaServerMongoDB {
+	t.Helper()
+	return vpaReaderWith(t, vpaObject("some-name-rs0-vpa",
+		map[string]corev1.ResourceList{naming.ContainerMongod: rl("", memory)}))
+}
+
+func TestSpecEditAppliesInsideStabilizationWindow(t *testing.T) {
+	// The window rate-limits adopting new recommendations. It must not hold back
+	// an edit the user makes to spec.<component>.resources: the effective values
+	// are recomputed from spec on every reconcile, so raising a limit takes
+	// effect at once. Holding it would mean spec and the running pods disagree
+	// for up to a full window with nothing but a status message to say why.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeAuto)
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+	require.NotNil(t, cr.Status.VPAStatus["rs0"].Applied)
+	require.Equal(t, "4Gi", cr.Status.VPAStatus["rs0"].Applied.Limits.Memory().String())
+
+	// Still well inside the window: the recommendation cannot move, but spec can.
+	cr.Spec.Replsets[0].Resources.Limits[corev1.ResourceMemory] = resource.MustParse("8Gi")
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	assert.Equal(t, "8Gi", cr.Status.VPAStatus["rs0"].Applied.Limits.Memory().String(),
+		"a spec.resources edit was held back by the stabilization window")
+}
+
+func TestNewRecommendationWaitsForStabilizationWindow(t *testing.T) {
+	// The flip side: a changed recommendation must wait, and status must name
+	// the value it is waiting on so the deferred change is visible.
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, vpaReaderWithRec(t, "2Gi").reconcileVPARecommendations(t.Context(), cr))
+	first := cr.Status.VPAStatus["rs0"]
+	require.Equal(t, "2Gi", first.Recommended.Memory().String())
+
+	require.NoError(t, vpaReaderWithRec(t, "3Gi").reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	assert.Equal(t, "2Gi", s.Recommended.Memory().String(),
+		"a new recommendation was adopted before the window elapsed")
+	assert.Contains(t, s.Message, "memory=3Gi", "status does not name the held recommendation")
+	assert.Contains(t, s.Message, "next adoption allowed after")
+}
+
+func TestOffModeNeverAppliesInsideWindow(t *testing.T) {
+	// Off observes without applying. Reaching the window check before the
+	// updateMode check would make Off start committing resources from the second
+	// reconcile onwards, since by then there is a recommendation in status to
+	// fall back on.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeOff)
+
+	for i := range 3 {
+		require.NoErrorf(t, r.reconcileVPARecommendations(t.Context(), cr), "reconcile %d", i)
+
+		s := cr.Status.VPAStatus["rs0"]
+		assert.Nilf(t, s.Applied, "updateMode Off committed resources on reconcile %d", i)
+		assert.Nilf(t, s.LastAppliedAt, "updateMode Off set lastAppliedAt on reconcile %d", i)
+		rec := s.Recommended
+		assert.Equal(t, "2Gi", rec.Memory().String(),
+			"Off must keep recording observations: status is its only output")
+		assert.Contains(t, s.Message, "updateMode is Off")
+	}
+}
+
+func TestMissingVPAInsideWindowStillFailsClosed(t *testing.T) {
+	// A component already sized from a recommendation whose VPA object has gone
+	// is an error for a human to resolve, and an open window must not defer that
+	// for its duration: the operator would keep sizing pods from a recommendation
+	// whose source no longer exists, reporting nothing.
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, vpaReaderWithRec(t, "2Gi").reconcileVPARecommendations(t.Context(), cr))
+	require.NotNil(t, cr.Status.VPAStatus["rs0"].Applied)
+
+	err := vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr)
+
+	require.Error(t, err, "a deleted VerticalPodAutoscaler was tolerated inside the window")
+	assert.Contains(t, err.Error(), "some-name-rs0-vpa",
+		"the error must name the object so it can be recreated")
+}
+
+func TestDiagnosticMessageNotFrozenByWindow(t *testing.T) {
+	// Every reconcile must set the message, including those that change nothing.
+	// A path that returns without setting it leaves an earlier reason in status
+	// for the rest of the window, long after it stopped being true.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	s.Message = "stale reason from an earlier reconcile"
+	cr.Status.VPAStatus["rs0"] = s
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	assert.Empty(t, cr.Status.VPAStatus["rs0"].Message,
+		"a stale reason survived a reconcile inside the stabilization window")
+}
+
+func TestStabilizationMessageNamesTheNextAdoption(t *testing.T) {
+	adopted := metav1.NewTime(time.Date(2026, 10, 1, 13, 40, 12, 0, time.UTC))
 	cr := vpaTestCR(true)
 	cr.Status.VPAStatus = map[string]api.VPAComponentStatus{
-		"rs0": {LastAppliedAt: &applied},
+		"rs0": {LastObservedAt: &adopted, Recommended: rl("350m", "350Mi")},
 	}
 
-	msg := stabilizationMessage(cr, "rs0", 5*time.Minute)
+	msg := stabilizationMessage(cr, "rs0", rl("500m", "1Gi"), 5*time.Minute)
 
-	// The time has to be the next allowed apply, not the last one, or it reads
+	// The time has to be the next allowed adoption, not the last one, or it reads
 	// as though the window has already passed.
 	assert.Contains(t, msg, "2026-10-01T13:45:12Z")
 	assert.Contains(t, msg, "stabilizationWindow 5m")
+
+	// The held recommendation is named, not the one already in force: a deferred
+	// change the user cannot see is the same as no explanation at all.
+	assert.Contains(t, msg, "cpu=500m")
+	assert.Contains(t, msg, "memory=1Gi")
 }
 
-func TestStabilizationMessageEmptyBeforeFirstApply(t *testing.T) {
+func TestStabilizationMessageEmptyBeforeFirstAdoption(t *testing.T) {
 	cr := vpaTestCR(true)
 	cr.Status.VPAStatus = map[string]api.VPAComponentStatus{"rs0": {}}
 
-	assert.Empty(t, stabilizationMessage(cr, "rs0", 5*time.Minute),
-		"with nothing applied yet there is no window to report")
+	assert.Empty(t, stabilizationMessage(cr, "rs0", rl("500m", "1Gi"), 5*time.Minute),
+		"with nothing adopted yet there is no window to report")
 }
 
 func TestStabilizationWindowDefaultIsNonZero(t *testing.T) {

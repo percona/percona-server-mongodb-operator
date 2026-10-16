@@ -2173,14 +2173,8 @@ type VPASpec struct {
 	// Per-component MaxAllowed takes precedence when both are set.
 	MaxAllowed corev1.ResourceList `json:"maxAllowed,omitempty"`
 
-	// StabilizationWindow is the minimum time between consecutive applies.
+	// StabilizationWindow is the minimum time between adopting new recommendations.
 	// Prevents thrashing when recommendations change frequently.
-	//
-	// Defaults to 5m. This is a floor against restart loops rather than a tuning
-	// recommendation: every apply rewrites the CR, which regenerates the
-	// StatefulSet and triggers a SmartUpdate rolling restart, so a zero window
-	// lets ordinary recommender jitter restart the cluster as fast as the
-	// operator reconciles. Raise it for workloads where restarts are expensive.
 	// +kubebuilder:default="5m"
 	StabilizationWindow metav1.Duration `json:"stabilizationWindow,omitempty"`
 
@@ -2216,27 +2210,28 @@ type ComponentVPASpec struct {
 
 // VPAComponentStatus records the last observed and applied VPA recommendation for one component.
 type VPAComponentStatus struct {
-	// LastObservedAt is the time the recommendation was last read from the VPA object.
+	// LastObservedAt is the time the recommendation in Recommended was read from
+	// the VPA object. Under updateMode Auto it is therefore also when that
+	// recommendation was adopted, and stabilizationWindow is measured from it.
 	LastObservedAt *metav1.Time `json:"lastObservedAt,omitempty"`
 
-	// LastAppliedAt is the time the recommendation was last patched into the CR.
-	// Nil when updateMode is Off or no apply has occurred yet.
+	// LastAppliedAt is the time Applied last changed. Nil when updateMode is Off
+	// or nothing has been applied yet. It is informational: the stabilization
+	// window is measured from LastObservedAt, not from this.
 	LastAppliedAt *metav1.Time `json:"lastAppliedAt,omitempty"`
 
-	// Recommended is the last observed recommendation from the VPA for this component.
-	// These may not be applied immediately, for example, if the last applied was within the stabilization window.
+	// Recommended is the recommendation the operator is currently sizing this
+	// component from. Under updateMode Auto a newer recommendation is not adopted
+	// here until the stabilization window allows it, and Message names the one
+	// waiting in the meantime. Under Off nothing is applied, so it simply tracks
+	// the latest observation.
 	Recommended corev1.ResourceList `json:"recommended,omitempty"`
 
 	// Applied is the last set of resource requirements that the operator has actually
 	// applied to the StatefulSet for this component. The StatefulSet is generated from this.
 	Applied *corev1.ResourceRequirements `json:"applied,omitempty"`
 
-	// Message explains why no recommendation is currently available for this
-	// component, or warns that the component's requests were changed outside the
-	// operator since the last apply. It is empty while a recommendation is being
-	// read and the last applied values are still in place. An entry exists for
-	// every component VPA is enabled for, so an absent entry means the component
-	// is not configured rather than that something went wrong.
+	// Message contains additional explanation for the current VPA recommendations.
 	Message string `json:"message,omitempty"`
 }
 
