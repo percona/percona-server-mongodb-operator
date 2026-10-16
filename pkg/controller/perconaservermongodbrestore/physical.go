@@ -41,6 +41,13 @@ var anotherOpBackoff = wait.Backoff{
 	Cap:      15 * time.Minute,
 }
 
+var transientErrorBackoff = wait.Backoff{
+	Steps:    6,
+	Duration: 5 * time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
+}
+
 // reconcilePhysicalRestore performs a physical restore of a Percona Server for MongoDB from a backup.
 func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 	ctx context.Context,
@@ -194,10 +201,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	meta := backup.BackupMeta{}
 
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
-			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
-			strings.Contains(err.Error(), "unable to upgrade connection") ||
+	err = retry.OnError(transientErrorBackoff, func(err error) bool {
+		return isTransientNetworkError(err) ||
+			strings.Contains(err.Error(), "container is not created or running") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
@@ -223,11 +229,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		return nil
 	})
 	if err != nil {
-		// The restore keeps running in PBM; a failed status check must not mark it as failed.
-		if isTransientNetworkError(err) {
-			log.Info("Failed to check restore status, will retry", "error", err.Error())
-			return status, nil
-		}
 		return status, err
 	}
 
