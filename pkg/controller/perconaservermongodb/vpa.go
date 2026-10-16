@@ -321,7 +321,15 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 			res.state = vpaStateNoRecommendation
 			return res, nil
 		}
-		res.rec = rec.Target.DeepCopy()
+
+		rec := rec.Target.DeepCopy()
+		for res := range rec {
+			// we only care about CPU and memory
+			if res != corev1.ResourceCPU && res != corev1.ResourceMemory {
+				delete(rec, res)
+			}
+		}
+		res.rec = rec
 		res.state = vpaStateOK
 		return res, nil
 	}
@@ -355,42 +363,16 @@ func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 
-	// Only record an observation that says something new. Writing the timestamp
-	// on every reconcile would make the status differ every time, so the API
-	// server could never collapse the update and every VPA-enabled cluster
-	// would bump its resourceVersion forever. lastObservedAt therefore means
-	// "the observed recommendation last changed", matching lastAppliedAt.
-	changed := s.LastObservedAt == nil
-	if cpu, ok := rec[corev1.ResourceCPU]; ok && !sameQuantityString(s.CPU, cpu) {
-		s.CPU = cpu.String()
-		changed = true
-	}
-	if mem, ok := rec[corev1.ResourceMemory]; ok && !sameQuantityString(s.Memory, mem) {
-		s.Memory = mem.String()
-		changed = true
-	}
-	if !changed {
+	// Only record an observation that says something new. quantitiesEqual compares
+	// by value, so a recommender that switches units does not register as a change.
+	if s.Recommended != nil && quantitiesEqual(s.Recommended, rec) {
 		return
 	}
 
 	now := metav1.Now()
+	s.Recommended = rec.DeepCopy()
 	s.LastObservedAt = &now
 	cr.Status.VPAStatus[statusKey] = s
-}
-
-// sameQuantityString reports whether a quantity already recorded in status as a
-// string describes the same amount as q. Comparing by value rather than by text
-// keeps a recommender that switches units from registering as a change. An
-// empty or unparseable stored value counts as different, so it gets rewritten.
-func sameQuantityString(stored string, q resource.Quantity) bool {
-	if stored == "" {
-		return false
-	}
-	parsed, err := resource.ParseQuantity(stored)
-	if err != nil {
-		return false
-	}
-	return parsed.Cmp(q) == 0
 }
 
 // stabilizationWindowPassed returns true if enough time has elapsed since the last apply,
@@ -454,31 +436,25 @@ func (r *ReconcilePerconaServerMongoDB) commitVPAResources(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 
-	// Only a change is a commit. The recommender holds a value steady for long
-	// stretches, so without this the component would be re-committed once per
-	// stabilization window forever: status churns, the log fills, and
-	// lastAppliedAt comes to mean "last reconciled" instead of "last changed".
-	if s.Resources != nil && sameResourceRequirements(*s.Resources, effective) {
+	// apply only when changed
+	if s.Applied != nil &&
+		quantitiesEqual(s.Applied.Limits, effective.Limits) &&
+		quantitiesEqual(s.Applied.Requests, effective.Requests) {
 		return
 	}
 
 	now := metav1.Now()
-	s.Resources = &effective
+	s.Applied = &effective
 	s.LastAppliedAt = &now
 	cr.Status.VPAStatus[statusKey] = s
 
 	log.Info("committed VPA resources",
 		"component", statusKey,
-		"cpu", requests.Cpu().String(),
-		"memory", requests.Memory().String(),
+		"cpuRequest", requests.Cpu().String(),
+		"memoryRequest", requests.Memory().String(),
+		"cpuLimits", limits.Cpu().String(),
+		"memoryLimits", limits.Memory().String(),
 	)
-}
-
-// sameResourceRequirements reports whether two requirements describe the same
-// resources. Quantities are compared by value, not by string form, so a commit
-// of 1Gi is not treated as a change when 1024Mi is already recorded.
-func sameResourceRequirements(a, b corev1.ResourceRequirements) bool {
-	return quantitiesEqual(a.Requests, b.Requests) && quantitiesEqual(a.Limits, b.Limits)
 }
 
 // capRequestsAtLimits ensures that no request exceeds the corresponding limit.

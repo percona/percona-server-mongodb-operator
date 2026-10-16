@@ -440,7 +440,7 @@ func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
 // A nil map omits status.recommendation entirely.
 func vpaObject(name string, recs map[string]corev1.ResourceList) *vpav1.VerticalPodAutoscaler {
 	obj := &vpav1.VerticalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+		Name: name, Namespace: "ns",
 	}
 	if recs == nil {
 		return obj
@@ -566,7 +566,7 @@ func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
 	require.NoError(t, withRec.reconcileVPARecommendations(t.Context(), cr))
 
 	s := cr.Status.VPAStatus["rs0"]
-	assert.Equal(t, "350m", s.CPU, "the recommendation should still be recorded in Off mode")
+	assert.Equal(t, "350m", s.Recommended.Cpu().String(), "the recommendation should still be recorded in Off mode")
 	assert.Contains(t, s.Message, "updateMode is Off")
 	assert.Nil(t, s.LastAppliedAt)
 }
@@ -657,13 +657,13 @@ func TestVPAResourcesResolution(t *testing.T) {
 		{
 			name:      "vpa disabled falls back to the declared spec",
 			vpa:       &api.VPASpec{Enabled: false, UpdateMode: api.VPAUpdateModeAuto},
-			status:    map[string]api.VPAComponentStatus{"rs0": {Resources: committed}},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
 			expectCPU: "100m",
 		},
 		{
 			name:      "Off observes only, so the declared spec still applies",
 			vpa:       &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeOff},
-			status:    map[string]api.VPAComponentStatus{"rs0": {Resources: committed}},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
 			expectCPU: "100m",
 		},
 		{
@@ -675,7 +675,7 @@ func TestVPAResourcesResolution(t *testing.T) {
 		{
 			name:      "Auto uses the committed value",
 			vpa:       &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeAuto},
-			status:    map[string]api.VPAComponentStatus{"rs0": {Resources: committed}},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
 			expectCPU: "350m",
 		},
 	}
@@ -709,8 +709,8 @@ func TestCommitVPAResourcesLeavesSpecAlone(t *testing.T) {
 
 	// The committed value lands in status...
 	s := cr.Status.VPAStatus["rs0"]
-	require.NotNil(t, s.Resources)
-	assertResourceList(t, rl("350m", "350Mi"), s.Resources.Requests)
+	require.NotNil(t, s.Applied)
+	assertResourceList(t, rl("350m", "350Mi"), s.Applied.Requests)
 	require.NotNil(t, s.LastAppliedAt)
 
 	// ...and the caller's declared spec is untouched.
@@ -731,10 +731,10 @@ func TestCommitVPAResourcesComputesFromDeclaredBaseline(t *testing.T) {
 	}
 
 	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", ""), vpaBounds{})
-	first := cr.Status.VPAStatus["rs0"].Resources.Limits.DeepCopy()
+	first := cr.Status.VPAStatus["rs0"].Applied.Limits.DeepCopy()
 
 	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", ""), vpaBounds{})
-	second := cr.Status.VPAStatus["rs0"].Resources.Limits
+	second := cr.Status.VPAStatus["rs0"].Applied.Limits
 
 	assertResourceList(t, rl("4", ""), first)
 	assertResourceList(t, first, second)
@@ -762,7 +762,7 @@ func TestCommitVPAResourcesSkipsUnchangedRecommendation(t *testing.T) {
 	s = cr.Status.VPAStatus["rs0"]
 	assert.True(t, s.LastAppliedAt.Equal(&applied),
 		"an unchanged recommendation advanced lastAppliedAt")
-	assertResourceList(t, rl("350m", "350Mi"), s.Resources.Requests)
+	assertResourceList(t, rl("350m", "350Mi"), s.Applied.Requests)
 }
 
 func TestCommitVPAResourcesAppliesChangedRecommendation(t *testing.T) {
@@ -783,7 +783,7 @@ func TestCommitVPAResourcesAppliesChangedRecommendation(t *testing.T) {
 	s = cr.Status.VPAStatus["rs0"]
 	assert.True(t, s.LastAppliedAt.After(applied.Time),
 		"a changed recommendation did not advance lastAppliedAt")
-	assertResourceList(t, rl("500m", "350Mi"), s.Resources.Requests)
+	assertResourceList(t, rl("500m", "350Mi"), s.Applied.Requests)
 }
 
 func TestCommitVPAResourcesIgnoresEquivalentQuantityForms(t *testing.T) {
@@ -827,7 +827,7 @@ func TestGuaranteedQoSPreservedUnderRequestsAndLimits(t *testing.T) {
 
 	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", "2Gi"), vpaBounds{})
 
-	got := cr.Status.VPAStatus["rs0"].Resources
+	got := cr.Status.VPAStatus["rs0"].Applied
 	require.NotNil(t, got)
 	for _, res := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
 		req, lim := got.Requests[res], got.Limits[res]
@@ -853,7 +853,7 @@ func TestRequestsOnlyCannotScaleUpGuaranteedPod(t *testing.T) {
 
 	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", "2Gi"), vpaBounds{})
 
-	got := cr.Status.VPAStatus["rs0"].Resources
+	got := cr.Status.VPAStatus["rs0"].Applied
 	require.NotNil(t, got)
 	assertResourceList(t, rl("1", "1Gi"), got.Requests)
 	assertResourceList(t, rl("1", "1Gi"), got.Limits)
@@ -878,7 +878,7 @@ func TestRecordVPAStatusSkipsUnchangedObservation(t *testing.T) {
 	s = cr.Status.VPAStatus["rs0"]
 	assert.True(t, s.LastObservedAt.Equal(&observed),
 		"an unchanged observation advanced lastObservedAt")
-	assert.Equal(t, "350m", s.CPU)
+	assert.Equal(t, "350m", s.Recommended.Cpu().String())
 }
 
 func TestRecordVPAStatusRecordsChangedObservation(t *testing.T) {
@@ -897,7 +897,7 @@ func TestRecordVPAStatusRecordsChangedObservation(t *testing.T) {
 	s = cr.Status.VPAStatus["rs0"]
 	assert.True(t, s.LastObservedAt.After(observed.Time),
 		"a changed observation did not advance lastObservedAt")
-	assert.Equal(t, "500m", s.CPU)
+	assert.Equal(t, "500m", s.Recommended.Cpu().String())
 }
 
 func TestRecordVPAStatusIgnoresEquivalentUnits(t *testing.T) {
@@ -918,5 +918,5 @@ func TestRecordVPAStatusIgnoresEquivalentUnits(t *testing.T) {
 	s = cr.Status.VPAStatus["rs0"]
 	assert.True(t, s.LastObservedAt.Equal(&observed),
 		"1024Mi was treated as a change from 1Gi")
-	assert.Equal(t, "1Gi", s.Memory)
+	assert.Equal(t, "1Gi", s.Recommended.Memory().String())
 }

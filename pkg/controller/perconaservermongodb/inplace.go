@@ -349,6 +349,20 @@ func normalizeResources(r corev1.ResourceRequirements) corev1.ResourceRequiremen
 	return r
 }
 
+// quantitiesEqual reports whether two resource lists describe the same request at
+// the granularity Kubernetes stores each resource at, which is not the same thing
+// as Quantity.Equal.
+//
+// An exact comparison is wrong here because the two sides come from different
+// places. ratioScaledLimits computes a limit with NewMilliQuantity, so a target
+// memory limit can carry milli precision (3435973836500m); Kubernetes reports the
+// applied value back in whole bytes (3435973837). Quantity.Equal would call those
+// different, resourcesApplied would never see the resize land, and the operator
+// would reapply it forever. Value() and MilliValue() both round up, which is the
+// same normalisation Kubernetes performs.
+//
+// CPU is compared in millis because that is its native granularity; every other
+// resource in whole units, which for memory means bytes.
 func quantitiesEqual(a, b corev1.ResourceList) bool {
 	if len(a) != len(b) {
 		return false

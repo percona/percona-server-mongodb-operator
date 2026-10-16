@@ -2216,12 +2216,6 @@ type ComponentVPASpec struct {
 
 // VPAComponentStatus records the last observed and applied VPA recommendation for one component.
 type VPAComponentStatus struct {
-	// CPU is the last observed CPU recommendation (e.g. "1200m").
-	CPU string `json:"cpu,omitempty"`
-
-	// Memory is the last observed memory recommendation (e.g. "2Gi").
-	Memory string `json:"memory,omitempty"`
-
 	// LastObservedAt is the time the recommendation was last read from the VPA object.
 	LastObservedAt *metav1.Time `json:"lastObservedAt,omitempty"`
 
@@ -2229,13 +2223,13 @@ type VPAComponentStatus struct {
 	// Nil when updateMode is Off or no apply has occurred yet.
 	LastAppliedAt *metav1.Time `json:"lastAppliedAt,omitempty"`
 
-	// Resources is the effective resource requirements the operator has committed
-	// for this component, derived from the recommendation and the configured
-	// bounds. The StatefulSet is generated from this rather than from
-	// spec.<component>.resources, so that spec stays what the user declared and
-	// the operator never writes to it. Nil until the first commit, and while
-	// updateMode is Off.
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Recommended is the last observed recommendation from the VPA for this component.
+	// These may not be applied immediately, for example, if the last applied was within the stabilization window.
+	Recommended corev1.ResourceList `json:"recommended,omitempty"`
+
+	// Applied is the last set of resource requirements that the operator has actually
+	// applied to the StatefulSet for this component. The StatefulSet is generated from this.
+	Applied *corev1.ResourceRequirements `json:"applied,omitempty"`
 
 	// Message explains why no recommendation is currently available for this
 	// component, or warns that the component's requests were changed outside the
@@ -2265,10 +2259,10 @@ func (cr *PerconaServerMongoDB) VPAResources(
 		return declared
 	}
 	s, ok := cr.Status.VPAStatus[statusKey]
-	if !ok || s.Resources == nil {
+	if !ok || s.Applied == nil {
 		return declared
 	}
-	return *s.Resources
+	return *s.Applied
 }
 
 // VPAInPlaceResizeEnabled reports whether VPA-committed resources are applied to
