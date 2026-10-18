@@ -581,14 +581,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 			return nil
 		}
 
-		maxUsed := float64(requested.Value()) * 0.8
+		maxUsageRatio := cr.Spec.ShrinkMaxDiskUsagePercent()
+		maxUsed := float64(requested.Value()) * maxUsageRatio
 		if float64(usage.UsedBytes) > maxUsed {
-			log.Info("PVC shrink rejected: disk usage exceeds 80% of target size",
-				"pod", pod.Name, "usedBytes", usage.UsedBytes, "targetSize", requested.String(), "maxAllowed", int64(maxUsed))
+			log.Info("PVC shrink rejected: disk usage exceeds threshold of target size",
+				"pod", pod.Name, "usedBytes", usage.UsedBytes, "targetSize", requested.String(), "maxAllowed", int64(maxUsed), "thresholdPercent", int(maxUsageRatio*100))
 			if err := r.revertVolumeTemplate(ctx, cr, sts, actual); err != nil {
 				return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
 			}
-			return errors.Errorf("PVC shrink rejected: pod %s disk usage exceeds 80%% of target size %s", pod.Name, requested.String())
+			return errors.Errorf("PVC shrink rejected: pod %s disk usage exceeds %d%% of target size %s", pod.Name, int(maxUsageRatio*100), requested.String())
 		}
 	}
 

@@ -261,6 +261,13 @@ func (spec *PerconaServerMongoDBSpec) IsVolumeShrinkEnabled() bool {
 	return false
 }
 
+func (spec *PerconaServerMongoDBSpec) ShrinkMaxDiskUsagePercent() float64 {
+	if spec.StorageScaling != nil && spec.StorageScaling.ShrinkOpts != nil && spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent != nil {
+		return float64(*spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent) / 100.0
+	}
+	return 0.8
+}
+
 // StorageAutoscaling returns the storage autoscaling configuration.
 func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
 	if spec.StorageScaling == nil {
@@ -1077,8 +1084,21 @@ type StorageScalingSpec struct {
 	// Requires initial sync for data recovery; only enable when replica set is healthy
 	EnableVolumeShrink bool `json:"enableVolumeShrink,omitempty"`
 
+	// ShrinkOpts configures PVC shrink behavior
+	ShrinkOpts *ShrinkOptsSpec `json:"shrinkOpts,omitempty"`
+
 	// Autoscaling configures automatic storage expansion based on disk usage
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+}
+
+// ShrinkOptsSpec defines options for PVC shrink operations
+type ShrinkOptsSpec struct {
+	// MaxDiskUsagePercent is the maximum allowed disk usage as a percentage
+	// of the target PVC size. Shrink is rejected if any pod exceeds this
+	// threshold. Default is 80 (20% headroom).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=99
+	MaxDiskUsagePercent *int `json:"maxDiskUsagePercent,omitempty"`
 }
 
 type SecretsSpec struct {
