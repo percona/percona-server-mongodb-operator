@@ -1943,6 +1943,15 @@ type PVCShrinkState struct {
 	PrimaryPod    string   `json:"primaryPod"`
 }
 
+func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
+	for key := range cr.Annotations {
+		if strings.HasPrefix(key, annotationPVCShrinkInProgressBase+".") {
+			return true
+		}
+	}
+	return false
+}
+
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 	v, ok := cr.Annotations[AnnotationResyncPBM]
 	return ok && v != ""

@@ -569,15 +569,16 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 	mountPath := ""
 	if component == naming.ComponentMongos {
 		containerName = naming.ContainerMongos
-		mountPath = "/mongos-log"
+		mountPath = config.MongodContainerDataLogsDir
 	}
 
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 		usage, err := r.getPVCUsageFromMetrics(ctx, pod, claimName+"-"+pod.Name, containerName, mountPath)
 		if err != nil {
-			log.Info("Failed to get PVC usage, skipping disk check for pod", "pod", pod.Name, "error", err)
-			continue
+			log.Info("Failed to get PVC usage, deferring shrink", "pod", pod.Name, "error", err)
+			revertVCT()
+			return nil
 		}
 
 		maxUsed := float64(requested.Value()) * 0.8
@@ -808,7 +809,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		// PVC has new size and pod is Ready
 		if isRSComponent && replset != nil {
-			isSecondary, err := r.isPodSecondary(ctx, cr, pod, replset)
+			isSecondary, err := r.isPodNonPrimary(ctx, cr, pod, replset)
 			if err != nil {
 				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
 				return nil
@@ -850,7 +851,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isPodSecondary(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, pod corev1.Pod, rs *psmdbv1.ReplsetSpec) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isPodNonPrimary(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, pod corev1.Pod, rs *psmdbv1.ReplsetSpec) (bool, error) {
 	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, psmdbv1.RoleClusterAdmin, pod)
 	if err != nil {
 		return false, errors.Wrap(err, "create standalone client")

@@ -148,12 +148,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	// Block smart update while any PVC shrink is in progress
-	for key := range cr.Annotations {
-		if strings.HasPrefix(key, "percona.com/pvc-shrink-in-progress.") {
-			log.Info("can't start 'SmartUpdate': PVC shrink in progress")
-			return nil
-		}
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return nil
 	}
 
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)

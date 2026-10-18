@@ -653,3 +653,69 @@ func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
 	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, actual.String(), vctSize.String(), "VCT should be reverted to actual PVC size when shrink is blocked")
 }
+
+func TestShrinkMongosShrinkEntryPath(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateError
+
+	requested := resource.MustParse("2Gi")
+	actual := resource.MustParse("3Gi")
+
+	labels := naming.MongosLabels(cr)
+	stsName := naming.MongosStatefulSetName(cr)
+
+	sts := &appsv1.StatefulSet{
+		Name:      stsName,
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongosLogVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: actual,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongosLogVolClaimName+"-"+pod.Name, labels, requested, actual)
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: requested,
+				},
+			},
+		},
+	}
+
+	err = r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
+	require.NoError(t, err, "blocked mongos shrink should return nil")
+
+	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, actual.String(), vctSize.String(),
+		"mongos VCT should be reverted to actual PVC size when shrink is blocked")
+}
