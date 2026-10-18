@@ -458,6 +458,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
 
+  pvc-shrink:
+    suites: [release]
+    operatorModes: [namespaced]
+    groups: [storage]
+
   recover-no-primary:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]

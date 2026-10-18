@@ -253,6 +253,14 @@ func (spec *PerconaServerMongoDBSpec) IsVolumeExpansionEnabled() bool {
 	return spec.VolumeExpansionEnabled
 }
 
+// IsVolumeShrinkEnabled returns whether PVC shrink operations are enabled.
+func (spec *PerconaServerMongoDBSpec) IsVolumeShrinkEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeShrink
+	}
+	return false
+}
+
 // StorageAutoscaling returns the storage autoscaling configuration.
 func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
 	if spec.StorageScaling == nil {
@@ -1064,6 +1072,10 @@ type StorageScalingSpec struct {
 	// EnableVolumeScaling allows volume expansion/resizing operations
 	// When disabled, PVC sizes will not be modified even if storage changes in the spec
 	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
+
+	// EnableVolumeShrink allows PVC shrink operations by deleting and recreating PVCs
+	// Requires initial sync for data recovery; only enable when replica set is healthy
+	EnableVolumeShrink bool `json:"enableVolumeShrink,omitempty"`
 
 	// Autoscaling configures automatic storage expansion based on disk usage
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
@@ -1912,10 +1924,23 @@ const (
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
 	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
+	annotationPVCShrinkInProgressBase  = "percona.com/pvc-shrink-in-progress"
 )
 
 func AnnotationPreservedRestartedAt(stsName string) string {
 	return annotationPreservedRestartedAtBase + "." + stsName
+}
+
+func AnnotationPVCShrinkInProgress(stsName string) string {
+	return annotationPVCShrinkInProgressBase + "." + stsName
+}
+
+type PVCShrinkState struct {
+	TargetSize    string   `json:"targetSize"`
+	StartedAt     string   `json:"startedAt"`
+	Phase         string   `json:"phase"`
+	ProcessedPods []string `json:"processedPods"`
+	PrimaryPod    string   `json:"primaryPod"`
 }
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {

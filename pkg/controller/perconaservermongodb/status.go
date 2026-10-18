@@ -382,6 +382,12 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 		return api.ReplsetStatus{Status: api.AppStateInit}, nil
 	}
 
+	// Check for PVC shrink in progress on the CR
+	shrinkAnnotation := api.AnnotationPVCShrinkInProgress(sts.Name)
+	if _, ok := cr.Annotations[shrinkAnnotation]; ok {
+		return api.ReplsetStatus{Status: api.AppStateInit}, nil
+	}
+
 	list, err := psmdb.GetRSPods(ctx, r.client, cr, rsSpec.Name)
 	if err != nil {
 		return api.ReplsetStatus{}, fmt.Errorf("get list: %v", err)

@@ -29771,6 +29771,8 @@ spec:
                     type: boolean
                   enableVolumeScaling:
                     type: boolean
+                  enableVolumeShrink:
+                    type: boolean
                 type: object
                 x-kubernetes-validations:
                 - message: autoscaling cannot be enabled when enableVolumeScaling

@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		actual            string
 		resizeInProgress  bool
 		volumeScaling     bool
+		volumeShrink      bool
 		orphanPVC         bool
 		expectSTSDeleted  bool
 		expectRestartedAt bool
@@ -92,6 +94,15 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			expectCRStorage:   "2Gi",
 		},
 		{
+			name:              "rejects shrink for single-member replica set",
+			requested:         "1200Mi",
+			configured:        "6G",
+			actual:            "6G",
+			volumeShrink:      true,
+			expectErrContains: "single-member replica set has no sync source",
+			expectCRStorage:   "6G",
+		},
+		{
 			name:             "deletes statefulset when pvc already matches increased request but template is stale",
 			requested:        "2Gi",
 			configured:       "1200Mi",
@@ -117,6 +128,10 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			}
 			cr.Spec.StorageScaling = &api.StorageScalingSpec{
 				EnableVolumeScaling: tt.volumeScaling,
+				EnableVolumeShrink:  tt.volumeShrink,
+			}
+			if tt.volumeShrink {
+				cr.Status.State = api.AppStateReady
 			}
 
 			labels := naming.MongodLabels(cr, rs)
@@ -504,4 +519,137 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShrinkAnnotationBlocksReconciliation(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	requested := resource.MustParse("5Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("10Gi"))
+
+	// Set shrink annotation on CR
+	state := api.PVCShrinkState{
+		TargetSize:    "5Gi",
+		StartedAt:     time.Now().Format(time.RFC3339),
+		Phase:         "secondaries",
+		ProcessedPods: []string{},
+		PrimaryPod:    stsName + "-0",
+	}
+	stateJSON, err := json.Marshal(state)
+	require.NoError(t, err)
+	cr.Annotations = map[string]string{
+		api.AnnotationPVCShrinkInProgress(stsName): string(stateJSON),
+	}
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, resource.MustParse("10Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	// The shrink annotation is present, so reconcilePVCs should enter the shrink path
+	// With a fake client (no mongo/exec), it will fail at the first mongo/exec call
+	// This test verifies the annotation is correctly detected and routing works
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	// Expect an error from the mongo/exec call since we're using a fake client,
+	// but NOT the "requested storage is less than actual" error
+	if err != nil {
+		assert.NotContains(t, err.Error(), "requested storage")
+	}
+}
+
+func TestShrinkRejectsSingleMember(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 1
+	requested := resource.MustParse("5Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateReady
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("10Gi"))
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, resource.MustParse("10Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "single-member replica set has no sync source")
+}
+
+func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	requested := resource.MustParse("5Gi")
+	actual := resource.MustParse("10Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateError
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, requested)
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, actual)
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	require.NoError(t, err, "blocked shrink should return nil, not error")
+
+	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, actual.String(), vctSize.String(), "VCT should be reverted to actual PVC size when shrink is blocked")
 }
