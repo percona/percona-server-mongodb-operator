@@ -31,6 +31,10 @@ var vpaGVK = vpav1.SchemeGroupVersion.WithKind("VerticalPodAutoscaler")
 // The operator is recommendation-agnostic: any external tool (VPA Recommender, Goldilocks,
 // etc.) that writes to a VerticalPodAutoscaler object is a valid recommendation source.
 func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Pause {
+		return nil
+	}
+
 	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled {
 		cr.Status.RemoveCondition(api.ConditionTypeVPAReady)
 		cr.Status.VPAStatus = nil
