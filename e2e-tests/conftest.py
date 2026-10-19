@@ -229,7 +229,8 @@ def setup_env_vars() -> None:
         "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
-            "perconalab/percona-server-mongodb-operator:main-mongod8.0"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.3"
         ),
         "IMAGE_SEARCH": "perconalab/percona-server-mongodb-operator:main-mongot",
         "IMAGE_BACKUP": "perconalab/percona-server-mongodb-operator:main-backup",

@@ -1,4 +1,5 @@
 IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main
+IMAGE_MONGOD83=perconalab/percona-server-mongodb-operator:main-mongod8.3
 IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0
 IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0
 IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup
