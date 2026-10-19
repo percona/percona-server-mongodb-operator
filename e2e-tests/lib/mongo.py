@@ -59,7 +59,7 @@ class MongoManager:
             base_file = base_path / f"{user}.json"
 
             image_mongod = os.environ.get("IMAGE_MONGOD", "")
-            version_mappings = [("8.0", "-80"), ("7.0", "-70")]
+            version_mappings = [("8.3", "-83"), ("8.0", "-80"), ("7.0", "-70")]
 
             for version, suffix in version_mappings:
                 if version in image_mongod:
@@ -84,7 +84,7 @@ class MongoManager:
                     return {
                         k: remove_timestamps(v)
                         for k, v in obj.items()
-                        if k not in {"ok", "$clusterTime", "operationTime"}
+                        if k not in {"ok", "$clusterTime", "operationTime", "uuid"}
                     }
                 elif isinstance(obj, list):
                     return [remove_timestamps(v) for v in obj]
