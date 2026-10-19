@@ -94,7 +94,8 @@ export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"
 export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
 export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
 perconalab/percona-server-mongodb-operator:main-mongod7.0
-perconalab/percona-server-mongodb-operator:main-mongod8.0'}
+perconalab/percona-server-mongodb-operator:main-mongod8.0
+perconalab/percona-server-mongodb-operator:main-mongod8.3'}
 export IMAGE_SEARCH=${IMAGE_SEARCH:-"perconalab/percona-server-mongodb-operator:main-mongot"}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
