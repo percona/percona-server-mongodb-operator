@@ -139,7 +139,53 @@ func TestGetMongoURIClientCertificate(t *testing.T) {
 		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
 		require.Equal(t, []byte("server-ca\n"), ca)
 	})
+}
 
+func TestPBMConfigPriority(t *testing.T) {
+	secret := &corev1.Secret{
+		APIVersion: "/v1",
+		Kind:       "Secret",
+		Name:       "test-secret",
+		Namespace:  "test-namespace",
+	}
+
+	t.Run("not configured", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Empty(t, cfg.Backup.Priority)
+	})
+
+	t.Run("legacy cr version", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = "1.23.0"
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		// operator tries to calculate priorities, which requires users secret
+		_, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.ErrorContains(t, err, "get priorities")
+	})
+
+	t.Run("user defined", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Equal(t, config.Priority{"localhost:28019": 2.5}, cfg.Backup.Priority)
+	})
 }
 
 func TestApplyCustomPBMConfig(t *testing.T) {

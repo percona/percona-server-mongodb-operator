@@ -262,7 +262,13 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 }
 
 // GetPriorities returns priorities to be used in PBM config.
+//
+// Deprecated: For >=1.24.0 this is no-op, operator doesn't configure any priorities any more.
 func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB) (map[string]float64, error) {
+	if cluster.CompareVersion("1.24.0") >= 0 {
+		return nil, nil
+	}
+
 	log := logf.FromContext(ctx)
 	priorities := make(map[string]float64)
 
