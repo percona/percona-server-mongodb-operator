@@ -16,6 +16,7 @@ from lib.kubectl import (
     wait_for_running,
     wait_pod,
 )
+from lib.mongo import MongoManager
 from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
@@ -288,7 +289,7 @@ class TestPVCShrinkBasic:
             assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_01_create_cluster"])
-    def test_02_seed_data(self, config: PVCShrinkConfig, psmdb_client) -> None:
+    def test_02_seed_data(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
         """Insert data before shrink to verify it survives."""
         admin_uri = f"userAdmin:userAdmin123456@{CLUSTER}-rs0.{config.namespace}"
         psmdb_client.run_mongosh(
@@ -309,7 +310,7 @@ class TestPVCShrinkBasic:
         assert count == "100", f"Expected 100 seed documents, got {count}"
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_02_seed_data"])
-    def test_03_shrink_with_live_traffic(self, config: PVCShrinkConfig, psmdb_client) -> None:
+    def test_03_shrink_with_live_traffic(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
         """Shrink from 10Gi to 5Gi while a background writer inserts documents.
 
         Proves the replica set stays available throughout the rolling PVC
@@ -353,7 +354,7 @@ class TestPVCShrinkBasic:
         assert _cr_storage(self.RS) == self.SHRUNK_SIZE
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_03_shrink_with_live_traffic"])
-    def test_05_seed_data_intact(self, config: PVCShrinkConfig, psmdb_client) -> None:
+    def test_05_seed_data_intact(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
         """Verify the 100 documents inserted before shrink are still present."""
         uri = f"testWriter:testWriter123456@{CLUSTER}-rs0.{config.namespace}"
         count = psmdb_client.run_mongosh(
