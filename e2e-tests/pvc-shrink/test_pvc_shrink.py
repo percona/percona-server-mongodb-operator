@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import json
 import logging
 import subprocess
@@ -7,6 +5,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 from lib.config import apply_cluster
@@ -261,7 +260,7 @@ class TestPVCShrinkBasic:
     RS = "rs0"
     INITIAL_SIZE = "10Gi"
     SHRUNK_SIZE = "5Gi"
-    PVCS = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
+    PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
@@ -524,9 +523,9 @@ class TestPVCShrinkSharded:
 
     INITIAL_SIZE = "10Gi"
     SHRUNK_SIZE = "5Gi"
-    RS0_PVCS = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
-    RS1_PVCS = [f"mongod-data-{CLUSTER}-rs1-{i}" for i in range(3)]
-    CFG_PVCS = [f"mongod-data-{CLUSTER}-cfg-{i}" for i in range(3)]
+    RS0_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
+    RS1_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs1-{i}" for i in range(3)]
+    CFG_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-cfg-{i}" for i in range(3)]
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
@@ -627,7 +626,7 @@ class TestPVCShrinkMongosLog:
 
     INITIAL_SIZE = "3Gi"
     SHRUNK_SIZE = "2Gi"
-    MONGOS_LOG_PVCS = [f"mongos-logs-{CLUSTER}-mongos-{i}" for i in range(2)]
+    MONGOS_LOG_PVCS: ClassVar[list[str]] = [f"mongos-logs-{CLUSTER}-mongos-{i}" for i in range(2)]
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
