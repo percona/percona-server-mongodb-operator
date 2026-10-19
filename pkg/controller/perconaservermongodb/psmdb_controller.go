@@ -471,7 +471,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
-	if err := r.reconcileVPARecommendations(ctx, cr); err != nil {
+	err = r.reconcileVPARecommendations(ctx, cr)
+	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
 	}
 
