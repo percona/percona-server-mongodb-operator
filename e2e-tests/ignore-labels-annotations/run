@@ -13,26 +13,51 @@ apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
 wait_for_running "$cluster-rs0" 3
 
+check_headless_svc_has_no_expose_annotations() {
+	local headless_svc=$1
+	shift
+	local keys=("$@")
+
+	if [[ -z "$headless_svc" ]]; then
+		return
+	fi
+
+	local key
+	local actual
+	for key in "${keys[@]}"; do
+		actual=$(kubectl_bin get "service/$headless_svc" -o json | jq -r ".metadata.annotations[\"$key\"] // \"\"")
+		if [[ -n "$actual" ]]; then
+			desc "FAIL: headless service $headless_svc must never get expose.annotations key \"$key\" applied, but got \"$actual\""
+			exit 1
+		fi
+	done
+}
+
 check_service() {
 	replset_name=$1
 
 	local expose_path
 	local svc_name
+	local headless_svc_name=""
 	case $replset_name in
 
 		"rs0")
 			expose_path="/spec/replsets/0/expose"
 			svc_name="$cluster-rs0-0"
+			headless_svc_name="$cluster-rs0"
 			;;
 
 		"cfg")
 			expose_path="/spec/sharding/configsvrReplSet/expose"
 			svc_name="$cluster-cfg-0"
+			headless_svc_name="$cluster-cfg"
 			;;
 
 		"mongos")
 			expose_path="/spec/sharding/mongos/expose"
 			svc_name="$cluster-mongos-0"
+			# mongos has no headless counterpart, nothing to check
+			headless_svc_name=""
 			;;
 
 		*)
@@ -106,6 +131,9 @@ check_service() {
 	desc "check if not ignored labels and annotations are deleted from service $svc_name"
 	compare_kubectl "service/$svc_name" "-crmeta"
 
+	desc "check that expose.annotations are never applied to the headless service $headless_svc_name"
+	check_headless_svc_has_no_expose_annotations "$headless_svc_name" "crAnnotation"
+
 	desc "removing labels and annotations from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
         {
@@ -141,6 +169,9 @@ check_service() {
 	sleep 5
 	desc "check if not previous service labels and annotations is deleted from $svc_name"
 	compare_kubectl "service/$svc_name" "-two-service-labels-annotations"
+
+	desc "check that expose.annotations are still never applied to the headless service $headless_svc_name"
+	check_headless_svc_has_no_expose_annotations "$headless_svc_name" "otherCrAnnotation" "secondCrAnnotation"
 
 	desc "adding removing one labels from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
