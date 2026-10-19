@@ -25,7 +25,8 @@ check_headless_svc_has_no_expose_annotations() {
 	local key
 	local actual
 	for key in "${keys[@]}"; do
-		actual=$(kubectl_bin get "service/$headless_svc" -o json | jq -r ".metadata.annotations[\"$key\"] // \"\"")
+		actual=$(kubectl_bin get "service/$headless_svc" -o json) || return 1
+		actual=$(jq -r ".metadata.annotations[\"$key\"] // \"\"" <<< "$actual") || return 1
 		if [[ -n "$actual" ]]; then
 			desc "FAIL: headless service $headless_svc must never get expose.annotations key \"$key\" applied, but got \"$actual\""
 			exit 1
