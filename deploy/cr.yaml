@@ -21,6 +21,7 @@ spec:
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
 #  vpa:
+#    enabled: false
 #    updateMode: "Off"
 #    controlledValues: RequestsOnly
 #    minAllowed:
