@@ -32010,6 +32010,13 @@ spec:
                     type: boolean
                   enableVolumeShrink:
                     type: boolean
+                  shrinkOpts:
+                    properties:
+                      maxDiskUsagePercent:
+                        maximum: 99
+                        minimum: 1
+                        type: integer
+                    type: object
                 type: object
                 x-kubernetes-validations:
                 - message: autoscaling cannot be enabled when enableVolumeScaling

@@ -599,7 +599,11 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		if err != nil {
 			return errors.Wrap(err, "create mongo client for RS health check")
 		}
-		defer rsClient.Disconnect(ctx)
+		defer func() {
+			if err := rsClient.Disconnect(ctx); err != nil {
+				log.Error(err, "failed to disconnect mongo client")
+			}
+		}()
 
 		rsStatus, err := rsClient.RSStatus(ctx)
 		if err != nil {
@@ -857,7 +861,11 @@ func (r *ReconcilePerconaServerMongoDB) isPodNonPrimary(ctx context.Context, cr 
 	if err != nil {
 		return false, errors.Wrap(err, "create standalone client")
 	}
-	defer mgoClient.Disconnect(ctx)
+	defer func() {
+		if err := mgoClient.Disconnect(ctx); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to disconnect mongo client")
+		}
+	}()
 
 	isMaster, err := mgoClient.IsMaster(ctx)
 	if err != nil {
