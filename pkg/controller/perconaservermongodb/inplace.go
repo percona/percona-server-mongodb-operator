@@ -13,6 +13,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/util/version"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -253,8 +254,11 @@ func (r *ReconcilePerconaServerMongoDB) tryInPlaceResize(
 		return false, nil
 	}
 
-	if reason := r.waitPodResized(ctx, pod, plan); reason != "" {
-		log.Info("recreating pod: resize did not complete", "reason", reason)
+	resized, err := r.waitPodResized(ctx, pod, plan)
+	if err != nil {
+		return false, errors.Wrap(err, "wait for in-place resize")
+	}
+	if !resized {
 		return false, nil
 	}
 
@@ -289,43 +293,60 @@ func (r *ReconcilePerconaServerMongoDB) resizePod(ctx context.Context, pod *core
 	return r.client.SubResource("resize").Patch(ctx, pod, client.StrategicMergeFrom(orig))
 }
 
-// waitPodResized polls the pod until the kubelet has applied plan.target. It
-// returns "" on success, or why the resize will not complete.
-func (r *ReconcilePerconaServerMongoDB) waitPodResized(ctx context.Context, pod *corev1.Pod, plan *inPlaceResize) string {
-	deadline := time.Now().Add(inPlaceResizeTimeout)
-	for time.Now().Before(deadline) {
-		time.Sleep(time.Second)
+// waitPodResized polls the pod until the kubelet has applied plan.target.
+// Returns false if the pod cannot be resized and needs to be recreated instead.
+func (r *ReconcilePerconaServerMongoDB) waitPodResized(ctx context.Context, pod *corev1.Pod, plan *inPlaceResize) (bool, error) {
+	log := logf.FromContext(ctx).WithName("InPlaceResize").WithValues("pod", pod.Name)
 
-		if err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod); err != nil {
-			return "get pod: " + err.Error()
-		}
-
-		inProgress := false
-		for _, cond := range pod.Status.Conditions {
-			switch cond.Type {
-			case corev1.PodResizePending:
-				if cond.Reason == corev1.PodReasonInfeasible {
-					return "resize is infeasible: " + cond.Message
-				}
-				inProgress = true
-			case corev1.PodResizeInProgress:
-				if cond.Reason == corev1.PodReasonError {
-					return "resize failed: " + cond.Message
-				}
-				inProgress = true
+	err := wait.PollUntilContextTimeout(ctx, time.Second, inPlaceResizeTimeout, false,
+		func(ctx context.Context) (bool, error) {
+			if err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), pod); err != nil {
+				return false, errors.Wrap(err, "get pod")
 			}
-		}
-		if inProgress {
-			continue
-		}
 
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.Name == plan.container && cs.Resources != nil && resourcesApplied(*cs.Resources, plan.target) {
-				return ""
+			inProgress := false
+			for _, cond := range pod.Status.Conditions {
+				switch cond.Type {
+				case corev1.PodResizePending:
+					if cond.Reason == corev1.PodReasonInfeasible {
+						return false, errors.Errorf("resize is infeasible: %s", cond.Message)
+					}
+					inProgress = true
+				case corev1.PodResizeInProgress:
+					if cond.Reason == corev1.PodReasonError {
+						return false, errors.Errorf("resize failed: %s", cond.Message)
+					}
+					inProgress = true
+				}
 			}
-		}
+			if inProgress {
+				return false, nil
+			}
+
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name == plan.container && cs.Resources != nil && resourcesApplied(*cs.Resources, plan.target) {
+					return true, nil
+				}
+			}
+			return false, nil
+		})
+
+	switch {
+	case err == nil:
+		return true, nil
+
+	case ctx.Err() != nil:
+		return false, errors.Wrap(ctx.Err(), "wait for resize")
+
+	case wait.Interrupted(err):
+		log.Info("recreating pod: resize did not complete",
+			"reason", "timed out after "+inPlaceResizeTimeout.String())
+		return false, nil
+
+	default:
+		log.Info("recreating pod: resize did not complete", "reason", err.Error())
+		return false, nil
 	}
-	return "timed out after " + inPlaceResizeTimeout.String()
 }
 
 // resourcesApplied reports whether actual (pod spec or container status) holds
