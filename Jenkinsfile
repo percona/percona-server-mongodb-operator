@@ -1,6 +1,6 @@
 import groovy.transform.Field
 
-@Field def zone = 'us-central1-c'
+@Field def zone = 'us-central1-a'
 @Field def testUrlPrefix = 'https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-psmdb-operator'
 @Field def tests = []
 @Field def reportHtml = 'e2e-test-report.html'
@@ -10,8 +10,9 @@ import groovy.transform.Field
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+            export CLOUDSDK_CONFIG=/tmp/gcloud-\$GKE_CLUSTER_NAME
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             GKE_VERSION=\$(gcloud container get-server-config --zone ${zone} --flatten='channels[].validVersions[]' --filter='channels.channel=STABLE' --format='value(channels.validVersions)' | sort -V | head -n1)
@@ -19,12 +20,35 @@ void createCluster(String CLUSTER_SUFFIX) {
                 echo "Failed to detect the minimum Kubernetes version from the GKE stable release channel"
                 exit 1
             fi
+
+            cluster_exists() {
+                gcloud container clusters describe "\${GKE_CLUSTER_NAME}" --zone ${zone} >/dev/null 2>&1
+            }
+
+            delete_cluster() {
+                for attempt in 1 2; do
+                    if gcloud container clusters delete "\${GKE_CLUSTER_NAME}" --zone ${zone} --quiet; then
+                        return 0
+                    fi
+                    if ! cluster_exists; then
+                        return 0
+                    fi
+                    if [ \${attempt} -eq 1 ]; then
+                        echo "Failed to delete GKE cluster \${GKE_CLUSTER_NAME}; retrying in 10 seconds"
+                        sleep 10
+                    fi
+                done
+                return 1
+            }
+
             ret_num=0
             while [ \${ret_num} -lt 15 ]; do
                 ret_val=0
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
-                echo "Creating GKE cluster ${CLUSTER_NAME}-${CLUSTER_SUFFIX} with Kubernetes version \${GKE_VERSION} from the stable release channel"
-                gcloud container clusters create ${CLUSTER_NAME}-${CLUSTER_SUFFIX} \
+                if cluster_exists; then
+                    delete_cluster || echo "Unable to remove existing GKE cluster \${GKE_CLUSTER_NAME}; continuing with cluster creation"
+                fi
+                echo "Creating GKE cluster \${GKE_CLUSTER_NAME} with Kubernetes version \${GKE_VERSION} from the stable release channel"
+                gcloud container clusters create "\${GKE_CLUSTER_NAME}" \
                     --zone=${zone} \
                     --machine-type='n1-standard-4' \
                     --cluster-version="\${GKE_VERSION}" \
@@ -46,7 +70,9 @@ void createCluster(String CLUSTER_SUFFIX) {
                 ret_num=\$((ret_num + 1))
             done
             if [ \${ret_num} -eq 15 ]; then
-                gcloud container clusters list --filter ${CLUSTER_NAME}-${CLUSTER_SUFFIX} --zone ${zone} --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone ${zone} --quiet || true
+                if cluster_exists; then
+                    delete_cluster || true
+                fi
                 exit 1
             fi
         """
@@ -56,8 +82,9 @@ void createCluster(String CLUSTER_SUFFIX) {
 void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/${CLUSTER_NAME}-${CLUSTER_SUFFIX}
-            export CLOUDSDK_CONFIG=/tmp/gcloud-$CLUSTER_NAME-${CLUSTER_SUFFIX}
+            export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+            export CLOUDSDK_CONFIG=/tmp/gcloud-\$GKE_CLUSTER_NAME
             gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
             gcloud config set project "\$GCP_PROJECT"
             for namespace in \$(kubectl get namespaces --no-headers | awk '{print \$1}' | grep -vE "^kube-|^openshift" | sed '/-operator/ s/^/1-/' | sort | sed 's/^1-//'); do
@@ -69,7 +96,7 @@ void shutdownCluster(String CLUSTER_SUFFIX) {
                 kubectl delete pods --all -n \$namespace --force --grace-period=0 || true
             done
             kubectl get svc --all-namespaces || true
-            gcloud container clusters delete --zone ${zone} ${CLUSTER_NAME}-${CLUSTER_SUFFIX}
+            gcloud container clusters delete --zone ${zone} "\$GKE_CLUSTER_NAME"
         """
    }
 }
@@ -81,12 +108,12 @@ void deleteOldClusters(String FILTER) {
                 gcloud auth activate-service-account --key-file "\$CLIENT_SECRET_FILE"
                 gcloud config set project "\$GCP_PROJECT"
                 for GKE_CLUSTER in \$(gcloud container clusters list --format='csv[no-heading](name)' --filter="$FILTER"); do
-                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                    GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="name=\$GKE_CLUSTER")
                     retry=0
                     while [ "\$GKE_CLUSTER_STATUS" == "PROVISIONING" ]; do
                         echo "Cluster \$GKE_CLUSTER is being provisioned, waiting before delete."
                         sleep 10
-                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="\$GKE_CLUSTER")
+                        GKE_CLUSTER_STATUS=\$(gcloud container clusters list --format='csv[no-heading](status)' --filter="name=\$GKE_CLUSTER")
                         let retry+=1
                         if [ \$retry -ge 60 ]; then
                             echo "Cluster \$GKE_CLUSTER to delete is being provisioned for too long. Skipping..."
@@ -364,6 +391,23 @@ void formatReportDuration(String htmlFile) {
     writeFile file: htmlFile, text: html.substring(0, valueStart) + formatted + html.substring(valueEnd + suffix.length())
 }
 
+boolean isClusterReachable(String clusterSuffix) {
+    return sh(returnStatus: true, script: """
+        export GKE_CLUSTER_NAME=${CLUSTER_NAME}-${clusterSuffix}
+        export KUBECONFIG=/tmp/\$GKE_CLUSTER_NAME
+        for attempt in 1 2; do
+            if kubectl get nodes --request-timeout=60s; then
+                exit 0
+            fi
+            if [ \${attempt} -eq 1 ]; then
+                echo "Cluster \$GKE_CLUSTER_NAME is unreachable; retrying in 10 seconds"
+                sleep 10
+            fi
+        done
+        exit 1
+    """) == 0
+}
+
 void clusterRunner(String cluster) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
         def clusterCreated=0
@@ -375,6 +419,9 @@ void clusterRunner(String cluster) {
                 if (clusterCreated == 0) {
                     createCluster(cluster)
                     clusterCreated++
+                } else if (!isClusterReachable(cluster)) {
+                    echo "Cluster ${CLUSTER_NAME}-${cluster} is unreachable, recreating it"
+                    createCluster(cluster)
                 }
                 runTest(i)
             }
@@ -493,7 +540,8 @@ BASH
         // so the build aborts cleanly.
         def timedOut = exc.causes.any { it.class.name.contains('ExceededTimeout') }
         if (timedOut) {
-            echo "Test $testName timed out!"
+            long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
+            echo "Test $testName timed out after ${elapsedMin} minutes!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
             currentBuild.result = 'FAILURE'
@@ -507,12 +555,13 @@ BASH
         // step can surface as a plain "exit code 143" error before the timeout's
         // FlowInterruptedException propagates. Treat 143 as a timeout/termination
         // (error), not a test assertion failure, so the report shows the right icon.
+        long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
         if (exc.message?.contains('exit code 143')) {
-            echo "Test $testName was terminated (exit 143) - treating as timeout/error!"
+            echo "Test $testName was terminated (exit 143) after ${elapsedMin} minutes - treating as timeout/error!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "error"
         } else {
-            echo "Test $testName has failed!"
+            echo "Test $testName has failed after ${elapsedMin} minutes!"
             collectDebugLogs(testName, clusterSuffix)
             tests[TEST_ID]["result"] = "failure"
         }
@@ -524,7 +573,10 @@ BASH
         tests[TEST_ID]["time"] = durationSec
         pushLogFile("$testName")
         pushLogFile("${testName}-debug")
-        echo "The $testName test was finished!"
+        long totalSec = ((long)(timeStop - timeStart)).intdiv(1000)
+        long mins = totalSec.intdiv(60)
+        long secs = totalSec % 60
+        echo "The $testName test was finished in ${totalSec}s (${mins}m ${secs}s)!"
     }
 }
 
@@ -591,6 +643,18 @@ boolean isManualBuild() {
     return !causes.isEmpty()
 }
 
+def skipRequested() {
+    try {
+        if (pullRequest.labels.contains('skip-e2e-tests')) {
+            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+            return true
+        }
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
+}
+
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild()) {
@@ -645,6 +709,10 @@ void checkE2EIgnoreFiles() {
     }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
+    if (skipRequested()) {
+        needToRunTests = false
+        return
+    }
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
@@ -768,7 +836,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c '
+                            golang:1.27 sh -c '
                                 go install github.com/google/go-licenses@v1.6.0;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mongodb-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -796,7 +864,7 @@ pipeline {
                             -v $WORKSPACE/src/github.com/percona/percona-server-mongodb-operator:/go/src/github.com/percona/percona-server-mongodb-operator \
                             -w /go/src/github.com/percona/percona-server-mongodb-operator \
                             -e GOFLAGS='-buildvcs=false' \
-                            golang:1.26 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
+                            golang:1.27 sh -c 'go build -v -o percona-server-mongodb-operator github.com/percona/percona-server-mongodb-operator/cmd/manager'
                     "
                 '''
 

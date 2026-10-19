@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,22 +18,18 @@ import (
 
 func TestGetObjectHashClusterIssuer(t *testing.T) {
 	spec := cm.IssuerSpec{
-		IssuerConfig: cm.IssuerConfig{
-			CA: &cm.CAIssuer{SecretName: "psmdb-ca-cert"},
-		},
+		CA: &cm.CAIssuer{SecretName: "psmdb-ca-cert"},
 	}
 
 	desired := &cm.ClusterIssuer{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-issuer"},
-		Spec:       spec,
+		Name: "psmdb-issuer",
+		Spec: spec,
 	}
 	existing := &cm.ClusterIssuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "psmdb-issuer",
-			ResourceVersion: "42",
-			Annotations:     map[string]string{"some-random-annotation": "true"},
-		},
-		Spec: spec,
+		Name:            "psmdb-issuer",
+		ResourceVersion: "42",
+		Annotations:     map[string]string{"some-random-annotation": "true"},
+		Spec:            spec,
 		Status: cm.IssuerStatus{
 			Conditions: []cm.IssuerCondition{{Type: cm.IssuerConditionReady, Status: cmmeta.ConditionTrue}},
 		},
@@ -53,7 +48,7 @@ func TestApplyIfSkipsUnownedObject(t *testing.T) {
 	s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.ClusterIssuer))
 
 	userIssuer := &cm.ClusterIssuer{
-		ObjectMeta: metav1.ObjectMeta{Name: "psmdb-issuer", Labels: map[string]string{"owner": "user"}},
+		Name: "psmdb-issuer", Labels: map[string]string{"owner": "user"},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: cm.IssuerConfig{CA: &cm.CAIssuer{SecretName: "user-ca"}},
 		},
@@ -86,7 +81,7 @@ func TestApplyIfSkipsUnownedObject(t *testing.T) {
 			cl := builder.Build()
 
 			desired := &cm.ClusterIssuer{
-				ObjectMeta: metav1.ObjectMeta{Name: userIssuer.Name, Labels: map[string]string{"owner": "operator"}},
+				Name: userIssuer.Name, Labels: map[string]string{"owner": "operator"},
 				Spec: cm.IssuerSpec{
 					IssuerConfig: cm.IssuerConfig{CA: &cm.CAIssuer{SecretName: "operator-ca"}},
 				},

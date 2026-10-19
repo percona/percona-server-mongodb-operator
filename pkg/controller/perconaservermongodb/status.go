@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -227,7 +228,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	pbmStatus, err := r.pbmStatus(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get pbm status")
+		log.V(1).Info("failed to get PBM status", "error", err.Error())
+		pbmStatus = api.AppStateError
 	}
 
 	state := api.AppStateInit
@@ -349,13 +351,27 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, c
 	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
+// writeStatusBackoff gives the informer cache time to catch up with our own
+// previous writes, otherwise consecutive status writes keep conflicting.
+var writeStatusBackoff = wait.Backoff{
+	Steps:    6,
+	Duration: 50 * time.Millisecond,
+	Factor:   2.0,
+	Jitter:   0.1,
+}
+
 func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retry.RetryOnConflict(writeStatusBackoff, func() error {
 		c := &api.PerconaServerMongoDB{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
 			return err
+		}
+
+		// The CR might be deleted and recreated with the same name while we were reconciling the old one.
+		if c.UID != cr.UID {
+			return nil
 		}
 
 		c.Status = cr.Status
@@ -556,6 +572,14 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 	}
 
 	log := logf.FromContext(ctx).WithName("PBM")
+
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if restore is running")
+	}
+	if isRestoring {
+		return api.AppStateInit, nil
+	}
 
 	pbm, err := r.newPBM(ctx, r.client, cr)
 	if err != nil {

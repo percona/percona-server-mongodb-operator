@@ -178,10 +178,8 @@ func (c *certManagerController) ApplyIssuer(ctx context.Context, cr *api.Percona
 		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
-		IssuerConfig: cm.IssuerConfig{
-			CA: &cm.CAIssuer{
-				SecretName: CertificateCA(cr).SecretName(),
-			},
+		CA: &cm.CAIssuer{
+			SecretName: CertificateCA(cr).SecretName(),
 		},
 	}
 
@@ -228,9 +226,7 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 		Labels: naming.ClusterLabels(cr),
 	}
 	spec := cm.IssuerSpec{
-		IssuerConfig: cm.IssuerConfig{
-			SelfSigned: &cm.SelfSignedIssuer{},
-		},
+		SelfSigned: &cm.SelfSignedIssuer{},
 	}
 	kind := cm.IssuerKind
 	if cr.CompareVersion("1.23.0") >= 0 {
@@ -264,7 +260,19 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 }
 
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
-	return c.createOrUpdate(ctx, cr, cert.Object())
+	obj := cert.Object()
+
+	if cr.CompareVersion("1.24.0") >= 0 && len(obj.Spec.DNSNames) > 0 {
+		current := new(cm.Certificate)
+		err := c.cl.Get(ctx, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, current)
+		if client.IgnoreNotFound(err) != nil {
+			return "", errors.Wrap(err, "get certificate")
+		}
+
+		obj.Spec.DNSNames, _ = SansToIssue(current.Spec.DNSNames, obj.Spec.DNSNames)
+	}
+
+	return c.createOrUpdate(ctx, cr, obj)
 }
 
 var (

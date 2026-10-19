@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -15,10 +14,8 @@ import (
 
 func newTestCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "psmdb",
-			Namespace: "default",
-		},
+		Name:      "psmdb",
+		Namespace: "default",
 		Spec: api.PerconaServerMongoDBSpec{
 			ClusterServiceDNSSuffix: "svc.cluster.local",
 		},

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,22 +28,25 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	secretObj := corev1.Secret{}
-	secretInternalObj := corev1.Secret{}
+	secretObj := new(corev1.Secret)
+	secretInternalObj := new(corev1.Secret)
 	errSecret := r.client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.SSLSecretName(cr),
 		},
-		&secretObj,
+		secretObj,
 	)
 	if client.IgnoreNotFound(errSecret) != nil {
 		return errors.Wrap(errSecret, "get SSL secret")
 	}
-	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretObj)
+	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if secret is created by user")
+	}
+	if errSecret != nil {
+		secretObj = nil
 	}
 	errInternalSecret := r.client.Get(
 		ctx,
@@ -50,14 +54,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 			Namespace: cr.Namespace,
 			Name:      api.SSLInternalSecretName(cr),
 		},
-		&secretInternalObj,
+		secretInternalObj,
 	)
 	if client.IgnoreNotFound(errInternalSecret) != nil {
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
 	}
-	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretInternalObj)
+	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretInternalObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if internal secret is created by user")
+	}
+	if errInternalSecret != nil {
+		secretInternalObj = nil
 	}
 
 	if errSecret == nil && isCustomSecret {
@@ -104,31 +111,33 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)
+	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace, secretObj, secretInternalObj)
 	if err != nil {
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
 		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
+			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
 				return r.updateSSLManually(ctx, cr)
 			}
 			return nil
 		}
-		err = r.createSSLManually(ctx, cr)
-		if err != nil {
+		if err := r.createSSLManually(ctx, cr); err != nil {
 			return errors.Wrap(err, "create ssl manually")
 		}
 		return nil
 	}
-	err = r.createSSLByCertManager(ctx, cr)
-	if err != nil {
+	if err := r.createSSLByCertManager(ctx, cr); err != nil {
 		return errors.Wrap(err, "create ssl by cert-manager")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string, secret, internalSecret *corev1.Secret) (bool, error) {
+	if secret != nil && internalSecret != nil {
+		return secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true" || internalSecret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true", nil
+	}
+
 	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
@@ -313,12 +322,10 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			return errors.Wrap(err, "get secret")
 		}
 		newSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secret.Name + "-old",
-				Namespace: secret.Namespace,
-				Labels:    naming.ClusterLabels(cr),
-			},
-			Data: secret.Data,
+			Name:      secret.Name + "-old",
+			Namespace: secret.Namespace,
+			Labels:    naming.ClusterLabels(cr),
+			Data:      secret.Data,
 		}
 		if cr.CompareVersion("1.17.0") < 0 {
 			newSecret.Labels = nil
@@ -517,12 +524,10 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		}
 
 		secretObj := corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            secretName,
-				Namespace:       cr.Namespace,
-				OwnerReferences: ownerReferences,
-				Labels:          naming.ClusterLabels(cr),
-			},
+			Name:            secretName,
+			Namespace:       cr.Namespace,
+			OwnerReferences: ownerReferences,
+			Labels:          naming.ClusterLabels(cr),
 			Data: map[string][]byte{
 				"ca.crt":  caCertPEM,
 				"tls.crt": tlsCert,
@@ -555,12 +560,10 @@ func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context,
 	}
 
 	caSecretObj := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            caSecretName,
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerRefs,
-			Labels:          labels,
-		},
+		Name:            caSecretName,
+		Namespace:       cr.Namespace,
+		OwnerReferences: ownerRefs,
+		Labels:          labels,
 		Data: map[string][]byte{
 			"ca.crt": caCertPEM,
 			"ca.key": caKeyPEM,
@@ -573,7 +576,8 @@ func (r *ReconcilePerconaServerMongoDB) getOrCreateManualCA(ctx context.Context,
 	return caCertPEM, caKeyPEM, nil
 }
 
-// needsManualSSLUpdate checks if the TLS certificate SANs differ from the expected SANs.
+// needsManualSSLUpdate checks if the TLS certificate SANs differ from the expected SANs. Starting
+// from 1.24.0 a certificate already covering every expected SAN is left untouched.
 func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context, cr *api.PerconaServerMongoDB, sslSecret *corev1.Secret) bool {
 	if sslSecret == nil || len(sslSecret.Data["tls.crt"]) == 0 {
 		return false
@@ -587,10 +591,16 @@ func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context
 
 	expectedSANs := tls.GetCertificateSans(cr)
 
-	sort.Strings(currentSANs)
-	sort.Strings(expectedSANs)
+	if cr.CompareVersion("1.24.0") < 0 {
+		sort.Strings(currentSANs)
+		sort.Strings(expectedSANs)
 
-	return !slices.Equal(currentSANs, expectedSANs)
+		return !slices.Equal(currentSANs, expectedSANs)
+	}
+
+	_, reissue := tls.SansToIssue(currentSANs, expectedSANs)
+
+	return reissue
 }
 
 // updateSSLManually re-signs TLS certificates with the existing CA when SANs change.

@@ -57,6 +57,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBM(ctx context.Context, cr *ps
 	return nil
 }
 
+func isPBMUnreachable(err error) bool {
+	return errors.Is(err, backup.ErrNoReplsetAddrs) ||
+		mongo.IsTimeout(err) ||
+		mongo.IsNetworkError(err)
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
@@ -85,6 +91,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 	for rs, status := range cr.Status.Replsets {
 		if !status.Initialized {
 			log.V(1).Info("waiting for replset to be initialized", "replset", rs)
+			return nil
+		}
+
+		// A restore is marked as ready as soon as PBM finishes, but mongod is
+		// still starting up at that point. Configuring PBM before the replset is
+		// ready fails the whole reconcile and puts the cluster into error state.
+		if status.Status != psmdbv1.AppStateReady {
+			log.V(1).Info("waiting for replset to be ready", "replset", rs, "status", status.Status)
 			return nil
 		}
 
@@ -140,6 +154,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePBMConfig(ctx context.Context, 
 
 	pbm, err := backup.NewPBM(ctx, r.client, cr)
 	if err != nil {
+		if isPBMUnreachable(err) {
+			log.V(1).Info("mongod is not reachable yet, skipping PBM configuration", "error", err.Error())
+			return nil
+		}
 		return errors.Wrap(err, "new PBM connection")
 	}
 	defer func() {

@@ -11,6 +11,13 @@ from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
 
+# keep in sync with KUBECTL_TRANSIENT_ERRORS in e2e-tests/functions
+TRANSIENT_ERRORS = re.compile(
+    r"ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout"
+    r"|etcdserver: request timed out|the server is currently unable to handle the request"
+    r"|Unable to connect to the server|connection reset by peer"
+)
+
 
 def _read_manifest(source: str) -> str | None:
     """Return manifest text for a local file or http(s) URL, else None."""
@@ -78,7 +85,15 @@ def kubectl_bin(
     arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
     cmd = ["kubectl"] + arg_list
     logger.debug(" ".join(map(str, cmd)))
-    result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
+    for attempt in range(10):
+        result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
+        if result.returncode == 0 or attempt == 9 or not TRANSIENT_ERRORS.search(result.stderr):
+            break
+        delay = min(5 * (attempt + 1), 30)
+        logger.warning(
+            "kubectl transient error, retrying in %ds: %s", delay, result.stderr.strip()
+        )
+        time.sleep(delay)
 
     if result.stderr:
         log = logger.warning if check else logger.debug
@@ -172,6 +187,17 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     except subprocess.CalledProcessError as e:
         raise TimeoutError(f"Resource {resource} was not deleted within {timeout}s") from e
     logger.info(f"{resource} was deleted")
+
+
+def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
+    """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""
+    _wait_for(
+        f"cluster {cluster_name} state={target_state}",
+        ["psmdb", cluster_name],
+        "{.status.state}",
+        target_state,
+        timeout,
+    )
 
 
 def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:

@@ -32,8 +32,6 @@ ENV_VARS_TO_REPORT = [
     "IMAGE_BACKUP",
     "IMAGE_PMM_CLIENT",
     "IMAGE_PMM_SERVER",
-    "IMAGE_PMM3_CLIENT",
-    "IMAGE_PMM3_SERVER",
     "IMAGE_LOGCOLLECTOR",
     "IMAGE_CLUSTERSYNC",
     "CERT_MANAGER_VER",
@@ -201,5 +199,8 @@ def generate_report(namespace: str) -> list[Any]:
             create_collapsible_section(
                 "Kubernetes Events", highlight_log_levels(summary["events"])
             )
+        ),
+        extras.html(
+            create_collapsible_section("PBM Status and Logs", html.escape(summary["pbm"]))
         ),
     ]

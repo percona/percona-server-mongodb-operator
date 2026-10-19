@@ -1,6 +1,9 @@
 package perconaservermongodb
 
 import (
+	"context"
+	"errors"
+	"slices"
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -10,21 +13,98 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+type sslCertManagerController struct {
+	tls.CertManagerController
+	checks  int
+	applies int
+	err     error
+}
+
+func (c *sslCertManagerController) Check(context.Context, *rest.Config, string) error {
+	c.checks++
+	return c.err
+}
+
+func (c *sslCertManagerController) ApplyIssuer(context.Context, *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+	c.applies++
+	return "", c.err
+}
+
+func (c *sslCertManagerController) ApplyCAIssuer(context.Context, *api.PerconaServerMongoDB) (util.ApplyStatus, error) {
+	c.applies++
+	return "", c.err
+}
+
+func TestReconcileSSLCertManagerCheck(t *testing.T) {
+	for _, tt := range []struct {
+		name                            string
+		external, internal, certManager bool
+		checks, applies                 int
+	}{
+		{name: "existing manual secrets", external: true, internal: true},
+		{name: "existing cert-manager secrets", external: true, internal: true, certManager: true, applies: 1},
+		{name: "missing external secret", internal: true, checks: 1},
+		{name: "missing internal secret", external: true, checks: 1},
+		{name: "missing both secrets", checks: 1},
+		{name: "missing cert-manager internal secret", external: true, certManager: true, checks: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cr, err := readDefaultCR("cluster", "namespace")
+			require.NoError(t, err)
+			cr.UID = "cluster-uid"
+			cr.Spec.Secrets.SSL = cr.Name + "-ssl"
+			cr.Spec.Secrets.SSLInternal = cr.Name + "-ssl-internal"
+			controller := true
+			var objects []client.Object
+			for name, exists := range map[string]bool{
+				api.SSLSecretName(cr):         tt.external,
+				api.SSLInternalSecretName(cr): tt.internal,
+			} {
+				if !exists {
+					continue
+				}
+				secret := &corev1.Secret{
+					Name: name, Namespace: cr.Namespace,
+					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}}}
+				if tt.certManager {
+					secret.Labels = map[string]string{cm.PartOfCertManagerControllerLabelKey: "true"}
+				}
+				objects = append(objects, secret)
+			}
+			r := buildFakeClient(objects...)
+			stop := errors.New("stop cert-manager operation")
+			c := &sslCertManagerController{err: stop}
+			r.newCertManagerCtrlFunc = func(client.Client, *runtime.Scheme, bool) tls.CertManagerController {
+				return c
+			}
+			err = r.reconcileSSL(t.Context(), cr)
+			if tt.checks > 0 || tt.applies > 0 {
+				require.ErrorIs(t, err, stop)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.checks, c.checks)
+			require.Equal(t, tt.applies, c.applies)
+		})
+	}
+}
+
 func newTestCR() *api.PerconaServerMongoDB {
 	return &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 			Secrets: &api.SecretsSpec{
@@ -43,12 +123,10 @@ func newTestCR() *api.PerconaServerMongoDB {
 
 func TestCurrentSSLAnnotation(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -98,12 +176,10 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 
 func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-rs0",
-			Namespace: "test-ns",
-			Labels: map[string]string{
-				naming.LabelKubernetesInstance: "test-cluster",
-			},
+		Name:      "test-cluster-rs0",
+		Namespace: "test-ns",
+		Labels: map[string]string{
+			naming.LabelKubernetesInstance: "test-cluster",
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Template: corev1.PodTemplateSpec{
@@ -118,20 +194,16 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 	}
 
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -196,20 +268,16 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 
 	// Now create secrets and call again - TLSSecretsReady should be true
 	sslSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("cert-data"),
 			"tls.key": []byte("key-data"),
 		},
 	}
 	sslInternalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster-ssl-internal",
+		Namespace: "test-ns",
 		Data: map[string][]byte{
 			"tls.crt": []byte("internal-cert-data"),
 			"tls.key": []byte("internal-key-data"),
@@ -301,10 +369,8 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "user-cluster-issuer",
-				Labels: labels,
-			},
+			Name:   "user-cluster-issuer",
+			Labels: labels,
 		}
 	}
 
@@ -375,20 +441,16 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 func TestIsExternalIssuer(t *testing.T) {
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "user-cluster-issuer",
-				Labels: labels,
-			},
+			Name:   "user-cluster-issuer",
+			Labels: labels,
 		}
 	}
 
 	issuer := func(labels map[string]string) *cm.Issuer {
 		return &cm.Issuer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "user-issuer",
-				Namespace: "test-ns",
-				Labels:    labels,
-			},
+			Name:      "user-issuer",
+			Namespace: "test-ns",
+			Labels:    labels,
 		}
 	}
 
@@ -476,6 +538,56 @@ func TestIsExternalIssuer(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, external)
+		})
+	}
+}
+
+func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
+	sslSecret := func(t *testing.T, cr *api.PerconaServerMongoDB, sans []string) *corev1.Secret {
+		t.Helper()
+
+		caCert, caKey, err := tls.IssueCA()
+		require.NoError(t, err)
+
+		tlsCert, _, err := tls.IssueWithCA(sans, caCert, caKey)
+		require.NoError(t, err)
+
+		return &corev1.Secret{
+			Name: api.SSLSecretName(cr), Namespace: cr.Namespace,
+			Data: map[string][]byte{"tls.crt": tlsCert},
+		}
+	}
+
+	tests := map[string]struct {
+		crVersion string
+		extraSan  string
+		dropSan   string
+		expected  bool
+	}{
+		"1.23.0 reissues on extra san":      {crVersion: "1.23.0", extraSan: "stale.example.com", expected: true},
+		"1.24.0 keeps cert with extra san":  {crVersion: "1.24.0", extraSan: "stale.example.com"},
+		"1.23.0 reissues on missing san":    {crVersion: "1.23.0", dropSan: "test-cluster-rs0", expected: true},
+		"1.24.0 reissues on missing san":    {crVersion: "1.24.0", dropSan: "test-cluster-rs0", expected: true},
+		"1.23.0 keeps cert with exact sans": {crVersion: "1.23.0"},
+		"1.24.0 keeps cert with exact sans": {crVersion: "1.24.0"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newTestCR()
+			cr.Spec.CRVersion = tt.crVersion
+
+			sans := tls.GetCertificateSans(cr)
+			if tt.extraSan != "" {
+				sans = append(sans, tt.extraSan)
+			}
+			if tt.dropSan != "" {
+				sans = slices.DeleteFunc(sans, func(san string) bool { return san == tt.dropSan })
+			}
+
+			r := &ReconcilePerconaServerMongoDB{}
+
+			assert.Equal(t, tt.expected, r.needsManualSSLUpdate(t.Context(), cr, sslSecret(t, cr, sans)))
 		})
 	}
 }

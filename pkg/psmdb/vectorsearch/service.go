@@ -2,7 +2,6 @@ package vectorsearch
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -23,15 +22,11 @@ func Service(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) *corev1.Service 
 	ls := naming.SearchLabels(cr, rs)
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.SearchServiceName(cr, rs),
-			Namespace: cr.Namespace,
-			Labels:    ls,
-		},
+		APIVersion: "v1",
+		Kind:       "Service",
+		Name:       naming.SearchServiceName(cr, rs),
+		Namespace:  cr.Namespace,
+		Labels:     ls,
 		Spec: corev1.ServiceSpec{
 			ClusterIP: corev1.ClusterIPNone,
 			Selector:  ls,

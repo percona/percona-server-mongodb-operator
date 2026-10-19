@@ -16,7 +16,6 @@ import (
 	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -40,7 +39,7 @@ func TestSnapshotBackups_Start(t *testing.T) {
 		setupMock    func(*MockPBM)
 		cluster      *api.PerconaServerMongoDB
 		wantState    api.BackupState
-		wantErr      bool
+		wantErrMsg   string
 		wantReplsets []string
 	}{
 		"success - no replsets": {
@@ -89,8 +88,8 @@ func TestSnapshotBackups_Start(t *testing.T) {
 			setupMock: func(m *MockPBM) {
 				m.EXPECT().SendCmd(gomock.Any(), gomock.Any()).Return(fmt.Errorf("connection refused"))
 			},
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "connection refused",
 		},
 	}
 
@@ -104,13 +103,13 @@ func TestSnapshotBackups_Start(t *testing.T) {
 
 			b := &snapshotBackups{pbm: mockPBM}
 			cr := &api.PerconaServerMongoDBBackup{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-backup"},
+				Name: "test-backup",
 			}
 
 			status, err := b.Start(ctx, nil, tt.cluster, cr)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -133,20 +132,16 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 	const namespace = "default"
 
 	bcp := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			VolumeSnapshotClass: new("csi-snapclass"),
 		},
 	}
 
 	existingSnapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.VolumeSnapshotName(bcp, "rs0"),
-			Namespace: namespace,
-		},
+		Name:      naming.VolumeSnapshotName(bcp, "rs0"),
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(true),
 		},
@@ -156,7 +151,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 		existingObjects []client.Object
 		rsName          string
 		pvc             string
-		wantErr         bool
+		wantErrMsg      string
 		check           func(t *testing.T, snapshot *volumesnapshotv1.VolumeSnapshot)
 	}{
 		"creates new snapshot when none exists": {
@@ -192,8 +187,8 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			b := &snapshotBackups{}
 			snapshot, err := b.reconcileSnapshot(ctx, cl, tt.rsName, tt.pvc, bcp)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -213,10 +208,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 	const namespace = "default"
 
 	bcp := &api.PerconaServerMongoDBBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBBackupSpec{
 			VolumeSnapshotClass: new("csi-snapclass"),
 		},
@@ -228,10 +221,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 
 	readySnapshot := func(rsName string) *volumesnapshotv1.VolumeSnapshot {
 		return &volumesnapshotv1.VolumeSnapshot{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      snapshotName(rsName),
-				Namespace: namespace,
-			},
+			Name:      snapshotName(rsName),
+			Namespace: namespace,
 			Status: &volumesnapshotv1.VolumeSnapshotStatus{
 				ReadyToUse: new(true),
 			},
@@ -242,7 +233,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		existingObjects []client.Object
 		meta            *pbmBackup.BackupMeta
 		wantDone        bool
-		wantErr         bool
+		wantErrMsg      string
 		wantSnapshots   []api.SnapshotInfo
 	}{
 		"empty replsets returns done immediately": {
@@ -276,10 +267,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		"copy-ready but snapshot not yet ready": {
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      snapshotName("rs0"),
-						Namespace: namespace,
-					},
+					Name:      snapshotName("rs0"),
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						ReadyToUse: new(false),
 					},
@@ -298,10 +287,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		"snapshot with error returns error": {
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      snapshotName("rs0"),
-						Namespace: namespace,
-					},
+					Name:      snapshotName("rs0"),
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
 							Message: new("snapshot creation failed: insufficient storage"),
@@ -314,7 +301,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 					{Name: "rs0", Node: "pod-0.rs0.svc", Status: defs.StatusCopyReady},
 				},
 			},
-			wantErr: true,
+			wantErrMsg: "snapshot error: snapshot creation failed: insufficient storage",
 		},
 		"invalid node name format returns error": {
 			meta: &pbmBackup.BackupMeta{
@@ -322,7 +309,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 					{Name: "rs0", Node: ".invalid-node", Status: defs.StatusCopyReady},
 				},
 			},
-			wantErr: true,
+			wantErrMsg: "get pod name: unexpected node name format: .invalid-node",
 		},
 		"multiple replsets with one not copy-ready": {
 			existingObjects: []client.Object{readySnapshot("rs0")},
@@ -349,8 +336,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 			b := &snapshotBackups{}
 			done, snapshots, err := b.reconcileSnapshots(ctx, cl, bcp, tt.meta)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -372,10 +359,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 
 	newCR := func() *api.PerconaServerMongoDBBackup {
 		return &api.PerconaServerMongoDBBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pbmName,
-				Namespace: namespace,
-			},
+			Name:      pbmName,
+			Namespace: namespace,
 			Spec: api.PerconaServerMongoDBBackupSpec{
 				Type:                defs.ExternalBackup,
 				VolumeSnapshotClass: new("csi-snapclass"),
@@ -390,20 +375,16 @@ func TestSnapshotBackups_Status(t *testing.T) {
 	rs0SnapshotName := naming.VolumeSnapshotName(newCR(), "rs0")
 
 	readyRS0Snapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rs0SnapshotName,
-			Namespace: namespace,
-		},
+		Name:      rs0SnapshotName,
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(true),
 		},
 	}
 
 	pendingRS0Snapshot := &volumesnapshotv1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rs0SnapshotName,
-			Namespace: namespace,
-		},
+		Name:      rs0SnapshotName,
+		Namespace: namespace,
 		Status: &volumesnapshotv1.VolumeSnapshotStatus{
 			ReadyToUse: new(false),
 		},
@@ -421,7 +402,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 		cr              *api.PerconaServerMongoDBBackup
 		cluster         *api.PerconaServerMongoDB
 		wantState       api.BackupState
-		wantErr         bool
+		wantErrMsg      string
 		check           func(t *testing.T, status api.PerconaServerMongoDBBackupStatus)
 	}{
 		"metadata not found leaves status unchanged": {
@@ -436,9 +417,9 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			setupMock: func(m *MockPBM) {
 				m.EXPECT().GetBackupMeta(gomock.Any(), pbmName).Return(nil, fmt.Errorf("mongodb connection error"))
 			},
-			cr:      newCR(),
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cr:         newCR(),
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "get pbm backup meta: mongodb connection error",
 		},
 		"backup in error state": {
 			setupMock: func(m *MockPBM) {
@@ -597,7 +578,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			existingObjects: []client.Object{readyRS0Snapshot},
 			cr:              newCR(),
 			cluster:         &api.PerconaServerMongoDB{},
-			wantErr:         true,
+			wantErrMsg:      "finish backup: finish backup failed",
 		},
 		"copy-ready with snapshot error propagates error": {
 			setupMock: func(m *MockPBM) {
@@ -611,10 +592,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			},
 			existingObjects: []client.Object{
 				&volumesnapshotv1.VolumeSnapshot{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      rs0SnapshotName,
-						Namespace: namespace,
-					},
+					Name:      rs0SnapshotName,
+					Namespace: namespace,
 					Status: &volumesnapshotv1.VolumeSnapshotStatus{
 						Error: &volumesnapshotv1.VolumeSnapshotError{
 							Message: new("csi driver error: disk unavailable"),
@@ -622,9 +601,9 @@ func TestSnapshotBackups_Status(t *testing.T) {
 					},
 				},
 			},
-			cr:      newCR(),
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cr:         newCR(),
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "reconcile snapshots: snapshot error: csi driver error: disk unavailable",
 		},
 	}
 
@@ -644,8 +623,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			b := &snapshotBackups{pbm: mockPBM}
 			status, err := b.Status(ctx, cl, tt.cluster, tt.cr)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
