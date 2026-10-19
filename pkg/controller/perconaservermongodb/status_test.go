@@ -338,6 +338,25 @@ func TestUpdateStatus(t *testing.T) {
 	}
 }
 
+func TestWriteStatusRecreatedCR(t *testing.T) {
+	existing := &api.PerconaServerMongoDB{
+		Name:      "some-name",
+		Namespace: "some-namespace",
+		UID:       "new-uid",
+	}
+	r := buildFakeClient(existing)
+
+	stale := existing.DeepCopy()
+	stale.UID = "old-uid"
+	stale.Status.Replsets = map[string]api.ReplsetStatus{"rs0": {Initialized: true}}
+
+	require.NoError(t, r.writeStatus(t.Context(), stale))
+
+	got := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
+	assert.Empty(t, got.Status.Replsets)
+}
+
 func fakeVolumeSpec(t *testing.T) *api.VolumeSpec {
 	q, err := resource.ParseQuantity("1Gi")
 	if err != nil {
