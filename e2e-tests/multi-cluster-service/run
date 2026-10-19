@@ -193,6 +193,9 @@ desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
 wait_mcs_dns
+# Replset reconfigs fail until clusterset.local hostnames are resolvable and the
+# operator can back off for a long time, so trigger a reconcile explicitly.
+kubectl_bin annotate psmdb ${cluster} percona.com/mcs-dns-ready="$(date +%s)" --overwrite
 wait_cluster_consistency "${cluster}" 60
 
 desc "disable MCS and wait for exported/imported services to be removed"
