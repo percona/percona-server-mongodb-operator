@@ -197,6 +197,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 				case "FileSystemResizeSuccessful":
 					log.Info("PVC resize completed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 				case "VolumeResizeFailed":
+					// the external resizer retries transient CSI errors, so the resize can still succeed
+					if strings.Contains(event.Note, "DeadlineExceeded") || strings.Contains(event.Note, "Unavailable") {
+						log.Info("PVC resize failed with a retriable error, waiting for retry", "pvc", pvc.Name, "message", event.Note)
+						continue
+					}
+
 					log.Error(nil, "PVC resize failed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 
 					if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
