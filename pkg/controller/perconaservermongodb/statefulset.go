@@ -45,17 +45,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "get StatefulSet for replset %s", rs.Name)
 	}
 
-	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
-	if ok {
-		if err := r.smartUpdate(ctx, cr, sfs, rs); err != nil {
-			return nil, errors.Wrap(err, "failed to run smartUpdate")
-		}
-
+	if _, ok := sfs.Annotations[api.AnnotationRestoreInProgress]; ok {
 		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
+	var pvcSpec *api.PVCSpec
+	if volumeSpec != nil {
+		pvcSpec = &volumeSpec.PersistentVolumeClaim
+	}
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, psmdbconfig.MongodDataVolClaimName, pvcSpec, ls); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 

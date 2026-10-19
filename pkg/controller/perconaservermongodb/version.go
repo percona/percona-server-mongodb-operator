@@ -156,6 +156,8 @@ func canUpgradeVersion(fcv, new string) bool {
 		return new == "7.0"
 	case "7.0":
 		return new == "8.0"
+	case "8.0":
+		return new == "8.3"
 	default:
 		return false
 	}
@@ -271,9 +273,11 @@ func (r *ReconcilePerconaServerMongoDB) getVersionMeta(ctx context.Context, cr *
 		VolumeExpansionEnabled: cr.Spec.IsVolumeExpansionEnabled(),
 	}
 
+	sv := *r.serverVersion
 	if cr.Spec.Platform != nil {
-		vm.Platform = string(*cr.Spec.Platform)
+		sv.Platform = *cr.Spec.Platform
 	}
+	vm.Platform = sv.String()
 
 	for _, rs := range cr.Spec.Replsets {
 		if len(rs.Sidecars) > 0 {
@@ -600,7 +604,17 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 	cr.Status.MongoVersion = info.Version
 	cr.Status.MongoImage = cr.Spec.Image
 
-	// updating status resets our defaults, so we're passing a copy
-	err = r.client.Status().Update(ctx, cr.DeepCopy())
-	return errors.Wrapf(err, "failed to update CR")
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		c := &api.PerconaServerMongoDB{}
+
+		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
+		if err != nil {
+			return err
+		}
+
+		c.Status.MongoVersion = info.Version
+		c.Status.MongoImage = cr.Spec.Image
+
+		return r.client.Status().Update(ctx, c)
+	})
 }
