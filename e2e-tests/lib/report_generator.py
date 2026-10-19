@@ -200,4 +200,7 @@ def generate_report(namespace: str) -> list[Any]:
                 "Kubernetes Events", highlight_log_levels(summary["events"])
             )
         ),
+        extras.html(
+            create_collapsible_section("PBM Status and Logs", html.escape(summary["pbm"]))
+        ),
     ]
