@@ -315,6 +315,58 @@ func TestRatioScaledLimits(t *testing.T) {
 	}
 }
 
+func TestRatioScaledLimitsSerializeReadably(t *testing.T) {
+	// The table test above compares quantities by value, which cannot see how
+	// they serialize. Building a memory limit with NewMilliQuantity yields the
+	// right amount in milli-bytes ("2863311530666m") — a form nobody reads, and
+	// one no user would write back into spec.
+	tests := []struct {
+		name             string
+		reqCPU, limCPU   string
+		reqMem, limMem   string
+		newCPU, newMem   string
+		wantCPU, wantMem string
+	}{
+		{
+			// 4Gi/3Gi is 1.333..., so the result lands off every binary boundary.
+			name:   "non-integer ratio renders as whole bytes",
+			reqMem: "3Gi", limMem: "4Gi", newMem: "2Gi", wantMem: "2863311530",
+		},
+		{
+			name:   "clean ratio keeps the declared binary suffix",
+			reqMem: "1Gi", limMem: "2Gi", newMem: "3Gi", wantMem: "6Gi",
+		},
+		{
+			name:   "a decimal declaration stays decimal",
+			reqMem: "1G", limMem: "2G", newMem: "3G", wantMem: "6G",
+		},
+		{
+			name:   "cpu keeps milli precision, where it means something",
+			reqCPU: "1", limCPU: "1500m", newCPU: "100m", wantCPU: "150m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ratioScaledLimits(corev1.ResourceRequirements{
+				Requests: rl(tt.reqCPU, tt.reqMem),
+				Limits:   rl(tt.limCPU, tt.limMem),
+			}, rl(tt.newCPU, tt.newMem))
+
+			if tt.wantCPU != "" {
+				cpu := got[corev1.ResourceCPU]
+				assert.Equal(t, tt.wantCPU, cpu.String())
+			}
+			if tt.wantMem != "" {
+				mem := got[corev1.ResourceMemory]
+				assert.Equal(t, tt.wantMem, mem.String())
+				assert.NotContains(t, mem.String(), "m",
+					"a memory limit must never serialize as milli-bytes")
+			}
+		})
+	}
+}
+
 func TestRatioScaledLimitsDoesNotMutateInput(t *testing.T) {
 	orig := corev1.ResourceRequirements{
 		Requests: rl("1", "1Gi"),

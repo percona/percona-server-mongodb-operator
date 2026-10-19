@@ -589,7 +589,12 @@ func ratioScaledLimits(orig corev1.ResourceRequirements, newRequests corev1.Reso
 		}
 		ratio := float64(oldLim.MilliValue()) / float64(oldReq.MilliValue())
 		newLimMilli := int64(float64(newReq.MilliValue()) * ratio)
-		newLimits[res] = *resource.NewMilliQuantity(newLimMilli, resource.DecimalSI)
+		newLimits[res] = *resource.NewMilliQuantity(newLimMilli, oldLim.Format)
+
+		// Milli precesion is meanningful for CPU only, unreadable for memory.
+		if res == corev1.ResourceMemory {
+			newLimits[res] = *resource.NewQuantity(newLimMilli/1000, oldLim.Format)
+		}
 	}
 	return newLimits
 }
