@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
@@ -330,7 +331,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 // - Adjusting the primary container's command, environment variables, and volume mounts for the restore process.
 // It returns an error if there's any issue during the update or if the backup-agent container is not found.
 func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalRestore(
-	ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, namespacedName types.NamespacedName, port int32,
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	namespacedName types.NamespacedName,
+	port int32,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -505,6 +509,45 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 	}
 
 	log.Info("Updated statefulset", "name", namespacedName.Name)
+
+	if err := r.terminateStatefulSetPods(ctx, &sts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
+	ctx context.Context,
+	sfs *appsv1.StatefulSet,
+) error {
+	targetGen := sfs.Generation
+	bo := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*2), 3), ctx)
+	if err := backoff.Retry(func() error {
+		observed := &appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), observed); err != nil {
+			return err
+		}
+
+		// When sfs is updated/patched, the client writes back the updated generation into the local object.
+		// We use it to ensure that the informers have been synced before deleting the pods.
+		if observed.Status.ObservedGeneration < targetGen {
+			return errors.New("updated statefulset not yet observed by informer")
+		}
+
+		podList := &corev1.PodList{}
+		if err := r.client.List(ctx, podList, client.InNamespace(sfs.Namespace), client.MatchingLabels(sfs.Spec.Selector.MatchLabels)); err != nil {
+			return err
+		}
+
+		for _, pod := range podList.Items {
+			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return err
+			}
+		}
+		return nil
+	}, bo); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -570,30 +613,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				sts := appsv1.StatefulSet{
-					Name:      stsName,
-					Namespace: cluster.Namespace,
-				}
-
-				err := r.client.Get(ctx, nn, &sts)
-				if err != nil {
-					return err
-				}
-
-				orig := sts.DeepCopy()
-				zero := int32(0)
-
-				sts.Spec.Replicas = &zero
-
-				if sts.Annotations == nil {
-					sts.Annotations = make(map[string]string)
-				}
-				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
-
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
-			})
-			if err != nil {
+			if err := r.shutdownStatefulSetForRestore(ctx, nn); err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
 			}
 		}
@@ -604,30 +624,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRes
 
 			log.Info("Preparing statefulset for physical restore", "name", stsName)
 
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				sts := appsv1.StatefulSet{
-					Name:      stsName,
-					Namespace: cluster.Namespace,
-				}
-
-				err := r.client.Get(ctx, nn, &sts)
-				if err != nil {
-					return err
-				}
-
-				orig := sts.DeepCopy()
-				zero := int32(0)
-
-				sts.Spec.Replicas = &zero
-
-				if sts.Annotations == nil {
-					sts.Annotations = make(map[string]string)
-				}
-				sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
-
-				return r.client.Patch(ctx, &sts, client.MergeFrom(orig))
-			})
-			if err != nil {
+			if err := r.shutdownStatefulSetForRestore(ctx, nn); err != nil {
 				return errors.Wrapf(err, "prepare statefulset %s for physical restore", stsName)
 			}
 		}
@@ -901,6 +898,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 
 	for _, pod := range podList.Items {
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return false, errors.Wrapf(err, "delete pod %s", pod.Name)
+			}
 			return false, nil
 		}
 
@@ -1033,4 +1033,36 @@ func getPBMBinaryAndContainerForExec(pod *corev1.Pod) (string, string) {
 	}
 
 	return container, pbmBinary
+}
+
+// shutdownStatefulSetForRestore scales down the StatefulSet to zero replicas and marks it as being restored.
+func (r *ReconcilePerconaServerMongoDBRestore) shutdownStatefulSetForRestore(
+	ctx context.Context,
+	nn types.NamespacedName,
+) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		sts := appsv1.StatefulSet{}
+		err := r.client.Get(ctx, nn, &sts)
+		if err != nil {
+			return err
+		}
+
+		orig := sts.DeepCopy()
+
+		sts.Spec.Replicas = new(int32(0))
+
+		if sts.Annotations == nil {
+			sts.Annotations = make(map[string]string)
+		}
+		sts.Annotations[psmdbv1.AnnotationRestoreInProgress] = "true"
+
+		if err := r.client.Patch(ctx, &sts, client.MergeFrom(orig)); err != nil {
+			return err
+		}
+
+		if err := r.terminateStatefulSetPods(ctx, &sts); err != nil {
+			return err
+		}
+		return nil
+	})
 }
