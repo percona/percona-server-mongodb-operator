@@ -2239,12 +2239,6 @@ type VPAComponentStatus struct {
 // StatefulSet from: the values the operator has committed from a VPA
 // recommendation, or the declared spec values when VPA is not managing this
 // component.
-//
-// The operator never writes resources back into spec, so spec stays the user's
-// declaration and remains safe for GitOps to own. statusKey is the component key
-// used in status.vpaStatus: the replset name for a replset or config server,
-// "<replset>-nv" and "<replset>-hidden" for its non-voting and hidden members,
-// and "mongos" for mongos.
 func (cr *PerconaServerMongoDB) VPAResources(
 	statusKey string, declared corev1.ResourceRequirements,
 ) corev1.ResourceRequirements {
@@ -2257,7 +2251,7 @@ func (cr *PerconaServerMongoDB) VPAResources(
 	if !ok || s.Applied == nil {
 		return declared
 	}
-	return *s.Applied
+	return *s.Applied.DeepCopy()
 }
 
 // VPAInPlaceResizeEnabled reports whether VPA-committed resources are applied to
