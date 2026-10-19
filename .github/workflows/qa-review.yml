@@ -1,0 +1,476 @@
+name: QA Code Review
+
+# Ported from elopage/web-automation-pw (.github/workflows/qa-review.yml).
+# Same mechanism: two parallel LLM passes (review + missing test cases) against an
+# OpenAI-compatible chat/completions endpoint, one sticky PR comment that tracks
+# resolved / new / persisted findings across pushes.
+# Adapted scope: e2e-tests (bash + pytest port) and Go unit/controller tests.
+#
+# Backend: any OpenAI-compatible endpoint, configured by three repo secrets
+# (names kept from the original LiteLLM setup):
+#   LITELLM_API_BASE  e.g. https://generativelanguage.googleapis.com/v1beta/openai
+#                     (Gemini API, free tier) or a LiteLLM proxy URL
+#   LITELLM_API_KEY   provider key
+#   LITELLM_MODEL     e.g. gemini-3.8-flash (any current Flash model)
+# GitHub Models (models.github.ai) was retired 2026-07-30 and is not an option.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'e2e-tests/**'
+      - 'pkg/**/*_test.go'
+
+concurrency:
+  group: qa-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  qa-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect-files
+        run: |
+          base_ref="${{ github.base_ref }}"
+          git fetch origin "$base_ref"
+          merge_base=$(git merge-base HEAD "origin/$base_ref")
+          git diff --name-only --diff-filter=d "$merge_base" HEAD \
+            | grep -E '^(e2e-tests/|pkg/.*_test\.go$)' \
+            | grep -vE '(__pycache__/|\.pyc$|\.DS_Store$)' \
+            > changed_files.txt || true
+          echo "Changed files:"
+          cat changed_files.txt
+          if [ -s changed_files.txt ]; then
+            echo "has_files=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_files=false" >> $GITHUB_OUTPUT
+          fi
+          echo "base_ref=$base_ref" >> $GITHUB_OUTPUT
+          echo "merge_base=$merge_base" >> $GITHUB_OUTPUT
+
+      - name: Run QA Review via LLM
+        id: run-qa-review
+        if: |
+          steps.detect-files.outputs.has_files == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          !contains(github.event.pull_request.labels.*.name, 'skip-qa-review')
+        continue-on-error: true
+        env:
+          LITELLM_API_BASE: ${{ secrets.LITELLM_API_BASE }}
+          LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+          LITELLM_MODEL: ${{ secrets.LITELLM_MODEL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ steps.detect-files.outputs.base_ref }}
+          MERGE_BASE: ${{ steps.detect-files.outputs.merge_base }}
+          # Golden files (e2e-tests/*/compare/*.yml) can produce huge diffs; cap what we send.
+          MAX_FILE_DIFF_LINES: '800'
+          MAX_TOTAL_DIFF_CHARS: '250000'
+        run: |
+          python3 << 'PYEOF'
+          import json
+          import re
+          import subprocess
+          import urllib.request
+          import urllib.error
+          import os
+          import sys
+          from concurrent.futures import ThreadPoolExecutor
+
+          # Validate LiteLLM secrets
+          for key in ['LITELLM_API_BASE', 'LITELLM_API_KEY', 'LITELLM_MODEL']:
+              if not os.environ.get(key):
+                  print(f"Missing required secret: {key}", file=sys.stderr)
+                  sys.exit(1)
+
+          GITHUB_TOKEN = os.environ['GITHUB_TOKEN']
+          GITHUB_REPOSITORY = os.environ['GITHUB_REPOSITORY']
+          GITHUB_SHA = os.environ['GITHUB_SHA'][:7]
+          PR_NUMBER = os.environ['PR_NUMBER']
+          BOT_MARKER = '<!-- qa-review-bot -->'
+          MAX_FILE_DIFF_LINES = int(os.environ.get('MAX_FILE_DIFF_LINES', '800'))
+          MAX_TOTAL_DIFF_CHARS = int(os.environ.get('MAX_TOTAL_DIFF_CHARS', '250000'))
+
+          # ── GitHub API ────────────────────────────────────────────────────────
+
+          def github_api(method, path, data=None):
+              url = f"https://api.github.com{path}"
+              body = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(
+                  url, data=body, method=method,
+                  headers={
+                      "Authorization": f"Bearer {GITHUB_TOKEN}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "content-type": "application/json"
+                  }
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      return json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  safe = e.read().decode().replace(GITHUB_TOKEN, '[REDACTED]')
+                  print(f"GitHub API {e.code}: {safe}", file=sys.stderr)
+                  raise
+
+          def find_existing_comment():
+              page = 1
+              while True:
+                  comments = github_api(
+                      'GET',
+                      f"/repos/{GITHUB_REPOSITORY}/issues/{PR_NUMBER}/comments?per_page=100&page={page}"
+                  )
+                  if not comments:
+                      break
+                  for c in comments:
+                      if BOT_MARKER in c.get('body', ''):
+                          return c
+                  if len(comments) < 100:
+                      break
+                  page += 1
+              return None
+
+          def extract_previous_findings(comment_body):
+              match = re.search(r'<!-- qa-review-json: (.*?) -->', comment_body, re.DOTALL)
+              if match:
+                  try:
+                      return json.loads(match.group(1))
+                  except Exception:
+                      pass
+              return []
+
+          def post_or_update_comment(existing_comment, body):
+              if existing_comment:
+                  comment_id = existing_comment['id']
+                  github_api('PATCH', f"/repos/{GITHUB_REPOSITORY}/issues/comments/{comment_id}", {"body": body})
+                  print(f"Updated existing comment {comment_id}")
+              else:
+                  github_api('POST', f"/repos/{GITHUB_REPOSITORY}/issues/{PR_NUMBER}/comments", {"body": body})
+                  print("Posted new comment")
+
+          # ── LiteLLM API ──────────────────────────────────────────────────────
+
+          base_url = os.environ['LITELLM_API_BASE'].rstrip('/')
+          api_key = os.environ['LITELLM_API_KEY']
+          model = os.environ['LITELLM_MODEL']
+
+          def call_api(messages, max_tokens=8192):
+              payload = {"model": model, "max_tokens": max_tokens, "messages": messages}
+              req = urllib.request.Request(
+                  f"{base_url}/chat/completions",
+                  data=json.dumps(payload).encode(),
+                  headers={
+                      "Authorization": f"Bearer {api_key}",
+                      "content-type": "application/json"
+                  }
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=180) as resp:
+                      return json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  safe = e.read().decode().replace(api_key, '[REDACTED]')
+                  print(f"API error {e.code}: {safe}", file=sys.stderr)
+                  raise RuntimeError(f"API error {e.code}")
+              except (urllib.error.URLError, OSError) as e:
+                  print(f"Network/timeout error: {e}", file=sys.stderr)
+                  raise RuntimeError(f"Network/timeout error: {e}")
+
+          def parse_json_response(text):
+              text = text.strip()
+              text = re.sub(r'^```(?:json)?\s*\n', '', text)
+              text = re.sub(r'\n```\s*$', '', text)
+              return json.loads(text.strip())
+
+          # ── Load prompts + build diff ─────────────────────────────────────────
+
+          def load_prompt(path):
+              with open(path, 'r') as f:
+                  return f.read()
+
+          review_prompt = load_prompt('.github/prompts/review-pass.md')
+          suggestions_prompt = load_prompt('.github/prompts/suggestions-pass.md')
+
+          try:
+              with open('.claude/agents/qa-reviewer-agent.md', 'r') as f:
+                  raw = f.read()
+              # Strip YAML frontmatter (--- ... ---)
+              agent_rules = re.sub(r'^---.*?---\s*', '', raw, flags=re.DOTALL).strip()
+              review_prompt = agent_rules + "\n\n---\n\n" + review_prompt
+          except Exception as e:
+              print(f"Warning: could not load qa-reviewer-agent.md: {e}", file=sys.stderr)
+
+          try:
+              with open('CLAUDE.md', 'r') as f:
+                  claude_md = f.read()
+              project_context = f"\n\n---\n## Project Conventions (CLAUDE.md)\n\n{claude_md}\n\n---\n\n"
+          except Exception:
+              project_context = ""
+
+          changed_files = []
+          with open('changed_files.txt', 'r') as f:
+              for line in f:
+                  fname = line.strip()
+                  if fname:
+                      changed_files.append(fname)
+
+          changed_files = [f for f in changed_files if os.path.exists(f)]
+          if not changed_files:
+              print("No relevant files changed")
+              sys.exit(0)
+
+          merge_base = os.environ['MERGE_BASE']
+          diff_content = "## Changed Files (diffs)\n\n"
+          skipped_files = []
+          for fname in changed_files:
+              try:
+                  diff = subprocess.check_output(
+                      ['git', 'diff', merge_base, 'HEAD', '--', fname],
+                      text=True
+                  )
+              except Exception as e:
+                  diff_content += f"### `{fname}` (could not diff: {e})\n\n"
+                  continue
+              diff_lines = diff.splitlines()
+              note = ""
+              if len(diff_lines) > MAX_FILE_DIFF_LINES:
+                  diff = "\n".join(diff_lines[:MAX_FILE_DIFF_LINES])
+                  note = f" (diff truncated to first {MAX_FILE_DIFF_LINES} of {len(diff_lines)} lines - do not flag anything about the omitted part)"
+              block = f"### `{fname}`{note}\n```diff\n{diff}\n```\n\n"
+              if len(diff_content) + len(block) > MAX_TOTAL_DIFF_CHARS:
+                  skipped_files.append(fname)
+                  continue
+              diff_content += block
+
+          if skipped_files:
+              diff_content += "## Files not included (diff budget exceeded) - out of scope for this review\n\n"
+              diff_content += "\n".join(f"- `{f}`" for f in skipped_files) + "\n\n"
+
+          # ── Fetch previous findings before running passes ─────────────────────
+
+          existing_comment = find_existing_comment()
+          previous_findings = []
+          if existing_comment:
+              previous_findings = extract_previous_findings(existing_comment['body'])
+              print(f"Found existing comment with {len(previous_findings)} previous findings")
+
+          # ── Run review + suggestions in parallel ──────────────────────────────
+
+          def run_review_pass():
+              print("Running review pass...")
+              result = call_api([
+                  {"role": "system", "content": review_prompt},
+                  {"role": "user", "content": f"Please review the following Pull Request changes.{project_context}{diff_content}"}
+              ], max_tokens=8192)
+              raw = result["choices"][0]["message"]["content"]
+              if result["choices"][0].get("finish_reason") == "length":
+                  print("Warning: review pass was truncated")
+              return parse_json_response(raw)
+
+          def run_suggestions_pass():
+              print("Running suggestions pass...")
+              result = call_api([
+                  {"role": "system", "content": suggestions_prompt},
+                  {"role": "user", "content": f"Analyze the following Pull Request diff for missing test cases.{project_context}{diff_content}"}
+              ], max_tokens=8192)
+              raw = result["choices"][0]["message"]["content"]
+              if result["choices"][0].get("finish_reason") == "length":
+                  print("Warning: suggestions pass was truncated")
+              return parse_json_response(raw)
+
+          review_result = None
+          suggestions_result = None
+          review_error = None
+          suggestions_error = None
+
+          with ThreadPoolExecutor(max_workers=2) as executor:
+              rf = executor.submit(run_review_pass)
+              sf = executor.submit(run_suggestions_pass)
+              try:
+                  review_result = rf.result()
+              except Exception as e:
+                  review_error = str(e)
+                  print(f"Review pass failed: {e}", file=sys.stderr)
+              try:
+                  suggestions_result = sf.result()
+              except Exception as e:
+                  suggestions_error = str(e)
+                  print(f"Suggestions pass failed: {e}", file=sys.stderr)
+
+          # ── Compute resolved / new findings ───────────────────────────────────
+
+          def fingerprint(finding):
+              file = finding.get('file', '')
+              id_ = finding.get('id', '').strip()
+              if id_:
+                  return f"{file}/{id_}"
+              line = finding.get('line', 'unknown')
+              if line and line != 'unknown':
+                  return f"{file}/{finding.get('category','')}/{line}"
+              return (
+                  f"{file}"
+                  f"/{finding.get('category','')}"
+                  f"/{finding.get('problem','')[:40].lower().strip()}"
+              )
+
+          current_findings = (review_result or {}).get('findings', [])
+          # If the review pass failed, keep previous findings instead of marking them all resolved.
+          if review_result is None:
+              current_findings = previous_findings
+          current_fps = {fingerprint(f) for f in current_findings}
+          prev_fps = {fingerprint(f) for f in previous_findings}
+
+          resolved = [f for f in previous_findings if fingerprint(f) not in current_fps]
+          new_findings = [f for f in current_findings if fingerprint(f) not in prev_fps]
+          persisted = [f for f in current_findings if fingerprint(f) in prev_fps]
+          new_fps = {fingerprint(f) for f in new_findings}
+
+          # ── Format comment ────────────────────────────────────────────────────
+
+          SEVERITY_ORDER = ['critical', 'major', 'minor', 'suggestion']
+          SEVERITY_EMOJI = {
+              'critical': '🔴 Critical',
+              'major': '🟠 Major',
+              'minor': '🟡 Minor',
+              'suggestion': '🔵 Suggestion'
+          }
+          CATEGORY_LABEL = {
+              'flakiness': 'Flakiness',
+              'correctness': 'Correctness',
+              'test-design': 'Test Design',
+              'conventions': 'Conventions',
+              'ci-cost': 'CI Cost',
+          }
+
+          def fence_lang(path):
+              if path.endswith('.go'):
+                  return 'go'
+              if path.endswith('.py'):
+                  return 'python'
+              if path.endswith(('.yml', '.yaml')):
+                  return 'yaml'
+              if path.endswith('.csv'):
+                  return 'text'
+              return 'bash'  # e2e-tests/<name>/run, e2e-tests/functions, *.sh
+
+          def sev_index(f):
+              s = f.get('severity', 'suggestion')
+              return SEVERITY_ORDER.index(s) if s in SEVERITY_ORDER else len(SEVERITY_ORDER)
+
+          def finding_line(finding, prefix=''):
+              severity = finding.get('severity', 'suggestion')
+              category = finding.get('category', '')
+              file_path = finding.get('file', '')
+              line = finding.get('line', '')
+              problem = finding.get('problem', '')
+              fix = finding.get('fix', '')
+              sev_label = SEVERITY_EMOJI.get(severity, severity)
+              cat_label = CATEGORY_LABEL.get(category, category)
+              location = f"`{file_path}:{line}`" if line and line != 'unknown' else f"`{file_path}`"
+              parts = [f"{prefix}**{sev_label}** · {cat_label} · {location}", f"{problem}"]
+              if fix:
+                  parts.append(f"<details><summary>Suggested fix</summary>\n\n```{fence_lang(file_path)}\n{fix}\n```\n</details>")
+              return "\n".join(parts)
+
+          open_count = len(current_findings)
+          resolved_count = len(resolved)
+          new_count = len(new_findings)
+
+          stats_parts = []
+          if resolved_count:
+              stats_parts.append(f"✅ {resolved_count} resolved")
+          if new_count:
+              stats_parts.append(f"🆕 {new_count} new")
+          stats_parts.append(f"{open_count} open")
+          stats_str = " · ".join(stats_parts)
+
+          lines = [
+              BOT_MARKER,
+              f"## 🤖 Automated QA Review - push `{GITHUB_SHA}`",
+              "",
+              f"**{stats_str}** · Reviewed files: {', '.join(f'`{f}`' for f in changed_files if f not in skipped_files)}",
+              ""
+          ]
+          if skipped_files:
+              lines += [f"_Not reviewed (diff too large): {', '.join(f'`{f}`' for f in skipped_files)}_", ""]
+
+          if resolved:
+              lines += ["---", "", "### ✅ Resolved Since Last Push", ""]
+              for f in resolved:
+                  sev_label = SEVERITY_EMOJI.get(f.get('severity', 'suggestion'), f.get('severity', ''))
+                  lines.append(f"- ~~**{sev_label}** · `{f.get('file', '')}` - {f.get('problem', '')}~~")
+              lines.append("")
+
+          all_open = new_findings + persisted
+          all_open.sort(key=sev_index)
+
+          if review_result is not None:
+              lines += ["---", "", "### Findings", ""]
+              if all_open:
+                  for i, finding in enumerate(all_open, 1):
+                      prefix = "🆕 " if fingerprint(finding) in new_fps else ""
+                      lines.append(f"**{i}.** {finding_line(finding, prefix)}")
+                      lines.append("")
+              else:
+                  lines += ["✅ No issues found.", ""]
+          elif review_error:
+              lines += ["---", "", "### Findings", "", "⚠️ Review pass failed - check workflow logs. Previous findings are kept.", ""]
+
+          if suggestions_result and suggestions_result.get('suggestions'):
+              lines += ["---", "", "### 💡 Missing Test Cases", ""]
+              for item in suggestions_result['suggestions']:
+                  missing = item.get('missing_cases', [])
+                  if missing:
+                      lines.append(f"**{item.get('test_area', '')}**")
+                      for case in missing:
+                          lines.append(f"- {case}")
+                      lines.append("")
+
+          if review_result and review_result.get('positives'):
+              lines += ["---", "", "### Positives", ""]
+              for positive in review_result['positives']:
+                  lines.append(f"- {positive}")
+              lines.append("")
+
+          # Hidden JSON for next run's resolved tracking ("--" would end the HTML comment early)
+          hidden_json = json.dumps(current_findings, separators=(',', ':')).replace('--', '-\\u002d')
+          lines.append(f"<!-- qa-review-json: {hidden_json} -->")
+
+          comment_body = "\n".join(lines)
+
+          try:
+              post_or_update_comment(existing_comment, comment_body)
+          except Exception as e:
+              print(f"Failed to post comment: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          if review_result is None and suggestions_result is None:
+              sys.exit(1)
+
+          print("Review complete")
+          PYEOF
+
+      - name: Post failure notice
+        if: |
+          steps.detect-files.outputs.has_files == 'true' &&
+          steps.run-qa-review.outcome == 'failure' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          !contains(github.event.pull_request.labels.*.name, 'skip-qa-review')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "## 🤖 Automated QA Review - push \`${{ github.sha }}\`
+
+          ⚠️ Review failed - check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
