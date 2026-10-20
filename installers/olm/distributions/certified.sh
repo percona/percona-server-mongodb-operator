@@ -102,7 +102,7 @@ validate_certified_tag() {
 		IMAGE_OPERATOR)
 			expected="${redhat_release}"
 			;;
-		IMAGE_MONGOD60|IMAGE_MONGOD70|IMAGE_MONGOD80)
+		IMAGE_MONGOD70|IMAGE_MONGOD80|IMAGE_MONGOD83)
 			expected="${redhat_release}-psmdb-${source_tag}"
 			;;
 		IMAGE_BACKUP)
@@ -178,9 +178,9 @@ report_missing_digests() {
 }
 
 build_redhat_related_images() {
-	local mongod60_tag
 	local mongod70_tag
 	local mongod80_tag
+	local mongod83_tag
 	local logcollector_tag
 
 	log "Building Red Hat related images from ${release_versions_file}"
@@ -193,9 +193,9 @@ build_redhat_related_images() {
 
 	for key in \
 		IMAGE_OPERATOR \
-		IMAGE_MONGOD60 \
 		IMAGE_MONGOD70 \
 		IMAGE_MONGOD80 \
+		IMAGE_MONGOD83 \
 		IMAGE_BACKUP \
 		IMAGE_PMM_CLIENT \
 		IMAGE_LOGCOLLECTOR \
@@ -203,14 +203,14 @@ build_redhat_related_images() {
 		require_release_image "${key}"
 	done
 
-	mongod60_tag="$(image_tag "${IMAGE_MONGOD60}")"
 	mongod70_tag="$(image_tag "${IMAGE_MONGOD70}")"
 	mongod80_tag="$(image_tag "${IMAGE_MONGOD80}")"
+	mongod83_tag="$(image_tag "${IMAGE_MONGOD83}")"
 	logcollector_tag="$(image_tag "${IMAGE_LOGCOLLECTOR}")"
 
+	add_related_image "IMAGE_MONGOD83" "mongod8.3" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod83_tag}" "${mongod83_tag}"
 	add_related_image "IMAGE_MONGOD80" "mongod8.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod80_tag}" "${mongod80_tag}"
 	add_related_image "IMAGE_MONGOD70" "mongod7.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod70_tag}" "${mongod70_tag}"
-	add_related_image "IMAGE_MONGOD60" "mongod6.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod60_tag}" "${mongod60_tag}"
 	add_related_image "IMAGE_BACKUP" "backup" "${redhat_containers_repository}" "${redhat_release}-backup"
 	add_related_image "IMAGE_PMM_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
 	add_related_image "IMAGE_CLUSTERSYNC" "clustersync" "${redhat_containers_repository}" "${redhat_release}-clustersync"
